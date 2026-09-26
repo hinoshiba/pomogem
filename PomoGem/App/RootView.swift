@@ -394,6 +394,7 @@ struct RootView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.displayScale) private var displayScale
     /// quality-01. The tab to reopen after the host remounted this account's
     /// data (see `CloudRemountNavigationMemory`). nil outside iCloud mode.
     @Environment(\.cloudRemountNavigation) private var remountNavigation
@@ -814,6 +815,14 @@ struct RootView: View {
         }
         .task {
             installCompleteDeletionOperation()
+        }
+        .task {
+            // The common gem textures bake off the main thread while the
+            // stores open, so the jar's first frame rarely has to bake.
+#if DEBUG && targetEnvironment(simulator)
+            guard !JarFrameProbe.disablesPrebake else { return }
+#endif
+            GemTextureAtlas.shared.prewarm(PebbleNode.commonBakeRequests(scale: displayScale))
         }
 #if DEBUG
         .task {
@@ -1253,6 +1262,9 @@ struct RootView: View {
 #endif
         }
         if modelContext.hasChanges { try modelContext.save() }
+#if DEBUG && targetEnvironment(simulator)
+        try GemShowcaseUITestFixture.seedIfNeeded(context: modelContext)
+#endif
     }
 
     /// Called by the actual Home/Onboarding subtree rather than the outer root
@@ -2418,14 +2430,7 @@ struct RootView: View {
         if let preset = SubjectSuggestionCatalog.preset(named: name) {
             return preset.colorHex
         }
-        let palette = [
-            Constants.Color.english,
-            Constants.Color.mathematics,
-            Constants.Color.japanese,
-            Constants.Color.science,
-            Constants.Color.socialStudies,
-            "#D6863A", "#36A7AE", "#D56B82", "#739B45", "#5967C8", "#A76A3F", "#5688A8"
-        ]
+        let palette = SubjectPalette.hexes
         return palette[index % palette.count]
     }
 
@@ -3135,6 +3140,8 @@ struct MainNavigationView: View {
                 }
         }
         .tint(PomoGemTheme.amber)
+        // The raw-stone widget (D19) opens the start screen.
+        .onOpenURL { router.openStartLink($0) }
         .onAppear { updateNavigationPath(for: router.selectedTab) }
         .onChange(of: router.selectedTab) { _, selectedTab in
             updateNavigationPath(for: selectedTab)

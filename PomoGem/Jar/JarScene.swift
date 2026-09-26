@@ -18,6 +18,54 @@ struct JarAcceptedTapSelection: Equatable, Sendable {
     let inspectableAggregateID: UUID?
 }
 
+/// A band of the stage the settled pile must stay below (round 12, D4):
+/// its top over `minX...maxX` (scene x) may reach `ceiling` (scene y, up)
+/// at most. The pile scale steps down for it, never below `minimumScale`.
+struct JarPileClearance: Equatable {
+    let minX: CGFloat
+    let maxX: CGFloat
+    let ceiling: CGFloat
+    let minimumScale: CGFloat
+    /// An optional band (the core's name plate) is worth a smaller pile
+    /// only when `minimumScale` would really clear it: a pile out of its
+    /// reach keeps its size, and the band gives way instead (its label
+    /// hides). A required band (the core, the HUD) steps as far as it may.
+    var isOptional = false
+
+    /// The core's clearance never takes the gems of a young jar below this
+    /// scale (a pile the scale cannot keep down meets the core drawn in
+    /// front of it instead).
+    static let coreMinimumScale: CGFloat = 2.0
+    /// Half the Home HUD's value row, about 200 pt across.
+    static let hudHalfWidth: CGFloat = 100
+    /// A settled top this far over its ceiling still counts as clear
+    /// (the profile rounds to 4 pt).
+    static let tolerance: CGFloat = 2
+
+    /// The rung the pile at `scale` should step to so a settled top at
+    /// `top` over a floor at `floor` comes under `ceiling` (the pile's
+    /// height above the floor follows the scale), never below
+    /// `minimumScale`; `nil` when the pile already fits or cannot shrink.
+    func steppedScale(current scale: CGFloat, top: CGFloat, floor: CGFloat) -> CGFloat? {
+        guard top > ceiling + Self.tolerance, scale > minimumScale + 0.0001 else { return nil }
+        let ratio = max(0, ceiling - floor) / max(1, top - floor)
+        if isOptional, scale * ratio < minimumScale - 0.0001 { return nil }
+        // At least one rung, so a stubborn heap still converges.
+        let target = min(scale * ratio, scale / JarScalePolicy.rungRatio)
+        return max(minimumScale, JarScalePolicy.rung(atOrBelow: target))
+    }
+
+    /// The name plate keeps a young jar's gems at most two rungs (8 %)
+    /// smaller than the largest scale.
+    static let namePlateMinimumScale: CGFloat = JarScalePolicy.maximumScale / (JarScalePolicy.rungRatio * JarScalePolicy.rungRatio)
+
+    /// Whether the pile would still fit at `grown` (the next rungs up).
+    func fits(top: CGFloat, floor: CGFloat, current scale: CGFloat, grown: CGFloat) -> Bool {
+        guard top > floor else { return true }
+        return floor + (top - floor) * grown / max(scale, 0.0001) <= ceiling
+    }
+}
+
 enum JarCapacityEvent {
     case approachingBake(
         physicalCount: Int,
@@ -55,6 +103,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     var rareRewardMode: RareRewardMode = .standard {
         didSet {
             guard rareRewardMode != oldValue else { return }
+            requestRedraw()
             livePebbles.forEach { $0.setRareRewardMode(rareRewardMode) }
             for index in dropQueue.indices {
                 dropQueue[index].needsSpecialAnticipation = shouldShowSpecialAnticipation(
@@ -81,6 +130,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     var reduceMotion: Bool = UIAccessibility.isReduceMotionEnabled {
         didSet {
             guard reduceMotion != oldValue else { return }
+            requestRedraw()
             allPebbleNodes.forEach { $0.setReduceMotion(reduceMotion) }
             if reduceMotion {
                 // Aggregation source nodes leave `livePebbles` before their
@@ -110,8 +160,35 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
     }
 
+    /// 演出の強さ (D17, §7.6): the device-local preference. What the jar
+    /// shows is `effects` — Reduce Motion implies 控えめ. A change only
+    /// redraws the light; it never wakes the physics.
+    var effectsIntensity: JarEffectsIntensity = .standard {
+        didSet {
+            guard effectsIntensity != oldValue else { return }
+            requestRedraw()
+            allPebbleNodes.forEach { $0.setEffectsIntensity(effectsIntensity) }
+            if !effects.allowsSpontaneousTwinkle {
+                worldNode.enumerateChildNodes(withName: "//ambient.twinkle") { node, _ in
+                    node.removeFromParent()
+                }
+            }
+        }
+    }
+
+    /// What the jar shows: the preference, or 控えめ under Reduce Motion.
+    var effects: JarEffectsIntensity {
+        .resolved(preference: effectsIntensity, reduceMotion: reduceMotion)
+    }
+
+    /// Pro (D21): every crystal's copper tag carries its month ("2026.9")
+    /// under the count. Nothing else about a crystal depends on Pro.
     var showsMonthLabels = false {
-        didSet { renderBaseLayers() }
+        didSet {
+            renderBaseLayers()
+            guard showsMonthLabels != oldValue else { return }
+            allPebbleNodes.forEach { $0.setMonthEngraving(showsMonthLabels) }
+        }
     }
 
     private enum DropOrigin {
@@ -155,6 +232,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         static let tapCaustic = "jar.tapCaustic"
         static let tapSpecular = "jar.tapSpecular"
         static let reducedMotionHighlight = "jar.reducedMotionHighlight"
+        static let pileGlowShape = "jar.pileGlow.shape"
     }
 
     /// A tap launches one primary gem and lets SpriteKit transfer that motion
@@ -224,15 +302,63 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private let backGlassNode = SKShapeNode()
     private let mouthDepthNode = SKShapeNode()
     private let glassNode = SKShapeNode()
-    private let baseRefractionNode = SKShapeNode()
-    private let baseCausticNode = SKShapeNode()
-    private let lensShadeNode = SKShapeNode()
     private let reducedMotionHighlightNode = SKShapeNode()
-    private let specularNode = SKShapeNode()
-    private let warmReflectionNode = SKShapeNode()
     private let rimNode = SKShapeNode()
     private let innerRimNode = SKShapeNode()
     private let tapCausticNode = SKShapeNode()
+    /// Glass v2: moving additive highlights (reflection bands, shoulder
+    /// light) over the pre-rendered front glass; ±6 pt with tilt.
+    private let glassHighlightNode = SKSpriteNode()
+    /// Copper neck collar: three pre-rendered tilt states (−1, 0, +1) of
+    /// which at most two are visible at once.
+    private let collarNode = SKNode()
+    private let collarCenterNode = SKSpriteNode()
+    private let collarLeftNode = SKSpriteNode()
+    private let collarRightNode = SKSpriteNode()
+    /// Long-term milestone traces engraved on the collar (0…6), mirrored
+    /// from the Home presence state. Presentation only.
+    var milestoneTraceCount = 0 {
+        didSet {
+            let clamped = min(max(milestoneTraceCount, 0), 6)
+            if clamped != milestoneTraceCount { milestoneTraceCount = clamped; return }
+            if oldValue != milestoneTraceCount { rebuildCollar() }
+        }
+    }
+    /// Warm pool of light on the jar floor; shared halo texture, additive.
+    private let floorGlowNode = SKSpriteNode(texture: GemArtwork.poolTexture)
+    /// One sprite of light that the whole pile casts into the lower jar
+    /// (weighted pile colour mixed 50:50 with #FF9E6B, additive).
+    private let pileGlowNode = SKSpriteNode(texture: GemArtwork.poolTexture)
+    /// The light's fade before the SKView's edge (round 13): one shader for
+    /// every node of this scene that can reach past the bottle.
+    let lightEdgeFade = JarLightEdgeFade()
+    private var pileGlowBaseAlpha: CGFloat = 0
+    /// 「積み上がりの光」 as a gem bed: one baked sprite behind the physics
+    /// bodies, set from lifetime grams and the lifetime theme mix only.
+    private let gemBedNode = SKSpriteNode()
+    /// Lifetime gem bed input. Nothing inside the scene (body count,
+    /// fusion, obstacles) writes it; only the SwiftUI owner does.
+    var gemBed: JarGemBedState? {
+        didSet {
+            guard oldValue != gemBed else { return }
+            refreshGemBed()
+        }
+    }
+    /// Display scale for baked gem textures: SwiftUI's `displayScale`, set
+    /// by the owner (Home) before its first restore and by the jar view on
+    /// appear; the SKView's window screen is a fallback. Until one reports
+    /// it, textures bake at the 3× ceiling so nothing looks soft.
+    var artworkScale: CGFloat = PebbleNode.defaultArtworkScale {
+        didSet {
+            // Assigning inside didSet does not re-enter it, so the clamped
+            // value is stored and compared here in one pass.
+            let resolved = GemArtwork.renderScale(artworkScale)
+            if resolved != artworkScale { artworkScale = resolved }
+            if resolved != GemArtwork.renderScale(oldValue) { refreshGemBed() }
+        }
+    }
+    private var lastPileLightRefresh: TimeInterval = -.greatestFiniteMagnitude
+    private var reduceTransparency = UIAccessibility.isReduceTransparencyEnabled
     private let wallNode = SKNode()
     private let floorNode = SKNode()
     private let cameraNode = SKCameraNode()
@@ -245,9 +371,55 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// persisted study projection. Rebuilding study bodies preserves it.
     private(set) var screenTimeObstacleUnitCount = 0
     private(set) var isIdlePaused = false
+    /// jar-01 (Docs/GemExperienceDesign.md §7.13): whether SpriteKit's render
+    /// loop — the SKView's display link — is stopped. True only while the
+    /// physics rests in its idle pause and nothing new waits to be drawn.
+    /// The scene drives its SKView's `isPaused` itself: `SpriteView` reads
+    /// its `isPaused` argument only when it creates the view (measured:
+    /// later changes of the argument never reach the SKView).
+    private(set) var isRenderLoopPaused = false
+    /// Whether the jar wants device motion at the full rate (§7.13) — its
+    /// physics is awake, or a tilt (or the first peak of a shake) keeps it
+    /// listening closely for a moment. The motion observer follows it and
+    /// drops to its idle rate when it turns false.
+    let fullRateMotionDemand = CurrentValueSubject<Bool, Never>(true)
+    var wantsFullRateMotion: Bool { fullRateMotionDemand.value }
+    /// A light-only redraw of the resting jar keeps the render loop running
+    /// this long (several frames at 60 or 30 fps).
+    nonisolated static let redrawHold: TimeInterval = 0.25
+    /// A tilt that moved the light keeps full-rate motion and the render
+    /// loop this long after its last step, so a slow, deliberate tilt does
+    /// not switch rates between steps.
+    nonisolated static let motionWakeHold: TimeInterval = 0.75
+    private var redrawUntil: TimeInterval = -.greatestFiniteMagnitude
+    private var motionWakeUntil: TimeInterval = -.greatestFiniteMagnitude
+    private var isRenderLoopCheckScheduled = false
     private(set) var isBakeInProgress = false
     private(set) var isCapacityReliefActive = false
     private(set) var appliedGravityVector = Constants.Jar.gravityVector
+    /// Height profile of the settled pile: the top (scene y, 4 pt steps; 0
+    /// when empty) of the resting bodies over each of `pileProfileBinCount`
+    /// equal columns of the scene width. Refreshed with the pile light
+    /// (every 0.5 s while awake) and when the scene settles; falling or
+    /// fast bodies are ignored, so SwiftUI layers outside the scene (the
+    /// time core's labels) never follow a drop or a bounce.
+    @Published private(set) var settledPileProfile: [CGFloat] = []
+    static let pileProfileBinCount = 12
+    /// Bodies slower than this (pt/s) count as resting for the profile.
+    static let pileProfileRestingSpeed: CGFloat = 24
+
+    /// Highest settled body over the horizontal span `minX...maxX` (scene
+    /// coordinates), or 0 when that span is clear.
+    func settledPileTop(minX: CGFloat, maxX: CGFloat) -> CGFloat {
+        guard !settledPileProfile.isEmpty, size.width > 0,
+              minX.isFinite, maxX.isFinite
+        else { return 0 }
+        let binWidth = size.width / CGFloat(settledPileProfile.count)
+        let first = max(0, Int(min(max(minX, 0), size.width) / binWidth))
+        let last = min(settledPileProfile.count - 1, Int(min(max(maxX, 0), size.width) / binWidth))
+        guard first <= last else { return 0 }
+        return settledPileProfile[first ... last].max() ?? 0
+    }
     /// Observation-only revision for SwiftUI accessibility. The actual source
     /// of truth remains `livePebbles`; consumers read `physicalPebbleCount`
     /// after this revision invalidates their view.
@@ -257,6 +429,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private var lastSpawnUptime = -Double.greatestFiniteMagnitude
     private var idleSampleStartedAt: TimeInterval?
     private var lastTwinkleUptime = ProcessInfo.processInfo.systemUptime
+    private var lastGemTwinkleUptime: TimeInterval = -.greatestFiniteMagnitude
+    private var lastGemTwinkleCheck: TimeInterval = -.greatestFiniteMagnitude
+    private var gemTwinkleSequence: UInt64 = 0
+    private var eventLightCount = 0
     private var lastTapBounceUptime = -Double.greatestFiniteMagnitude
     private(set) var lastAcceptedTapSelection: JarAcceptedTapSelection?
     private var lastShakeUptime = -Double.greatestFiniteMagnitude
@@ -292,13 +468,29 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private var suspendedAggregateIDs = Set<UUID>()
     private var hasReportedHardLimit = false
     private var reduceMotionObserver: NSObjectProtocol?
+    private var reduceTransparencyObserver: NSObjectProtocol?
+    private var differentiateWithoutColorObserver: NSObjectProtocol?
+    private var increasedContrastObserver: NSObjectProtocol?
     private var transientMotionGate = JarTransientMotionGate()
     private var sensorySequence: UInt64 = 0
-    private var opticalTiltFraction: CGFloat = 0
+    private(set) var opticalTiltFraction: CGFloat = 0
     private var lastPublishedPhysicalPebbleCount = 0
+    private var lastPublishedHasStudyGems = false
     private var earlyEffortSpotlightIDs = Set<UUID>()
+    private var nextStackingIndex = 0
 
     private var outerJarRect: CGRect {
+        Self.outerJarRect(sceneSize: size)
+    }
+
+    private var interiorRect: CGRect {
+        Self.interiorRect(sceneSize: size)
+    }
+
+    /// The bottle in scene coordinates (y up) for a scene of `sceneSize`.
+    /// SwiftUI layers behind the scene use the same geometry, so light and
+    /// labels line up with the physics walls.
+    nonisolated static func outerJarRect(sceneSize size: CGSize) -> CGRect {
         let jarWidth = max(size.width - Constants.Jar.horizontalMargin * 2, 1)
         let jarHeight = min(Constants.Jar.height, max(size.height, 1))
         return CGRect(
@@ -309,8 +501,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         )
     }
 
-    private var interiorRect: CGRect {
-        let outer = outerJarRect
+    /// The physics interior (walls and floor) in scene coordinates (y up).
+    nonisolated static func interiorRect(sceneSize size: CGSize) -> CGRect {
+        let outer = outerJarRect(sceneSize: size)
         return CGRect(
             x: outer.minX + Constants.Jar.wallInset,
             y: outer.minY + Constants.Jar.floorInset,
@@ -320,6 +513,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 1
             )
         )
+    }
+
+    /// Top edge of the gem bed measured from the top of a stage of
+    /// `stageSize` (SwiftUI, y down), or the floor when there is no bed.
+    nonisolated static func gemBedTopFromStageTop(stageSize: CGSize, bed: JarGemBedState?) -> CGFloat {
+        let interior = interiorRect(sceneSize: stageSize)
+        let bedHeight = bed.map { $0.height(interiorHeight: interior.height) } ?? 0
+        return stageSize.height - (interior.minY + bedHeight)
     }
 
     private var currentFloorY: CGFloat {
@@ -335,7 +536,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
     private var neckInset: CGFloat {
-        min(50, outerJarRect.width * 0.14)
+        Self.neckInset(jarWidth: outerJarRect.width)
     }
 
     private var neckInteriorMinX: CGFloat {
@@ -364,8 +565,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         livePebbles.filter { $0.descriptor.participatesInBake }
     }
 
+    /// Capacity counts the bodies at their own radii: the jar-wide scale
+    /// (D4) is presentation only and never moves a fusion threshold.
     private var bakeEligibleRadii: [Double] {
-        bakeEligiblePebbles.map { Double($0.radius) }
+        bakeEligiblePebbles.map { Double($0.localRadius) }
     }
 
     var physicalPebbleCount: Int { livePebbles.count }
@@ -378,6 +581,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
     private var studyPhysicalBodyCount: Int {
         livePebbles.filter { !$0.descriptor.isScreenTimeObstacle }.count
+    }
+    /// The gems device motion is for — study gems (and the tutorial's
+    /// stand-in). Black stones or milestone stones alone never keep the
+    /// sensor on.
+    var hasStudyGems: Bool {
+        livePebbles.contains {
+            !$0.descriptor.isScreenTimeObstacle && !$0.descriptor.isAchievement
+        }
     }
     var physicalAggregateCount: Int { livePebbles.filter { $0.descriptor.isAggregate }.count }
     var representedPebbleCount: Int {
@@ -418,7 +629,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         let removedIDs = oldIDs.subtracting(desiredIDs)
         let removedBodies = livePebbles.filter { removedIDs.contains($0.descriptor.id) }
         if !removedIDs.isEmpty || previousTotal != screenTimeObstacleUnitCount {
-            worldNode.childNode(withName: "obstacle.fusion")?.removeFromParent()
+            worldNode.children.first { $0.name == "obstacle.fusion" }?.removeFromParent()
         }
         if !removedIDs.isEmpty {
             // A tap's pending impulse must not keep referencing a root that a
@@ -455,13 +666,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 enqueue(descriptor, delay: 0, origin: .interior)
             }
         } else {
+            bakeBodies(for: additions)
             for (index, descriptor) in additions.enumerated() {
                 acceptedPebbleIDs.insert(descriptor.id)
-                let node = PebbleNode(
-                    descriptor: descriptor,
-                    reduceMotion: reduceMotion,
-                    rareRewardMode: rareRewardMode
-                )
+                let node = makePebbleNode(descriptor)
                 let diameter = node.radius * 2
                 let columns = max(1, Int(interiorRect.width / diameter))
                 node.position = CGPoint(
@@ -472,10 +680,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 )
                 node.zRotation = deterministicAngle(for: descriptor.id)
                 node.markLanded()
-                worldNode.addChild(node)
+                insertPebble(node)
             }
         }
         guard !removedIDs.isEmpty || !additions.isEmpty || previousTotal != screenTimeObstacleUnitCount else { return }
+        // Stones placed at once or carried away change the jar's area now;
+        // dropped ones rescale the pile when they land.
+        reconcileJarScale()
         publishPhysicalContentChangeIfNeeded(force: true)
         resetIdleObservation()
         resumeSimulation()
@@ -510,34 +721,42 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         for source in removedBodies {
             guard let obstacle = source.descriptor.screenTimeObstacle else { continue }
             let fragment = SKShapeNode()
-            ScreenTimeObstacleAppearance.apply(to: fragment, descriptor: obstacle, radius: source.radius)
+            let count = ScreenTimeObstacleAppearance.apply(
+                to: fragment,
+                descriptor: obstacle,
+                radius: source.localRadius,
+                scale: artworkScale,
+                textureJarScale: source.textureJarScale
+            )
+            count?.setScale(1 / max(source.jarScale, 0.01))
+            fragment.setScale(source.xScale)
             fragment.position = source.position
             fragment.zRotation = source.zRotation
-            fragment.zPosition = JarZPosition.pebble
+            // The view ignores sibling order: the fading fragments take the
+            // top stacking slot, so they stay above the resting bodies as
+            // the effect container (added last) used to.
+            fragment.zPosition = JarZPosition.pebble(stackingIndex: JarZPosition.stackingSlots - 1)
             effect.addChild(fragment)
             fragment.run(.group([
                 .move(to: point, duration: 0.28),
-                .scale(to: 0.25, duration: 0.28),
+                .scale(to: 0.25 * source.xScale, duration: 0.28),
                 .fadeOut(withDuration: 0.28)
             ]))
         }
         effect.run(.sequence([.wait(forDuration: 0.3), .removeFromParent()]))
-        let node = PebbleNode(
-            descriptor: destination,
-            reduceMotion: reduceMotion,
-            rareRewardMode: rareRewardMode
-        )
+        let node = makePebbleNode(destination)
         let range = allowedHorizontalRange(at: point.y, radius: node.radius)
         node.position = CGPoint(
             x: min(max(point.x, range.lowerBound), range.upperBound),
             y: min(max(point.y + 12, currentFloorY + node.radius + 6), interiorRect.maxY - node.radius)
         )
-        node.setScale(0.4)
+        node.setScale(0.4 * node.jarScale)
         node.alpha = 0.25
         node.physicsBody?.velocity = CGVector(dx: 0, dy: 32)
-        node.run(.group([.scale(to: 1, duration: 0.28), .fadeIn(withDuration: 0.28)]))
+        node.run(.scale(to: node.jarScale, duration: 0.28), withKey: PebbleNode.birthActionKey)
+        node.run(.fadeIn(withDuration: 0.28))
         acceptedPebbleIDs.insert(destination.id)
-        worldNode.addChild(node)
+        insertPebble(node)
         return destination.id
     }
     /// Observation-only test seam: a tap must actively drive exactly one body.
@@ -546,6 +765,341 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     var activeTapMotionPebbleID: UUID? { activeTapMotion?.pebbleID }
     var isInteractionMotionActive: Bool { interactionMotionWindow != nil }
     var snapshotRect: CGRect { outerJarRect }
+
+    /// The time core (or the colourless vessel) that Home draws behind this
+    /// scene, set by the SwiftUI owner; share snapshots draw it behind the
+    /// bottle so the exported jar shows the same centrepiece. Presentation
+    /// only.
+    var shareCore: JarShareCore?
+
+    /// Whether any live body the capture shows overlaps `rect` (scene
+    /// coordinates): a share animation must never draw the core over them.
+    /// Bodies `hides` leaves out of the image (Screen Time stones, a
+    /// self-reported gem left out of the share) do not count.
+    func hasBody(intersecting rect: CGRect, hides: (PebbleDescriptor) -> Bool = { _ in false }) -> Bool {
+        livePebbles.contains { pebble in
+            guard !hides(pebble.descriptor) else { return false }
+            let r = pebble.radius
+            return CGRect(x: pebble.position.x - r, y: pebble.position.y - r, width: r * 2, height: r * 2)
+                .intersects(rect)
+        }
+    }
+
+    /// Up to `count` points where a glint may catch light in a share
+    /// animation: the upper-left facet of the highest resting study gems
+    /// the capture shows (never a Screen Time stone, and never a gem
+    /// `hides` leaves out, whose place is a hole in the image), in scene
+    /// coordinates.
+    func shareGlintAnchors(count: Int = 4, hides: (PebbleDescriptor) -> Bool = { _ in false }) -> [CGPoint] {
+        livePebbles
+            .filter { !$0.descriptor.isScreenTimeObstacle && !hides($0.descriptor) && $0.hasLanded && $0.position.x.isFinite && $0.position.y.isFinite }
+            .sorted { ($0.position.y + $0.radius, $0.descriptor.id.uuidString) > ($1.position.y + $1.radius, $1.descriptor.id.uuidString) }
+            .prefix(max(0, count))
+            .map { CGPoint(x: $0.position.x - $0.radius * 0.32, y: $0.position.y + $0.radius * 0.42) }
+    }
+
+    /// Share of the interior height left free between the highest body and
+    /// the mouth (worst-case capacity reviews; presentation only).
+    var pileHeadroomFraction: CGFloat {
+        let interior = interiorRect
+        let top = livePebbles.map { $0.position.y + $0.radius }.max() ?? interior.minY
+        return max(0, (interior.maxY - top) / max(interior.height, 1))
+    }
+
+    // MARK: Jar-wide scale (D4)
+
+    /// The scale every study body is shown at (`JarScalePolicy`; Screen Time
+    /// stones use their own capped share of it). It changes only when a
+    /// drop lands, a fusion completes, the jar restores, or its content is
+    /// replaced (history sync, rotation, Screen Time); a smaller jar may
+    /// shrink it at once, a larger one never grows it by itself.
+    private(set) var jarScale: CGFloat = 1
+    /// The scale the pile moves to once the incoming drop has landed.
+    private var scheduledJarScale: CGFloat?
+    /// A landing asked for the scheduled scale; applied on the next update,
+    /// outside SpriteKit's contact callback.
+    private var appliesScheduledJarScale = false
+    /// Every scale change so far (Debug reviews and tests).
+    private(set) var jarScaleChangeCount = 0
+    /// The animated scale change whose rung is still baking off the main
+    /// thread (its `jarScaleChangeCount`); nil once its textures are shown.
+    private(set) var pendingScaleBakeChange: Int?
+    /// That change's background bake, which the deadline takes over.
+    private var pendingScaleBake: GemTextureAtlas.BackgroundBake?
+    /// How many rung bakes missed `scaleBakeDeadline` and were finished in
+    /// place for the visible bodies (Debug reviews and tests).
+    private(set) var scaleBakeFallbackCount = 0
+    /// A rung's background bake gets this long (round 13): the bodies show
+    /// their former, slightly upscaled texture meanwhile, never longer than
+    /// the 0.5 s transition itself.
+    static let scaleBakeDeadline: TimeInterval = JarScalePolicy.transitionDuration
+    /// Bands the settled pile stays below (the time core, the Home HUD),
+    /// set by the SwiftUI owner (round 12). Empty keeps the area rule only.
+    var pileClearances: [JarPileClearance] = [] {
+        didSet {
+            guard pileClearances != oldValue else { return }
+            // A higher ceiling (the completion card closed, the core moved
+            // up) lets the next landing or fusion grow the pile again.
+            let rose = pileClearances.count != oldValue.count
+                || zip(pileClearances, oldValue).contains { $0.ceiling > $1.ceiling + 8 }
+            if rose { pileHeightCap = JarScalePolicy.maximumScale }
+            // A resting jar under a lower ceiling (the card shortened it)
+            // steps down now; an awake one does when it settles.
+            if isIdlePaused { enforcePileClearances() }
+        }
+    }
+    /// The largest scale the settled pile may take under `pileClearances`
+    /// (learned when it settles; the area rule still applies below it).
+    private(set) var pileHeightCap: CGFloat = JarScalePolicy.maximumScale
+    /// True from the moment ten gems start to converge until their crystal
+    /// has flashed (about 0.9 s): the core's labels step aside meanwhile.
+    @Published private(set) var isFusionSpotlightActive = false
+    /// The newest fusion's spotlight: an earlier fusion's timer clears the
+    /// flag only while it is still the newest (round 14; back-to-back
+    /// roll-ups after a restore, or a ×10 cascading into a ×100).
+    private var fusionSpotlightToken: UInt64 = 0
+    /// The scene has drawn at least one frame. Before that (a restore or
+    /// the first layout of a new Home) scale changes apply at once, so a jar
+    /// never visibly resizes while it appears.
+    private var hasRenderedFrame = false
+
+    private var interiorArea: CGFloat {
+        interiorRect.width * interiorRect.height
+    }
+
+    /// Σπr² at the bodies' own radii: the live bodies and `extra` (the
+    /// incoming drop or a new crystal). Queued drops count only once they
+    /// spawn, so a waiting reward never resizes the pile before it lands.
+    private func jarBaseArea(adding extra: [PebbleDescriptor] = []) -> CGFloat {
+        JarScalePolicy.baseArea(
+            radii: livePebbles.map(\.localRadius) + extra.map(\.radius)
+        )
+    }
+
+    /// The scale the jar resolves to for its current content (plus `extra`),
+    /// with the policy's hysteresis against the scale it shows now.
+    private func resolvedJarScale(adding extra: [PebbleDescriptor] = []) -> CGFloat {
+        min(
+            JarScalePolicy.resolvedScale(
+                current: jarScale,
+                baseArea: jarBaseArea(adding: extra),
+                interiorArea: interiorArea
+            ),
+            pileHeightCap
+        )
+    }
+
+    /// Resting gems stack about this much of a restore row's height.
+    static let restoreRowNesting: CGFloat = 0.75
+
+    /// Highest resting body over `minX...maxX` (scene coordinates), from
+    /// the bodies themselves (landed, not leaving for a fusion).
+    private func restingPileTop(minX: CGFloat, maxX: CGFloat) -> CGFloat {
+        livePebbles.reduce(CGFloat.zero) { top, pebble in
+            guard !pebble.isRemovedForBake, pebble.hasLanded,
+                  pebble.position.x.isFinite, pebble.position.y.isFinite
+            else { return top }
+            let radius = pebble.radius
+            guard pebble.position.x + radius >= minX, pebble.position.x - radius <= maxX else { return top }
+            return max(top, pebble.position.y + radius)
+        }
+    }
+
+    /// Round 12 (D4): the area rule sizes the gems, and the settled pile
+    /// keeps below the core and the HUD. When the pile rests over one of
+    /// `pileClearances`, the whole jar steps down (0.5 s) to the rung whose
+    /// pile fits, never below that band's floor, and remembers it as a cap
+    /// for later landings; a pile with room for two more rungs lifts the cap
+    /// again (it grows at the next landing or fusion, never by itself).
+    ///
+    /// `fromRestoreRows`: the pile is the restore's rows, not yet settled.
+    /// Rows stack a whole diameter each where resting gems nest, so their
+    /// height is taken at `restoreRowNesting`, and optional bands wait for
+    /// the settled pile (an over-tall estimate never costs the gems size).
+    @discardableResult
+    private func enforcePileClearances(fromRestoreRows: Bool = false) -> Bool {
+        guard !pileClearances.isEmpty, !isBakeInProgress, !livePebbles.isEmpty else { return false }
+        let floor = currentFloorY
+        var stepped: CGFloat?
+        for clearance in pileClearances where !(fromRestoreRows && clearance.isOptional) {
+            var top = restingPileTop(minX: clearance.minX, maxX: clearance.maxX)
+            if fromRestoreRows, top > floor {
+                top = floor + (top - floor) * Self.restoreRowNesting
+            }
+            if let scale = clearance.steppedScale(current: jarScale, top: top, floor: floor) {
+                stepped = min(stepped ?? scale, scale)
+            }
+        }
+        if let stepped, stepped < jarScale - 0.0001 {
+            pileHeightCap = stepped
+            applyJarScale(stepped, animated: true)
+            return true
+        }
+        guard pileHeightCap < JarScalePolicy.maximumScale - 0.0001 else { return false }
+        let grown = min(
+            JarScalePolicy.maximumScale,
+            jarScale * pow(JarScalePolicy.rungRatio, CGFloat(JarScalePolicy.growthRungs))
+        )
+        let roomy = pileClearances.allSatisfy { clearance in
+            clearance.fits(
+                top: restingPileTop(minX: clearance.minX, maxX: clearance.maxX),
+                floor: floor,
+                current: jarScale,
+                grown: grown
+            )
+        }
+        if roomy { pileHeightCap = max(pileHeightCap, grown) }
+        return false
+    }
+
+    /// Every body of the scene is created here, at its share of the jar
+    /// scale (`studyScale`, the current scale by default).
+    private func makePebbleNode(_ descriptor: PebbleDescriptor, studyScale: CGFloat? = nil) -> PebbleNode {
+        let node = PebbleNode(
+            descriptor: descriptor,
+            reduceMotion: reduceMotion,
+            rareRewardMode: rareRewardMode,
+            artworkScale: artworkScale,
+            jarScale: JarScalePolicy.bodyScale(for: descriptor, studyScale: studyScale ?? jarScale),
+            effectsIntensity: effectsIntensity,
+            showsMonthEngraving: showsMonthLabels
+        )
+        node.lightEdgeFade = lightEdgeFade
+        return node
+    }
+
+    /// Points the edge fade at this view's drawable (round 13). Cheap when
+    /// nothing changed, so it also runs on every awake frame: a view that
+    /// joins its window or changes size is corrected on its next frame.
+    /// Before the view has a window, its drawable follows the display
+    /// scale the SwiftUI owner set (`artworkScale`).
+    private func refreshLightEdgeFade() {
+        guard let view, view.bounds.width > 0, view.bounds.height > 0 else { return }
+        let pixelScale = view.window != nil ? view.contentScaleFactor : artworkScale
+        lightEdgeFade.update(stageSize: size, pixelScale: pixelScale)
+    }
+
+    /// Moves every live body to `newScale`. Animated changes last
+    /// `JarScalePolicy.transitionDuration` and move the visual and the
+    /// physics radius together, a few percent a frame, so the solver
+    /// separates growing neighbours gently; the pile is woken for them and
+    /// a wall rescue runs when they end. The misses of the new size bake in
+    /// one parallel pass: off the main thread for an animated change (the
+    /// bodies keep their textures until it is in, round 12), at once for an
+    /// instant one (a restore, a jar not yet drawn).
+    private func applyJarScale(_ rawScale: CGFloat, animated: Bool) {
+        scheduledJarScale = nil
+        appliesScheduledJarScale = false
+        let newScale = PebbleNode.sanitizedJarScale(rawScale)
+        let bodies = livePebbles
+        let needsChange = abs(newScale - jarScale) > 0.0001
+            || bodies.contains {
+                abs($0.jarScaleTarget - JarScalePolicy.bodyScale(for: $0.descriptor, studyScale: newScale)) > 0.0001
+            }
+        guard needsChange else { return }
+        jarScale = newScale
+        jarScaleChangeCount += 1
+        let duration = animated && view != nil && hasRenderedFrame ? JarScalePolicy.transitionDuration : 0
+        let bakesAhead = duration > 0 && Self.bakesScaleTransitionsInBackground
+        if bakesAhead {
+            let change = jarScaleChangeCount
+            pendingScaleBakeChange = change
+            pendingScaleBake = nil
+            let run = GemTextureAtlas.shared.bakeInBackground(bakeRequests(for: bodies.map(\.descriptor))) { [weak self] in
+                self?.adoptScaleBake(of: change)
+            }
+            if pendingScaleBakeChange == change { pendingScaleBake = run }
+            // Round 13: a bake still out after `scaleBakeDeadline` (a busy
+            // device, a large pile) is finished in place for the bodies on
+            // screen, so a stale texture never outlives the transition.
+            if pendingScaleBakeChange == change {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.scaleBakeDeadline) { [weak self] in
+                    MainActor.assumeIsolated {
+                        self?.finishScaleBakeAtDeadline(of: change)
+                    }
+                }
+            }
+        } else {
+            pendingScaleBakeChange = nil
+            pendingScaleBake = nil
+            bakeBodies(for: bodies.map(\.descriptor))
+        }
+        for pebble in bodies {
+            pebble.transitionJarScale(
+                to: JarScalePolicy.bodyScale(for: pebble.descriptor, studyScale: newScale),
+                duration: duration,
+                refreshesTexture: !bakesAhead
+            )
+            pebble.physicsBody?.isResting = false
+        }
+        removeAction(forKey: "jar.scale.rescue")
+        if duration > 0 {
+            run(.sequence([
+                .wait(forDuration: duration + 0.05),
+                .run { [weak self] in self?.rescuePebblesInsideWalls() }
+            ]), withKey: "jar.scale.rescue")
+        } else {
+            rescuePebblesInsideWalls()
+        }
+        resumeSimulation()
+#if DEBUG && targetEnvironment(simulator)
+        JarFrameProbe.shared?.note(String(
+            format: "jarScale=%.3f bodies=%d A0=%.0f interior=%.0f",
+            newScale,
+            bodies.count,
+            jarBaseArea(),
+            interiorArea
+        ))
+#endif
+    }
+
+    /// The background bake of `change` is in: every body shows the texture
+    /// of the scale it is moving to. A newer change hands its own over.
+    private func adoptScaleBake(of change: Int) {
+        guard jarScaleChangeCount == change else { return }
+        if pendingScaleBakeChange == change {
+            pendingScaleBakeChange = nil
+            pendingScaleBake = nil
+        }
+        livePebbles.forEach { $0.adoptJarScaleTexture() }
+        if isIdlePaused { requestRedraw() }
+    }
+
+    /// `scaleBakeDeadline` passed and the background bake of `change` is
+    /// still out: finish what the visible bodies need here and show it.
+    /// Round 14: the images the background bake has not started are baked
+    /// here in one parallel pass and the ones it is baking are waited for,
+    /// so none is baked twice (the two passes no longer compete for every
+    /// core at the end of the transition). Bodies that are hidden or
+    /// leaving for a fusion wait for the background bake. Tests call it
+    /// directly to stand in for a slow bake.
+    func finishScaleBakeAtDeadline(of change: Int) {
+        guard jarScaleChangeCount == change, pendingScaleBakeChange == change else { return }
+        pendingScaleBakeChange = nil
+        scaleBakeFallbackCount += 1
+        let visible = livePebbles.filter { !$0.isHidden && !$0.isRemovedForBake && $0.alpha > 0 }
+        let requests = bakeRequests(for: visible.map(\.descriptor))
+        if let run = pendingScaleBake {
+            pendingScaleBake = nil
+            GemTextureAtlas.shared.finishInBackgroundBake(run, names: Set(requests.map(\.name)))
+        }
+        // Anything the background bake never had (none, normally).
+        GemTextureAtlas.shared.bakeMissing(requests)
+        visible.forEach { $0.adoptJarScaleTexture() }
+        if isIdlePaused { requestRedraw() }
+#if DEBUG && targetEnvironment(simulator)
+        JarFrameProbe.shared?.note("scaleBake=deadline bodies=\(visible.count)")
+#endif
+    }
+
+    /// Re-resolves the scale for the current content (after a history
+    /// sync, a rotation to the shelf or a Screen Time change). Never during
+    /// a fusion: its sources have left the pile but its crystal has not
+    /// arrived yet, and the fusion resolves the scale itself.
+    private func reconcileJarScale(animated: Bool = true) {
+        guard !isBakeInProgress else { return }
+        applyJarScale(resolvedJarScale(), animated: animated)
+    }
 
     init(
         size: CGSize = CGSize(
@@ -564,7 +1118,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         appliedGravityVector = Constants.Jar.gravityVector
         physicsWorld.contactDelegate = self
         installSceneGraph()
-        observeReduceMotion()
+        observeAccessibilitySettings()
     }
 
     required init?(coder aDecoder: NSCoder) {
@@ -577,27 +1131,55 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         appliedGravityVector = Constants.Jar.gravityVector
         physicsWorld.contactDelegate = self
         installSceneGraph()
-        observeReduceMotion()
+        observeAccessibilitySettings()
     }
 
     deinit {
         if let reduceMotionObserver {
             NotificationCenter.default.removeObserver(reduceMotionObserver)
         }
+        if let reduceTransparencyObserver {
+            NotificationCenter.default.removeObserver(reduceTransparencyObserver)
+        }
+        if let differentiateWithoutColorObserver {
+            NotificationCenter.default.removeObserver(differentiateWithoutColorObserver)
+        }
+        if let increasedContrastObserver {
+            NotificationCenter.default.removeObserver(increasedContrastObserver)
+        }
     }
 
     override func didMove(to view: SKView) {
+        // One source of truth for the bake scale: the SwiftUI owner sets
+        // `displayScale` before its first restore; the window's screen is
+        // only a fallback once the view is really on one.
+        if let screenScale = view.window?.screen.scale {
+            artworkScale = screenScale
+        }
         view.preferredFramesPerSecond = Constants.Jar.targetFramesPerSecond
         view.ignoresSiblingOrder = true
         view.allowsTransparency = true
         soundSynth.prepare()
         haptics.prepare()
         rebuildGeometry()
+        refreshLightEdgeFade()
+        // A new SKView (Home shown again) presents a resting jar: draw its
+        // frame once, then let the render loop stop again (jar-01).
+        requestRedraw()
     }
 
     override func didChangeSize(_ oldSize: CGSize) {
         super.didChangeSize(oldSize)
         rebuildGeometry()
+        refreshLightEdgeFade()
+        // A smaller jar may shrink the pile at once (its budget is part of
+        // the interior); a larger one waits for the next landing or fusion.
+        if !isBakeInProgress, !livePebbles.isEmpty {
+            let resolved = resolvedJarScale()
+            if resolved < jarScale - 0.0001 {
+                applyJarScale(resolved, animated: true)
+            }
+        }
     }
 
     func configureBase(
@@ -695,7 +1277,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         worldNode.children
             .compactMap { $0 as? PebbleNode }
             .forEach { $0.removeFromParent() }
-        worldNode.childNode(withName: "obstacle.fusion")?.removeFromParent()
+        worldNode.children.first { $0.name == "obstacle.fusion" }?.removeFromParent()
 
         var cursorX = interiorRect.minX
         var cursorY = currentFloorY
@@ -712,13 +1294,42 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         let studyDescriptors = uniqueDescriptors.filter { !$0.isScreenTimeObstacle }
         let initiallyVisible = Array(studyDescriptors.prefix(Constants.Jar.maxPhysicsBodies))
             + uniqueDescriptors.filter(\.isScreenTimeObstacle)
+        // D4: the restored content (overflow drops included) sets the scale
+        // before any body exists, so nothing rescales after the layout.
+        scheduledJarScale = nil
+        appliesScheduledJarScale = false
+        // The new bodies bake in place below: no rung bake is pending.
+        pendingScaleBakeChange = nil
+        pendingScaleBake = nil
+        let restoredScale = min(
+            JarScalePolicy.resolvedScale(
+                current: jarScale,
+                baseArea: JarScalePolicy.baseArea(radii: uniqueDescriptors.map(\.radius)),
+                interiorArea: interiorArea
+            ),
+            pileHeightCap
+        )
+        if abs(restoredScale - jarScale) > 0.0001 {
+            jarScale = restoredScale
+            jarScaleChangeCount += 1
+        }
+#if DEBUG && targetEnvironment(simulator)
+        let restoreStart = CACurrentMediaTime()
+        let bakedBefore = GemTextureAtlas.shared.statistics.keptImages
+#endif
+        bakeBodies(for: initiallyVisible)
+        // Rows are centred: with the large gems of a young jar (D4), a
+        // first gem rests under the core instead of in a corner.
+        var row: [PebbleNode] = []
+        func centerRow() {
+            let slack = max(0, interiorRect.maxX - cursorX) / 2
+            row.forEach { $0.position.x += slack }
+            row.removeAll()
+        }
         for descriptor in initiallyVisible {
-            let node = PebbleNode(
-                descriptor: descriptor,
-                reduceMotion: reduceMotion,
-                rareRewardMode: rareRewardMode
-            )
+            let node = makePebbleNode(descriptor)
             if cursorX + node.radius * 2 > interiorRect.maxX {
+                centerRow()
                 cursorX = interiorRect.minX
                 cursorY += rowHeight * 2
                 rowHeight = .zero
@@ -730,9 +1341,19 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             )
             node.zRotation = CGFloat.random(in: -.pi ... .pi)
             node.markLanded()
-            worldNode.addChild(node)
+            insertPebble(node)
+            row.append(node)
             cursorX += node.radius * 2
         }
+        centerRow()
+#if DEBUG && targetEnvironment(simulator)
+        JarFrameProbe.shared?.note(String(
+            format: "restore bodies=%d baked=%d ms=%.1f",
+            initiallyVisible.count,
+            GemTextureAtlas.shared.statistics.keptImages - bakedBefore,
+            (CACurrentMediaTime() - restoreStart) * 1_000
+        ))
+#endif
         let overflow = studyDescriptors.dropFirst(Constants.Jar.maxPhysicsBodies)
         let now = ProcessInfo.processInfo.systemUptime
         for descriptor in overflow {
@@ -749,6 +1370,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
         publishPhysicalContentChangeIfNeeded()
         resetIdleObservation()
+        // The rows just laid out already tell roughly whether the pile
+        // clears the core and the HUD: step down now, before the jar is
+        // first drawn (the settled pile corrects it when it rests).
+        enforcePileClearances(fromRestoreRows: true)
         resumeSimulation()
     }
 
@@ -826,13 +1451,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         let existingIDs = Set(livePebbles.map { $0.descriptor.id })
             .union(dropQueue.map { $0.descriptor.id })
         let additions = historyDescriptors.filter { !existingIDs.contains($0.id) }
+        bakeBodies(for: additions)
         for (index, descriptor) in additions.enumerated() {
             guard acceptedPebbleIDs.insert(descriptor.id).inserted else { continue }
-            let node = PebbleNode(
-                descriptor: descriptor,
-                reduceMotion: reduceMotion,
-                rareRewardMode: rareRewardMode
-            )
+            let node = makePebbleNode(descriptor)
             let columns = max(1, Int(interiorRect.width / max(node.radius * 2, 1)))
             let column = index % columns
             let row = index / columns
@@ -848,9 +1470,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             )
             node.zRotation = deterministicAngle(for: descriptor.id)
             node.markLanded()
-            worldNode.addChild(node)
+            insertPebble(node)
         }
         installedHistoryIDs = wantedIDs
+        if !removedIDs.isEmpty || !replacements.isEmpty || !additions.isEmpty {
+            reconcileJarScale()
+        }
         publishPhysicalContentChangeIfNeeded(force: !replacements.isEmpty)
         resetIdleObservation()
     }
@@ -864,11 +1489,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         let oldRotation = oldNode.zRotation
         let wasLanded = oldNode.hasLanded
 
-        let node = PebbleNode(
-            descriptor: descriptor,
-            reduceMotion: reduceMotion,
-            rareRewardMode: rareRewardMode
-        )
+        let node = makePebbleNode(descriptor)
         let minimumY = currentFloorY + node.radius
         let maximumY = interiorRect.maxY - node.radius
         let safeY = minimumY <= maximumY
@@ -891,7 +1512,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
 
         oldNode.removeFromParent()
-        worldNode.addChild(node)
+        insertPebble(node)
         if let oldBody, let body = node.physicsBody {
             body.velocity = oldBody.velocity
             body.angularVelocity = oldBody.angularVelocity
@@ -903,6 +1524,59 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
         node.rememberObservedPosition()
         node.updatePresentationLighting(horizontal: opticalTiltFraction)
+    }
+
+    /// Adds a body on top of the bodies already in the jar. The view ignores
+    /// sibling order (so SpriteKit can batch), which leaves ties at equal z
+    /// unordered; each body therefore gets its own tiny stacking offset in
+    /// insertion order — the order the node tree used to give — kept inside
+    /// every layer's band (`JarZPosition.stackingSpan`).
+    private func insertPebble(_ node: PebbleNode) {
+        if nextStackingIndex >= JarZPosition.stackingSlots {
+            // Renumber the live bodies compactly, keeping their order.
+            let ordered = allPebbleNodes.sorted { $0.zPosition < $1.zPosition }
+            for (index, pebble) in ordered.enumerated() {
+                pebble.zPosition = JarZPosition.pebble(stackingIndex: index)
+            }
+            nextStackingIndex = ordered.count
+        }
+        node.zPosition = JarZPosition.pebble(stackingIndex: nextStackingIndex)
+        nextStackingIndex += 1
+        worldNode.addChild(node)
+    }
+
+    /// Bakes the bodies about to be created in one parallel pass (misses
+    /// only), so a restore never bakes a full jar one body at a time on the
+    /// main thread (§7.13).
+    private func bakeBodies(for descriptors: [PebbleDescriptor]) {
+#if DEBUG && targetEnvironment(simulator)
+        guard !JarFrameProbe.disablesPrebake else { return }
+#endif
+        GemTextureAtlas.shared.bakeMissing(bakeRequests(for: descriptors))
+    }
+
+    /// The body bakes `descriptors` need at the current jar scale.
+    private func bakeRequests(for descriptors: [PebbleDescriptor]) -> [GemTextureAtlas.BakeRequest] {
+        let scale = artworkScale
+        let studyScale = jarScale
+        return descriptors.compactMap {
+            PebbleNode.bakeRequest(
+                for: $0,
+                scale: scale,
+                jarScale: JarScalePolicy.bodyScale(for: $0, studyScale: studyScale)
+            )
+        }
+    }
+
+    /// Whether an animated scale change bakes its new rung off the main
+    /// thread (the Debug frame probe can measure the former synchronous
+    /// bake by turning the pre-bake off).
+    private static var bakesScaleTransitionsInBackground: Bool {
+#if DEBUG && targetEnvironment(simulator)
+        !JarFrameProbe.disablesPrebake
+#else
+        true
+#endif
     }
 
     private func deterministicAngle(for id: UUID) -> CGFloat {
@@ -943,6 +1617,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         for pebble in livePebbles where ids.contains(pebble.descriptor.id) {
             pebble.removeFromParent()
         }
+        reconcileJarScale()
         publishPhysicalContentChangeIfNeeded()
         resetIdleObservation()
         resumeSimulation()
@@ -998,15 +1673,18 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         else { return }
         beginInteractionMotionWindow(uptime: uptime)
         for pebble in pebbles {
+            // SpriteKit's mass grows with the jar scale; the impulse grows
+            // with it, so a nudge moves every jar the same.
+            let massScale = pebble.xScale * pebble.xScale
             pebble.physicsBody?.applyImpulse(CGVector(
-                dx: safeDirection * Constants.Jar.shakeHorizontalImpulse,
-                dy: Constants.Jar.shakeVerticalImpulseMin * 0.25
+                dx: safeDirection * Constants.Jar.shakeHorizontalImpulse * massScale,
+                dy: Constants.Jar.shakeVerticalImpulseMin * 0.25 * massScale
             ))
         }
         playSensoryFeedback(
             trigger: .tap,
             samples: pebbles.map {
-                JarSensorySample(radius: Double($0.radius), coupling: 0.45)
+                JarSensorySample(radius: Double($0.sensoryRadius), coupling: 0.45)
             },
             strength: 0.55,
             userInitiated: true
@@ -1074,14 +1752,16 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                     dx: localDirection * horizontalImpulse,
                     dy: verticalImpulse * (0.86 + abs(variation) * 0.14)
                 ),
-                mass: CGFloat(body.mass)
+                // The unscaled mass: a jar of large young gems shakes like
+                // the shipping jar (D4 is presentation only).
+                mass: pebble.presentationMass
             )
         }
         playTapCaustic(at: centroid, expands: !reduceMotion)
         playSensoryFeedback(
             trigger: .shake,
             samples: pebbles.map {
-                JarSensorySample(radius: Double($0.radius), coupling: 1)
+                JarSensorySample(radius: Double($0.sensoryRadius), coupling: 1)
             },
             strength: Double(strength),
             userInitiated: true
@@ -1298,7 +1978,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             trigger: .tap,
             samples: impacts.map {
                 JarSensorySample(
-                    radius: Double($0.pebble.radius),
+                    radius: Double($0.pebble.sensoryRadius),
                     coupling: Double($0.strength)
                 )
             },
@@ -1520,6 +2200,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         )
         tapCausticNode.removeAction(forKey: ActionKey.tapCaustic)
         tapCausticNode.position = safePoint
+        tapCausticNode.isHidden = false
         tapCausticNode.alpha = 0.62
         tapCausticNode.setScale(expands ? 0.44 : 0.84)
         let action: SKAction = expands
@@ -1531,17 +2212,20 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 .wait(forDuration: 0.06),
                 .fadeOut(withDuration: 0.16)
             ])
-        tapCausticNode.run(action, withKey: ActionKey.tapCaustic)
+        // Hidden at rest: a transparent shape node still costs draws.
+        tapCausticNode.run(.sequence([action, .hide()]), withKey: ActionKey.tapCaustic)
     }
 
     private func playReducedMotionHighlight() {
         reducedMotionHighlightNode.removeAction(forKey: ActionKey.reducedMotionHighlight)
         reducedMotionHighlightNode.alpha = 0
+        reducedMotionHighlightNode.isHidden = false
         reducedMotionHighlightNode.run(
             .sequence([
                 .fadeAlpha(to: 1, duration: 0.07),
                 .wait(forDuration: 0.06),
-                .fadeOut(withDuration: 0.14)
+                .fadeOut(withDuration: 0.14),
+                .hide()
             ]),
             withKey: ActionKey.reducedMotionHighlight
         )
@@ -1554,19 +2238,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         smoothing: Bool = true,
         wakesSimulation: Bool = false
     ) {
-        guard proposed.dx.isFinite, proposed.dy.isFinite else { return }
-        let magnitude = hypot(proposed.dx, proposed.dy)
-        let maximum = max(Constants.Jar.maximumExternalGravityMagnitude, 0.1)
-        let scale = magnitude > maximum ? maximum / magnitude : 1
-        let clamped = CGVector(dx: proposed.dx * scale, dy: proposed.dy * scale)
+        guard let clamped = JarTiltMath.clamped(proposed) else { return }
         let next: CGVector
         if smoothing {
-            let fraction = min(max(Constants.Jar.gravitySmoothingFactor, 0), 1)
-            next = CGVector(
-                dx: appliedGravityVector.dx
-                    + (clamped.dx - appliedGravityVector.dx) * fraction,
-                dy: appliedGravityVector.dy
-                    + (clamped.dy - appliedGravityVector.dy) * fraction
+            next = JarTiltMath.smoothed(
+                from: appliedGravityVector,
+                toward: clamped,
+                fraction: Constants.Jar.gravitySmoothingFactor
             )
         } else {
             next = clamped
@@ -1577,7 +2255,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         ) > 0.01 else { return }
         appliedGravityVector = next
         physicsWorld.gravity = next
-        updateOpticalTilt(horizontal: next.dx)
+        applyOpticalTilt(horizontal: next.dx, uptime: tiltClock())
         // Core Motion delivers up to 30 updates per second. Treating every
         // sample as a new interaction used to reset both the three-second
         // settling observation and the tapped gem's low damping, so a held
@@ -1595,23 +2273,80 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
     func resetGravity() {
         setGravityVector(Constants.Jar.gravityVector, smoothing: false)
+        // Below the 0.01 sample step the call above keeps the old vector;
+        // a reset is exact whatever the last sample was.
+        appliedGravityVector = Constants.Jar.gravityVector
+        physicsWorld.gravity = Constants.Jar.gravityVector
+        // A resting jar returns its light exactly to the level position.
+        updateOpticalTilt(horizontal: appliedGravityVector.dx)
+    }
+
+    /// Idle tilt (Docs/GemExperienceDesign.md §7.13). While the jar rests,
+    /// its physics is paused and its render loop stops (jar-01), so a jar on
+    /// a desk costs no frames. Tilt moves the glints and the glass, so while
+    /// idle the light follows the phone in steps larger than
+    /// `idleTiltRenderThreshold`, at most `idleTiltFramesPerSecond` times a
+    /// second: a deliberate tilt still sparkles at once (the step restarts
+    /// the render loop and full-rate motion for `motionWakeHold`), while
+    /// the sensor noise of a phone held still draws nothing. An awake jar
+    /// follows every sample, as before.
+    static let idleTiltRenderThreshold: CGFloat = JarTiltMath.idleLightThreshold
+    static let idleTiltFramesPerSecond: Double = 30
+    /// Clock of the idle tilt gate and of the render loop's redraw and
+    /// motion holds (tests inject one).
+    var tiltClock: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+    private var lastIdleTiltUptime: TimeInterval = -.greatestFiniteMagnitude
+    /// Light changes made while idle — each one is a frame SpriteKit draws
+    /// for a paused jar (tests and the Debug frame probe).
+    private(set) var idleTiltFrameCount = 0
+
+    private func applyOpticalTilt(horizontal: CGFloat, uptime: TimeInterval) {
+#if DEBUG && targetEnvironment(simulator)
+        if JarFrameProbe.disablesIdleTiltGate {
+            updateOpticalTilt(horizontal: horizontal)
+            return
+        }
+#endif
+        if isIdlePaused {
+            guard abs(opticalFraction(horizontal: horizontal) - opticalTiltFraction)
+                    > Self.idleTiltRenderThreshold,
+                  uptime - lastIdleTiltUptime >= 1 / Self.idleTiltFramesPerSecond - 0.004
+            else { return }
+            lastIdleTiltUptime = uptime
+            let drawn = opticalTiltFraction
+            updateOpticalTilt(horizontal: horizontal)
+            // A tilt that moved the light keeps the jar drawing and
+            // listening closely for a moment.
+            if opticalTiltFraction != drawn {
+                requestRedraw(for: Self.motionWakeHold)
+                holdFullRateMotion()
+            }
+            return
+        }
+        updateOpticalTilt(horizontal: horizontal)
+    }
+
+    private func opticalFraction(horizontal: CGFloat) -> CGFloat {
+        reduceMotion ? CGFloat.zero : JarTiltMath.lightFraction(horizontal: horizontal)
     }
 
     /// Reflections move a few points opposite the sensed gravity, producing a
     /// lens-like parallax response without rotating text or the whole screen.
     /// Reduce Motion removes this simulated depth while keeping physics stable.
     private func updateOpticalTilt(horizontal: CGFloat) {
-        let fraction = reduceMotion
-            ? CGFloat.zero
-            : min(max(horizontal / Constants.Jar.tiltGravityHorizontalScale, -1), 1)
+        let fraction = opticalFraction(horizontal: horizontal)
+        // Unchanged light: touch no node, so a paused jar stays undrawn.
+        guard fraction != opticalTiltFraction else { return }
+        if isIdlePaused { idleTiltFrameCount &+= 1 }
         opticalTiltFraction = fraction
-        specularNode.position.x = fraction * 4
+        glassHighlightNode.position.x = outerJarRect.midX + fraction * 6
         backGlassNode.position.x = fraction * -1.6
-        baseRefractionNode.position.x = fraction * 0.8
-        lensShadeNode.position.x = fraction * -1.1
         mouthDepthNode.position.x = fraction * -0.55
         innerRimNode.position.x = fraction * 0.35
+        updateCollarTilt(fraction)
         livePebbles.forEach { $0.updatePresentationLighting(horizontal: fraction) }
+        // A resting jar's render loop is stopped: draw the new light.
+        if isIdlePaused { requestRedraw() }
     }
 
     func resumeSimulation() {
@@ -1619,9 +2354,99 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         if isIdlePaused {
             isIdlePaused = false
             onIdlePauseChanged?(false)
+            // Samples the idle gate held back are caught up at once.
+            updateOpticalTilt(horizontal: appliedGravityVector.dx)
         }
         resetIdleObservation()
+        // Landing, fusion, tap, shake, content changes: the render loop and
+        // full-rate motion come back in this same turn.
+        updateRenderLoop(now: tiltClock())
     }
+
+    // MARK: Render loop and motion demand (jar-01, §7.13)
+
+    /// Draws the resting jar again for `hold` seconds without waking its
+    /// physics: a light-only change (tilt, a setting, a new gem bed), a view
+    /// that must show the settled frame (a new SKView, a return to the
+    /// foreground) or a snapshot. An awake jar renders anyway.
+    func requestRedraw(for hold: TimeInterval = JarScene.redrawHold) {
+        let now = tiltClock()
+        redrawUntil = max(redrawUntil, now + max(0, hold))
+        updateRenderLoop(now: now)
+    }
+
+    /// Keeps device motion at the full rate for `hold` seconds while the jar
+    /// rests: after a tilt that moved the light, or the first peak of a
+    /// shake (its reversal must not fall between idle samples).
+    func holdFullRateMotion(for hold: TimeInterval = JarScene.motionWakeHold) {
+        let now = tiltClock()
+        motionWakeUntil = max(motionWakeUntil, now + max(0, hold))
+        updateRenderLoop(now: now)
+    }
+
+    /// Resolves the render loop and the motion demand from the idle pause
+    /// and the open holds, applies them, and schedules the check that ends
+    /// the holds (a paused scene gets no `update(_:)` to do it).
+    private func updateRenderLoop(now: TimeInterval) {
+        var paused = isIdlePaused && now >= redrawUntil
+        var fullRate = !isIdlePaused || now < motionWakeUntil
+#if DEBUG && targetEnvironment(simulator)
+        if JarIdleEnergyDebug.keepsRestingJarAwake {
+            paused = false
+            fullRate = true
+        }
+#endif
+        isRenderLoopPaused = paused
+        applyRenderLoopState()
+        if fullRateMotionDemand.value != fullRate {
+            fullRateMotionDemand.send(fullRate)
+        }
+        let deadline = max(redrawUntil, motionWakeUntil)
+        if isIdlePaused, now < deadline {
+            scheduleRenderLoopCheck(after: deadline - now)
+        }
+    }
+
+    /// Applies the render loop state to the SKView again. SwiftUI owns the
+    /// view and may re-create or update it (for example when its frame
+    /// rate changes with Low Power Mode); the owner calls this after such a
+    /// change so a resting jar's stopped loop never silently restarts
+    /// (jar-01).
+    func reassertRenderLoopState() {
+        applyRenderLoopState()
+    }
+
+    /// The SKView un-pauses its scene together with itself (measured), so a
+    /// light-only redraw re-freezes the resting physics in the same turn,
+    /// before any frame can step it.
+    private func applyRenderLoopState() {
+        if let view, view.isPaused != isRenderLoopPaused {
+            view.isPaused = isRenderLoopPaused
+        }
+        if isIdlePaused, !isPaused {
+            isPaused = true
+        }
+    }
+
+    private func scheduleRenderLoopCheck(after delay: TimeInterval) {
+        guard !isRenderLoopCheckScheduled else { return }
+        isRenderLoopCheckScheduled = true
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + min(max(delay, 0.02), 1)
+        ) { [weak self] in
+            guard let self else { return }
+            self.isRenderLoopCheckScheduled = false
+            self.updateRenderLoop(now: self.tiltClock())
+        }
+    }
+
+#if DEBUG
+    /// Deterministic seam: re-resolves the render loop and the motion demand
+    /// at the injected `tiltClock`, as the scheduled check would.
+    func evaluateRenderLoopForTesting() {
+        updateRenderLoop(now: tiltClock())
+    }
+#endif
 
     private func beginInteractionMotionWindow(uptime: TimeInterval) {
         interactionMotionWindow = JarInteractionMotionWindow(openedAt: uptime)
@@ -1643,6 +2468,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
     override func update(_ currentTime: TimeInterval) {
         super.update(currentTime)
+#if DEBUG && targetEnvironment(simulator)
+        JarFrameProbe.shared?.sceneUpdated()
+#endif
+        refreshLightEdgeFade()
         let capacity = StrataMath.capacityUnits(pebbleRadii: bakeEligibleRadii)
         if capacity >= Constants.Jar.aggregateCapacityUnits {
             isCapacityReliefActive = true
@@ -1652,9 +2481,19 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         if !isBakeInProgress, needsAggregation {
             _ = beginBakeIfNeeded(force: false)
         }
+        hasRenderedFrame = true
+        if appliesScheduledJarScale, let scheduled = scheduledJarScale {
+            applyJarScale(scheduled, animated: true)
+        }
         processDropQueue()
         publishPhysicalContentChangeIfNeeded()
         updateRareTwinkles()
+        updateGemTwinkles(now: currentTime)
+        if abs(currentTime - lastPileLightRefresh) >= 0.5 {
+            lastPileLightRefresh = currentTime
+            refreshPileLight()
+            publishSettledPileTop()
+        }
         updateIdlePause(
             currentTime: currentTime,
             uptime: ProcessInfo.processInfo.systemUptime
@@ -1675,6 +2514,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             $0.updatePresentationLighting(horizontal: opticalTiltFraction)
         }
     }
+
+#if DEBUG && targetEnvironment(simulator)
+    override func didFinishUpdate() {
+        super.didFinishUpdate()
+        JarFrameProbe.shared?.sceneFinishedUpdate()
+    }
+#endif
 
     /// A sleeping floor contact can consume a newly assigned upward velocity
     /// during the same SpriteKit step. Reassert it for three frames, then retain
@@ -1736,6 +2582,11 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             let impulseSpeed = contact.collisionImpulse / max(pebble.physicsBody?.mass ?? 1, 1)
             let impactSpeed = max(velocity, impulseSpeed)
             pebble.markLanded()
+            if scheduledJarScale != nil {
+                // Rescaling inside the contact callback would resize bodies
+                // mid-step; the next update applies it.
+                appliesScheduledJarScale = true
+            }
             finishCompletionEntryPhysics(for: pebble)
             aboveEntryPebbleIDs.remove(pebble.descriptor.id)
             updateCompletionDropTrackingIfNeeded()
@@ -1770,30 +2621,55 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         wallNode.name = "jar.walls"
         floorNode.name = "jar.floor"
         glassNode.name = "jar.glass.front"
-        baseRefractionNode.name = "jar.glass.base"
-        baseCausticNode.name = "jar.glass.baseCaustic"
-        lensShadeNode.name = "jar.glass.lensShade"
+        glassHighlightNode.name = "jar.glass.highlights"
         reducedMotionHighlightNode.name = "jar.reducedMotion.highlight"
-        specularNode.name = "jar.glass.specular"
-        warmReflectionNode.name = "jar.glass.warmReflection"
         rimNode.name = "jar.glass.rim"
         innerRimNode.name = "jar.glass.innerRim"
         tapCausticNode.name = "jar.tap.caustic"
+        floorGlowNode.name = "jar.floorGlow"
+        pileGlowNode.name = "jar.pileGlow"
+        gemBedNode.name = "jar.gemBed"
+        collarNode.name = "jar.collar"
+        collarCenterNode.name = "jar.collar.center"
+        collarLeftNode.name = "jar.collar.left"
+        collarRightNode.name = "jar.collar.right"
+        // The light that reaches past the bottle fades before the view's
+        // edge (`JarLightEdgeFade`): the contact shadow and the stage light.
+        [jarShadowNode, floorGlowNode, pileGlowNode, glassHighlightNode].forEach(lightEdgeFade.apply(to:))
+        // Glass v2 is three pre-rendered layers (back, front, moving
+        // highlights) plus the mouth rim; the former thin stroke nodes
+        // (specular, warm reflection, lens shade, base arcs) are gone.
         worldNode.addChild(jarShadowNode)
         worldNode.addChild(backGlassNode)
         worldNode.addChild(mouthDepthNode)
         worldNode.addChild(wallNode)
         worldNode.addChild(floorNode)
         worldNode.addChild(glassNode)
-        worldNode.addChild(baseRefractionNode)
-        worldNode.addChild(baseCausticNode)
-        worldNode.addChild(lensShadeNode)
+        worldNode.addChild(glassHighlightNode)
         worldNode.addChild(reducedMotionHighlightNode)
-        worldNode.addChild(specularNode)
-        worldNode.addChild(warmReflectionNode)
+        worldNode.addChild(collarNode)
+        collarNode.addChild(collarLeftNode)
+        collarNode.addChild(collarCenterNode)
+        collarNode.addChild(collarRightNode)
         worldNode.addChild(rimNode)
         worldNode.addChild(innerRimNode)
         worldNode.addChild(tapCausticNode)
+        worldNode.addChild(floorGlowNode)
+        worldNode.addChild(gemBedNode)
+        worldNode.addChild(pileGlowNode)
+        // Ordinary alpha: the bed is decoration that must survive the
+        // transparent snapshot as drawn, and it sits between the floor glow
+        // (below) and the pile light (above), behind every body.
+        gemBedNode.blendMode = .alpha
+        gemBedNode.anchorPoint = CGPoint(x: 0.5, y: 0)
+        gemBedNode.zPosition = JarZPosition.strata + 0.55
+        gemBedNode.isHidden = true
+        pileGlowNode.blendMode = .add
+        pileGlowNode.colorBlendFactor = 1
+        pileGlowNode.alpha = 0
+        // Behind the gem bed: the pile's light rises around the bodies and
+        // through the bed's gaps, but never tints one side of the bed.
+        pileGlowNode.zPosition = JarZPosition.strata + 0.52
 
         cameraNode.position = cameraRestPosition
         addChild(cameraNode)
@@ -1801,7 +2677,22 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         rebuildGeometry()
     }
 
-    private func observeReduceMotion() {
+    private func observeAccessibilitySettings() {
+        reduceTransparencyObserver = NotificationCenter.default.addObserver(
+            forName: UIAccessibility.reduceTransparencyStatusDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let enabled = UIAccessibility.isReduceTransparencyEnabled
+                self.reduceTransparency = enabled
+                self.allPebbleNodes.forEach { $0.setReduceTransparency(enabled) }
+                self.floorGlowNode.alpha = enabled ? 0.12 : 0.28
+                self.refreshPileLight()
+                self.requestRedraw()
+            }
+        }
         reduceMotionObserver = NotificationCenter.default.addObserver(
             forName: UIAccessibility.reduceMotionStatusDidChangeNotification,
             object: nil,
@@ -1811,10 +2702,47 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 self?.reduceMotion = UIAccessibility.isReduceMotionEnabled
             }
         }
+        differentiateWithoutColorObserver = NotificationCenter.default.addObserver(
+            forName: UIAccessibility.differentiateWithoutColorDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.setThemeMarks(GemThemeMark.isSystemEnabled)
+            }
+        }
+        increasedContrastObserver = NotificationCenter.default.addObserver(
+            forName: UIAccessibility.darkerSystemColorsStatusDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.setIncreasedContrast(UIAccessibility.isDarkerSystemColorsEnabled)
+            }
+        }
+    }
+
+    /// Increase Contrast (round 14): every gem re-bakes its facet edges and
+    /// every 記念石 its engraving at once, instead of at the next restore
+    /// (§7.12). A resting jar draws one more settled frame.
+    func setIncreasedContrast(_ enabled: Bool) {
+        allPebbleNodes.forEach { $0.setIncreasedContrast(enabled) }
+        requestRedraw()
+    }
+
+    /// Differentiate Without Color: every study gem and crystal re-bakes
+    /// with (or without) its theme mark (§7.12). A jar resting in its idle
+    /// pause draws one more settled frame so the change shows at once.
+    func setThemeMarks(_ enabled: Bool) {
+        allPebbleNodes.forEach { $0.setThemeMarks(enabled) }
+        // A light-only change: draw it without waking the physics.
+        requestRedraw()
     }
 
     private func rebuildGeometry() {
         guard size.width > .zero, size.height > .zero else { return }
+        // A new stage size (or a new view) shows even on a resting jar.
+        requestRedraw()
         let outer = outerJarRect
         if cameraNode.action(forKey: ActionKey.cameraShake) == nil {
             cameraNode.position = cameraRestPosition
@@ -1830,16 +2758,23 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             ),
             transform: nil
         )
-        jarShadowNode.fillColor = UIColor.black.withAlphaComponent(0.42)
+        // A light contact shadow only: the floor under the jar is lit by the
+        // pile (SwiftUI stage), not a dark shelf.
+        jarShadowNode.fillColor = UIColor.black.withAlphaComponent(0.20)
         jarShadowNode.strokeColor = .clear
-        jarShadowNode.glowWidth = 18
+        jarShadowNode.glowWidth = 10
         jarShadowNode.zPosition = JarZPosition.background - 2
 
+        // Glass v2: back and front are pre-rendered per jar size (cached),
+        // so the bottle is a handful of textured draws instead of a dozen
+        // hairline strokes.
+        let glassTextures = Self.glassTextures(for: outer.size, neckInset: neckInset)
         backGlassNode.path = jarPath
-        backGlassNode.fillColor = JarPalette.backGlass
-        backGlassNode.strokeColor = JarPalette.deepGlassEdge
-        backGlassNode.lineWidth = 2.4
-        backGlassNode.glowWidth = 0.8
+        backGlassNode.fillColor = .white
+        backGlassNode.fillTexture = glassTextures.back
+        backGlassNode.strokeColor = .clear
+        backGlassNode.lineWidth = 0
+        backGlassNode.glowWidth = 0
         backGlassNode.zPosition = JarZPosition.background
 
         let mouthRect = CGRect(
@@ -1850,78 +2785,25 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         )
         mouthDepthNode.path = CGPath(ellipseIn: mouthRect, transform: nil)
         mouthDepthNode.fillColor = JarPalette.mouthDepth
-        mouthDepthNode.strokeColor = JarPalette.specular.withAlphaComponent(0.36)
-        mouthDepthNode.lineWidth = 2.2
-        mouthDepthNode.glowWidth = 1.0
+        mouthDepthNode.strokeColor = JarPalette.specular.withAlphaComponent(0.30)
+        mouthDepthNode.lineWidth = 1.6
+        mouthDepthNode.glowWidth = 0
         mouthDepthNode.zPosition = JarZPosition.background + 0.6
 
         glassNode.path = jarPath
         glassNode.fillColor = .white
-        glassNode.fillTexture = Self.glassTexture(for: outer.size)
-        // Keep the silhouette legible without letting a uniform blue halo win
-        // over the mouth depth, base refraction, and asymmetric lens shading.
-        // This is especially important against Dawn's brighter background.
-        glassNode.strokeColor = JarPalette.glassEdge.withAlphaComponent(0.40)
-        glassNode.lineWidth = 1.45
-        glassNode.glowWidth = 0.22
+        glassNode.fillTexture = glassTextures.front
+        // The silhouette is carried by the thick-glass rims in the texture.
+        glassNode.strokeColor = .clear
+        glassNode.lineWidth = 0
+        glassNode.glowWidth = 0
         glassNode.zPosition = JarZPosition.glass
 
-        let frontBaseArc = CGMutablePath()
-        frontBaseArc.move(
-            to: CGPoint(
-                x: outer.minX + Constants.Jar.cornerRadius * 0.55,
-                y: outer.minY + 12
-            )
-        )
-        frontBaseArc.addQuadCurve(
-            to: CGPoint(
-                x: outer.maxX - Constants.Jar.cornerRadius * 0.55,
-                y: outer.minY + 12
-            ),
-            control: CGPoint(x: outer.midX, y: outer.minY + 1.5)
-        )
-        baseRefractionNode.path = frontBaseArc
-        baseRefractionNode.fillColor = .clear
-        baseRefractionNode.strokeColor = JarPalette.glassEdge.withAlphaComponent(0.34)
-        baseRefractionNode.lineWidth = 1.25
-        baseRefractionNode.zPosition = JarZPosition.glass + 0.2
-
-        baseCausticNode.path = CGPath(
-            ellipseIn: CGRect(
-                x: outer.midX - outer.width * 0.22,
-                y: outer.minY + 5,
-                width: outer.width * 0.44,
-                height: 17
-            ),
-            transform: nil
-        )
-        baseCausticNode.fillColor = JarPalette.warmSpecular.withAlphaComponent(0.07)
-        baseCausticNode.strokeColor = .clear
-        baseCausticNode.lineWidth = 0
-        baseCausticNode.glowWidth = 0
-        baseCausticNode.zPosition = JarZPosition.glass + 0.32
-
-        let lensShade = CGMutablePath()
-        lensShade.move(to: CGPoint(x: outer.minX + 8, y: outer.minY + 38))
-        lensShade.addCurve(
-            to: CGPoint(x: outer.minX + neckInset + 7, y: outer.maxY - 15),
-            control1: CGPoint(x: outer.minX + 4, y: outer.midY),
-            control2: CGPoint(x: outer.minX + 11, y: outer.maxY - 58)
-        )
-        lensShade.move(to: CGPoint(x: outer.maxX - 8, y: outer.minY + 38))
-        lensShade.addCurve(
-            to: CGPoint(x: outer.maxX - neckInset - 7, y: outer.maxY - 15),
-            control1: CGPoint(x: outer.maxX - 4, y: outer.midY),
-            control2: CGPoint(x: outer.maxX - 11, y: outer.maxY - 58)
-        )
-        lensShadeNode.path = lensShade
-        lensShadeNode.fillColor = .clear
-        lensShadeNode.strokeColor = JarPalette.lensShade
-        lensShadeNode.lineWidth = 14
-        lensShadeNode.lineCap = .round
-        lensShadeNode.glowWidth = 3.5
-        lensShadeNode.alpha = 0.54
-        lensShadeNode.zPosition = JarZPosition.glass + 0.42
+        glassHighlightNode.texture = glassTextures.highlights
+        glassHighlightNode.size = outer.size
+        glassHighlightNode.position = CGPoint(x: outer.midX + opticalTiltFraction * 6, y: outer.midY)
+        glassHighlightNode.blendMode = .add
+        glassHighlightNode.zPosition = JarZPosition.glass + 0.4
 
         reducedMotionHighlightNode.path = jarPath
         reducedMotionHighlightNode.fillColor = UIColor.white.withAlphaComponent(0.11)
@@ -1932,46 +2814,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             forKey: ActionKey.reducedMotionHighlight
         ) == nil {
             reducedMotionHighlightNode.alpha = 0
+            reducedMotionHighlightNode.isHidden = true
         }
         reducedMotionHighlightNode.zPosition = JarZPosition.glass + 0.72
-
-        let highlights = CGMutablePath()
-        highlights.move(to: CGPoint(x: outer.maxX - neckInset - 12, y: outer.maxY - 18))
-        highlights.addCurve(
-            to: CGPoint(x: outer.maxX - 13, y: outer.maxY - outer.height * 0.28),
-            control1: CGPoint(x: outer.maxX - 14, y: outer.maxY - 54),
-            control2: CGPoint(x: outer.maxX - 12, y: outer.maxY - outer.height * 0.18)
-        )
-        specularNode.path = highlights
-        specularNode.fillColor = .clear
-        specularNode.strokeColor = JarPalette.specular
-        specularNode.lineWidth = 2.2
-        specularNode.lineCap = .round
-        specularNode.glowWidth = 0.8
-        specularNode.alpha = 0.58
-        specularNode.zPosition = JarZPosition.glass + 1
-
-        let warmReflection = CGMutablePath()
-        warmReflection.move(to: CGPoint(x: outer.minX + 15, y: outer.maxY - 48))
-        warmReflection.addCurve(
-            to: CGPoint(x: outer.minX + 11, y: outer.maxY - outer.height * 0.34),
-            control1: CGPoint(x: outer.minX + 7, y: outer.maxY - 104),
-            control2: CGPoint(x: outer.minX + 9, y: outer.maxY - outer.height * 0.24)
-        )
-        warmReflection.move(to: CGPoint(x: outer.midX - outer.width * 0.08, y: outer.maxY - 2))
-        warmReflection.addCurve(
-            to: CGPoint(x: outer.minX + neckInset + 9, y: outer.maxY - 9),
-            control1: CGPoint(x: outer.midX - outer.width * 0.26, y: outer.maxY + 1),
-            control2: CGPoint(x: outer.minX + neckInset + 4, y: outer.maxY - 2)
-        )
-        warmReflectionNode.path = warmReflection
-        warmReflectionNode.fillColor = .clear
-        warmReflectionNode.strokeColor = JarPalette.warmSpecular
-        warmReflectionNode.lineWidth = 1.45
-        warmReflectionNode.lineCap = .round
-        warmReflectionNode.glowWidth = 1.0
-        warmReflectionNode.alpha = 0.60
-        warmReflectionNode.zPosition = JarZPosition.glass + 1.05
 
         rimNode.path = CGPath(
             ellipseIn: CGRect(
@@ -1983,9 +2828,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             transform: nil
         )
         rimNode.fillColor = JarPalette.mouthDepth.withAlphaComponent(0.42)
-        rimNode.strokeColor = JarPalette.specular.withAlphaComponent(0.62)
-        rimNode.lineWidth = 2.05
-        rimNode.glowWidth = 0.65
+        rimNode.strokeColor = JarPalette.specular.withAlphaComponent(0.70)
+        rimNode.lineWidth = 1.8
+        rimNode.glowWidth = 0
         rimNode.zPosition = JarZPosition.glass + 1.2
 
         innerRimNode.path = CGPath(
@@ -1993,7 +2838,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             transform: nil
         )
         innerRimNode.fillColor = .clear
-        innerRimNode.strokeColor = JarPalette.warmSpecular.withAlphaComponent(0.17)
+        innerRimNode.strokeColor = JarPalette.warmSpecular.withAlphaComponent(0.22)
         innerRimNode.lineWidth = 0.9
         innerRimNode.glowWidth = 0
         innerRimNode.zPosition = JarZPosition.glass + 1.35
@@ -2012,7 +2857,21 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         tapCausticNode.lineWidth = 1.1
         tapCausticNode.glowWidth = 3.2
         tapCausticNode.alpha = 0
+        if tapCausticNode.action(forKey: ActionKey.tapCaustic) == nil {
+            tapCausticNode.isHidden = true
+        }
         tapCausticNode.zPosition = JarZPosition.glass + 1.5
+
+        rebuildCollar()
+
+        floorGlowNode.size = CGSize(width: outer.width * 0.98, height: 72)
+        floorGlowNode.position = CGPoint(x: outer.midX, y: interiorRect.minY + 4)
+        floorGlowNode.color = UIColor(red: 1, green: 0.62, blue: 0.42, alpha: 1)
+        floorGlowNode.colorBlendFactor = 1
+        floorGlowNode.blendMode = .add
+        floorGlowNode.alpha = reduceTransparency ? 0.12 : 0.28
+        floorGlowNode.zPosition = JarZPosition.strata + 0.5
+        refreshGemBed()
 
         wallNode.removeAllChildren()
         addStaticEdge(
@@ -2064,6 +2923,18 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
     private func makeJarPath(in rect: CGRect) -> CGPath {
+        Self.jarPath(in: rect, neckInset: neckInset)
+    }
+
+    /// Neck inset of a bottle `width` wide (the mouth is narrower by this
+    /// on both sides).
+    nonisolated static func neckInset(jarWidth width: CGFloat) -> CGFloat {
+        min(50, width * 0.14)
+    }
+
+    /// The bottle silhouette in `rect` (y up, like the scene). SwiftUI layers
+    /// and share art flip it to draw the same bottle.
+    nonisolated static func jarPath(in rect: CGRect, neckInset: CGFloat) -> CGPath {
         let path = CGMutablePath()
         let bottomRadius = min(Constants.Jar.cornerRadius * 1.30, rect.width * 0.12)
         let shoulderDepth = min(52, rect.height * 0.13)
@@ -2102,126 +2973,538 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         return path
     }
 
-    private static let glassTextureCache = NSCache<NSString, SKTexture>()
+    private struct GlassTextures {
+        let back: SKTexture
+        let front: SKTexture
+        let highlights: SKTexture
+    }
 
-    private static func glassTexture(for size: CGSize) -> SKTexture {
-        let pixelWidth = max(1, Int(size.width.rounded()))
-        let pixelHeight = max(1, Int(size.height.rounded()))
-        let key = NSString(string: "\(pixelWidth)x\(pixelHeight)")
-        if let cached = glassTextureCache.object(forKey: key) { return cached }
+    private static let glassTextureCache = NSCache<NSString, NSArray>()
 
-        let renderSize = CGSize(width: CGFloat(pixelWidth), height: CGFloat(pixelHeight))
+    /// Glass v2 (Docs/GemExperienceDesign.md §7.8), pre-rendered once per jar
+    /// size. Back: absorption tint and inner shadows. Front: 7 pt wall band,
+    /// warm left rim, cool right rim with a lower-right flare, a 14 pt base
+    /// lens with its caustic line, neck ridges and a faint outline.
+    /// Highlights (additive, moved ±6 pt with tilt): two vertical reflection
+    /// bands and the shoulder light. No SKEffectNode or CIFilter.
+    private static func glassTextures(for size: CGSize, neckInset: CGFloat) -> GlassTextures {
+        let width = max(1, size.width.rounded())
+        let height = max(1, size.height.rounded())
+        let key = NSString(string: "\(Int(width))x\(Int(height))-\(Int(neckInset.rounded()))")
+        if let cached = glassTextureCache.object(forKey: key) as? [SKTexture], cached.count == 3 {
+            return GlassTextures(back: cached[0], front: cached[1], highlights: cached[2])
+        }
+        let renderSize = CGSize(width: width, height: height)
+        // Jar path in y-down texture space.
+        var flip = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: height)
+        let outline = jarPath(
+            in: CGRect(origin: .zero, size: renderSize),
+            neckInset: neckInset
+        ).copy(using: &flip) ?? CGPath(rect: CGRect(origin: .zero, size: renderSize), transform: nil)
+        let space = CGColorSpaceCreateDeviceRGB()
         let format = UIGraphicsImageRendererFormat.preferred()
         format.opaque = false
-        let image = UIGraphicsImageRenderer(size: renderSize, format: format).image { renderer in
-            let context = renderer.cgContext
-            let colorSpace = CGColorSpaceCreateDeviceRGB()
-            let horizontalColors = [
-                JarPalette.warmSpecular.withAlphaComponent(0.12).cgColor,
-                JarPalette.warmSpecular.withAlphaComponent(0.025).cgColor,
-                UIColor.clear.cgColor,
-                JarPalette.specular.withAlphaComponent(0.10).cgColor
-            ] as CFArray
-            if let gradient = CGGradient(
-                colorsSpace: colorSpace,
-                colors: horizontalColors,
-                locations: [0, 0.18, 0.72, 1]
-            ) {
-                context.drawLinearGradient(
-                    gradient,
-                    start: CGPoint(x: 0, y: renderSize.height * 0.45),
-                    end: CGPoint(x: renderSize.width, y: renderSize.height * 0.55),
-                    options: []
-                )
-            }
+        format.preferredRange = .standard
+        let renderer = UIGraphicsImageRenderer(size: renderSize, format: format)
+        let warm = JarPalette.color(hex: Constants.Color.auroraWarm)
+        let peach = JarPalette.color(hex: "#FFB38A")
+        let cool = JarPalette.color(hex: Constants.Color.auroraCool)
+        let blue = JarPalette.color(hex: Constants.Color.floorGlow)
+        let shoulderY = min(52, height * 0.13)
+        let neckHeight = min(16, height * 0.04)
 
-            let verticalColors = [
-                UIColor.white.withAlphaComponent(0.07).cgColor,
-                UIColor.clear.cgColor,
-                UIColor(red: 0.10, green: 0.22, blue: 0.40, alpha: 0.10).cgColor
-            ] as CFArray
-            if let gradient = CGGradient(
-                colorsSpace: colorSpace,
-                colors: verticalColors,
-                locations: [0, 0.50, 1]
-            ) {
-                context.drawLinearGradient(
-                    gradient,
-                    start: CGPoint(x: renderSize.width / 2, y: 0),
-                    end: CGPoint(x: renderSize.width / 2, y: renderSize.height),
-                    options: []
-                )
-            }
-
-            // A narrow key-light ribbon and a cooler opposite rim create the
-            // asymmetric highlights people read as thick, curved glass.
+        /// Soft inner glow along the silhouette: widening strokes clipped to
+        /// the interior, masked to one side by a horizontal gradient.
+        func innerRim(
+            _ context: CGContext,
+            colors: [UIColor],
+            alpha: CGFloat,
+            depth: CGFloat,
+            fromLeft: Bool
+        ) {
             context.saveGState()
-            context.setBlendMode(.screen)
-            let keyRibbon = [
+            context.addPath(outline)
+            context.clip()
+            context.beginTransparencyLayer(auxiliaryInfo: nil)
+            let passes = 6
+            for pass in 0 ..< passes {
+                let t = CGFloat(pass) / CGFloat(passes - 1)
+                let color = colors[min(colors.count - 1, Int(t * CGFloat(colors.count - 1) + 0.5))]
+                context.setStrokeColor(color.withAlphaComponent(alpha * pow(1 - t, 1.6) * 0.55).cgColor)
+                context.setLineWidth(max(1, depth * 2 * (0.12 + t)))
+                context.addPath(outline)
+                context.strokePath()
+            }
+            // Side mask.
+            context.setBlendMode(.destinationIn)
+            let mask = [
+                UIColor(white: 1, alpha: 1).cgColor,
+                UIColor(white: 1, alpha: 0.35).cgColor,
+                UIColor(white: 1, alpha: 0).cgColor
+            ] as CFArray
+            if let gradient = CGGradient(colorsSpace: space, colors: mask, locations: [0, 0.30, 0.56]) {
+                context.drawLinearGradient(
+                    gradient,
+                    start: CGPoint(x: fromLeft ? 0 : width, y: 0),
+                    end: CGPoint(x: fromLeft ? width : 0, y: 0),
+                    options: []
+                )
+            }
+            context.endTransparencyLayer()
+            context.restoreGState()
+        }
+
+        let back = renderer.image { rendererContext in
+            let context = rendererContext.cgContext
+            context.addPath(outline)
+            context.clip()
+            // Absorption follows the path length through the back wall:
+            // clear in the middle (where the time core glows through), deeper
+            // toward the side walls.
+            let absorption = JarPalette.color(hex: Constants.Color.glassAbsorption)
+            let wall = [
+                absorption.withAlphaComponent(0.20).cgColor,
+                absorption.withAlphaComponent(0.10).cgColor,
+                absorption.withAlphaComponent(0.06).cgColor,
+                absorption.withAlphaComponent(0.10).cgColor,
+                absorption.withAlphaComponent(0.20).cgColor
+            ] as CFArray
+            if let gradient = CGGradient(colorsSpace: space, colors: wall, locations: [0, 0.28, 0.5, 0.72, 1]) {
+                context.drawLinearGradient(
+                    gradient,
+                    start: CGPoint(x: 0, y: height / 2),
+                    end: CGPoint(x: width, y: height / 2),
+                    options: []
+                )
+            }
+            // Inner shadow in the lower back corners and under the shoulders.
+            for center in [
+                CGPoint(x: 0, y: height), CGPoint(x: width, y: height),
+                CGPoint(x: width * 0.08, y: shoulderY + 10), CGPoint(x: width * 0.92, y: shoulderY + 10)
+            ] {
+                let shade = [
+                    UIColor(red: 0.01, green: 0.02, blue: 0.06, alpha: 0.18).cgColor,
+                    UIColor(red: 0.01, green: 0.02, blue: 0.06, alpha: 0).cgColor
+                ] as CFArray
+                if let gradient = CGGradient(colorsSpace: space, colors: shade, locations: [0, 1]) {
+                    context.drawRadialGradient(
+                        gradient,
+                        startCenter: center, startRadius: 0,
+                        endCenter: center, endRadius: width * 0.22,
+                        options: []
+                    )
+                }
+            }
+            // Faint back wall contour seen through the front.
+            context.setStrokeColor(JarPalette.color(hex: Constants.Color.auroraViolet).withAlphaComponent(0.16).cgColor)
+            context.setLineWidth(2)
+            context.addPath(outline)
+            context.strokePath()
+        }
+
+        let front = renderer.image { rendererContext in
+            let context = rendererContext.cgContext
+            context.saveGState()
+            context.addPath(outline)
+            context.clip()
+            // Very light body tint: a hint of warm left, cool right.
+            let body = [
+                warm.withAlphaComponent(0.05).cgColor,
                 UIColor.clear.cgColor,
-                JarPalette.warmSpecular.withAlphaComponent(0.14).cgColor,
-                JarPalette.warmSpecular.withAlphaComponent(0.030).cgColor,
+                cool.withAlphaComponent(0.05).cgColor
+            ] as CFArray
+            if let gradient = CGGradient(colorsSpace: space, colors: body, locations: [0, 0.5, 1]) {
+                context.drawLinearGradient(
+                    gradient,
+                    start: CGPoint(x: 0, y: height / 2),
+                    end: CGPoint(x: width, y: height / 2),
+                    options: []
+                )
+            }
+            // Wall thickness: a 7 pt cool band inside the silhouette.
+            context.setStrokeColor(cool.withAlphaComponent(0.18).cgColor)
+            context.setLineWidth(14)
+            context.addPath(outline)
+            context.strokePath()
+            context.setStrokeColor(UIColor.white.withAlphaComponent(0.10).cgColor)
+            context.setLineWidth(15.5)
+            context.addPath(outline)
+            context.replacePathWithStrokedPath()
+            context.setLineWidth(0.8)
+            context.strokePath()
+
+            // Base lens: 14 pt thick, a dark refraction band over a bright
+            // caustic line at the floor the gems rest on.
+            let lensTop = height - 14
+            let refraction = [
+                UIColor(red: 0.04, green: 0.06, blue: 0.16, alpha: 0).cgColor,
+                UIColor(red: 0.04, green: 0.06, blue: 0.16, alpha: 0.12).cgColor,
+                UIColor(red: 0.30, green: 0.40, blue: 0.62, alpha: 0.14).cgColor
+            ] as CFArray
+            if let gradient = CGGradient(colorsSpace: space, colors: refraction, locations: [0, 0.35, 1]) {
+                context.drawLinearGradient(
+                    gradient,
+                    start: CGPoint(x: 0, y: lensTop - 6),
+                    end: CGPoint(x: 0, y: height),
+                    options: []
+                )
+            }
+            let caustic = [
+                UIColor.clear.cgColor,
+                warm.withAlphaComponent(0.75).cgColor,
+                UIColor.white.withAlphaComponent(0.85).cgColor,
+                cool.withAlphaComponent(0.75).cgColor,
                 UIColor.clear.cgColor
             ] as CFArray
             if let gradient = CGGradient(
-                colorsSpace: colorSpace,
-                colors: keyRibbon,
-                locations: [0, 0.36, 0.58, 1]
+                colorsSpace: space,
+                colors: caustic,
+                locations: [0.04, 0.26, 0.5, 0.74, 0.96]
             ) {
-                context.drawLinearGradient(
+                for (y, thickness, alpha) in [(height - 10, CGFloat(2), CGFloat(1)), (height - 2.5, CGFloat(1.2), CGFloat(0.7))] {
+                    context.saveGState()
+                    context.setAlpha(alpha)
+                    context.clip(to: CGRect(x: 0, y: y - thickness / 2, width: width, height: thickness))
+                    context.drawLinearGradient(
+                        gradient,
+                        start: CGPoint(x: 0, y: y),
+                        end: CGPoint(x: width, y: y),
+                        options: []
+                    )
+                    context.restoreGState()
+                }
+            }
+
+            // Neck ridges just under the collar: two thin lit lines.
+            for offset in [CGFloat(3), 7] {
+                let y = neckHeight + offset
+                let ridge = CGMutablePath()
+                ridge.move(to: CGPoint(x: neckInset - 4, y: y))
+                ridge.addQuadCurve(
+                    to: CGPoint(x: width - neckInset + 4, y: y),
+                    control: CGPoint(x: width / 2, y: y + 3)
+                )
+                context.setStrokeColor(UIColor.white.withAlphaComponent(offset < 5 ? 0.22 : 0.12).cgColor)
+                context.setLineWidth(0.8)
+                context.addPath(ridge)
+                context.strokePath()
+            }
+            context.restoreGState()
+
+            // Warm left rim (coral → peach) and cool right rim (cyan → blue):
+            // thick glass that glows from within.
+            innerRim(context, colors: [warm, peach], alpha: 1, depth: 15, fromLeft: true)
+            innerRim(context, colors: [cool, blue], alpha: 0.95, depth: 15, fromLeft: false)
+
+            // Wall specular lines (round 12): down each wall, from the
+            // shoulder to 75 % of the height, fading at both ends, a 1.5 pt
+            // white core (α0.95) in a 5 pt glow (α0.25).
+            context.saveGState()
+            for (x, alpha) in [(CGFloat(5.5), CGFloat(0.95)), (width - 5.5, CGFloat(0.95))] {
+                let top = shoulderY + 8
+                let bottom = height * 0.75
+                for (lineWidth, lineAlpha) in [(CGFloat(5), CGFloat(0.25)), (CGFloat(1.5), alpha)] {
+                    context.saveGState()
+                    context.clip(to: CGRect(x: x - lineWidth / 2, y: top, width: lineWidth, height: bottom - top))
+                    let line = [
+                        UIColor.white.withAlphaComponent(0).cgColor,
+                        UIColor.white.withAlphaComponent(lineAlpha).cgColor,
+                        UIColor.white.withAlphaComponent(lineAlpha * 0.85).cgColor,
+                        UIColor.white.withAlphaComponent(0).cgColor
+                    ] as CFArray
+                    if let gradient = CGGradient(colorsSpace: space, colors: line, locations: [0, 0.16, 0.72, 1]) {
+                        context.drawLinearGradient(
+                            gradient,
+                            start: CGPoint(x: x, y: top),
+                            end: CGPoint(x: x, y: bottom),
+                            options: []
+                        )
+                    }
+                    context.restoreGState()
+                }
+            }
+            context.restoreGState()
+
+            // Lower-right flare streak in the cool rim.
+            context.saveGState()
+            context.addPath(outline)
+            context.clip()
+            let flare = [
+                UIColor.white.withAlphaComponent(0.55).cgColor,
+                cool.withAlphaComponent(0.22).cgColor,
+                UIColor.clear.cgColor
+            ] as CFArray
+            if let gradient = CGGradient(colorsSpace: space, colors: flare, locations: [0, 0.35, 1]) {
+                context.translateBy(x: width - 4, y: height * 0.80)
+                context.scaleBy(x: 0.10, y: 1)
+                context.drawRadialGradient(
                     gradient,
-                    start: CGPoint(x: renderSize.width * 0.03, y: renderSize.height / 2),
-                    end: CGPoint(x: renderSize.width * 0.34, y: renderSize.height / 2),
-                    options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
+                    startCenter: .zero, startRadius: 0,
+                    endCenter: .zero, endRadius: height * 0.16,
+                    options: []
                 )
             }
             context.restoreGState()
 
-            let bottomCaustic = [
-                UIColor(red: 0.32, green: 0.70, blue: 1, alpha: 0.12).cgColor,
-                UIColor(red: 0.24, green: 0.48, blue: 0.88, alpha: 0.025).cgColor,
-                UIColor.clear.cgColor
-            ] as CFArray
-            if let gradient = CGGradient(
-                colorsSpace: colorSpace,
-                colors: bottomCaustic,
-                locations: [0, 0.44, 1]
-            ) {
+            // Faint outline so the silhouette stays legible on Dawn.
+            context.setStrokeColor(JarPalette.color(hex: Constants.Color.glassEdge).withAlphaComponent(0.32).cgColor)
+            context.setLineWidth(1)
+            context.addPath(outline)
+            context.strokePath()
+        }
+
+        let highlights = renderer.image { rendererContext in
+            let context = rendererContext.cgContext
+            context.addPath(outline)
+            context.clip()
+            // Two soft vertical reflection bands (0.2 and 0.75 of the width).
+            for (center, bandWidth) in [(width * 0.20, width * 0.05), (width * 0.75, width * 0.03)] {
+                let band = [
+                    UIColor.white.withAlphaComponent(0.12).cgColor,
+                    UIColor.white.withAlphaComponent(0.06).cgColor,
+                    UIColor.clear.cgColor
+                ] as CFArray
+                guard let gradient = CGGradient(colorsSpace: space, colors: band, locations: [0, 0.6, 1]) else { continue }
+                context.saveGState()
+                context.translateBy(x: center, y: height * 0.52)
+                context.scaleBy(x: 1, y: height * 0.36 / max(bandWidth, 1))
                 context.drawRadialGradient(
                     gradient,
-                    startCenter: CGPoint(
-                        x: renderSize.width * 0.52,
-                        y: renderSize.height * 0.94
-                    ),
-                    startRadius: 1,
-                    endCenter: CGPoint(
-                        x: renderSize.width * 0.52,
-                        y: renderSize.height * 0.94
-                    ),
-                    endRadius: renderSize.width * 0.52,
-                    options: [.drawsAfterEndLocation]
+                    startCenter: .zero, startRadius: 0,
+                    endCenter: .zero, endRadius: bandWidth,
+                    options: []
+                )
+                context.restoreGState()
+            }
+            // Specular streaks on the glass (round 12): the window light
+            // seen in the front wall, 18 % in from the left and 10 % in
+            // from the right, from the shoulder to 75 % of the height: a
+            // 2 pt white core (α0.85) in an 8 pt glow (α0.3), tapered at
+            // both ends. Additive, so they ride the tilt with the bands.
+            for (center, alpha) in [(width * 0.18, CGFloat(0.85)), (width * 0.90, CGFloat(0.8))] {
+                let top = shoulderY + 12
+                let bottom = height * 0.75
+                for (lineWidth, lineAlpha) in [(CGFloat(8), CGFloat(0.3)), (CGFloat(2), alpha)] {
+                    context.saveGState()
+                    context.clip(to: CGRect(x: center - lineWidth / 2, y: top, width: lineWidth, height: bottom - top))
+                    let streak = [
+                        UIColor.white.withAlphaComponent(0).cgColor,
+                        UIColor.white.withAlphaComponent(lineAlpha).cgColor,
+                        UIColor.white.withAlphaComponent(lineAlpha * 0.7).cgColor,
+                        UIColor.white.withAlphaComponent(0).cgColor
+                    ] as CFArray
+                    if let gradient = CGGradient(colorsSpace: space, colors: streak, locations: [0, 0.2, 0.62, 1]) {
+                        context.drawLinearGradient(
+                            gradient,
+                            start: CGPoint(x: center, y: top),
+                            end: CGPoint(x: center, y: bottom),
+                            options: []
+                        )
+                    }
+                    context.restoreGState()
+                }
+            }
+            // Shoulder light on the right shoulder, a warmer one left, each
+            // with a white specular core along the curve (round 12).
+            for (fromLeft, color, alpha) in [(false, GemColor(cool).mixed(with: .white, amount: 0.7).withAlpha(1), CGFloat(0.9)), (true, GemColor(peach).mixed(with: .white, amount: 0.55).withAlpha(1), CGFloat(0.72))] {
+                let x0 = fromLeft ? neckInset * 0.55 : width - neckInset * 0.55
+                let arc = CGMutablePath()
+                arc.move(to: CGPoint(x: fromLeft ? neckInset - 2 : width - neckInset + 2, y: neckHeight + 4))
+                arc.addQuadCurve(
+                    to: CGPoint(x: fromLeft ? 6 : width - 6, y: shoulderY + 6),
+                    control: CGPoint(x: x0, y: neckHeight + 6)
+                )
+                context.setLineCap(.round)
+                for pass in 0 ..< 3 {
+                    context.setStrokeColor(color.withAlphaComponent(alpha * [0.22, 0.4, 1][pass]).cgColor)
+                    context.setLineWidth([7, 4, 1.6][pass])
+                    context.addPath(arc)
+                    context.strokePath()
+                }
+            }
+        }
+
+        let textures = [back, front, highlights].map { image -> SKTexture in
+            let texture = SKTexture(image: image)
+            texture.filteringMode = .linear
+            return texture
+        }
+        glassTextureCache.setObject(textures as NSArray, forKey: key)
+        return GlassTextures(back: textures[0], front: textures[1], highlights: textures[2])
+    }
+
+    // MARK: Copper collar
+
+    private static let collarTextureCache = NSCache<NSString, SKTexture>()
+
+    /// Rose-gold band around the neck: base #B8735A, highlight #F2C4A8,
+    /// shade #5A2E22 (engravings only), two white specular bands, vertical
+    /// anisotropic highlight bands whose position follows the tilt state,
+    /// and up to six engraved milestone marks on the lower edge. The mouth
+    /// stays open.
+    private static func collarTexture(width: CGFloat, tilt: Int, marks: Int) -> SKTexture {
+        let key = NSString(string: "\(Int(width.rounded()))-\(tilt)-\(marks)")
+        if let cached = collarTextureCache.object(forKey: key) { return cached }
+        let height: CGFloat = 14
+        let size = CGSize(width: width, height: height + 3)
+        let format = UIGraphicsImageRendererFormat.preferred()
+        format.opaque = false
+        format.preferredRange = .standard
+        let base = JarPalette.color(hex: "#B8735A")
+        let highlight = JarPalette.color(hex: "#F2C4A8")
+        let shade = JarPalette.color(hex: "#5A2E22")
+        let image = UIGraphicsImageRenderer(size: size, format: format).image { rendererContext in
+            let context = rendererContext.cgContext
+            let space = CGColorSpaceCreateDeviceRGB()
+            // Cylinder band: both edges bow toward the viewer.
+            let band = CGMutablePath()
+            band.move(to: CGPoint(x: 0, y: 1.5))
+            band.addQuadCurve(to: CGPoint(x: width, y: 1.5), control: CGPoint(x: width / 2, y: 3.2))
+            band.addLine(to: CGPoint(x: width, y: height - 1))
+            band.addQuadCurve(to: CGPoint(x: 0, y: height - 1), control: CGPoint(x: width / 2, y: height + 2.4))
+            band.closeSubpath()
+            context.saveGState()
+            context.addPath(band)
+            context.clip()
+            // Polished rose gold (round 12): pale lip #FFE3CF, #D9967A
+            // body, a slightly deeper waist, and the lower edge lit again
+            // (#D9967A → #FFE3CF) instead of a brown band.
+            let vertical = [
+                JarPalette.color(hex: "#FFE3CF").cgColor,
+                JarPalette.color(hex: "#D9967A").cgColor,
+                JarPalette.color(hex: "#C98468").cgColor,
+                JarPalette.color(hex: "#D9967A").cgColor,
+                JarPalette.color(hex: "#FFE3CF").cgColor
+            ] as CFArray
+            if let gradient = CGGradient(colorsSpace: space, colors: vertical, locations: [0, 0.30, 0.52, 0.78, 1]) {
+                context.drawLinearGradient(
+                    gradient,
+                    start: CGPoint(x: 0, y: 0),
+                    end: CGPoint(x: 0, y: height + 2),
+                    options: []
                 )
             }
-
-            // Microscopic deterministic grain keeps large translucent areas
-            // from looking like a flat vector fill without requiring an asset.
-            context.setFillColor(UIColor.white.withAlphaComponent(0.018).cgColor)
-            for index in 0..<54 {
-                let x = CGFloat((index * 73 + 19) % 997) / 997 * renderSize.width
-                let y = CGFloat((index * 151 + 47) % 991) / 991 * renderSize.height
-                let diameter = index.isMultiple(of: 3) ? CGFloat(0.9) : CGFloat(0.55)
-                context.fillEllipse(in: CGRect(
-                    x: x,
-                    y: y,
-                    width: diameter,
-                    height: diameter
-                ))
+            // White specular bands: at 30 % of the height (under the mouth's
+            // rim on screen) and a second one at 62 %, below the rim where
+            // it shows; each a 2 pt white core (α0.95) with soft edges.
+            let bandColors = [
+                UIColor.white.withAlphaComponent(0).cgColor,
+                UIColor.white.withAlphaComponent(0.95).cgColor,
+                UIColor.white.withAlphaComponent(0.95).cgColor,
+                UIColor.white.withAlphaComponent(0).cgColor
+            ] as CFArray
+            if let gradient = CGGradient(colorsSpace: space, colors: bandColors, locations: [0, 0.3, 0.7, 1]) {
+                for bandY in [height * 0.30, height * 0.62] {
+                    context.drawLinearGradient(
+                        gradient,
+                        start: CGPoint(x: 0, y: bandY - 1.7),
+                        end: CGPoint(x: 0, y: bandY + 1.7),
+                        options: []
+                    )
+                }
             }
+            // Horizontal shading: the band turns away at both ends (a
+            // rose shade, never brown).
+            let ends = [
+                base.withAlphaComponent(0.55).cgColor,
+                UIColor.clear.cgColor,
+                UIColor.clear.cgColor,
+                base.withAlphaComponent(0.65).cgColor
+            ] as CFArray
+            if let gradient = CGGradient(colorsSpace: space, colors: ends, locations: [0, 0.16, 0.84, 1]) {
+                context.drawLinearGradient(
+                    gradient,
+                    start: .zero,
+                    end: CGPoint(x: width, y: 0),
+                    options: []
+                )
+            }
+            // Anisotropic highlight streaks; tilt slides them.
+            let shift = CGFloat(tilt) * 0.07
+            for (center, streakWidth, alpha) in [
+                (0.20 + shift, 0.07, CGFloat(0.95)),
+                (0.34 + shift, 0.025, CGFloat(0.6)),
+                (0.80 + shift, 0.05, CGFloat(0.75))
+            ] {
+                let streak = [
+                    UIColor.clear.cgColor,
+                    GemColor(highlight).mixed(with: .white, amount: 0.5).withAlpha(alpha).cgColor,
+                    UIColor.clear.cgColor
+                ] as CFArray
+                if let gradient = CGGradient(colorsSpace: space, colors: streak, locations: [0, 0.5, 1]) {
+                    context.drawLinearGradient(
+                        gradient,
+                        start: CGPoint(x: width * (center - streakWidth), y: 0),
+                        end: CGPoint(x: width * (center + streakWidth), y: 0),
+                        options: []
+                    )
+                }
+            }
+            // Engraved milestone marks on the lower edge.
+            if marks > 0 {
+                let spacing: CGFloat = 5
+                let start = width / 2 - spacing * CGFloat(marks - 1) / 2
+                for index in 0 ..< marks {
+                    let x = start + spacing * CGFloat(index)
+                    context.setStrokeColor(shade.withAlphaComponent(0.95).cgColor)
+                    context.setLineWidth(1)
+                    context.move(to: CGPoint(x: x, y: height - 5.5))
+                    context.addLine(to: CGPoint(x: x, y: height - 1.5))
+                    context.strokePath()
+                    context.setStrokeColor(highlight.withAlphaComponent(0.8).cgColor)
+                    context.setLineWidth(0.5)
+                    context.move(to: CGPoint(x: x + 0.8, y: height - 5.5))
+                    context.addLine(to: CGPoint(x: x + 0.8, y: height - 1.5))
+                    context.strokePath()
+                }
+            }
+            context.restoreGState()
+            // Bright lip and dark lower edge.
+            context.setStrokeColor(GemColor(highlight).mixed(with: .white, amount: 0.4).withAlpha(0.9).cgColor)
+            context.setLineWidth(0.8)
+            context.move(to: CGPoint(x: 1.5, y: 1.9))
+            context.addQuadCurve(to: CGPoint(x: width - 1.5, y: 1.9), control: CGPoint(x: width / 2, y: 3.6))
+            context.strokePath()
+            context.setStrokeColor(base.withAlphaComponent(0.7).cgColor)
+            context.move(to: CGPoint(x: 1.5, y: height - 1))
+            context.addQuadCurve(to: CGPoint(x: width - 1.5, y: height - 1), control: CGPoint(x: width / 2, y: height + 2.2))
+            context.strokePath()
         }
         let texture = SKTexture(image: image)
         texture.filteringMode = .linear
-        glassTextureCache.setObject(texture, forKey: key)
+        collarTextureCache.setObject(texture, forKey: key)
         return texture
+    }
+
+    private func rebuildCollar() {
+        guard size.width > .zero, size.height > .zero else { return }
+        requestRedraw()
+        let outer = outerJarRect
+        let mouthWidth = outer.width - neckInset * 2
+        let width = mouthWidth + 8
+        let height: CGFloat = 17
+        collarNode.position = CGPoint(x: outer.midX, y: outer.maxY - 9.5)
+        collarNode.zPosition = JarZPosition.glass + 1.1
+        for (node, tilt) in [(collarLeftNode, -1), (collarCenterNode, 0), (collarRightNode, 1)] {
+            node.texture = Self.collarTexture(width: width, tilt: tilt, marks: milestoneTraceCount)
+            node.size = CGSize(width: width, height: height)
+            // Two states cross-fade: keep their former child order explicit
+            // now that the view ignores sibling order.
+            node.zPosition = CGFloat(tilt + 1) * 0.01
+        }
+        updateCollarTilt(opticalTiltFraction)
+    }
+
+    /// Crossfades the three pre-rendered collar states; never more than two
+    /// are drawn.
+    private func updateCollarTilt(_ fraction: CGFloat) {
+        let amount = min(abs(fraction), 1)
+        collarCenterNode.alpha = 1 - amount
+        collarLeftNode.alpha = fraction < 0 ? amount : 0
+        collarRightNode.alpha = fraction > 0 ? amount : 0
+        for node in [collarCenterNode, collarLeftNode, collarRightNode] {
+            node.isHidden = node.alpha <= 0.001
+        }
     }
 
     private func addStaticEdge(
@@ -2252,6 +3535,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
     private func renderBaseLayers(animatedStratumID: UUID? = nil) {
+        requestRedraw()
         let previousScale = strataRenderer.compactionScale
         strataRenderer.render(
             strata: visualStrata,
@@ -2361,11 +3645,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         horizontalUnit: CGFloat,
         origin: DropOrigin
     ) {
-        let node = PebbleNode(
-            descriptor: descriptor,
-            reduceMotion: reduceMotion,
-            rareRewardMode: rareRewardMode
-        )
+        // D4: the incoming gem counts toward the jar's area now and falls at
+        // the scale the pile takes when it lands (usually smaller; larger
+        // only after the jar itself had to shrink, e.g. under a card).
+        let arrivalScale = resolvedJarScale(adding: [descriptor])
+        if abs(arrivalScale - jarScale) > 0.0001 {
+            scheduledJarScale = arrivalScale
+        }
+        let node = makePebbleNode(descriptor, studyScale: arrivalScale)
         let xRange = interiorRect.width * Constants.Jar.dropHorizontalRangeFraction
         if origin == .sceneTop {
             let entryRange = allowedHorizontalRange(at: size.height, radius: node.radius)
@@ -2395,7 +3682,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         node.physicsBody?.angularVelocity = CGFloat.random(
             in: -Constants.Jar.dropHorizontalSpeed ... Constants.Jar.dropHorizontalSpeed
         )
-        worldNode.addChild(node)
+        insertPebble(node)
         if origin == .sceneTop {
             completionDropSequence &+= 1
             completionDropMaximumFall = 0
@@ -2490,25 +3777,96 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         if reduceMotion {
             completeActiveBake(token: bakeToken)
         } else {
+            // 標準 0.52 s; 控えめ converges in 0.32 s (D17).
+            let formation = effects.fusion.formation
+            // Round 12: the core's labels step aside while the ten meet
+            // and their crystal flashes (formation + about 0.4 s).
+            holdFusionSpotlight(for: formation + Self.fusionSpotlightTail)
             selected.forEach { pebble in
+                // The ten stay solid and brighten as they meet (additive
+                // light and a short trail); only the last 28 % fades, as
+                // the crystal takes their place.
                 pebble.run(
                     .group([
-                        .fadeOut(withDuration: Constants.Jar.aggregateFormationDuration),
-                        .move(to: formationPoint, duration: Constants.Jar.aggregateFormationDuration),
+                        .sequence([
+                            .wait(forDuration: formation * 0.72),
+                            .fadeOut(withDuration: formation * 0.28)
+                        ]),
+                        .move(to: formationPoint, duration: formation),
                         .scale(
-                            to: Constants.Jar.bakePebbleFinalScale,
-                            duration: Constants.Jar.aggregateFormationDuration
+                            to: Constants.Jar.bakePebbleFinalScale * pebble.xScale,
+                            duration: formation
                         )
                     ])
                 )
+                addConvergenceLight(to: pebble, toward: formationPoint, duration: formation)
             }
             DispatchQueue.main.asyncAfter(
-                deadline: .now() + Constants.Jar.aggregateFormationDuration
+                deadline: .now() + formation
             ) { [weak self] in
                 self?.completeActiveBake(token: bakeToken)
             }
         }
         return true
+    }
+
+    /// How long the core's labels stay aside after the ten have met.
+    static let fusionSpotlightTail: TimeInterval = 0.4
+
+    /// Lights the fusion spotlight for `duration`. A later fusion takes it
+    /// over: only the newest hold's timer turns it off.
+    func holdFusionSpotlight(for duration: TimeInterval) {
+        fusionSpotlightToken &+= 1
+        let token = fusionSpotlightToken
+        isFusionSpotlightActive = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.fusionSpotlightToken == token else { return }
+                self.isFusionSpotlightActive = false
+            }
+        }
+    }
+
+    /// A converging gem's own light (round 12): an additive halo in its
+    /// glint colour that swells over the first 60 % of the formation
+    /// (+0.15 L or so on the gem), and a trail about 0.12 s of travel long
+    /// behind it. Children of the gem, so they leave with it.
+    private func addConvergenceLight(to pebble: PebbleNode, toward point: CGPoint, duration: TimeInterval) {
+        guard Self.allowsAmbientSparkle, duration > 0 else { return }
+        let tint = GemTone(hex: pebble.descriptor.colorHex, muted: !pebble.descriptor.isMeasured, glass: false)
+            .glintUIColor
+        let radius = pebble.localRadius
+        let halo = SKSpriteNode(texture: GemArtwork.haloTexture, size: CGSize(width: radius * 2.8, height: radius * 2.8))
+        halo.name = "drop.fusionConverge"
+        halo.color = tint
+        halo.colorBlendFactor = 1
+        halo.blendMode = .add
+        lightEdgeFade.apply(to: halo)
+        halo.alpha = 0
+        halo.zPosition = 2
+        pebble.addChild(halo)
+        halo.run(.fadeAlpha(to: 0.62 * effects.haloScale, duration: duration * 0.6))
+
+        let dx = point.x - pebble.position.x
+        let dy = point.y - pebble.position.y
+        let distance = hypot(dx, dy)
+        guard distance > radius else { return }
+        // In the gem's own (scaled, rotated) frame.
+        let scale = max(pebble.xScale, 0.0001)
+        let length = min(distance / scale * 0.12 / duration, radius * 3)
+        let trail = SKSpriteNode(texture: GemArtwork.haloTexture, size: CGSize(width: length + radius, height: radius * 0.9))
+        trail.name = "drop.fusionTrail"
+        trail.anchorPoint = CGPoint(x: 1, y: 0.5)
+        trail.position = .zero
+        trail.zRotation = atan2(dy, dx) - pebble.zRotation
+        trail.color = tint
+        trail.colorBlendFactor = 1
+        trail.blendMode = .add
+        lightEdgeFade.apply(to: trail)
+        trail.alpha = 0
+        trail.zPosition = 1.5
+        pebble.addChild(trail)
+        trail.run(.fadeAlpha(to: 0.5 * effects.haloScale, duration: 0.12))
     }
 
     /// Commits exactly the aggregation transaction captured before source nodes
@@ -2524,13 +3882,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
 
         let descriptor = request.outputDescriptor
-        if !livePebbles.contains(where: { $0.descriptor.id == descriptor.id }) {
+        let needsCrystal = !livePebbles.contains(where: { $0.descriptor.id == descriptor.id })
+        // D4: ten bodies became one, so A0 fell and the pile may grow back
+        // (fusion adds; it never empties the jar). The crystal is born at
+        // the new scale while its neighbours grow toward it.
+        let fusedScale = resolvedJarScale(adding: needsCrystal ? [descriptor] : [])
+        if needsCrystal {
             _ = acceptedPebbleIDs.insert(descriptor.id)
-            let aggregateNode = PebbleNode(
-                descriptor: descriptor,
-                reduceMotion: reduceMotion,
-                rareRewardMode: rareRewardMode
-            )
+            let aggregateNode = makePebbleNode(descriptor, studyScale: fusedScale)
             aggregateNode.position = CGPoint(
                 x: min(
                     max(
@@ -2547,28 +3906,17 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                     interiorRect.maxY - aggregateNode.radius
                 )
             )
-            aggregateNode.setScale(0.38)
+            aggregateNode.setScale(0.38 * aggregateNode.jarScale)
             aggregateNode.alpha = 0.25
             aggregateNode.physicsBody?.velocity = CGVector(
                 dx: 0,
                 dy: Constants.Jar.aggregateBirthImpulse
             )
-            worldNode.addChild(aggregateNode)
-            if reduceMotion {
-                aggregateNode.setScale(1)
-                aggregateNode.alpha = 1
-            } else {
-                aggregateNode.run(.group([
-                    .scale(to: 1, duration: Constants.Jar.aggregateFormationDuration * 0.55),
-                    .fadeIn(withDuration: Constants.Jar.aggregateFormationDuration * 0.55)
-                ]))
-                spawnSparks(
-                    at: aggregateNode.position,
-                    color: aggregateNode.subjectColor,
-                    mark: "✦"
-                )
-            }
+            insertPebble(aggregateNode)
+            presentFusionFinale(for: aggregateNode)
         }
+        applyJarScale(fusedScale, animated: true)
+        refreshPileLight()
         publishPhysicalContentChangeIfNeeded()
         let persistenceHandler = activeBake.persistenceHandler
         self.activeBake = nil
@@ -2644,7 +3992,11 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         // SpriteKit contact callback/frame even when one output has been disabled.
         soundSynth.playThud(impactSpeed: speed)
         haptics.playLanding(impactSpeed: speed)
-        spawnDust(at: point, color: pebble.subjectColor)
+        if pebble.gemRung != nil, !pebble.descriptor.isTutorial {
+            spawnLandingLight(at: point, pebble: pebble)
+        } else {
+            spawnDust(at: point, color: pebble.subjectColor)
+        }
         shakeCamera(impactSpeed: speed)
 
         switch presentationKind(for: pebble.descriptor) {
@@ -2743,7 +4095,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         let plan = JarSensoryPolicy.plan(
             trigger: .collision,
             samples: pebbles.map {
-                JarSensorySample(radius: Double($0.radius), coupling: 1)
+                JarSensorySample(radius: Double($0.sensoryRadius), coupling: 1)
             },
             gestureStrength: Double(min(max(impactSpeed / 8, 0.08), 1)),
             abundanceCount: physicalPebbleCount,
@@ -2766,8 +4118,11 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
     private func spawnDust(at point: CGPoint, color: UIColor) {
         guard !reduceMotion else { return }
-        for index in 0..<Constants.Jar.dustCount {
-            let angle = CGFloat(index) / CGFloat(max(Constants.Jar.dustCount, 1)) * .pi
+        let beat = effects.landing
+        let count = beat.sparkCount(standard: Constants.Jar.dustCount)
+        let lifetime = Constants.Jar.dustLifetime * beat.particleLifetimeScale
+        for index in 0..<count {
+            let angle = CGFloat(index) / CGFloat(max(count, 1)) * .pi
             let particle = SKShapeNode(
                 circleOfRadius: Constants.Jar.measuredRadius * Constants.Jar.dustRadiusScale
             )
@@ -2781,7 +4136,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             let distance = Constants.Jar.measuredRadius * (
                 Constants.Jar.dustDistanceBase
                     + CGFloat(index % 3) * Constants.Jar.dustDistanceStep
-            )
+            ) * beat.particleReach
             let destination = CGPoint(
                 x: cos(angle) * distance,
                 y: sin(angle) * distance
@@ -2793,12 +4148,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                         .moveBy(
                             x: destination.x,
                             y: destination.y,
-                            duration: Constants.Jar.dustLifetime
+                            duration: lifetime
                         ),
-                        .fadeOut(withDuration: Constants.Jar.dustLifetime),
+                        .fadeOut(withDuration: lifetime),
                         .scale(
                             to: Constants.Jar.dustFinalScale,
-                            duration: Constants.Jar.dustLifetime
+                            duration: lifetime
                         )
                     ]),
                     .removeFromParent()
@@ -2809,8 +4164,11 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
     private func spawnSparks(at point: CGPoint, color: UIColor, mark: String) {
         guard !reduceMotion else { return }
-        for index in 0..<Constants.Jar.goldSparkCount {
-            let angle = CGFloat(index) / CGFloat(max(Constants.Jar.goldSparkCount, 1)) * .pi * 2
+        let beat = effects.landing
+        let count = beat.sparkCount(standard: Constants.Jar.goldSparkCount)
+        let lifetime = Constants.Jar.goldPreDropDuration * beat.particleLifetimeScale
+        for index in 0..<count {
+            let angle = CGFloat(index) / CGFloat(max(count, 1)) * .pi * 2
             let spark = SKLabelNode(fontNamed: "HiraginoSans-W6")
             spark.name = "drop.spark"
             spark.text = mark
@@ -2820,18 +4178,19 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             spark.zPosition = JarZPosition.effect
             worldNode.addChild(spark)
             let distance = Constants.Jar.touchRadius * Constants.Jar.sparkDistanceScale
+                * beat.particleReach
             spark.run(
                 .sequence([
                     .group([
                         .moveBy(
                             x: cos(angle) * distance,
                             y: sin(angle) * distance,
-                            duration: Constants.Jar.goldPreDropDuration
+                            duration: lifetime
                         ),
-                        .fadeOut(withDuration: Constants.Jar.goldPreDropDuration),
+                        .fadeOut(withDuration: lifetime),
                         .scale(
                             to: Constants.Jar.sparkFinalScale,
-                            duration: Constants.Jar.goldPreDropDuration
+                            duration: lifetime
                         )
                     ]),
                     .removeFromParent()
@@ -2918,14 +4277,15 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
     private func shakeCamera(impactSpeed: CGFloat) {
         guard !reduceMotion else { return }
+        let beat = effects.landing
         let amplitude = min(
             Constants.Jar.screenShakeMaxAmplitude,
             Constants.Jar.screenShakeBaseAmplitude + impactSpeed
-        )
+        ) * beat.cameraShake
         cameraNode.removeAction(forKey: ActionKey.cameraShake)
         cameraNode.position = cameraRestPosition
         let rest = cameraRestPosition
-        let shake = SKAction.customAction(withDuration: Constants.Jar.dustLifetime) {
+        let shake = SKAction.customAction(withDuration: beat.cameraShakeDuration) {
             [weak cameraNode] _, elapsed in
             let frames = CGFloat(elapsed) * CGFloat(Constants.Jar.targetFramesPerSecond)
             let current = amplitude * pow(Constants.Jar.screenShakeDecay, frames)
@@ -2943,8 +4303,487 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         )
     }
 
+    /// Spontaneous flares while the scene is awake: at most three at once,
+    /// at least `gemTwinkleInterval` apart, and 2.5 s between flares of one
+    /// gem. The pick is a deterministic sequence hash weighted by glint count
+    /// (higher rungs own more glints); there is no randomness and no reward
+    /// meaning. Off at 控えめ (D17), with Reduce Motion, Low Power Mode and
+    /// serious heat.
+    private func updateGemTwinkles(now: TimeInterval) {
+        guard effects.allowsSpontaneousTwinkle,
+              Self.allowsAmbientSparkle,
+              abs(now - lastGemTwinkleCheck) >= 0.15
+        else { return }
+        lastGemTwinkleCheck = now
+        guard abs(now - lastGemTwinkleUptime) >= Constants.Jar.gemTwinkleInterval else { return }
+        var candidates: [PebbleNode] = []
+        var totalWeight = 0
+        var activeCount = 0
+        for case let pebble as PebbleNode in worldNode.children where pebble.canGemTwinkle {
+            if pebble.isGemTwinkling {
+                activeCount += 1
+                continue
+            }
+            guard pebble.canGemTwinkle(at: now) else { continue }
+            candidates.append(pebble)
+            totalWeight += pebble.gemTwinkleWeight
+        }
+        guard activeCount < Constants.Jar.maximumConcurrentGemTwinkles,
+              totalWeight > 0
+        else { return }
+        gemTwinkleSequence &+= 1
+        var mixed = gemTwinkleSequence &* 0x9E37_79B9_7F4A_7C15
+        mixed ^= mixed >> 29
+        mixed &*= 0xBF58_476D_1CE4_E5B9
+        mixed ^= mixed >> 32
+        var pick = Int(mixed % UInt64(totalWeight))
+        for pebble in candidates {
+            pick -= pebble.gemTwinkleWeight
+            if pick < 0 {
+                pebble.playGemTwinkle(sequence: mixed >> 7, at: now)
+                lastGemTwinkleUptime = now
+                return
+            }
+        }
+    }
+
+    /// Ambient sparkle (flares, event particles) pauses in Low Power Mode and
+    /// when the device is hot; static light stays.
+    static var allowsAmbientSparkle: Bool {
+        let info = ProcessInfo.processInfo
+        return !info.isLowPowerModeEnabled
+            && info.thermalState.rawValue < ProcessInfo.ThermalState.serious.rawValue
+    }
+
+    /// Recomputes the light the pile casts into the lower jar and marks the
+    /// crystal holding the most grams. O(n), a few times a second while
+    /// awake and once when the jar settles.
+    ///
+    /// Only the resting pile lights the jar: a gem that has not landed yet
+    /// (a completion falling from the mouth) or one moving faster than
+    /// `pileProfileRestingSpeed` never stretches the light, so a drop no
+    /// longer floods the core and the HUD with a haze. The light is also
+    /// bounded to a band seated on the floor (at most 0.45 of the jar width
+    /// across and 0.45 of the interior high, its centre no higher than the
+    /// gem bed's top + 40 pt) and eases to a new shape over 0.4 s.
+    private func refreshPileLight(animated: Bool = true) {
+        var minX = CGFloat.greatestFiniteMagnitude
+        var maxX = -CGFloat.greatestFiniteMagnitude
+        var minY = CGFloat.greatestFiniteMagnitude
+        var maxY = -CGFloat.greatestFiniteMagnitude
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var weight: CGFloat = 0
+        var heaviest: PebbleNode?
+        var aggregates: [PebbleNode] = []
+        var hasUnsettledGem = false
+        for pebble in livePebbles where !pebble.isRemovedForBake
+            && !pebble.descriptor.isScreenTimeObstacle
+            && !pebble.descriptor.isTutorial {
+            if pebble.descriptor.isAggregate {
+                aggregates.append(pebble)
+                if heaviest == nil || pebble.descriptor.grams > heaviest?.descriptor.grams ?? 0 {
+                    heaviest = pebble
+                }
+            }
+            guard Self.castsPileLight(pebble) else {
+                hasUnsettledGem = true
+                continue
+            }
+            let r = pebble.radius
+            minX = min(minX, pebble.position.x - r)
+            maxX = max(maxX, pebble.position.x + r)
+            minY = min(minY, pebble.position.y - r)
+            maxY = max(maxY, pebble.position.y + r)
+            let tone = GemTone(hex: pebble.descriptor.colorHex, muted: !pebble.descriptor.isMeasured, glass: false).halo
+            let w = r * r
+            red += tone.red * w
+            green += tone.green * w
+            blue += tone.blue * w
+            weight += w
+        }
+        aggregates.forEach { $0.setPileEmphasis($0 === heaviest) }
+        guard weight > 0 else {
+            // Nothing rests yet (an empty jar, or only a falling gem): keep
+            // the last resting light rather than flashing it off mid-drop.
+            if !hasUnsettledGem {
+                pileGlowNode.removeAction(forKey: ActionKey.pileGlowShape)
+                pileGlowNode.alpha = 0
+                pileGlowBaseAlpha = 0
+            }
+            return
+        }
+        let mean = GemColor(red: red / weight, green: green / weight, blue: blue / weight)
+        // Warm-biased (60 % #FF9E6B) so a blue/violet pile still reads as
+        // lit rather than foggy.
+        let color = mean.mixed(with: GemColor(hex: "#FF9E6B"), amount: 0.6).withAlpha(1)
+        let target = Self.pileLightFrame(
+            bodies: CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY),
+            jar: outerJarRect,
+            interior: interiorRect,
+            bedTop: currentFloorY + (gemBed.map { $0.height(interiorHeight: interiorRect.height) } ?? 0)
+        )
+        // The lit interior (JarStageArtwork) already glows toward the
+        // floor, so the pile adds a softer light than before.
+        pileGlowBaseAlpha = 0.45 * (reduceTransparency ? 0.45 : 1)
+        if pileGlowNode.action(forKey: "jar.pileGlow.pulse") == nil {
+            pileGlowNode.alpha = pileGlowBaseAlpha
+        }
+        pileGlowNode.removeAction(forKey: ActionKey.pileGlowShape)
+        let isFirstLight = pileGlowNode.size.width < 1
+        guard animated, !isFirstLight, !isPaused, !reduceMotion else {
+            pileGlowNode.color = color
+            pileGlowNode.size = target.size
+            pileGlowNode.position = CGPoint(x: target.midX, y: target.midY)
+            return
+        }
+        let duration: TimeInterval = 0.4
+        let startColor = GemColor(pileGlowNode.color)
+        let endColor = GemColor(color)
+        let tint = SKAction.customAction(withDuration: duration) { node, elapsed in
+            let t = CGFloat(elapsed / duration)
+            (node as? SKSpriteNode)?.color = startColor.mixed(with: endColor, amount: t).withAlpha(1)
+        }
+        let resize = SKAction.resize(toWidth: target.width, height: target.height, duration: duration)
+        let move = SKAction.move(to: CGPoint(x: target.midX, y: target.midY), duration: duration)
+        [resize, move].forEach { $0.timingMode = .easeInEaseOut }
+        pileGlowNode.run(.group([resize, move, tint]), withKey: ActionKey.pileGlowShape)
+    }
+
+    /// Whether a body counts toward the pile light: it has landed and rests
+    /// (the same speed test as the settled pile profile).
+    private static func castsPileLight(_ pebble: PebbleNode) -> Bool {
+        guard pebble.hasLanded else { return false }
+        if let velocity = pebble.physicsBody?.velocity,
+           hypot(velocity.dx, velocity.dy) > pileProfileRestingSpeed {
+            return false
+        }
+        return pebble.position.x.isFinite && pebble.position.y.isFinite
+    }
+
+    /// The pile light's rectangle for resting bodies spanning `bodies`:
+    /// 1.3 × their width (at least 96 pt, at most 0.9 × the jar width),
+    /// 1.8 × their height (at least 64 pt, at most 0.45 of the interior and
+    /// 0.75 of its own width), seated on the floor with its centre no higher
+    /// than the gem bed's top + 40 pt.
+    nonisolated static func pileLightFrame(
+        bodies: CGRect,
+        jar: CGRect,
+        interior: CGRect,
+        bedTop: CGFloat
+    ) -> CGRect {
+        let width = min(max(96, bodies.width * 1.3), jar.width * 0.9)
+        let height = min(
+            max(64, bodies.height * 1.8),
+            width * 0.75,
+            interior.height * 0.45
+        )
+        let floorY = interior.minY
+        let centerY = min(
+            max(bodies.midY, floorY + height * 0.22),
+            max(bedTop, floorY) + 40,
+            floorY + height * 0.5
+        )
+        let centerX = min(max(bodies.midX, jar.minX + width / 2), jar.maxX - width / 2)
+        return CGRect(x: centerX - width / 2, y: centerY - height / 2, width: width, height: height)
+    }
+
+    private func publishSettledPileTop() {
+        let count = Self.pileProfileBinCount
+        guard size.width > 0 else { return }
+        let binWidth = size.width / CGFloat(count)
+        var profile = [CGFloat](repeating: 0, count: count)
+        for pebble in livePebbles where !pebble.isRemovedForBake {
+            if let velocity = pebble.physicsBody?.velocity,
+               hypot(velocity.dx, velocity.dy) > Self.pileProfileRestingSpeed {
+                continue
+            }
+            // A body flung out of range (or a non-finite position) must
+            // never trap the Int conversion below.
+            guard pebble.position.x.isFinite, pebble.position.y.isFinite else { continue }
+            let top = min(max(0, pebble.position.y + pebble.radius), size.height)
+            let left = min(max(pebble.position.x - pebble.radius, 0), size.width)
+            let right = min(max(pebble.position.x + pebble.radius, 0), size.width)
+            let first = max(0, Int(left / binWidth))
+            let last = min(count - 1, Int(right / binWidth))
+            guard first <= last else { continue }
+            for bin in first ... last {
+                profile[bin] = max(profile[bin], (top / 4).rounded(.up) * 4)
+            }
+        }
+        if profile != settledPileProfile { settledPileProfile = profile }
+    }
+
+    /// Bakes gem bed textures off the main thread (tests may bake inline).
+    var bakesGemBedInBackground = true
+    /// A background bed bake is running (tests wait for it).
+    private(set) var isGemBedBaking = false
+    private var gemBedBakeGeneration: UInt64 = 0
+
+    /// Re-bakes (or reuses) the gem bed texture for the current lifetime
+    /// state and jar size. Depends on `gemBed`, the interior rect and the
+    /// display scale only. A cached texture shows at once; a new one bakes
+    /// on a utility queue while the previous bed stays on screen, and the
+    /// texture, size and position change together when it is ready.
+    private func refreshGemBed() {
+        gemBedBakeGeneration &+= 1
+        guard size.width > .zero, size.height > .zero,
+              let state = gemBed, state.isVisible
+        else {
+            isGemBedBaking = false
+            gemBedNode.isHidden = true
+            gemBedNode.texture = nil
+            requestRedraw()
+            return
+        }
+        let interior = interiorRect
+        let height = state.height(interiorHeight: interior.height)
+        guard height >= 2 else {
+            isGemBedBaking = false
+            gemBedNode.isHidden = true
+            gemBedNode.texture = nil
+            requestRedraw()
+            return
+        }
+        let width = interior.width.rounded()
+        let hexes = state.slotHexes
+        let scale = artworkScale
+        let install: (SKTexture) -> Void = { [weak self] texture in
+            guard let self else { return }
+            self.gemBedNode.texture = texture
+            self.gemBedNode.size = CGSize(width: width, height: height)
+            self.gemBedNode.position = CGPoint(x: interior.midX, y: interior.minY)
+            self.gemBedNode.alpha = 1
+            self.gemBedNode.isHidden = false
+            // The bed may finish baking after the jar has come to rest.
+            self.requestRedraw()
+        }
+        if let cached = GemArtwork.cachedBedTexture(width: width, height: height, slotHexes: hexes, scale: scale) {
+            isGemBedBaking = false
+            install(cached)
+            return
+        }
+        guard bakesGemBedInBackground else {
+            isGemBedBaking = false
+            install(GemArtwork.bedTexture(width: width, height: height, slotHexes: hexes, scale: scale))
+            return
+        }
+        isGemBedBaking = true
+        let generation = gemBedBakeGeneration
+        DispatchQueue.global(qos: .userInitiated).async {
+            let texture = GemArtwork.bedTexture(width: width, height: height, slotHexes: hexes, scale: scale)
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, self.gemBedBakeGeneration == generation else { return }
+                    self.isGemBedBaking = false
+                    install(texture)
+                }
+            }
+        }
+    }
+
+    /// Landing light: 6–8 soft sparks from the shared glint texture (3–4,
+    /// shorter and closer at 控えめ), at most `maximumEventLightSprites`
+    /// alive at once, plus a brief pile-light swell. Reduce Motion never
+    /// spawns them.
+    private func spawnLandingLight(at point: CGPoint, pebble: PebbleNode) {
+        guard !reduceMotion, Self.allowsAmbientSparkle else { return }
+        pebble.playLandingPulse()
+        let beat = effects.landing
+        let tint = GemTone(hex: pebble.descriptor.colorHex, muted: !pebble.descriptor.isMeasured, glass: false)
+            .glintUIColor
+        let count = beat.sparkCount(standard: 6 + Int(pebble.descriptor.id.presentationHash % 3))
+        for index in 0 ..< count where eventLightCount < Constants.Jar.maximumEventLightSprites {
+            let spark = SKSpriteNode(
+                texture: index.isMultiple(of: 3) ? GemArtwork.glintTexture : GemArtwork.haloTexture,
+                size: CGSize(width: 7, height: 7)
+            )
+            spark.name = "drop.light"
+            spark.color = tint
+            spark.colorBlendFactor = 1
+            spark.blendMode = .add
+            lightEdgeFade.apply(to: spark)
+            spark.position = CGPoint(x: point.x, y: point.y + pebble.radius * 0.2)
+            spark.zPosition = JarZPosition.effect
+            worldNode.addChild(spark)
+            eventLightCount += 1
+            let angle = CGFloat.pi * (0.15 + 0.7 * CGFloat(index) / CGFloat(max(count - 1, 1)))
+            let distance = pebble.radius * (1.3 + CGFloat(index % 3) * 0.45) * beat.particleReach
+            let lifetime: TimeInterval = 0.52 * beat.particleLifetimeScale
+            let move = SKAction.moveBy(x: cos(angle) * distance, y: sin(angle) * distance, duration: lifetime)
+            move.timingMode = .easeOut
+            spark.run(.sequence([
+                .group([move, .fadeOut(withDuration: lifetime), .scale(to: 0.4, duration: lifetime)]),
+                .run { [weak self] in self?.eventLightCount -= 1 },
+                .removeFromParent()
+            ]))
+        }
+        guard pileGlowBaseAlpha > 0 else { return }
+        let swell = SKAction.sequence([
+            .fadeAlpha(to: min(1, pileGlowBaseAlpha * beat.pileSwell), duration: beat.pileSwellRise),
+            .fadeAlpha(to: pileGlowBaseAlpha, duration: beat.pileSwellFall)
+        ])
+        pileGlowNode.run(swell, withKey: "jar.pileGlow.pulse")
+    }
+
+    /// Fusion finale by rung (`JarEffectsIntensity.fusion`). 標準: A0 only
+    /// fades in (200 ms); A1+ adds a white flash (2.2R, 160 ms), a shock
+    /// ring (1R → 3R, 420 ms) and a spring birth (0.6 → 1.08 → 1.0,
+    /// 380 ms); A2+ adds twelve shards. 控えめ: a 120 ms fade, a fainter
+    /// 100 ms flash, a 1R → 2.2R ring in 260 ms, a 0.85 → 1.0 birth with
+    /// no overshoot and no shards. Reduce Motion shows a static ring for
+    /// 600 ms and no motion on the stone.
+    private func presentFusionFinale(for node: PebbleNode) {
+        let tier = GemCutLadder.aggregateTier(grams: node.descriptor.grams)
+        let point = node.position
+        let rest = node.jarScale
+        if reduceMotion {
+            node.setScale(rest)
+            node.alpha = 1
+            guard tier >= 1 else { return }
+            let ring = makeFusionRing(at: point, radius: node.radius)
+            ring.setScale(2)
+            ring.alpha = 0.55
+            ring.run(.sequence([.wait(forDuration: 0.6), .removeFromParent()]))
+            return
+        }
+        let beat = effects.fusion
+        guard tier >= 1, Self.allowsAmbientSparkle else {
+            node.setScale(rest)
+            node.alpha = 0
+            node.run(.fadeIn(withDuration: beat.fadeIn))
+            return
+        }
+        node.alpha = 1
+        node.setScale(beat.birthStart * rest)
+        let grow = SKAction.scale(to: beat.birthOvershoot * rest, duration: beat.birthGrow)
+        grow.timingMode = .easeOut
+        if beat.birthSettle > 0 {
+            let settle = SKAction.scale(to: rest, duration: beat.birthSettle)
+            settle.timingMode = .easeInEaseOut
+            node.run(.sequence([grow, settle]), withKey: PebbleNode.birthActionKey)
+        } else {
+            node.run(grow, withKey: PebbleNode.birthActionKey)
+        }
+
+        let flash = SKSpriteNode(
+            texture: GemArtwork.haloTexture,
+            size: CGSize(width: node.radius * 4.4, height: node.radius * 4.4)
+        )
+        flash.name = "drop.fusionFlash"
+        flash.color = .white
+        flash.colorBlendFactor = 1
+        flash.blendMode = .add
+        lightEdgeFade.apply(to: flash)
+        flash.alpha = beat.flashAlpha
+        flash.position = point
+        flash.zPosition = JarZPosition.effect
+        worldNode.addChild(flash)
+        flash.run(.sequence([.fadeOut(withDuration: beat.flashDuration), .removeFromParent()]))
+
+        let ring = makeFusionRing(at: point, radius: node.radius)
+        let expand = SKAction.scale(to: beat.ringScale, duration: beat.ringDuration)
+        expand.timingMode = .easeOut
+        ring.run(.sequence([.group([expand, .fadeOut(withDuration: beat.ringDuration)]), .removeFromParent()]))
+        presentFusionAfterglow(on: node)
+
+        guard tier >= 2, beat.shardCount > 0 else { return }
+        let tint = GemTone(hex: node.descriptor.colorHex, muted: false, glass: false).glintUIColor
+        for index in 0 ..< beat.shardCount where eventLightCount < Constants.Jar.maximumEventLightSprites {
+            let shard = SKSpriteNode(texture: GemArtwork.glintTexture, size: CGSize(width: 8, height: 8))
+            shard.name = "drop.fusionShard"
+            shard.color = tint
+            shard.colorBlendFactor = 1
+            shard.blendMode = .add
+            lightEdgeFade.apply(to: shard)
+            shard.position = point
+            shard.zPosition = JarZPosition.effect
+            worldNode.addChild(shard)
+            eventLightCount += 1
+            let angle = CGFloat(index) / CGFloat(beat.shardCount) * .pi * 2
+            let distance = node.radius * 2.6
+            let move = SKAction.moveBy(x: cos(angle) * distance, y: sin(angle) * distance, duration: beat.shardLifetime)
+            move.timingMode = .easeOut
+            shard.run(.sequence([
+                .group([move, .fadeOut(withDuration: beat.shardLifetime)]),
+                .run { [weak self] in self?.eventLightCount -= 1 },
+                .removeFromParent()
+            ]))
+        }
+    }
+
+    /// After the flash (round 12): the new crystal keeps a warm afterglow
+    /// for 1.2 s and three glints open and close on its crown one after
+    /// another (two at 控えめ), so ten gems becoming one reads as a gain,
+    /// not as a jar that emptied. Children of the crystal: they ride its
+    /// birth bounce and leave with it.
+    private func presentFusionAfterglow(on node: PebbleNode) {
+        let radius = node.localRadius
+        let tint = GemTone(hex: node.descriptor.colorHex, muted: false, glass: false).glintUIColor
+        let glow = SKSpriteNode(texture: GemArtwork.haloTexture, size: CGSize(width: radius * 3.4, height: radius * 3.4))
+        glow.name = "drop.fusionAfterglow"
+        glow.color = tint
+        glow.colorBlendFactor = 1
+        glow.blendMode = .add
+        lightEdgeFade.apply(to: glow)
+        glow.alpha = 0
+        glow.zPosition = 2
+        node.addChild(glow)
+        let peak = 0.55 * effects.haloScale
+        glow.run(.sequence([
+            .fadeAlpha(to: peak, duration: 0.15),
+            .wait(forDuration: 0.5),
+            .fadeOut(withDuration: 0.55),
+            .removeFromParent()
+        ]))
+        let spots: [CGPoint] = [
+            CGPoint(x: -0.38, y: 0.42), CGPoint(x: 0.44, y: 0.12), CGPoint(x: -0.06, y: -0.36)
+        ]
+        let count = effects == .subtle ? 2 : 3
+        for (index, spot) in spots.prefix(count).enumerated() {
+            let glint = SKSpriteNode(texture: GemArtwork.glintTexture, size: CGSize(width: radius * 0.7, height: radius * 0.7))
+            glint.name = "drop.fusionGlint"
+            glint.color = .white
+            glint.colorBlendFactor = 1
+            glint.blendMode = .add
+            lightEdgeFade.apply(to: glint)
+            glint.position = CGPoint(x: spot.x * radius, y: spot.y * radius)
+            glint.zPosition = 3
+            glint.setScale(0)
+            node.addChild(glint)
+            let open = SKAction.scale(to: 1, duration: 0.16)
+            open.timingMode = .easeOut
+            let close = SKAction.scale(to: 0, duration: 0.3)
+            close.timingMode = .easeIn
+            glint.run(.sequence([
+                .wait(forDuration: 0.12 + Double(index) * 0.26),
+                open,
+                .wait(forDuration: 0.12),
+                close,
+                .removeFromParent()
+            ]))
+        }
+    }
+
+    private func makeFusionRing(at point: CGPoint, radius: CGFloat) -> SKSpriteNode {
+        let ring = SKSpriteNode(
+            texture: GemArtwork.ringTexture,
+            size: CGSize(width: radius * 2, height: radius * 2)
+        )
+        ring.name = "drop.fusionRing"
+        ring.color = JarPalette.color(hex: "#FFE3B0")
+        ring.colorBlendFactor = 1
+        ring.blendMode = .add
+        lightEdgeFade.apply(to: ring)
+        ring.position = point
+        ring.zPosition = JarZPosition.effect
+        worldNode.addChild(ring)
+        return ring
+    }
+
     private func updateRareTwinkles() {
-        guard !reduceMotion, rareRewardMode.usesEnhancedPresentation else { return }
+        guard effects.allowsSpontaneousTwinkle, rareRewardMode.usesEnhancedPresentation else { return }
         let now = ProcessInfo.processInfo.systemUptime
         guard now - lastTwinkleUptime >= Constants.Jar.rareTwinkleInterval else { return }
         lastTwinkleUptime = now
@@ -3006,6 +4845,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
         if let interactionMotionWindow,
            interactionMotionWindow.mustStop(at: uptime) {
+            // A scale transition in flight (at most 0.5 s) finishes first:
+            // freezing it would snap growing neighbours to full size while
+            // they still overlap.
+            if isJarScaleTransitionInFlight { return }
             if livePebbles.allSatisfy(\.hasLanded) {
                 pauseSettledSimulation()
                 return
@@ -3037,7 +4880,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 pebble.position.y - pebble.lastObservedPosition.y
             ))
         }
-        if movement < Constants.Jar.idleMovementThreshold {
+        if movement < Constants.Jar.idleMovementThreshold, !isJarScaleTransitionInFlight {
             pauseSettledSimulation()
         } else {
             let isSettlingInteraction = interactionMotionWindow != nil
@@ -3065,9 +4908,24 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 #endif
 
+    /// Whether any live body is still easing to a new jar scale.
+    private var isJarScaleTransitionInFlight: Bool {
+        livePebbles.contains(where: \.isTransitioningJarScale)
+    }
+
     /// Freezes only presentation physics. Study records, aggregate membership,
     /// mass, and cloud state live outside SpriteKit and are never touched.
     private func pauseSettledSimulation() {
+        // A frozen jar never keeps a half-scaled body. The idle and hard
+        // stops wait for a transition, so one is cut short only by an
+        // explicit pause; its bodies are then put back inside the walls at
+        // once (the scheduled rescue would not run until the next wake).
+        let cutShort = isJarScaleTransitionInFlight
+        livePebbles.forEach { $0.finishJarScaleTransition() }
+        if cutShort {
+            removeAction(forKey: "jar.scale.rescue")
+            rescuePebblesInsideWalls()
+        }
         finishActiveTapMotion(forceReturn: false)
         transientMotionGate.invalidate()
         interactionMotionWindow = nil
@@ -3081,11 +4939,68 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             body.usesPreciseCollisionDetection = false
             body.isResting = true
         }
+        // The light enters the idle state exactly where gravity is, so the
+        // idle gate's small residual can only come from later samples.
+        updateOpticalTilt(horizontal: appliedGravityVector.dx)
+        // Never freeze a half-lit flare: settle every star to its resting
+        // (or tilt-lit) value before the frame stops.
+        livePebbles.forEach {
+            $0.settleGemTwinkle()
+            $0.updatePresentationLighting(horizontal: opticalTiltFraction)
+        }
+        refreshPileLight(animated: false)
+        publishSettledPileTop()
+        // A settled pile over the core or the HUD steps down first: the jar
+        // stays awake for the 0.5 s transition and settles anew after it.
+        if enforcePileClearances() { return }
         if !isIdlePaused {
             isIdlePaused = true
             onIdlePauseChanged?(true)
         }
         isPaused = true
+        // The settled frame is drawn, then the render loop stops (jar-01)
+        // and device motion drops to its idle rate.
+        requestRedraw()
+    }
+
+    /// Prepares a deterministic, transparent-safe frame for `JarSnapshotter`:
+    /// flares settle, and additive light is drawn as ordinary alpha blending
+    /// (additive colour over a clear texture would be lost or saturated when
+    /// the PNG is un-premultiplied). Returns the restore closure.
+    func prepareForSnapshot() -> () -> Void {
+        let pebbles = allPebbleNodes
+        pebbles.forEach {
+            $0.settleGemTwinkle()
+            $0.updatePresentationLighting(horizontal: 0)
+            $0.setSnapshotBlending(true)
+        }
+        // Each light keeps its own original mode for the restore, so a
+        // light that is not additive today is never forced to `.add`.
+        // Alpha-blended colour over a clear texture reads much stronger
+        // than the same light added to the dark jar, so the broad floor and
+        // pile lights are halved for the capture (no pink haze).
+        let sceneLights = [floorGlowNode, pileGlowNode, glassHighlightNode].map { ($0, $0.blendMode, $0.alpha) }
+        sceneLights.forEach { $0.0.blendMode = .alpha }
+        floorGlowNode.alpha *= 0.5
+        pileGlowNode.alpha *= 0.45
+        // The capture's texture is the bottle's rectangle, not the view:
+        // the edge fade would dim the bottle's own edge there.
+        let fadeWasSuspended = lightEdgeFade.isSuspended
+        lightEdgeFade.isSuspended = true
+        return { [weak self] in
+            self?.lightEdgeFade.isSuspended = fadeWasSuspended
+            pebbles.forEach {
+                $0.setSnapshotBlending(false)
+                $0.updatePresentationLighting(horizontal: self?.opticalTiltFraction ?? 0)
+            }
+            sceneLights.forEach {
+                $0.0.blendMode = $0.1
+                $0.0.alpha = $0.2
+            }
+            // A resting jar's render loop is stopped: show the restored
+            // (settled) frame, so the screen never lags the scene.
+            self?.requestRedraw()
+        }
     }
 
     private func resetIdleObservation() {
@@ -3098,13 +5013,20 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
     /// Invalidates SwiftUI only when the live physics chamber transitions to a
-    /// different body count. `physicalPebbleCount` itself remains computed from
-    /// `livePebbles`, avoiding a second, potentially stale emptiness source.
+    /// different body count, or gains or loses its study gems (they decide
+    /// whether device motion runs). `physicalPebbleCount` itself remains
+    /// computed from `livePebbles`, avoiding a second, potentially stale
+    /// emptiness source.
     private func publishPhysicalContentChangeIfNeeded(force: Bool = false) {
         refreshEarlyEffortSpotlightsIfNeeded()
         let count = physicalPebbleCount
-        guard force || count != lastPublishedPhysicalPebbleCount else { return }
+        let hasStudyGems = self.hasStudyGems
+        guard force
+            || count != lastPublishedPhysicalPebbleCount
+            || hasStudyGems != lastPublishedHasStudyGems
+        else { return }
         lastPublishedPhysicalPebbleCount = count
+        lastPublishedHasStudyGems = hasStudyGems
         physicalContentRevision &+= 1
     }
 
@@ -3570,19 +5492,47 @@ struct JarShakeDetector {
     }
 }
 
+/// Samples device motion for one jar (Docs/GemExperienceDesign.md §7.13).
+/// While the jar is awake it runs at the full rate on the main queue and
+/// applies every sample, as before. When the jar comes to rest it drops
+/// to `JarMotionRate.idleUpdatesPerSecond` on a background queue, where
+/// `JarIdleTiltMonitor` keeps the smoothed tilt; only a tilt that would move
+/// the drawn light (or a shake peak) hops to main, which restores the full
+/// rate and the render loop. Stopped whenever the jar's owner says so (Home
+/// hidden or covered, the app not active, no study gem).
 @MainActor
 final class JarMotionObserver: ObservableObject {
     private static weak var activeOwner: JarMotionObserver?
 
-    private let manager = CMMotionManager()
+    private let source: JarMotionSource
     private weak var scene: JarScene?
     private var updateGate = JarMotionUpdateGate()
     private var shakeDetector = JarShakeDetector()
     private var appliesGravity = true
     private var hapticPlaybackObserver: NSObjectProtocol?
+    private let idleMonitor = JarIdleTiltMonitor()
+    /// The idle rate is delivered here, off the main thread.
+    private let idleQueue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.name = "PomoGem.JarMotion.idle"
+        queue.maxConcurrentOperationCount = 1
+        queue.qualityOfService = .utility
+        return queue
+    }()
+    private var demandSubscription: AnyCancellable?
+    private var isStarted = false
+    /// The rate the sensor runs at now (tests and the Debug frame probe).
+    private(set) var rate: JarMotionRate = .stopped {
+        didSet {
+#if DEBUG && targetEnvironment(simulator)
+            JarFrameProbe.shared?.motionRate = rate
+#endif
+        }
+    }
 
-    init(scene: JarScene? = nil) {
+    init(scene: JarScene? = nil, source: JarMotionSource? = nil) {
         self.scene = scene
+        self.source = source ?? Self.makeDefaultSource()
         hapticPlaybackObserver = NotificationCenter.default.addObserver(
             forName: HapticPlaybackNotification.willPlay,
             object: nil,
@@ -3607,70 +5557,174 @@ final class JarMotionObserver: ObservableObject {
         }
     }
 
+    private static func makeDefaultSource() -> JarMotionSource {
+#if DEBUG && targetEnvironment(simulator)
+        if let synthetic = SyntheticJarMotionSource.forCurrentProcess() {
+            return synthetic
+        }
+#endif
+        return CoreMotionJarMotionSource()
+    }
+
     func start(scene: JarScene? = nil, appliesGravity: Bool = true) {
-        if let scene { self.scene = scene }
+        if let scene, scene !== self.scene {
+            if isStarted { stop() }
+            self.scene = scene
+        }
         self.appliesGravity = appliesGravity
-        guard self.scene != nil,
-              manager.isDeviceMotionAvailable
+        guard let scene = self.scene,
+              source.isAvailable
         else { return }
         if let previousOwner = Self.activeOwner, previousOwner !== self {
             previousOwner.stop()
         }
         Self.activeOwner = self
-        guard !manager.isDeviceMotionActive else { return }
-        let generation = updateGate.begin()
-        shakeDetector.reset()
-        manager.deviceMotionUpdateInterval = 1 / TimeInterval(Constants.Jar.tiltUpdatesPerSecond)
-        manager.startDeviceMotionUpdates(to: .main) { [weak self] motion, _ in
-            guard let motion else { return }
-            let gravity = motion.gravity
-            let acceleration = motion.userAcceleration
-            let timestamp = motion.timestamp
-            let horizontal = CGFloat(gravity.x) * Constants.Jar.tiltGravityHorizontalScale
-            let sensedVertical = CGFloat(gravity.y) * abs(Constants.Jar.gravity)
-            let vertical = min(-Constants.Jar.tiltGravityMinimumDownward, sensedVertical)
-            // OperationQueue.main is the delivery contract. Consume each sample
-            // synchronously so 30 Hz input cannot accumulate as unordered,
-            // stale unstructured tasks behind a busy SpriteKit frame.
-            MainActor.assumeIsolated { [weak self] in
-                guard let self,
-                      let scene = self.scene,
-                      self.updateGate.accepts(generation)
-                else { return }
-                if self.appliesGravity,
-                   self.updateGate.acceptsGravity(
-                    generation,
-                    reduceMotion: scene.reduceMotion
-                ) {
-                    scene.setGravityVector(
-                        CGVector(dx: horizontal, dy: vertical)
-                    )
-                }
-                if let shake = self.shakeDetector.ingest(
-                    x: acceleration.x,
-                    y: acceleration.y,
-                    z: acceleration.z,
-                    uptime: timestamp
-                ) {
-                    _ = scene.shakePebbles(
-                        strength: CGFloat(shake.strength),
-                        horizontal: CGFloat(shake.horizontalDirection)
-                    )
-                }
+        isStarted = true
+        // Reduce Motion may have changed since the idle check was armed.
+        idleMonitor.setFollowsTilt(!scene.reduceMotion)
+        guard demandSubscription == nil else { return }
+        // The subject hands over the current demand at once, then every
+        // change, synchronously on the main actor.
+        demandSubscription = scene.fullRateMotionDemand
+            .removeDuplicates()
+            .sink { [weak self] wantsFullRate in
+                self?.follow(jarWantsFullRate: wantsFullRate)
             }
-        }
     }
 
     func stop() {
         // Invalidate before stopping/resetting so a delivery already queued by
         // Core Motion cannot overwrite the stable downward gravity afterward.
         updateGate.invalidate()
+        idleMonitor.disarm()
+        demandSubscription = nil
+        isStarted = false
         appliesGravity = false
-        manager.stopDeviceMotionUpdates()
+        source.stop()
+        rate = .stopped
         shakeDetector.reset()
         scene?.resetGravity()
         if Self.activeOwner === self {
             Self.activeOwner = nil
         }
     }
+
+    private func follow(jarWantsFullRate: Bool) {
+        guard isStarted else { return }
+        switch JarMotionRate.resolve(sampling: .tiltAndShake, jarWantsFullRate: jarWantsFullRate) {
+        case .full where rate != .full:
+            runFullRate()
+        case .idle where rate != .idle:
+            runIdleRate()
+        default:
+            break
+        }
+    }
+
+    /// The awake jar: every sample, on the main queue.
+    private func runFullRate() {
+        // Set first: the gravity catch-up below can itself raise the jar's
+        // demand, which must find the full rate already running.
+        rate = .full
+        let latestIdleGravity = idleMonitor.disarm()
+        let generation = updateGate.begin()
+        shakeDetector.reset()
+        source.start(
+            updatesPerSecond: JarMotionRate.fullUpdatesPerSecond,
+            queue: .main
+        ) { [weak self] sample in
+            // OperationQueue.main is the delivery contract. Consume each sample
+            // synchronously so 30 Hz input cannot accumulate as unordered,
+            // stale unstructured tasks behind a busy SpriteKit frame.
+            MainActor.assumeIsolated {
+                self?.ingestFullRate(sample, generation: generation)
+            }
+        }
+        // What the idle check saw last becomes the gravity now, so a jar
+        // woken by a tap never starts from a stale tilt, and a tilt that
+        // woke it moves the light at once.
+        if appliesGravity, let latestIdleGravity {
+            scene?.setGravityVector(latestIdleGravity, smoothing: false)
+        }
+    }
+
+    /// The resting jar: a few samples a second, checked off the main thread.
+    private func runIdleRate() {
+        guard let scene else { return }
+        rate = .idle
+        let generation = updateGate.begin()
+        idleMonitor.arm(
+            JarIdleTiltFilter(
+                gravity: scene.appliedGravityVector,
+                drawnLight: scene.opticalTiltFraction,
+                followsTilt: !scene.reduceMotion
+            ),
+            generation: generation
+        )
+        let monitor = idleMonitor
+        source.start(
+            updatesPerSecond: JarMotionRate.idleUpdatesPerSecond,
+            queue: idleQueue
+        ) { [weak self] sample in
+            // Core Motion's background queue: only the monitor is touched.
+            guard let wake = monitor.ingest(sample, generation: generation) else { return }
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated {
+                    self?.handleIdleWake(wake, generation: generation)
+                }
+            }
+        }
+    }
+
+    private func handleIdleWake(_ wake: JarIdleWake, generation: UInt64) {
+        guard rate == .idle,
+              updateGate.accepts(generation),
+              let scene
+        else { return }
+        // The sample that woke the jar starts a gesture: full rate at once.
+        // Its smoothed gravity is applied there; a tilt that moves the light
+        // restarts the render loop and holds the full rate (JarScene).
+        runFullRate()
+        if wake.reason == .shake {
+            // The reversal of a shake follows within 0.42 s.
+            scene.holdFullRateMotion()
+            ingestShake(wake.sample)
+        }
+        // Nothing to draw after all (the light already follows this tilt):
+        // rest again, re-armed around the light on screen.
+        if !scene.wantsFullRateMotion {
+            runIdleRate()
+        }
+    }
+
+    private func ingestFullRate(_ sample: JarMotionSample, generation: UInt64) {
+        guard let scene,
+              updateGate.accepts(generation)
+        else { return }
+        if appliesGravity,
+           updateGate.acceptsGravity(generation, reduceMotion: scene.reduceMotion) {
+            scene.setGravityVector(sample.proposedGravity)
+        }
+        ingestShake(sample)
+    }
+
+    private func ingestShake(_ sample: JarMotionSample) {
+        guard let scene,
+              let shake = shakeDetector.ingest(
+                x: sample.accelerationX,
+                y: sample.accelerationY,
+                z: sample.accelerationZ,
+                uptime: sample.timestamp
+              )
+        else { return }
+        _ = scene.shakePebbles(
+            strength: CGFloat(shake.strength),
+            horizontal: CGFloat(shake.horizontalDirection)
+        )
+    }
+
+#if DEBUG
+    /// Test seam: whether the idle tilt check is armed.
+    var isIdleCheckArmedForTesting: Bool { idleMonitor.isArmed }
+#endif
 }

@@ -1,0 +1,588 @@
+import SpriteKit
+import UIKit
+
+/// One runtime texture atlas for every gem-family sprite in the jar
+/// (Docs/GemExperienceDesign.md §7.13): the shared light images (halo,
+/// glint, contact shadow, the rig's key light and shade) and every baked
+/// body — facet bodies and Screen Time rubble alike.
+///
+/// SpriteKit batches consecutive sprites that share a GPU texture and a blend
+/// mode. With the scene's per-body stacking bands (`JarZPosition`) each gem
+/// layer is one contiguous run, so a page shared by all of them turns
+/// "one draw per sprite" into a few draws for the whole jar. Pixels never
+/// change: an atlas entry is the same bitmap as its stand-alone texture.
+///
+/// A name that is not packed yet is served from a stand-alone texture at
+/// once (the fallback is synchronous, never blank). New names start a
+/// coalesced rebuild: `SKTextureAtlas(dictionary:)` packs every kept image
+/// on a utility queue, preloads the page, and only then re-points the
+/// registered sprites on the main thread. Kept images are bounded by
+/// `imageByteBudget` (least recently used first).
+@MainActor
+final class GemTextureAtlas {
+    static let shared = GemTextureAtlas()
+
+    enum SharedName {
+        static let halo = "gem.shared.halo"
+        static let glint = "gem.shared.glint"
+        static let shadow = "gem.shared.shadow"
+        static let lightAdd = "gem.shared.lightAdd"
+        static let innerGlow = "gem.shared.innerGlow"
+        static let lightShade = "gem.shared.lightShade"
+    }
+
+    /// Kept CPU source images (RGBA bytes). A full jar needs about 3–7 MB at
+    /// 3×; the budget leaves room for the share/plan jars without growing
+    /// without bound. It bounds the CPU copies only: the installed page on
+    /// the GPU holds about as many bytes again, and stand-alone textures of
+    /// names not yet packed come on top (`Statistics.residentBytes`). Names
+    /// a live sprite still shows are never evicted.
+    static let imageByteBudget = 24 * 1_024 * 1_024
+
+    struct Statistics: Equatable {
+        var generation: Int
+        var packedNames: Int
+        var keptImages: Int
+        var keptImageBytes: Int
+        var standaloneTextures: Int
+        /// Pixel size of the installed page, derived from its largest entry.
+        var pageSize: CGSize
+        /// RGBA bytes of the installed page (GPU) and of the stand-alone
+        /// textures that wait for the next page.
+        var pageBytes: Int
+        var standaloneBytes: Int
+        /// Names that a live sprite shows (never evicted).
+        var liveNames: Int
+
+        /// Kept CPU images + page + stand-alone textures: the atlas's whole
+        /// resident footprint, about 2–3 × `keptImageBytes`.
+        var residentBytes: Int { keptImageBytes + pageBytes + standaloneBytes }
+    }
+
+    private struct Entry {
+        let image: UIImage
+        let bytes: Int
+        var lastUse: UInt64
+        let isPinned: Bool
+    }
+
+    private var entries: [String: Entry] = [:]
+    private var keptBytes = 0
+    private var useClock: UInt64 = 0
+    /// Resolved textures of the installed generation, by name.
+    private var packed: [String: SKTexture] = [:]
+    private var standalone: [String: SKTexture] = [:]
+    /// Sprites that show a managed texture (weak), re-pointed at every new
+    /// generation.
+    private let registry = NSMapTable<SKSpriteNode, NSString>(
+        keyOptions: .weakMemory,
+        valueOptions: .strongMemory
+    )
+    private var isRebuildScheduled = false
+    private var isBuilding = false
+    private(set) var generation = 0
+    /// Images baked inline by a lookup miss (a node created before its body
+    /// was baked ahead). Tests read it to prove a restore bakes first.
+    private(set) var onDemandBakeCount = 0
+    /// Coalescing delay after a new name before the atlas is rebuilt.
+    var rebuildDelay: TimeInterval = 0.25
+    /// Tests pack synchronously with `rebuildNow()`.
+    var rebuildsAutomatically = true
+
+    private init() {
+        let shared: [(String, UIImage, SKTexture)] = [
+            (SharedName.halo, GemArtwork.haloImage, GemArtwork.haloTexture),
+            (SharedName.glint, GemArtwork.glintImage, GemArtwork.glintTexture),
+            (SharedName.shadow, GemArtwork.shadowImage, GemArtwork.shadowTexture),
+            (SharedName.lightAdd, GemArtwork.lightRigAddImage, GemArtwork.lightRigAddTexture),
+            (SharedName.innerGlow, GemArtwork.innerGlowImage, GemArtwork.innerGlowTexture),
+            (SharedName.lightShade, GemArtwork.lightRigShadeImage, GemArtwork.lightRigShadeTexture)
+        ]
+        for (name, image, texture) in shared {
+            store(name, image: image, pinned: true)
+            standalone[name] = texture
+        }
+    }
+
+    // MARK: Lookup
+
+    /// The texture for `name`: the packed one when the current page holds
+    /// it, else a stand-alone texture of the same bitmap (baked now with
+    /// `image` on a miss).
+    func texture(named name: String, image makeImage: () -> UIImage) -> SKTexture {
+        touch(name)
+        if let texture = packed[name] { return texture }
+        if let texture = standalone[name] { return texture }
+        let image: UIImage
+        if let kept = entries[name]?.image {
+            image = kept
+        } else {
+            onDemandBakeCount &+= 1
+            image = makeImage()
+        }
+        if entries[name] == nil { store(name, image: image, pinned: false) }
+        let texture = SKTexture(image: image)
+        texture.filteringMode = .linear
+        standalone[name] = texture
+        scheduleRebuild()
+        return texture
+    }
+
+    /// Shows `name` on `sprite` and keeps the sprite on the current page.
+    func show(_ name: String, on sprite: SKSpriteNode, image makeImage: () -> UIImage) {
+        sprite.texture = texture(named: name, image: makeImage)
+        registry.setObject(name as NSString, forKey: sprite)
+    }
+
+    /// Shared light images are always kept, so they never need a bake.
+    func showShared(_ name: String, on sprite: SKSpriteNode) {
+        show(name, on: sprite) { entries[name]?.image ?? GemArtwork.haloImage }
+    }
+
+    func textureName(of sprite: SKSpriteNode) -> String? {
+        registry.object(forKey: sprite) as String?
+    }
+
+    func isPacked(_ name: String) -> Bool { packed[name] != nil }
+
+    func hasImage(named name: String) -> Bool { entries[name] != nil }
+
+    /// Adds images baked elsewhere (the launch pre-bake) without a sprite.
+    func insert(_ images: [(name: String, image: UIImage)]) {
+        var added = false
+        for (name, image) in images where entries[name] == nil {
+            store(name, image: image, pinned: false)
+            added = true
+        }
+        if added { scheduleRebuild() }
+    }
+
+    /// Drops kept images (tests). Sprites keep what they show.
+    func removeImages(named names: [String]) {
+        for name in names {
+            guard let entry = entries[name], !entry.isPinned else { continue }
+            entries[name] = nil
+            standalone[name] = nil
+            keptBytes -= entry.bytes
+        }
+    }
+
+    var statistics: Statistics {
+        let page = pageSize
+        let standaloneBytes = standalone.keys.reduce(0) { $0 + (entries[$1]?.bytes ?? 0) }
+        return Statistics(
+            generation: generation,
+            packedNames: packed.count,
+            keptImages: entries.count,
+            keptImageBytes: keptBytes,
+            standaloneTextures: standalone.count,
+            pageSize: page,
+            pageBytes: Int(page.width) * Int(page.height) * 4,
+            standaloneBytes: standaloneBytes,
+            liveNames: liveNames().count
+        )
+    }
+
+    /// Names shown by sprites that still exist.
+    private func liveNames() -> Set<String> {
+        var names = Set<String>()
+        let enumerator = registry.objectEnumerator()
+        while let name = enumerator?.nextObject() as? NSString {
+            names.insert(name as String)
+        }
+        return names
+    }
+
+    private var pageSize: CGSize {
+        let largest = packed.compactMap { name, texture -> (CGSize, CGRect)? in
+            guard let image = entries[name]?.image.cgImage else { return nil }
+            return (CGSize(width: image.width, height: image.height), texture.textureRect())
+        }.max { $0.0.width < $1.0.width }
+        guard let (pixels, rect) = largest, rect.width > 0, rect.height > 0 else { return .zero }
+        return CGSize(
+            width: (pixels.width / rect.width).rounded(),
+            height: (pixels.height / rect.height).rounded()
+        )
+    }
+
+    // MARK: Baking ahead
+
+    /// One texture to bake: its atlas name and a thread-safe Core Graphics
+    /// bake of its image.
+    struct BakeRequest: @unchecked Sendable {
+        let name: String
+        let make: () -> UIImage
+    }
+
+    /// Bakes every missing image of `requests` across all cores, then keeps
+    /// them. Blocks the caller only for the misses; a restore calls it
+    /// before creating its nodes, so a full jar's misses cost one parallel
+    /// pass instead of one serial bake per body.
+    func bakeMissing(_ requests: [BakeRequest]) {
+        // A restore right after launch must not bake the same bodies again
+        // while the launch pre-bake is still on the utility pool (both would
+        // compete for every core exactly when the first frame is due): stop
+        // the pre-bake from starting new bakes, wait for the few in flight,
+        // and keep what it has finished.
+        finishPrewarmNow()
+        var seen = Set<String>()
+        let missing = requests.filter { entries[$0.name] == nil && seen.insert($0.name).inserted }
+        guard !missing.isEmpty else { return }
+        insert(Self.bake(missing))
+    }
+
+    /// Bakes `requests` on a utility queue and keeps them when done (the
+    /// launch pre-bake). A restore that needs bodies before it finishes
+    /// takes over (`bakeMissing`); the later insert skips names that exist
+    /// by then.
+    func prewarm(_ requests: [BakeRequest]) {
+        var seen = Set<String>()
+        let missing = requests.filter { entries[$0.name] == nil && seen.insert($0.name).inserted }
+        guard !missing.isEmpty else { return }
+        finishPrewarmNow()
+        let run = PrewarmRun()
+        activePrewarm = run
+        run.group.enter()
+        DispatchQueue.global(qos: .utility).async {
+            Self.bake(missing, run: run)
+            run.group.leave()
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    let atlas = GemTextureAtlas.shared
+                    if atlas.activePrewarm === run { atlas.activePrewarm = nil }
+                    atlas.insert(run.takeResults())
+                }
+            }
+        }
+    }
+
+    /// Bakes the missing images of `requests` off the main thread (user
+    /// initiated: a jar waits to show them) and keeps them; `completion`
+    /// runs on the main actor once they are in, at once when nothing is
+    /// missing. A jar-scale transition uses it (round 12), so the landing
+    /// or fusion beat never waits for a whole pile's re-bake: the bodies
+    /// keep their current textures meanwhile. The returned run (nil when
+    /// nothing was missing) can be finished early on the main thread
+    /// (`finishInBackgroundBake`).
+    @discardableResult
+    func bakeInBackground(
+        _ requests: [BakeRequest],
+        completion: @escaping @MainActor @Sendable () -> Void
+    ) -> BackgroundBake? {
+        var seen = Set<String>()
+        let missing = requests.filter { entries[$0.name] == nil && seen.insert($0.name).inserted }
+        guard !missing.isEmpty else {
+            completion()
+            return nil
+        }
+        let run = BackgroundBake(missing)
+        DispatchQueue.global(qos: .userInitiated).async {
+            run.bakeUnclaimed()
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    GemTextureAtlas.shared.insert(run.takeResults())
+                    completion()
+                }
+            }
+        }
+        return run
+    }
+
+    /// Finishes the images of `run` named in `names` now, on the calling
+    /// (main) thread (round 14): the ones no background worker has started
+    /// are baked here in one parallel pass, the ones already in flight are
+    /// waited for (at most one bake per core), and none is baked twice.
+    /// Everything `run` has finished by then is kept; the rest of it goes on
+    /// in the background and lands with its completion.
+    func finishInBackgroundBake(_ run: BackgroundBake, names: Set<String>) {
+        run.finish(names: names)
+        insert(run.takeResults())
+    }
+
+    /// Whether a launch pre-bake is still running (tests).
+    var isPrewarming: Bool { activePrewarm != nil }
+
+    private var activePrewarm: PrewarmRun?
+
+    /// Stops the running pre-bake from starting new bakes, waits for the
+    /// bakes already in flight (at most one per core, a few ms each) and
+    /// keeps every finished image.
+    private func finishPrewarmNow() {
+        guard let run = activePrewarm else { return }
+        activePrewarm = nil
+        run.cancel()
+        run.group.wait()
+        insert(run.takeResults())
+    }
+
+    /// One background bake (`bakeInBackground`): each request is claimed
+    /// once, by a worker or by the main thread taking over at a deadline, so
+    /// no image is ever baked twice.
+    final class BackgroundBake: @unchecked Sendable {
+        private let requests: [BakeRequest]
+        private let condition = NSCondition()
+        private var claimed: [Bool]
+        private var finished: [Bool]
+        private var results: [(name: String, image: UIImage)] = []
+
+        init(_ requests: [BakeRequest]) {
+            self.requests = requests
+            claimed = Array(repeating: false, count: requests.count)
+            finished = Array(repeating: false, count: requests.count)
+        }
+
+        /// Every name the run bakes.
+        var names: [String] { requests.map(\.name) }
+
+        /// The workers' pass: bakes every request nobody has claimed yet.
+        func bakeUnclaimed() {
+            DispatchQueue.concurrentPerform(iterations: requests.count) { index in
+                guard claim(index) else { return }
+                complete(index, with: requests[index].make())
+            }
+        }
+
+        /// Bakes the unclaimed requests named in `names` on the calling
+        /// thread's pool, then waits until every one of `names` is done.
+        func finish(names: Set<String>) {
+            let wanted = requests.indices.filter { names.contains(requests[$0].name) }
+            let mine = wanted.filter(claim)
+            DispatchQueue.concurrentPerform(iterations: mine.count) { position in
+                let index = mine[position]
+                complete(index, with: requests[index].make())
+            }
+            condition.lock()
+            while wanted.contains(where: { !finished[$0] }) {
+                condition.wait()
+            }
+            condition.unlock()
+        }
+
+        /// Finished images not yet handed to the atlas.
+        func takeResults() -> [(name: String, image: UIImage)] {
+            condition.lock()
+            defer { condition.unlock() }
+            let taken = results
+            results = []
+            return taken
+        }
+
+        private func claim(_ index: Int) -> Bool {
+            condition.lock()
+            defer { condition.unlock() }
+            guard !claimed[index] else { return false }
+            claimed[index] = true
+            return true
+        }
+
+        private func complete(_ index: Int, with image: UIImage) {
+            condition.lock()
+            finished[index] = true
+            results.append((requests[index].name, image))
+            condition.broadcast()
+            condition.unlock()
+        }
+    }
+
+    /// One launch pre-bake: cancellation flag and finished images, shared
+    /// with the utility pool under a lock.
+    private final class PrewarmRun: @unchecked Sendable {
+        let group = DispatchGroup()
+        private let lock = NSLock()
+        private var cancelled = false
+        private var results: [(name: String, image: UIImage)] = []
+
+        var isCancelled: Bool {
+            lock.lock(); defer { lock.unlock() }
+            return cancelled
+        }
+
+        func cancel() {
+            lock.lock(); cancelled = true; lock.unlock()
+        }
+
+        func append(_ name: String, _ image: UIImage) {
+            lock.lock(); results.append((name, image)); lock.unlock()
+        }
+
+        func takeResults() -> [(name: String, image: UIImage)] {
+            lock.lock(); defer { lock.unlock() }
+            let taken = results
+            results = []
+            return taken
+        }
+    }
+
+    nonisolated private static func bake(_ requests: [BakeRequest], run: PrewarmRun) {
+        DispatchQueue.concurrentPerform(iterations: requests.count) { index in
+            guard !run.isCancelled else { return }
+            run.append(requests[index].name, requests[index].make())
+        }
+    }
+
+    nonisolated private static func bake(_ requests: [BakeRequest]) -> [(name: String, image: UIImage)] {
+        let lock = NSLock()
+        var images = [UIImage?](repeating: nil, count: requests.count)
+        DispatchQueue.concurrentPerform(iterations: requests.count) { index in
+            let image = requests[index].make()
+            lock.lock()
+            images[index] = image
+            lock.unlock()
+        }
+        return zip(requests, images).compactMap { request, image in
+            image.map { (request.name, $0) }
+        }
+    }
+
+    // MARK: Packing
+
+    /// Packs every kept image now and installs the page (tests, and the
+    /// pre-bake when it already runs off the main thread's critical path).
+    func rebuildNow() {
+        let snapshot = entries.mapValues(\.image)
+        let built = Self.pack(snapshot)
+        install(built)
+    }
+
+    private func scheduleRebuild() {
+        guard rebuildsAutomatically, !isRebuildScheduled else { return }
+        isRebuildScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + rebuildDelay) { [weak self] in
+            MainActor.assumeIsolated {
+                self?.startRebuild()
+            }
+        }
+    }
+
+    private func startRebuild() {
+        isRebuildScheduled = false
+        guard !isBuilding else { return }
+        // Everything on screen counts as just used.
+        for name in liveNames() { touch(name) }
+        let snapshot = entries.mapValues(\.image)
+        guard Set(snapshot.keys) != Set(packed.keys) else { return }
+        isBuilding = true
+        DispatchQueue.global(qos: .utility).async {
+            let built = Self.pack(snapshot)
+            built.atlas.preload {
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        GemTextureAtlas.shared.finishRebuild(built)
+                    }
+                }
+            }
+        }
+    }
+
+    private func finishRebuild(_ built: Packed) {
+        isBuilding = false
+        install(built)
+        if Set(entries.keys) != Set(packed.keys) { scheduleRebuild() }
+    }
+
+    private struct Packed: @unchecked Sendable {
+        let atlas: SKTextureAtlas
+        let textures: [String: SKTexture]
+    }
+
+    /// Thread-safe: SpriteKit packs the images and every name is resolved
+    /// here, off the main thread.
+    nonisolated private static func pack(_ images: [String: UIImage]) -> Packed {
+        let atlas = SKTextureAtlas(dictionary: images.mapValues(untrimmed))
+        var textures: [String: SKTexture] = [:]
+        for name in images.keys {
+            let texture = atlas.textureNamed(name)
+            texture.filteringMode = .linear
+            textures[name] = texture
+        }
+        return Packed(atlas: atlas, textures: textures)
+    }
+
+    /// A scale-1 copy of the same bitmap (so the packer keeps every pixel
+    /// of a 2× or 3× bake; sprite sizes are always set explicitly) whose
+    /// four corner pixels carry alpha 1/255. The packer trims transparent
+    /// borders, which would clip the outermost antialiased texels of a
+    /// silhouette; with the corners marked, each entry keeps its full
+    /// transparent margin and samples exactly like its stand-alone texture.
+    nonisolated private static func untrimmed(_ image: UIImage) -> UIImage {
+        guard let source = image.cgImage,
+              let space = CGColorSpace(name: CGColorSpace.sRGB)
+        else { return image }
+        let width = source.width
+        let height = source.height
+        guard width > 1, height > 1,
+              let context = CGContext(
+                  data: nil,
+                  width: width,
+                  height: height,
+                  bitsPerComponent: 8,
+                  bytesPerRow: width * 4,
+                  space: space,
+                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+              ),
+              let pixels = context.data?.assumingMemoryBound(to: UInt8.self)
+        else { return UIImage(cgImage: source, scale: 1, orientation: .up) }
+        context.draw(source, in: CGRect(x: 0, y: 0, width: width, height: height))
+        for (x, y) in [(0, 0), (width - 1, 0), (0, height - 1), (width - 1, height - 1)] {
+            let alpha = pixels + (y * width + x) * 4 + 3
+            if alpha.pointee == 0 { alpha.pointee = 1 }
+        }
+        guard let marked = context.makeImage() else {
+            return UIImage(cgImage: source, scale: 1, orientation: .up)
+        }
+        return UIImage(cgImage: marked, scale: 1, orientation: .up)
+    }
+
+    private func install(_ built: Packed) {
+        packed = built.textures
+        generation += 1
+        for name in built.textures.keys where !Self.isShared(name) {
+            standalone[name] = nil
+        }
+        let sprites = registry.keyEnumerator().allObjects.compactMap { $0 as? SKSpriteNode }
+        for sprite in sprites {
+            guard let name = registry.object(forKey: sprite) as String?,
+                  let texture = built.textures[name],
+                  sprite.texture !== texture
+            else { continue }
+            sprite.texture = texture
+        }
+    }
+
+    // MARK: Kept images
+
+    private static func isShared(_ name: String) -> Bool {
+        name.hasPrefix("gem.shared.")
+    }
+
+    private func touch(_ name: String) {
+        useClock &+= 1
+        entries[name]?.lastUse = useClock
+    }
+
+    private func store(_ name: String, image: UIImage, pinned: Bool) {
+        let bytes = Int(image.size.width * image.scale) * Int(image.size.height * image.scale) * 4
+        useClock &+= 1
+        entries[name] = Entry(image: image, bytes: bytes, lastUse: useClock, isPinned: pinned)
+        keptBytes += bytes
+        evictIfNeeded()
+    }
+
+    private func evictIfNeeded() {
+        guard keptBytes > Self.imageByteBudget else { return }
+        // A body that stays on screen is "least recently used" by lookup
+        // time, yet it is the one image that must survive: dropping it
+        // would leave its sprite on an old page (unbatched, and keeping that
+        // whole page alive). Only names no live sprite shows may go.
+        let live = liveNames()
+        let candidates = entries
+            .filter { !$0.value.isPinned && !live.contains($0.key) }
+            .sorted { $0.value.lastUse < $1.value.lastUse }
+        for (name, entry) in candidates {
+            guard keptBytes > Self.imageByteBudget else { break }
+            entries[name] = nil
+            standalone[name] = nil
+            keptBytes -= entry.bytes
+        }
+    }
+}

@@ -155,6 +155,9 @@ struct SettingsView: View {
                 rarePebbleSection
             }
             sensorySection
+            // 演出の強さ sits with 音と触覚: both are how the app feels on
+            // this iPhone, not what it records.
+            JarEffectsSettingsSection()
             notificationSection
             shareSection
             // 記録とiCloud: where the records live, moving them, exporting
@@ -2792,20 +2795,9 @@ private struct SubjectEditorView: View {
     @State private var saveError: String?
     @FocusState private var isNameFocused: Bool
 
-    private let palette = [
-        SubjectColorChoice(hex: Constants.Color.english, name: "朱色"),
-        SubjectColorChoice(hex: Constants.Color.mathematics, name: "瑠璃"),
-        SubjectColorChoice(hex: Constants.Color.japanese, name: "紅藤"),
-        SubjectColorChoice(hex: Constants.Color.science, name: "緑青"),
-        SubjectColorChoice(hex: Constants.Color.socialStudies, name: "菫"),
-        SubjectColorChoice(hex: "#D6863A", name: "琥珀"),
-        SubjectColorChoice(hex: "#36A7AE", name: "青緑"),
-        SubjectColorChoice(hex: "#D56B82", name: "珊瑚"),
-        SubjectColorChoice(hex: "#739B45", name: "若草"),
-        SubjectColorChoice(hex: "#5967C8", name: "藍"),
-        SubjectColorChoice(hex: "#A76A3F", name: "赤銅"),
-        SubjectColorChoice(hex: "#5688A8", name: "空色")
-    ]
+    private let palette = SubjectPalette.swatches.map {
+        SubjectColorChoice(hex: $0.hex, name: $0.name)
+    }
 
     private var nameValidationError: SubjectNamePolicy.ValidationError? {
         SubjectNamePolicy.validationError(for: name)

@@ -49,6 +49,7 @@ struct HomeView: View {
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.displayScale) private var displayScale
     @Environment(\.isCloudOfflineSession) private var isCloudOfflineSession
     @Environment(\.aggregateProjectionPresentation)
     private var aggregateProjectionPresentation
@@ -99,6 +100,10 @@ struct HomeView: View {
     /// state change (formerly the three-second Screen Time pass) re-renders.
     @State private var pendingRewardReceiptRevision = 0
     @State private var sceneInitialized = false
+    /// Measured HUD bottom and jar stage top in the jar card's coordinate
+    /// space; the time core's orbit is laid out below the HUD.
+    @State private var measuredJarHUDBottom: CGFloat?
+    @State private var measuredJarStageTop: CGFloat = 0
     @State private var homeIsVisible = false
     @State private var rewardDropRevealIsPending = false
     @State private var rewardDropRevealRequestID: UUID?
@@ -481,31 +486,39 @@ struct HomeView: View {
     /// the colour of their accumulated effort, while the launch button can
     /// still describe the next chosen theme independently.
     private var lifetimeCoreColorHex: String {
-        var weights: [String: Double] = [:]
-
-        for aggregate in activeAggregateRoots {
-            let grams = Double(max(0, aggregate.grams))
-            let mix = aggregate.colorMix.isEmpty
-                ? [StratumColorFraction(
-                    hex: aggregate.subjectMix.first?.colorHex
-                        ?? selectedSubject?.colorHex
-                        ?? Constants.Color.amberLamp,
-                    fraction: 1
-                )]
-                : aggregate.colorMix
-            for contribution in mix {
-                weights[contribution.hex, default: 0] += grams * max(0, contribution.fraction)
-            }
-        }
-
-        for session in looseSessions {
-            weights[session.displaySubjectColorHex, default: 0] += Double(max(0, session.grams))
-        }
-
-        return weights.sorted { lhs, rhs in
+        lifetimeCoreColorWeights.sorted { lhs, rhs in
             if lhs.value == rhs.value { return lhs.key < rhs.key }
             return lhs.value > rhs.value
         }.first?.key ?? selectedSubject?.colorHex ?? Constants.Color.amberLamp
+    }
+
+    /// Approximate theme shares of the lifetime core (root grams × colour
+    /// mix + loose grams). Aggregate mixes are count-weighted, so this is
+    /// called "おおよそ" and never a mass breakdown.
+    private var lifetimeCoreColorShares: [GemColorShare] {
+        JarLifetimeCorePresentation.colorShares(weights: lifetimeCoreColorWeights)
+    }
+
+    /// The same fan the Overview draws (`JarLifetimeCorePresentation`).
+    private var lifetimeCoreColorWeights: [String: Double] {
+        JarLifetimeCorePresentation.colorWeights(
+            activeAggregateRoots.map { aggregate in
+                JarLifetimeCorePresentation.ColorContribution(
+                    grams: aggregate.grams,
+                    colorMix: aggregate.colorMix.isEmpty
+                        ? [StratumColorFraction(
+                            hex: aggregate.subjectMix.first?.colorHex
+                                ?? selectedSubject?.colorHex
+                                ?? Constants.Color.amberLamp,
+                            fraction: 1
+                        )]
+                        : aggregate.colorMix
+                )
+            }
+            + looseSessions.map {
+                JarLifetimeCorePresentation.ColorContribution(grams: $0.grams, hex: $0.displaySubjectColorHex)
+            }
+        )
     }
     private var visibleAchievementStones: [AchievementStone] {
         AchievementStonePolicy.visibleStones(from: achievementStones)
@@ -678,6 +691,19 @@ struct HomeView: View {
                     } else {
                         completionInsetContents
                     }
+                }
+                // Whatever scrolls behind the card's top edge (the theme and
+                // duration row) fades out instead of showing half its text.
+                .background(alignment: .top) {
+                    LinearGradient(
+                        colors: [PomoGemTheme.background.opacity(0), PomoGemTheme.background.opacity(0.92)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 30)
+                    .offset(y: -30)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
                 }
                 .transition(
                     reduceMotion
@@ -1010,6 +1036,14 @@ struct HomeView: View {
     private func stratumCelebrationSheet(_ request: PendingStratumCelebration) -> some View {
         StratumCelebrationView(
             request: request,
+            // The crystal's own colour mix, as the jar paints the same ×10
+            // (the receipt keeps only its dominant colour).
+            colorShares: storedAggregates.first { $0.id == request.id }.map {
+                GemArtworkSpec.aggregateColors(
+                    $0.colorMix,
+                    fallbackHex: request.colorHex ?? Constants.Color.amberLamp
+                )
+            } ?? [],
             showsMonthLabel: purchase.isPro,
             onExplore: exploreCompletedStratum,
             onShare: { shareCompletedStratum(request) },
@@ -1055,6 +1089,8 @@ struct HomeView: View {
                 prismPebbleCount: visiblePrismPebbleCount,
                 accentHex: selectedSubject?.colorHex ?? Constants.Color.amberLamp,
                 lifetimeCoreColorHex: lifetimeCoreColorHex,
+                lifetimeCoreColorShares: lifetimeCoreColorShares,
+                coreTopClearance: Self.previewsHUDAboveJar ? nil : jarMetricHUDClearance,
                 projectionIsLowerBound: presentedLifetimeGrams == nil || presentedLifetimeIsLowerBound,
                 projectionIsUnverified:
                     aggregateProjectionPresentation.isCloudVerificationPending,
@@ -1068,9 +1104,15 @@ struct HomeView: View {
                 onAggregateTapped: revealAggregateInspection,
                 onAggregateAccessibilityAction: presentAggregateDetail
             )
+                .onGeometryChange(for: CGFloat.self) { geometry in
+                    geometry.frame(in: .named(Self.jarCardCoordinateSpace)).minY
+                } action: { top in
+                    measuredJarStageTop = top
+                }
                 .padding(.horizontal, 4)
+                .padding(.top, Self.previewsHUDAboveJar ? Self.hudAboveJarHeight : 0)
 
-            jarMetricHUD
+            jarMetricHUD(stageHeight: height)
 
             if isJarEmpty {
                 emptyJarMessage
@@ -1083,24 +1125,29 @@ struct HomeView: View {
             }
 
             if let remaining = capacityRemaining, remaining <= 15 {
-                VStack {
-                    HStack(spacing: 7) {
-                        Image(systemName: "circle.grid.2x2.fill")
-                        Text(remaining == 0 ? "まとまり粒をつくっています" : "あと\(remaining)%で、下の粒がひとつにまとまる")
-                    }
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(PomoGemTheme.text)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .overlay { Capsule().stroke(PomoGemTheme.amber.opacity(0.28), lineWidth: 1) }
-                    .padding(.top, 188)
-                    Spacer()
+                // Right under the bottle (round 12), never over the HUD or
+                // the time core: the fusion happens in the jar, and the chip
+                // only names it. It takes the place of the quiet 内訳 hint
+                // below the jar while it shows, and fades in place (sliding
+                // from the top edge crossed the value and settled on the
+                // core).
+                HStack(spacing: 7) {
+                    Image(systemName: "circle.grid.2x2.fill")
+                    Text(remaining == 0 ? "まとまり粒をつくっています" : "あと\(remaining)%で、下の粒がひとつにまとまる")
                 }
+                .font(.caption.weight(.bold))
+                .foregroundStyle(PomoGemTheme.text)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay { Capsule().stroke(PomoGemTheme.amber.opacity(0.28), lineWidth: 1) }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                // Placed by offset, so the card's layout never changes.
+                .offset(y: Self.capacityChipTopInset(stageHeight: height))
                 .transition(
                     reduceMotion
                         ? .opacity
-                        : .move(edge: .top).combined(with: .opacity)
+                        : .opacity.combined(with: .offset(y: 6))
                 )
                 .allowsHitTesting(false)
             }
@@ -1162,6 +1209,20 @@ struct HomeView: View {
 
         }
         .frame(height: height)
+        .coordinateSpace(.named(Self.jarCardCoordinateSpace))
+    }
+
+    /// The capacity chip hangs 6 pt under the bottle's base (the bottle is
+    /// centred in the stage and at most `Constants.Jar.height` tall), over
+    /// the 内訳 hint's row when the stage has no room below the bottle.
+    private static func capacityChipTopInset(stageHeight: CGFloat) -> CGFloat {
+        let outer = JarScene.outerJarRect(sceneSize: CGSize(width: 1, height: stageHeight))
+        return stageHeight - outer.minY + 6
+    }
+
+    /// The chip above is showing (the 内訳 hint under the jar steps aside).
+    private var showsCapacityChip: Bool {
+        capacityRemaining.map { $0 <= 15 } ?? false
     }
 
     /// SwiftUI keeps presenting views mounted behind sheets. The jar owns the
@@ -1187,7 +1248,47 @@ struct HomeView: View {
             && router.cloudFocusRecoveryOffer == nil
     }
 
-    private var jarMetricHUD: some View {
+    /// D5 (owner decision pending, Docs/GemExperienceDesign.md §8.1): a
+    /// Simulator-only preview that moves the metric HUD above the jar mouth
+    /// so the jar holds only the core and the gems. Requires the in-memory
+    /// UI-test launch plus `POMOGEM_UI_TEST_HUD=outside`; never in release.
+    private static let previewsHUDAboveJar: Bool = {
+#if DEBUG && targetEnvironment(simulator)
+        return LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess
+            && LocalPreviewLaunchPolicy.persistenceModeForCurrentProcess == .inMemoryPreview
+            && ProcessInfo.processInfo.environment["POMOGEM_UI_TEST_HUD"] == "outside"
+#else
+        return false
+#endif
+    }()
+    private static let hudAboveJarHeight: CGFloat = 104
+
+    private static let jarCardCoordinateSpace = "home.jarCard"
+
+    /// Bottom edge of the metric HUD in the jar stage's own coordinates,
+    /// measured from the laid-out HUD (every Dynamic Type size, the cloud
+    /// status line and the pre-fusion rail included), so the time core's
+    /// orbit is placed below what is actually drawn. Before the first
+    /// layout pass it falls back to the HUD's nominal rows.
+    private var jarMetricHUDClearance: CGFloat {
+        if let measuredJarHUDBottom {
+            return max(0, measuredJarHUDBottom - measuredJarStageTop)
+        }
+        let valueRow: CGFloat = dynamicTypeSize.isAccessibilitySize ? 36 : 47
+        let rail: CGFloat = showsPreFusionRail ? 34 : 0
+        return 88 + 15 + 3 + valueRow + 3 + 24 + rail
+    }
+
+    /// The bottle is at most `Constants.Jar.height` tall and centred in a
+    /// taller stage (accessibility sizes, large phones); the HUD follows its
+    /// mouth instead of the stage top, so it never meets the neck or the
+    /// 巡 pill.
+    private func jarMetricHUDTopInset(stageHeight: CGFloat) -> CGFloat {
+        let outer = JarScene.outerJarRect(sceneSize: CGSize(width: 1, height: stageHeight))
+        return 88 + max(0, stageHeight - outer.maxY)
+    }
+
+    private func jarMetricHUD(stageHeight: CGFloat) -> some View {
         VStack(spacing: 14) {
             jarMetricReadout
             // The one-time hint hangs under the readout, in the jar's empty
@@ -1206,7 +1307,7 @@ struct HomeView: View {
         }
         // Keep every glyph behind the mouth instead of straddling its bright
         // rim; the occlusion cue is what makes the glass depth believable.
-        .padding(.top, 88)
+        .padding(.top, Self.previewsHUDAboveJar ? 0 : jarMetricHUDTopInset(stageHeight: stageHeight))
         .frame(maxHeight: .infinity, alignment: .top)
         .allowsHitTesting(false)
     }
@@ -1287,7 +1388,30 @@ struct HomeView: View {
                 }
             }
         }
+        // Only the readout counts: the one-time hint below it is transient,
+        // and the core must not move when it comes and goes.
+        .onGeometryChange(for: CGFloat.self) { geometry in
+            geometry.frame(in: .named(Self.jarCardCoordinateSpace)).maxY
+        } action: { bottom in
+            measuredJarHUDBottom = bottom
+        }
         .shadow(color: .black.opacity(0.52), radius: 3, y: 1)
+        // A soft ink scrim keeps the value legible over the brighter core,
+        // orbit markers and glowing gems behind the glass. The text shadow
+        // is applied first, so the blurred scrim is not shadowed again.
+        .background {
+            Ellipse()
+                .fill(
+                    RadialGradient(
+                        colors: [Color.black.opacity(0.34), Color.black.opacity(0.14), .clear],
+                        center: .center,
+                        startRadius: 4,
+                        endRadius: 120
+                    )
+                )
+                .frame(width: 250, height: 150)
+                .blur(radius: 8)
+        }
         .accessibilityHidden(true)
     }
 
@@ -2355,15 +2479,17 @@ struct HomeView: View {
         let historyTitle = offer.weeklyTitle
         let historySpokenTitle = offer.weeklySpokenTitle
         return HStack(spacing: 11) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 34, weight: .black))
-                .foregroundStyle(Color(hex: offer.heroColorHex(for: rareRewardMode)))
-                .frame(width: 48, height: 48)
-                .background(
-                    Color(hex: offer.heroColorHex(for: rareRewardMode)).opacity(0.12),
-                    in: Circle()
-                )
-                .accessibilityHidden(true)
+            // The earned gem itself (round 12), in the jar's own art and
+            // with its light, rather than a check mark: the reward's card
+            // shows the reward.
+            GemArtworkStone(
+                spec: GemArtworkStone.looseSpec(hex: offer.heroColorHex(for: rareRewardMode)),
+                glowHex: offer.heroColorHex(for: rareRewardMode),
+                glowOpacity: 0.5
+            )
+            .frame(width: 44, height: 44)
+            .frame(width: 48, height: 48)
+            .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 Text(offer.dropTitle(for: rareRewardMode))
                     .font(.system(.headline, design: .rounded, weight: .black))
@@ -2774,6 +2900,10 @@ struct HomeView: View {
             acknowledgeRewardOffer(offer, destination: .rest(recovery))
         }
         .buttonStyle(PomoGemCompactButtonStyle())
+        // One line: at xxxL on a 12 mini the third of the row is narrower
+        // than 「5分休憩」 and the word broke mid-way (round 14).
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
         .accessibilityLabel("\(offer.minutes)分休憩する")
     }
 
@@ -2980,6 +3110,9 @@ struct HomeView: View {
         // first visible descent. The landing callback applies the latest page.
         guard !scene.hasCompletionDropInFlight else { return }
         guard refreshRewardSessionBackfill() else { return }
+        // Bodies bake at this view's scale; set it before the first restore
+        // so a 2× device never bakes (and keeps) 3× textures.
+        scene.artworkScale = displayScale
         syncBaseLayers()
 
         let localCompletions = looseSessions.filter(hasLocalCompletionMarker)
@@ -4375,7 +4508,8 @@ struct HomeView: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(PomoGemTheme.muted)
                 .multilineTextAlignment(.center)
-                .opacity(isPresented ? 0 : 1)
+                // The capacity chip takes this row while a fusion nears.
+                .opacity(isPresented || showsCapacityChip ? 0 : 1)
                 .accessibilityHidden(true)
                 .allowsHitTesting(false)
             }
@@ -4768,6 +4902,8 @@ struct MonthLabelHint {
 
 private struct StratumCelebrationView: View {
     let request: PendingStratumCelebration
+    /// The crystal's colour shares; empty uses the receipt's colour.
+    let colorShares: [GemColorShare]
     let showsMonthLabel: Bool
     let onExplore: () -> Void
     let onShare: () -> Void
@@ -4821,33 +4957,39 @@ private struct StratumCelebrationView: View {
                                     .stroke(Color(hex: colorHex).opacity(0.30), lineWidth: 1)
                             }
 
-                        FusionOrbitStage(
-                            state: orbitState,
-                            colorHex: colorHex,
-                            scale: .hero
-                        )
-                        .frame(width: 218, height: 218)
+                        // The pill sits under the stage (round 12), never
+                        // over the lowest of the ten gems.
+                        VStack(spacing: 6) {
+                            FusionOrbitStage(
+                                state: orbitState,
+                                colorHex: colorHex,
+                                scale: .hero,
+                                destinationGrams: request.grams,
+                                colorShares: colorShares
+                            )
+                            .frame(width: 206, height: 206)
 
-                        HStack(spacing: 8) {
-                            Text("瓶の整理")
-                                .foregroundStyle(PomoGemTheme.muted)
-                            Text("10")
-                            Image(systemName: "arrow.right")
-                                .accessibilityHidden(true)
-                            Text("1")
-                            Text("・ 記録 100% 保持")
-                                .foregroundStyle(PomoGemTheme.muted)
+                            HStack(spacing: 8) {
+                                Text("瓶の整理")
+                                    .foregroundStyle(PomoGemTheme.muted)
+                                Text("10")
+                                Image(systemName: "arrow.right")
+                                    .accessibilityHidden(true)
+                                Text("1")
+                                Text("・ 記録 100% 保持")
+                                    .foregroundStyle(PomoGemTheme.muted)
+                            }
+                            .font(.system(.caption, design: .rounded, weight: .black))
+                            .monospacedDigit()
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(PomoGemTheme.card.opacity(0.92), in: Capsule())
+                            .overlay(Capsule().stroke(.white.opacity(0.16), lineWidth: 0.7))
                         }
-                        .font(.system(.caption, design: .rounded, weight: .black))
-                        .monospacedDigit()
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(PomoGemTheme.card.opacity(0.92), in: Capsule())
-                        .overlay(Capsule().stroke(.white.opacity(0.16), lineWidth: 0.7))
                         .padding(.bottom, 10)
                     }
                     .frame(maxWidth: .infinity)
-                    .frame(height: 244)
+                    .frame(height: 256)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(
                         "瓶の整理として、10個の記録を1個の\(AggregatePresentation.title(level: level))へ圧縮。記録と質量は100パーセント保持。時間の価値は変わりません"
@@ -4935,7 +5077,9 @@ private struct StratumCelebrationView: View {
             value: showsMonthLabel ? request.monthLabel : "\(request.pebbleCount)粒"
         )
         StatPill(title: "積んだ質量", value: formattedMass(request.grams))
-        StatPill(title: "結晶", value: AggregatePresentation.title(level: level))
+        // The tile names the crystal's size (×10, ×100…): its title already
+        // says 結晶 (round 12; the value repeated it).
+        StatPill(title: "結晶", value: AggregatePresentation.countLabel(request.pebbleCount))
     }
 
     private func formattedMass(_ grams: Int) -> String {

@@ -122,9 +122,6 @@ enum Constants {
         static let minimumRecentAggregateRoots = 12
         static let aggregateFormationDuration: TimeInterval = 0.52
         static let aggregateBirthImpulse: CGFloat = 2.4
-        static let aggregateInteriorDotCount = 18
-        static let aggregateInteriorDotScale: CGFloat = 0.13
-        static let aggregateRingWidth: CGFloat = 1.25
 
         // Compatibility aliases for the former fixed-stratum implementation.
         // New code aggregates into a movable body instead of raising the floor.
@@ -198,6 +195,15 @@ enum Constants {
         static let goldSparkCount = 8
         static let goldPreDropDuration: TimeInterval = 0.4
         static let rareTwinkleInterval: TimeInterval = 2
+        /// Faceted study gems: one deterministic star flare at most every
+        /// interval while the scene is awake, never more than three at once,
+        /// and each gem at most once per `PebbleNode.gemTwinkleCooldown`. The
+        /// idle pause still freezes the jar after it settles, so a resting jar
+        /// costs no extra frames.
+        static let gemTwinkleInterval: TimeInterval = 0.6
+        static let maximumConcurrentGemTwinkles = 3
+        /// Event light particles (landing, fusion) share one bounded budget.
+        static let maximumEventLightSprites = 48
         static let goldTwinkleProbability = 0.14
         static let prismTwinkleProbability = 0.20
         static let sparkFontScale: CGFloat = 0.72

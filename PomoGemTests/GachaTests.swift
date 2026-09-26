@@ -714,26 +714,35 @@ final class GachaTests: XCTestCase {
             rareRewardMode: .standard
         )
         let originalGlow = pebble.glowWidth
+        let originalHalo = pebble.gemHaloAlpha
         let originalFill = pebble.fillColor
         let originalStroke = pebble.strokeColor
         let originalMark = try XCTUnwrap(pebble.childNode(withName: "achievement.mark"))
-        let originalBackdrop = try XCTUnwrap(
-            pebble.childNode(withName: "achievement.markBackdrop")
+        let loose = PebbleNode(
+            descriptor: PebbleDescriptor(
+                subjectName: "資格",
+                colorHex: Constants.Color.science,
+                source: .timer,
+                kind: .normal,
+                grams: Constants.Mass.measuredPebbleGrams
+            ),
+            reduceMotion: false
         )
 
         pebble.setRareRewardMode(.quiet)
 
         XCTAssertEqual(pebble.rareRewardMode, .quiet)
-        XCTAssertEqual(originalGlow, descriptor.radius * 0.36, accuracy: 0.001)
+        // v1.2: the jewel glows through its copper-tinted halo sprite, which
+        // is stronger than a loose gem's and never changes with the mode.
+        XCTAssertEqual(originalGlow, 0, accuracy: 0.001)
+        XCTAssertGreaterThan(originalHalo, loose.gemHaloAlpha)
+        XCTAssertEqual(pebble.gemHaloAlpha, originalHalo, accuracy: 0.001)
         XCTAssertEqual(pebble.glowWidth, originalGlow, accuracy: 0.001)
         XCTAssertTrue(pebble.fillColor.isEqual(originalFill))
         XCTAssertTrue(pebble.strokeColor.isEqual(originalStroke))
         XCTAssertTrue(
             originalMark === pebble.childNode(withName: "achievement.mark"),
             "A rare-reward preference must not rebuild or dim an achievement mark"
-        )
-        XCTAssertTrue(
-            originalBackdrop === pebble.childNode(withName: "achievement.markBackdrop")
         )
     }
 
@@ -781,31 +790,20 @@ final class GachaTests: XCTestCase {
             reduceMotion: true,
             rareRewardMode: .standard
         )
-        let aura = try XCTUnwrap(
-            pebble.childNode(withName: "aggregate.aura") as? SKShapeNode
-        )
-        let baseGlow = descriptor.radius * AggregatePresentation.glowScale(
-            level: metadata.level,
-            containsRare: false
-        )
-        let enhancedGlow = descriptor.radius * AggregatePresentation.glowScale(
-            level: metadata.level,
-            containsRare: true
-        )
-
-        XCTAssertGreaterThan(baseGlow, 0)
-        XCTAssertGreaterThan(enhancedGlow, baseGlow)
-        XCTAssertEqual(pebble.glowWidth, enhancedGlow, accuracy: 0.001)
-        XCTAssertEqual(aura.glowWidth, enhancedGlow, accuracy: 0.001)
+        // v1.2: the earned bloom is the halo sprite inside `aggregate.aura`
+        // (no glowWidth neon rim). Rare enhancement may brighten it; quiet
+        // and off return to the deterministic, gram-derived base glow.
+        XCTAssertNotNil(pebble.childNode(withName: "aggregate.aura/gem.halo"))
+        XCTAssertEqual(pebble.glowWidth, 0, accuracy: 0.001)
+        let enhancedHalo = pebble.gemHaloAlpha
 
         pebble.setRareRewardMode(.quiet)
-        XCTAssertEqual(pebble.glowWidth, baseGlow, accuracy: 0.001)
-        XCTAssertEqual(aura.glowWidth, baseGlow, accuracy: 0.001)
-        XCTAssertGreaterThan(pebble.glowWidth, 0, "The earned aggregate keeps its base glow")
+        let baseHalo = pebble.gemHaloAlpha
+        XCTAssertGreaterThan(baseHalo, 0, "The earned aggregate keeps its base glow")
+        XCTAssertGreaterThan(enhancedHalo, baseHalo)
 
         pebble.setRareRewardMode(.off)
-        XCTAssertEqual(pebble.glowWidth, baseGlow, accuracy: 0.001)
-        XCTAssertEqual(aura.glowWidth, baseGlow, accuracy: 0.001)
+        XCTAssertEqual(pebble.gemHaloAlpha, baseHalo, accuracy: 0.001)
     }
 
     @MainActor
@@ -831,6 +829,11 @@ final class GachaTests: XCTestCase {
         XCTAssertNil(pebble.childNode(withName: "pebble.earlyEffortAura"))
     }
 
+    /// Round 13: the mark is engraved in the moonstone, upright however the
+    /// stone rolls, and VoiceOver keeps the kind. Round 14: the groove is at
+    /// least 4.5:1 against the crown (WCAG AA for the small 「100」 and
+    /// 「W」), 7:1 with Increase Contrast (main's former floor), for every
+    /// kind and for any hue a stone could take.
     @MainActor
     func testEveryAchievementMarkHasHighContrastUprightTreatment() {
         for kind in AchievementKind.allCases {
@@ -846,39 +849,92 @@ final class GachaTests: XCTestCase {
             let originalRadius = pebble.radius
             let originalMass = pebble.physicsBody?.mass
 
-            guard let backdrop = pebble.childNode(
-                withName: "achievement.markBackdrop"
-            ) as? SKShapeNode,
-            let mark = pebble.childNode(withName: "achievement.mark") as? SKLabelNode else {
-                XCTFail("\(kind) needs a mark and a contrast backdrop")
+            guard let mark = pebble.childNode(withName: "achievement.mark") as? SKSpriteNode else {
+                XCTFail("\(kind) needs its engraved mark")
                 continue
             }
-            guard let fontColor = mark.fontColor else {
-                XCTFail("\(kind) needs an explicit high-contrast mark color")
-                continue
+            XCTAssertNil(pebble.childNode(withName: "achievement.markBackdrop"), "No badge plate behind the mark")
+            XCTAssertNotNil(mark.texture)
+            for increased in [false, true] {
+                let colors = GemArtwork.achievementEngravingColors(hex: kind.gemBaseHex, increasedContrast: increased)
+                XCTAssertGreaterThanOrEqual(
+                    contrastRatio(colors.groove.withAlpha(1), colors.surface.withAlpha(1)),
+                    increased ? 7 : 4.5,
+                    "\(kind) stays readable in the moonstone"
+                )
             }
-
-            XCTAssertGreaterThanOrEqual(
-                contrastRatio(fontColor, backdrop.fillColor),
-                7,
-                "\(kind) should remain readable over every jewel material"
-            )
             XCTAssertEqual(mark.accessibilityLabel, kind.title)
             XCTAssertEqual(mark.blendMode, .alpha)
-            XCTAssertEqual(backdrop.blendMode, .alpha)
             XCTAssertFalse(mark.hasActions())
-            XCTAssertFalse(backdrop.hasActions())
 
             pebble.zRotation = .pi / 3
             pebble.updatePresentationLighting(horizontal: 0)
             XCTAssertEqual(mark.zRotation, -pebble.zRotation, accuracy: 0.001)
-            XCTAssertEqual(backdrop.zRotation, -pebble.zRotation, accuracy: 0.001)
 
             XCTAssertEqual(pebble.radius, originalRadius)
             XCTAssertEqual(pebble.physicsBody?.mass, originalMass)
             XCTAssertEqual(pebble.descriptor.grams, 0)
             XCTAssertFalse(pebble.descriptor.participatesInAggregation)
         }
+    }
+
+    /// The Overview's achievement card engraves in the milestone's own
+    /// colour, so the floors hold for every hue, not only the three kinds.
+    func testAchievementEngravingKeepsItsContrastFloorForEveryHue() {
+        for step in 0 ..< 72 {
+            let hex = GemColor(hue: CGFloat(step) / 72, saturation: 0.7, brightness: 0.8).hexString
+            for increased in [false, true] {
+                let colors = GemArtwork.achievementEngravingColors(hex: hex, increasedContrast: increased)
+                XCTAssertGreaterThanOrEqual(
+                    contrastRatio(colors.groove.withAlpha(1), colors.surface.withAlpha(1)),
+                    increased ? 7 : 4.5,
+                    hex
+                )
+            }
+        }
+    }
+
+    /// Round 14: turning Increase Contrast on while the jar is shown re-bakes
+    /// the engraving (and the facet edges) at once; turning it off returns
+    /// to the default bake.
+    @MainActor
+    func testIncreaseContrastReachesLiveStonesWithoutARestore() throws {
+        let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
+        scene.soundEnabled = false
+        scene.hapticsEnabled = false
+        scene.reduceMotion = true
+        scene.bakesGemBedInBackground = false
+        let stone = PebbleDescriptor(
+            id: UUID(uuidString: "D0C20000-0000-4000-8000-000000000001")!,
+            subjectName: "記念",
+            colorHex: Constants.Color.english,
+            source: .manual,
+            kind: .normal,
+            achievementKind: .perfectScore,
+            grams: 0
+        )
+        let gem = PebbleDescriptor(
+            id: UUID(uuidString: "D0C20000-0000-4000-8000-000000000002")!,
+            subjectName: "英語",
+            colorHex: Constants.Color.english,
+            source: .timer,
+            kind: .normal,
+            grams: Constants.Mass.measuredPebbleGrams
+        )
+        scene.restore(pebbles: [stone, gem])
+        let pebbles = scene.children.flatMap(\.children).compactMap { $0 as? PebbleNode }
+        let achievement = try XCTUnwrap(pebbles.first { $0.descriptor.isAchievement })
+        let loose = try XCTUnwrap(pebbles.first { !$0.descriptor.isAchievement })
+        let mark = try XCTUnwrap(achievement.childNode(withName: "achievement.mark") as? SKSpriteNode)
+
+        scene.setIncreasedContrast(true)
+        XCTAssertEqual(GemTextureAtlas.shared.textureName(of: mark)?.hasSuffix("|c"), true, "The deeper groove")
+        XCTAssertEqual(loose.displayedBodySpec?.edgeBoost, 0.2, "Brighter facet edges")
+        XCTAssertEqual(achievement.displayedBodySpec?.edgeBoost, 0.2)
+
+        scene.setIncreasedContrast(false)
+        XCTAssertEqual(GemTextureAtlas.shared.textureName(of: mark)?.hasSuffix("|c"), false)
+        XCTAssertEqual(loose.displayedBodySpec?.edgeBoost, 0)
     }
 
     private func contrastRatio(_ first: UIColor, _ second: UIColor) -> CGFloat {

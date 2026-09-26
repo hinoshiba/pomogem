@@ -28,8 +28,14 @@
     "iOS：%@" : {
       "comment" : "Support mail line; the argument is the iOS version, e.g. 26.5"
     },
+    "「視差効果を減らす」がオンのため、いまは控えめで表示しています。" : {
+      "comment" : "Settings note under Effect intensity while the system Reduce Motion setting is on"
+    },
     "「集中に戻るお知らせ」は既定でオフです。オンにすると、集中タイマー中にホーム画面や別のアプリへ移ったとき、30秒後に一度通知し、戻ると取り消します。画面をロックしただけなら通知しません（パスコードを使っていないiPhoneなどでは届くことがあります）。一時停止中・休憩中・終了間際も通知しません。" : {
       "comment" : "Settings caption under the return-to-focus reminder switch"
+    },
+    "きらめきと傾けたときの星を止め、光を弱め、着地と融合を短くします" : {
+      "comment" : "Effect intensity detail for Subtle"
     },
     "このiPhoneのみ" : {
       "comment" : "Support mail: records are kept only on this iPhone"
@@ -112,6 +118,12 @@
     "承認待ち・承認されると自動で使えます" : {
       "comment" : "Settings Pro row subtitle while a purchase request awaits approval"
     },
+    "控えめ" : {
+      "comment" : "Effect intensity option: calmer light and shorter effects (Subtle)"
+    },
+    "控えめにしても、粒の重さや数、融合、カットは変わりません。「視差効果を減らす」がオンのときは、常に控えめで表示します。この設定はこのiPhoneだけに保存され、iCloudでは同期しません。" : {
+      "comment" : "Settings footer explaining Effect intensity"
+    },
     "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにあるすべての記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このiPhoneのデータはアプリの削除で、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除できます。" : {
       "comment" : "Settings export footer in iCloud mode"
     },
@@ -120,6 +132,12 @@
     },
     "未購入" : {
       "comment" : "Support mail: Pro is not owned"
+    },
+    "朱色" : {
+      "comment" : "Theme colour swatch name (Vermilion)"
+    },
+    "標準" : {
+      "comment" : "Effect intensity option: every light and motion effect (Standard)"
     },
     "機種：%@" : {
       "comment" : "Support mail line; the argument is the model identifier, e.g. iPhone13,1"
@@ -133,11 +151,47 @@
     "毎月1日に一度だけ" : {
       "comment" : "Settings switch subtitle: the monthly notification is sent on the 1st"
     },
+    "演出の強さ" : {
+      "comment" : "Settings row: how much light and motion the jar's rewards use (Effect intensity)"
+    },
+    "珊瑚" : {
+      "comment" : "Theme colour swatch name (Coral)"
+    },
+    "琥珀" : {
+      "comment" : "Theme colour swatch name (Amber)"
+    },
+    "瑠璃" : {
+      "comment" : "Theme colour swatch name (Lapis lazuli)"
+    },
+    "瓶の表示" : {
+      "comment" : "Settings section header: how the jar is shown (Jar display)"
+    },
+    "空色" : {
+      "comment" : "Theme colour swatch name (Sky blue)"
+    },
+    "紅藤" : {
+      "comment" : "Theme colour swatch name (Pink wisteria)"
+    },
+    "緑青" : {
+      "comment" : "Theme colour swatch name (Verdigris)"
+    },
+    "自然なきらめきと傾けたときの星、光の広がりをすべて表示します" : {
+      "comment" : "Effect intensity detail for Standard"
+    },
     "自由な集中時間・結晶の月刻印・勉強アプリ数の無制限" : {
       "comment" : "Settings Pro row subtitle for free users: what Pro adds"
     },
+    "若草" : {
+      "comment" : "Theme colour swatch name (Young leaf green)"
+    },
+    "菫" : {
+      "comment" : "Theme colour swatch name (Violet)"
+    },
     "著作権" : {
       "comment" : "About page row: copyright"
+    },
+    "藍" : {
+      "comment" : "Theme colour swatch name (Indigo)"
     },
     "見出し書体" : {
       "comment" : "About page row: the heading typeface"
@@ -163,6 +217,9 @@
     "購入・返金の案内など（Webで開く）" : {
       "comment" : "Settings row subtitle: what the support web page covers"
     },
+    "赤銅" : {
+      "comment" : "Theme colour swatch name (Copper)"
+    },
     "通知する時刻" : {
       "comment" : "Settings time picker label for reminders"
     },
@@ -171,6 +228,9 @@
     },
     "集中の粒・結晶・記念石を表示と集計から外し、0から始めます。同じiCloudを使うほかのiPhoneにも、接続したときに反映されます。オフラインのiPhoneから古い記録が戻らないよう、リセット前の記録は同期のために残り、データの書き出しにも含まれます。このiPhoneから完全に消すにはアプリを削除し、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除してください。この操作は取り消せません。" : {
       "comment" : "Reset confirmation in iCloud mode"
+    },
+    "青緑" : {
+      "comment" : "Theme colour swatch name (Teal)"
     },
     "（お問い合わせの内容をお書きください。不具合の場合は、操作の手順と起きたことを教えてください。）" : {
       "comment" : "Support mail body: where the person writes their message"

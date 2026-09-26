@@ -20,27 +20,27 @@ enum JarMotionActivationPolicy {
         isMotionEnabled: Bool,
         reduceMotion: Bool,
         sceneIsActive: Bool,
-        hasPhysicalContent: Bool
+        hasStudyGems: Bool
     ) -> Bool {
         mode(
             isMotionEnabled: isMotionEnabled,
             reduceMotion: reduceMotion,
             sceneIsActive: sceneIsActive,
-            hasPhysicalContent: hasPhysicalContent
+            hasStudyGems: hasStudyGems
         ) != .stopped
     }
 
+    /// The sensor runs only for a visible, active jar (Home in front:
+    /// no covering sheet, not the Focus screen) that holds a study gem.
+    /// Whether it runs at the full or the idle rate is the jar's own
+    /// demand (`JarMotionRate`).
     static func mode(
         isMotionEnabled: Bool,
         reduceMotion: Bool,
         sceneIsActive: Bool,
-        hasPhysicalContent: Bool
+        hasStudyGems: Bool
     ) -> JarMotionSamplingMode {
-        guard shouldCaptureShake(
-            isMotionEnabled: isMotionEnabled,
-            sceneIsActive: sceneIsActive,
-            hasPhysicalContent: hasPhysicalContent
-        ) else { return .stopped }
+        guard isMotionEnabled, sceneIsActive, hasStudyGems else { return .stopped }
         // Reduce Motion changes decorative effects in the scene. The jar's
         // physical response to direct interaction remains the same.
         return .tiltAndShake
@@ -143,6 +143,10 @@ struct JarSpriteView: View {
     let prismPebbleCount: Int
     let accentHex: String
     let lifetimeCoreColorHex: String
+    let lifetimeCoreColorShares: [GemColorShare]
+    /// Height of an overlaid HUD at the top of the stage (Home), so the core
+    /// and its orbit stay clear of it.
+    let coreTopClearance: CGFloat?
     let projectionIsLowerBound: Bool
     let projectionIsUnverified: Bool
     /// sync-03 (icloud-life): VoiceOver only; the jar's visuals are unchanged.
@@ -158,7 +162,18 @@ struct JarSpriteView: View {
     @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.isCloudOfflineSession) private var isCloudOfflineSession
+    @Environment(\.displayScale) private var displayScale
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
+    /// 演出の強さ (D17): device-local, read live from Settings.
+    @AppStorage(JarEffectsIntensity.defaultsKey) private var effectsIntensity: JarEffectsIntensity = .standard
     @StateObject private var motionObserver: JarMotionObserver
+    /// Measured size of the time core's label block (shared by the core
+    /// behind the scene and its labels in front, so both use one layout;
+    /// the width tells which columns of the pile lie under the labels).
+    @State private var coreLabelMetrics = JarLifetimeCoreLabelMetrics.estimated
+    /// Low Power Mode and the thermal state, followed live (round 14), so
+    /// an awake jar drops to 30 fps the moment either changes.
+    @State private var allowsAmbientSparkle = JarScene.allowsAmbientSparkle
 #if targetEnvironment(macCatalyst)
     @State private var catalystGestureOwnership = JarDragGestureOwnership()
 #endif
@@ -179,6 +194,8 @@ struct JarSpriteView: View {
         prismPebbleCount: Int = 0,
         accentHex: String = Constants.Color.amberLamp,
         lifetimeCoreColorHex: String? = nil,
+        lifetimeCoreColorShares: [GemColorShare] = [],
+        coreTopClearance: CGFloat? = nil,
         projectionIsLowerBound: Bool = false,
         projectionIsUnverified: Bool = false,
         pendingMass: JarAccessibilityPresentation.PendingMass? = nil,
@@ -204,6 +221,8 @@ struct JarSpriteView: View {
         )
         self.accentHex = accentHex
         self.lifetimeCoreColorHex = lifetimeCoreColorHex ?? accentHex
+        self.lifetimeCoreColorShares = lifetimeCoreColorShares
+        self.coreTopClearance = coreTopClearance
         self.projectionIsLowerBound = projectionIsLowerBound
         self.projectionIsUnverified = projectionIsUnverified
         self.pendingMass = pendingMass
@@ -219,8 +238,6 @@ struct JarSpriteView: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                JarAmbientStage()
-
                 let effortSnapshot = JarAccumulationPresencePresentation.effortSnapshot(
                     totalGrams: totalGrams
                 )
@@ -249,18 +266,156 @@ struct JarSpriteView: View {
                     )
                 }
 
+                // The core column (orbit and labels) stays above the gem
+                // bed, which the scene draws in front of this layer.
+                let bedTop = JarScene.gemBedTopFromStageTop(
+                    stageSize: proxy.size,
+                    bed: gemBedState
+                )
+                let coreBottomLimit = bedTop - 6
+                let limits = JarLifetimeCoreLabelLimits.resolve(
+                    stageHeight: proxy.size.height,
+                    floorY: JarScene.interiorRect(sceneSize: proxy.size).minY,
+                    bedTop: bedTop,
+                    pileTop: scene.settledPileTop(
+                        minX: (proxy.size.width - coreLabelMetrics.size.width) / 2,
+                        maxX: (proxy.size.width + coreLabelMetrics.size.width) / 2
+                    )
+                )
+                let floorLabelLimit = limits.floor
+                let abovePileLimit = limits.abovePile
+                // Round 12: the column is placed from the HUD, the bed and
+                // the floor row only, so the core never moves or shrinks
+                // with the pile (the pile scale keeps the pile below it,
+                // `JarScene.pileClearances`). The labels then show whole,
+                // without the second line, or not at all, whichever fits
+                // above the settled gems (the completion card shortens the
+                // jar the same way).
+                let coreSecondLine = lifetimeCoreState?.nextFusionLabel == nil ? 0 : coreLabelMetrics.secondLine
+                let coreLabelHeight = coreLabelMetrics.size.height
+                let coreLabelBottomLimit = floorLabelLimit
+                let coreLayout = lifetimeCoreState.map { state in
+                    JarLifetimeCoreLabels.layout(
+                        stageSize: proxy.size,
+                        state: state,
+                        topClearance: coreTopClearance,
+                        bottomLimit: coreBottomLimit,
+                        labelBottomLimit: coreLabelBottomLimit,
+                        labelHeight: coreLabelHeight
+                    )
+                }
+                let namePlateHalfWidth = coreLabelMetrics.namePlateWidth / 2 + JarLifetimeCoreLabelLimits.clearance
+                let nameAbovePileLimit = JarLifetimeCoreLabelLimits.resolve(
+                    stageHeight: proxy.size.height,
+                    floorY: JarScene.interiorRect(sceneSize: proxy.size).minY,
+                    bedTop: bedTop,
+                    pileTop: scene.settledPileTop(
+                        minX: proxy.size.width / 2 - namePlateHalfWidth,
+                        maxX: proxy.size.width / 2 + namePlateHalfWidth
+                    )
+                ).abovePile
+                let coreLabelFit = coreLayout.map { layout in
+                    JarLifetimeCoreLabelFit.resolve(
+                        fullHeight: coreLabelMetrics.size.height,
+                        secondLineHeight: coreSecondLine,
+                        nameHeight: coreLabelMetrics.namePlate,
+                        abovePileLimit: abovePileLimit,
+                        nameAbovePileLimit: nameAbovePileLimit
+                    ) { _ in layout }
+                } ?? .full
+                let coreLabelsBuried = coreLabelFit == .hidden
+                let coreDisc = Self.coreDisc(
+                    stageSize: proxy.size,
+                    coreState: lifetimeCoreState,
+                    coreLayout: coreLayout,
+                    totalGrams: totalGrams,
+                    topClearance: coreTopClearance,
+                    bottomLimit: coreBottomLimit,
+                    labelBottomLimit: coreLabelBottomLimit
+                )
+                // A pile the scale could not keep down (a heavy jar at
+                // 1.0, or a young one at the 2.0 floor) never buries the
+                // core: it steps in front of the settled gems instead.
+                let coreInFront = coreDisc.map { disc in
+                    scene.settledPileTop(minX: disc.center.x - disc.radius, maxX: disc.center.x + disc.radius)
+                        > proxy.size.height - disc.center.y - disc.radius * 0.8
+                } ?? false
+                let pileClearances = Self.pileClearances(
+                    stageSize: proxy.size,
+                    coreDisc: coreDisc,
+                    namePlate: coreLayout.map { layout in
+                        (top: layout.labelTop, height: coreLabelMetrics.namePlate, halfWidth: namePlateHalfWidth)
+                    },
+                    hudBottom: coreTopClearance
+                )
+                let effects = JarEffectsIntensity.resolved(preference: effectsIntensity, reduceMotion: reduceMotion)
+                let shareCore = Self.shareCore(
+                    stageSize: proxy.size,
+                    coreState: lifetimeCoreState,
+                    totalGrams: totalGrams,
+                    shares: lifetimeCoreColorShares.isEmpty
+                        ? [GemColorShare(hex: lifetimeCoreColorHex, fraction: 1)]
+                        : lifetimeCoreColorShares,
+                    themeMarks: GemThemeMark.isEnabled(environment: differentiateWithoutColor),
+                    effects: effects
+                )
                 if let coreState = lifetimeCoreState {
+                    // Behind the scene: all of it, or (when the pile reaches
+                    // the core) its bloom and orbit, the stone in front.
                     JarLifetimeCoreBackdrop(
                         state: coreState,
-                        colorHex: lifetimeCoreColorHex
+                        colorHex: lifetimeCoreColorHex,
+                        colorShares: lifetimeCoreColorShares,
+                        topClearance: coreTopClearance,
+                        bottomLimit: coreBottomLimit,
+                        labelBottomLimit: coreLabelBottomLimit,
+                        labelHeight: coreLabelHeight,
+                        effectsInEffect: effects,
+                        parts: coreInFront ? .behindThePile : .whole
+                    )
+                    // The whole block, laid out but never drawn, measures
+                    // the labels (their measured size keeps the layout
+                    // stable whatever shows). Labels the pile would reach
+                    // are not drawn at all: behind the large gems of a young
+                    // jar (D4) only fragments of text would show through
+                    // the gaps. VoiceOver reads the jar as one element.
+                    JarLifetimeCoreLabels(
+                        state: coreState,
+                        topClearance: coreTopClearance,
+                        bottomLimit: coreBottomLimit,
+                        labelBottomLimit: coreLabelBottomLimit,
+                        metrics: $coreLabelMetrics
+                    )
+                    .opacity(0)
+                } else if totalGrams > 0, totalGrams < GemCutLadder.firstCrystalTierGrams, !coreInFront {
+                    // Where the core will be born: a colourless vessel whose
+                    // facets light up one per 250 g.
+                    JarLifetimeCoreVessel(
+                        totalGrams: totalGrams,
+                        topClearance: coreTopClearance,
+                        bottomLimit: coreBottomLimit,
+                        labelBottomLimit: coreLabelBottomLimit,
+                        effectsInEffect: effects
                     )
                 }
 
+                // jar-01: the scene stops this SKView's render loop itself
+                // while it rests (`JarScene.isRenderLoopPaused`), because
+                // SpriteView applies `isPaused` only when it creates the view.
+                let framesPerSecond = allowsAmbientSparkle
+                    ? Constants.Jar.targetFramesPerSecond
+                    : min(30, Constants.Jar.targetFramesPerSecond)
                 SpriteView(
                     scene: scene,
-                    preferredFramesPerSecond: Constants.Jar.targetFramesPerSecond,
-                    options: [.allowsTransparency]
+                    // Low Power Mode and a hot device drop to 30 fps (the
+                    // flares and event sparks also pause there).
+                    preferredFramesPerSecond: framesPerSecond,
+                    options: [.allowsTransparency, .ignoresSiblingOrder, .shouldCullNonVisibleNodes],
+                    debugOptions: Self.spriteDebugOptions
                 )
+                // The scene's light fades out before the SKView's edge in
+                // the scene itself (`JarLightEdgeFade`, round 13): no SwiftUI
+                // mask, so no offscreen pass on awake frames.
 #if targetEnvironment(macCatalyst)
                 // One zero-distance gesture owns both click and drag on Mac.
                 // Once travel reaches 3 pt it can only be a tilt drag, so the
@@ -287,11 +442,95 @@ struct JarSpriteView: View {
                 )
 #endif
                 .onAppear {
+#if DEBUG && targetEnvironment(simulator)
+                    JarFrameProbe.shared?.attach(scene)
+#endif
                     scene.size = proxy.size
+                    scene.artworkScale = displayScale
+                    scene.gemBed = gemBedState
+                    scene.milestoneTraceCount = milestoneTraceCount
+                    scene.effectsIntensity = effectsIntensity
                     updateMotionBehavior(reduceMotion: reduceMotion)
+                    // Home shown again: draw the resting jar's frame.
+                    scene.requestRedraw()
+                }
+                .onChange(of: effectsIntensity) { _, intensity in
+                    scene.effectsIntensity = intensity
+                }
+                .onChange(of: milestoneTraceCount) { _, count in
+                    scene.milestoneTraceCount = count
+                }
+                .onChange(of: gemBedState) { _, state in
+                    scene.gemBed = state
+                }
+                .onChange(of: shareCore, initial: true) { _, core in
+                    scene.shareCore = core
+                }
+                .onChange(of: pileClearances, initial: true) { _, clearances in
+                    scene.pileClearances = clearances
                 }
                 .onChange(of: proxy.size) { _, newSize in
                     scene.size = newSize
+                }
+                // A new frame rate updates the SKView: whatever SwiftUI
+                // re-applies there, the resting jar's loop stays as the
+                // scene set it (after SwiftUI's update, hence the hop).
+                .onChange(of: framesPerSecond) { _, _ in
+                    DispatchQueue.main.async { scene.reassertRenderLoopState() }
+                }
+                .onReceive(
+                    NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange)
+                        .receive(on: RunLoop.main)
+                ) { _ in
+                    allowsAmbientSparkle = JarScene.allowsAmbientSparkle
+                }
+                .onReceive(
+                    NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification)
+                        .receive(on: RunLoop.main)
+                ) { _ in
+                    allowsAmbientSparkle = JarScene.allowsAmbientSparkle
+                }
+
+                if coreInFront {
+                    if let coreState = lifetimeCoreState {
+                        JarLifetimeCoreBackdrop(
+                            state: coreState,
+                            colorHex: lifetimeCoreColorHex,
+                            colorShares: lifetimeCoreColorShares,
+                            topClearance: coreTopClearance,
+                            bottomLimit: coreBottomLimit,
+                            labelBottomLimit: coreLabelBottomLimit,
+                            labelHeight: coreLabelHeight,
+                            effectsInEffect: effects,
+                            parts: .inFrontOfThePile
+                        )
+                    } else {
+                        JarLifetimeCoreVessel(
+                            totalGrams: totalGrams,
+                            topClearance: coreTopClearance,
+                            bottomLimit: coreBottomLimit,
+                            labelBottomLimit: coreLabelBottomLimit,
+                            effectsInEffect: effects
+                        )
+                    }
+                }
+
+                // The core's name plate and progress card sit in front of
+                // the scene (like the HUD): the bed can never hide them, and
+                // they may overlap its soft top edge. While ten gems fuse
+                // under them they step aside (0.9 s), so the flash is seen.
+                if let coreState = lifetimeCoreState, !coreLabelsBuried {
+                    JarLifetimeCoreLabels(
+                        state: coreState,
+                        topClearance: coreTopClearance,
+                        bottomLimit: coreBottomLimit,
+                        labelBottomLimit: coreLabelBottomLimit,
+                        fit: coreLabelFit,
+                        measures: false,
+                        metrics: $coreLabelMetrics
+                    )
+                    .opacity(scene.isFusionSpotlightActive ? 0 : 1)
+                    .animation(.easeInOut(duration: 0.18), value: scene.isFusionSpotlightActive)
                 }
             }
         }
@@ -309,8 +548,11 @@ struct JarSpriteView: View {
         .onChange(of: reduceMotion) { _, enabled in
             updateMotionBehavior(reduceMotion: enabled)
         }
-        .onChange(of: scenePhase) { _, _ in
+        .onChange(of: scenePhase) { _, phase in
             updateMotionBehavior(reduceMotion: reduceMotion)
+            // Back in front: redraw the resting jar (the system may have
+            // dropped its drawable), then its render loop stops again.
+            if phase == .active { scene.requestRedraw() }
         }
         .onChange(of: scene.physicalContentRevision) { _, _ in
             updateMotionBehavior(reduceMotion: reduceMotion)
@@ -336,10 +578,171 @@ struct JarSpriteView: View {
             .accessibilityHidden(true)
         }
 #endif
+        // The stage light lies behind the whole jar but outside its
+        // accessibility element: its glow is wider than the stage and its
+        // floor light runs past the bottom edge, and inside the element those
+        // bounds became the jar's frame, so VoiceOver's jar reached over the
+        // theme row and a tap placed in that frame missed the gem.
+        .background {
+            JarAmbientStage()
+        }
         .onDisappear {
             scene.cancelInteractionPresentation()
             motionObserver.stop()
         }
+    }
+
+    /// 「積み上がりの光」 as a gem bed: lifetime grams and the lifetime theme
+    /// mix only (the same fan as the time core). While the projection is
+    /// provisional (unverified or a lower bound) the bed never sinks below
+    /// the one already shown.
+    private var gemBedState: JarGemBedState {
+        JarGemBedPresentation.displayed(
+            current: JarGemBedPresentation.state(
+                totalGrams: totalGrams,
+                colorShares: lifetimeCoreColorShares.isEmpty
+                    ? [GemColorShare(hex: lifetimeCoreColorHex, fraction: 1)]
+                    : lifetimeCoreColorShares
+            ),
+            shown: scene.gemBed,
+            isProvisional: projectionIsLowerBound || projectionIsUnverified
+        )
+    }
+
+    /// Where the time core (or, before 2.5 kg, its vessel) is drawn: its
+    /// centre in stage coordinates (y down) and the drawn stone's radius.
+    private static func coreDisc(
+        stageSize: CGSize,
+        coreState: JarLifetimeCoreState?,
+        coreLayout: JarLifetimeCoreLayout?,
+        totalGrams: Int,
+        topClearance: CGFloat?,
+        bottomLimit: CGFloat,
+        labelBottomLimit: CGFloat
+    ) -> (center: CGPoint, radius: CGFloat)? {
+        let jarWidth = max(1, stageSize.width - Constants.Jar.horizontalMargin * 2)
+        if let coreState, let coreLayout {
+            let core = JarLifetimeCoreBackdrop.coreDiameter(jarWidth: jarWidth, level: coreState.coreLevel)
+            return (
+                CGPoint(x: stageSize.width / 2, y: coreLayout.centerY),
+                core * coreLayout.stoneScale * JarLifetimeCoreLayout.stoneRadiusFactor
+            )
+        }
+        guard totalGrams > 0, totalGrams < GemCutLadder.firstCrystalTierGrams else { return nil }
+        let core = JarLifetimeCoreBackdrop.coreDiameter(jarWidth: jarWidth, level: 1)
+        let layout = JarLifetimeCoreLayout.resolve(
+            stageHeight: stageSize.height,
+            core: core,
+            orbitCount: 1,
+            topClearance: topClearance,
+            bottomLimit: bottomLimit,
+            labelBottomLimit: labelBottomLimit,
+            labelHeight: JarLifetimeCoreBackdrop.estimatedLabelHeight,
+            minimumStoneDiameter: JarLifetimeCoreBackdrop.minimumStoneDiameter(jarWidth: jarWidth)
+        )
+        // The vessel is drawn at 0.92 of the core frame.
+        return (
+            CGPoint(x: stageSize.width / 2, y: layout.centerY),
+            core * 0.92 * JarLifetimeCoreLayout.stoneRadiusFactor
+        )
+    }
+
+    /// Where the settled pile must stay below (scene coordinates, y up),
+    /// for the pile scale (`JarScene.pileClearances`, round 12):
+    /// - under the core, no higher than 0.45 of its radius below its
+    ///   centre, so at least about 85 % of the stone shows; the scale never
+    ///   gives way below 2.0 for it;
+    /// - under the core's name plate (its width and 6 pt), 6 pt below it,
+    ///   so a young jar keeps 「時間の核」 readable, but only when two rungs
+    ///   smaller gems clear it (large gems come first; out of reach, the
+    ///   plate hides instead);
+    /// - under the Home HUD's value (its central 200 pt), 8 pt below its
+    ///   measured bottom, down to scale 1.0 (the completion card shortens
+    ///   the jar under a HUD that stays put).
+    static func pileClearances(
+        stageSize: CGSize,
+        coreDisc: (center: CGPoint, radius: CGFloat)?,
+        namePlate: (top: CGFloat, height: CGFloat, halfWidth: CGFloat)? = nil,
+        hudBottom: CGFloat?
+    ) -> [JarPileClearance] {
+        guard stageSize.width > 0, stageSize.height > 0 else { return [] }
+        var clearances: [JarPileClearance] = []
+        if let disc = coreDisc, disc.radius > 0 {
+            clearances.append(JarPileClearance(
+                minX: disc.center.x - disc.radius,
+                maxX: disc.center.x + disc.radius,
+                ceiling: (stageSize.height - disc.center.y - disc.radius * 0.45).rounded(),
+                minimumScale: JarPileClearance.coreMinimumScale
+            ))
+        }
+        if let plate = namePlate, plate.height > 0, plate.halfWidth > 0 {
+            clearances.append(JarPileClearance(
+                minX: stageSize.width / 2 - plate.halfWidth,
+                maxX: stageSize.width / 2 + plate.halfWidth,
+                ceiling: (stageSize.height - plate.top - plate.height - JarLifetimeCoreLabelLimits.clearance).rounded(),
+                minimumScale: JarPileClearance.namePlateMinimumScale,
+                isOptional: true
+            ))
+        }
+        if let hudBottom, hudBottom > 0 {
+            clearances.append(JarPileClearance(
+                minX: stageSize.width / 2 - JarPileClearance.hudHalfWidth,
+                maxX: stageSize.width / 2 + JarPileClearance.hudHalfWidth,
+                ceiling: (stageSize.height - hudBottom - 8).rounded(),
+                minimumScale: JarScalePolicy.minimumScale
+            ))
+        }
+        return clearances
+    }
+
+    /// The centrepiece a share snapshot redraws behind the bottle.
+    private static func shareCore(
+        stageSize: CGSize,
+        coreState: JarLifetimeCoreState?,
+        totalGrams: Int,
+        shares: [GemColorShare],
+        themeMarks: Bool,
+        effects: JarEffectsIntensity
+    ) -> JarShareCore? {
+        let jarWidth = max(1, stageSize.width - Constants.Jar.horizontalMargin * 2)
+        if let coreState {
+            return JarShareCore(
+                shares: shares,
+                level: coreState.coreLevel,
+                vesselLitFacets: nil,
+                diameter: JarLifetimeCoreBackdrop.coreDiameter(jarWidth: jarWidth, level: coreState.coreLevel),
+                themeMarks: themeMarks,
+                effects: effects
+            )
+        }
+        guard totalGrams > 0, totalGrams < GemCutLadder.firstCrystalTierGrams else { return nil }
+        return JarShareCore(
+            shares: [],
+            level: 0,
+            vesselLitFacets: min(10, max(0, totalGrams / max(1, Constants.Mass.measuredPebbleGrams))),
+            diameter: JarLifetimeCoreBackdrop.coreDiameter(jarWidth: jarWidth, level: 1),
+            effects: effects
+        )
+    }
+
+    /// Long-term milestone traces, engraved on the jar's copper collar.
+    private var milestoneTraceCount: Int {
+        JarAccumulationPresencePresentation.state(
+            totalGrams: totalGrams,
+            effortSnapshot: JarAccumulationPresencePresentation.effortSnapshot(totalGrams: totalGrams)
+        ).visibleMajorMilestoneTraceCount
+    }
+
+    /// Debug-only rendering counters for gem performance reviews in the
+    /// Simulator (`POMOGEM_UI_TEST_SPRITE_STATS=1` with the UI-test launch).
+    private static var spriteDebugOptions: SpriteView.DebugOptions {
+#if DEBUG
+        if LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess,
+           ProcessInfo.processInfo.environment["POMOGEM_UI_TEST_SPRITE_STATS"] == "1" {
+            return [.showsFPS, .showsNodeCount, .showsDrawCount]
+        }
+#endif
+        return []
     }
 
     private var accessibilityValue: String {
@@ -407,7 +810,7 @@ struct JarSpriteView: View {
             isMotionEnabled: isMotionEnabled,
             reduceMotion: reduceMotion,
             sceneIsActive: scenePhase == .active,
-            hasPhysicalContent: hasPhysicalContent
+            hasStudyGems: scene.hasStudyGems
         )
         switch samplingMode {
         case .stopped:
@@ -417,6 +820,8 @@ struct JarSpriteView: View {
             // longer needs the sensor while a prior tilt is still applied.
             motionObserver.stop()
         case .tiltAndShake:
+            // Full rate while the jar is awake, the idle rate while it rests
+            // (the observer follows `scene.fullRateMotionDemand`).
             motionObserver.start(scene: scene, appliesGravity: true)
         }
 #endif
@@ -633,6 +1038,108 @@ private struct JarDirectionalAccessibilityModifier: ViewModifier {
     }
 }
 
+/// Where the scene's light may show: the whole bottle, and past it a band
+/// that fades to nothing at the SKView's edge (smoothstep over the margins
+/// beside, above and below the bottle, less a 3 pt clearance). A halo, a
+/// bloom, a stage light or a gem entering from the top then fades out
+/// instead of being cut by the view's rectangle.
+///
+/// Round 13: the fade lives in the scene. Round 12 masked the whole
+/// SpriteView in SwiftUI, which composited the SKView's layer offscreen on
+/// every awake frame; now one fragment shader per scene, shared by every
+/// node that can reach past the bottle (gem bodies and halos, the first
+/// gems' light, the floor, pile and glass light, the contact shadow and the
+/// landing and fusion light), multiplies their colour by the band at the
+/// fragment's place in the drawable (`gl_FragCoord`). Nothing is drawn
+/// twice and nothing leaves the drawable; nodes that share the shader still
+/// batch. The bottle is centred in its stage, so the band is the same at
+/// both ends of each axis and the drawable's y direction does not matter.
+/// A capture (`JarScene.prepareForSnapshot`) suspends the fade: its texture
+/// is the bottle's own rectangle, not the view.
+final class JarLightEdgeFade {
+    /// Light stays whole this far outside the bottle's sides, top and base.
+    static let clearance: CGFloat = 3
+
+    static let shaderSource = """
+    void main() {
+        vec4 color = SKDefaultShading();
+        vec2 p = gl_FragCoord.xy;
+        vec2 band = max(u_edge_band, vec2(0.001, 0.001));
+        float fx = smoothstep(0.0, band.x, p.x) * smoothstep(0.0, band.x, u_edge_size.x - p.x);
+        float fy = smoothstep(0.0, band.y, p.y) * smoothstep(0.0, band.y, u_edge_size.y - p.y);
+        gl_FragColor = color * mix(1.0, fx * fy, u_edge_on);
+    }
+    """
+
+    let shader: SKShader
+    private let bandUniform = SKUniform(name: "u_edge_band", vectorFloat2: vector_float2(0, 0))
+    private let sizeUniform = SKUniform(name: "u_edge_size", vectorFloat2: vector_float2(0, 0))
+    private let enabledUniform = SKUniform(name: "u_edge_on", float: 0)
+    private(set) var stageSize: CGSize = .zero
+    private(set) var pixelScale: CGFloat = 0
+    /// Off while a capture renders the bottle's rectangle into a texture.
+    var isSuspended = false {
+        didSet { if isSuspended != oldValue { applyEnabled() } }
+    }
+
+    init() {
+        shader = SKShader(source: Self.shaderSource, uniforms: [bandUniform, sizeUniform, enabledUniform])
+    }
+
+    /// The band on each axis, in points: from the view's edge to where the
+    /// light is whole (outside the bottle by `clearance`).
+    static func band(stageSize: CGSize) -> CGSize {
+        let outer = JarScene.outerJarRect(sceneSize: stageSize)
+        return CGSize(
+            width: max(0, outer.minX - clearance),
+            height: max(0, outer.minY - clearance)
+        )
+    }
+
+    /// The shader's coverage (0…1) at `point` of a stage of `stageSize`
+    /// (points, either y direction).
+    static func coverage(at point: CGPoint, stageSize: CGSize) -> CGFloat {
+        let band = band(stageSize: stageSize)
+        func smooth(_ value: CGFloat, _ width: CGFloat) -> CGFloat {
+            let t = min(max(value / max(width, 0.001), 0), 1)
+            return t * t * (3 - 2 * t)
+        }
+        return smooth(point.x, band.width) * smooth(stageSize.width - point.x, band.width)
+            * smooth(point.y, band.height) * smooth(stageSize.height - point.y, band.height)
+    }
+
+    /// Points the fade at a drawable showing a stage of `stageSize` at
+    /// `pixelScale` pixels per point; returns whether anything changed.
+    @discardableResult
+    func update(stageSize: CGSize, pixelScale: CGFloat) -> Bool {
+        guard stageSize.width > 0, stageSize.height > 0, pixelScale.isFinite, pixelScale > 0 else { return false }
+        guard stageSize != self.stageSize || abs(pixelScale - self.pixelScale) > 0.0001 else { return false }
+        self.stageSize = stageSize
+        self.pixelScale = pixelScale
+        let band = Self.band(stageSize: stageSize)
+        bandUniform.vectorFloat2Value = vector_float2(Float(band.width * pixelScale), Float(band.height * pixelScale))
+        sizeUniform.vectorFloat2Value = vector_float2(Float(stageSize.width * pixelScale), Float(stageSize.height * pixelScale))
+        applyEnabled()
+        return true
+    }
+
+    /// Fades `node` (a sprite's colour, or a shape's fill) at the view's edge.
+    func apply(to node: SKNode?) {
+        switch node {
+        case let sprite as SKSpriteNode:
+            sprite.shader = shader
+        case let shape as SKShapeNode:
+            shape.fillShader = shader
+        default:
+            break
+        }
+    }
+
+    private func applyEnabled() {
+        enabledUniform.floatValue = (!isSuspended && pixelScale > 0) ? 1 : 0
+    }
+}
+
 /// Code-native light rig behind the SpriteKit bottle. Static gradients and a
 /// single Canvas-style scene avoid another animation loop while giving the
 /// transparent jar a clear foreground, midground, and ground plane.
@@ -643,8 +1150,13 @@ private struct JarAmbientStage: View {
         GeometryReader { proxy in
             let width = proxy.size.width
             let height = proxy.size.height
+            // Mirrors JarScene.outerJarRect: the bottle is vertically centred
+            // and at most `Constants.Jar.height` tall.
+            let jarHeight = min(Constants.Jar.height, max(height, 1))
+            let jarBottom = (height + jarHeight) / 2
+            let jarWidth = max(width - Constants.Jar.horizontalMargin * 2, 1)
 
-            ZStack(alignment: .bottom) {
+            ZStack(alignment: .topLeading) {
                 RadialGradient(
                     colors: [
                         PomoGemTheme.auroraWarm.opacity(reduceTransparency ? 0.035 : 0.085),
@@ -656,27 +1168,407 @@ private struct JarAmbientStage: View {
                     endRadius: max(width, height) * 0.56
                 )
                 .frame(width: width * 1.14, height: height * 0.92)
-                .offset(y: -height * 0.03)
+                .position(x: width / 2, y: height * 0.43)
 
-                Ellipse()
+                // The jar's own light, baked once per stage size (no blur,
+                // no animation): floor pools, the rim bloom around the
+                // glass, and the lit interior behind the core and the gems.
+                // The floor light runs on past the stage's bottom edge.
+                Image(uiImage: JarStageArtwork.image(
+                    stageSize: proxy.size,
+                    reduceTransparency: reduceTransparency
+                ))
+                .resizable()
+                .frame(width: width, height: height + JarStageArtwork.bottomOverflow)
+                .frame(width: width, height: height, alignment: .top)
+
+                // Rim of light where the glass base meets the floor.
+                Capsule()
                     .fill(
-                        RadialGradient(
+                        LinearGradient(
                             colors: [
-                                PomoGemTheme.auroraBlue.opacity(reduceTransparency ? 0.08 : 0.18),
-                                Color.black.opacity(0.46),
+                                .clear,
+                                PomoGemTheme.auroraWarm.opacity(0.70),
+                                Color.white.opacity(0.80),
+                                PomoGemTheme.auroraBlue.opacity(0.66),
                                 .clear
                             ],
-                            center: .center,
-                            startRadius: 2,
-                            endRadius: width * 0.42
+                            startPoint: .leading,
+                            endPoint: .trailing
                         )
                     )
-                    .frame(width: width * 0.86, height: max(30, height * 0.10))
-                    .blur(radius: reduceTransparency ? 4 : 10)
-                    .offset(y: -height * 0.035)
+                    .frame(width: jarWidth * 0.90, height: 1.6)
+                    .position(x: width / 2, y: jarBottom + 1)
+
+                if !reduceTransparency {
+                    JarFloorSparkles()
+                        .frame(width: jarWidth * 1.1, height: 26)
+                        .position(x: width / 2, y: jarBottom + 9)
+                }
             }
+            .frame(width: width, height: height)
         }
         .accessibilityHidden(true)
         .allowsHitTesting(false)
+    }
+}
+
+/// The static light of the jar stage (Docs/GemExperienceDesign.md §7.8),
+/// baked with Core Graphics once per stage size and cached. It lies behind
+/// the time core and the SpriteKit bottle:
+///
+/// - the floor: a soft contact shadow and two light pools, warm #FF8A5B on
+///   the left and cool #5BA8FF on the right (α0.42/0.38, 0.62 of the jar
+///   width each), as if the jar stood on glass;
+/// - the rim bloom: warm light leaving the left wall, cool light the right;
+/// - the interior: a violet body of light, brighter toward the floor where
+///   the gems glow, warm/cool side light, a soft glow behind the core, and
+///   ten still bokeh dots in the empty band (never over the core column).
+///
+/// `JarSnapshotter` draws the same image behind a share snapshot, so the
+/// exported jar carries the same light as Home.
+enum JarStageArtwork {
+    private static let cache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 6
+        return cache
+    }()
+
+    /// Soft light only, so a modest scale is enough and keeps the bitmap
+    /// small (about 1.7 MB for a 402 × 470 pt stage).
+    static let renderScale: CGFloat = 1.5
+
+    /// The floor light continues this far below the stage (the image is
+    /// taller than the stage by this much), so it never ends in a hard edge.
+    static let bottomOverflow: CGFloat = 60
+
+    static func image(stageSize: CGSize, reduceTransparency: Bool) -> UIImage {
+        let stage = CGSize(width: max(1, stageSize.width.rounded()), height: max(1, stageSize.height.rounded()))
+        let size = CGSize(width: stage.width, height: stage.height + bottomOverflow)
+        let key = NSString(string: "stage4|\(Int(stage.width))x\(Int(stage.height))|\(reduceTransparency ? 1 : 0)")
+        if let cached = cache.object(forKey: key) { return cached }
+        let format = UIGraphicsImageRendererFormat.preferred()
+        format.scale = renderScale
+        format.opaque = false
+        format.preferredRange = .standard
+        let strength: CGFloat = reduceTransparency ? 0.5 : 1
+        let image = UIGraphicsImageRenderer(size: size, format: format).image { renderer in
+            draw(in: renderer.cgContext, stageSize: stage, strength: strength)
+        }
+        cache.setObject(image, forKey: key)
+        return image
+    }
+
+    /// The jar rectangle in stage coordinates (y down).
+    static func jarRect(stageSize: CGSize) -> CGRect {
+        let outer = JarScene.outerJarRect(sceneSize: stageSize)
+        return CGRect(x: outer.minX, y: stageSize.height - outer.maxY, width: outer.width, height: outer.height)
+    }
+
+    /// The bottle outline in stage coordinates (y down).
+    static func jarOutline(stageSize: CGSize) -> CGPath {
+        let rect = jarRect(stageSize: stageSize)
+        var flip = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: rect.minY * 2 + rect.height)
+        let path = JarScene.jarPath(in: rect, neckInset: JarScene.neckInset(jarWidth: rect.width))
+        return path.copy(using: &flip) ?? CGPath(rect: rect, transform: nil)
+    }
+
+    /// Draws the stage light into `context` (y down, stage points).
+    static func draw(in context: CGContext, stageSize: CGSize, strength: CGFloat) {
+        let jar = jarRect(stageSize: stageSize)
+        let outline = jarOutline(stageSize: stageSize)
+        let space = CGColorSpaceCreateDeviceRGB()
+        func color(_ hex: String, _ alpha: CGFloat) -> CGColor {
+            GemColor(hex: hex).withAlpha(alpha * strength).cgColor
+        }
+        func ellipse(center: CGPoint, radii: CGSize, colors: [CGColor], locations: [CGFloat]) {
+            guard let gradient = CGGradient(colorsSpace: space, colors: colors as CFArray, locations: locations) else { return }
+            context.saveGState()
+            context.translateBy(x: center.x, y: center.y)
+            context.scaleBy(x: 1, y: radii.height / max(radii.width, 1))
+            context.drawRadialGradient(
+                gradient,
+                startCenter: .zero, startRadius: 0,
+                endCenter: .zero, endRadius: radii.width,
+                options: []
+            )
+            context.restoreGState()
+        }
+
+        // Floor: contact shadow, then the warm and cool pools.
+        ellipse(
+            center: CGPoint(x: jar.midX, y: jar.maxY + 2),
+            radii: CGSize(width: jar.width * 0.47, height: 17),
+            colors: [UIColor.black.withAlphaComponent(0.30).cgColor, UIColor.black.withAlphaComponent(0).cgColor],
+            locations: [0, 1]
+        )
+        for (hex, alpha, dx) in [("#FF8A5B", CGFloat(0.62), CGFloat(-0.22)), ("#5BA8FF", CGFloat(0.56), CGFloat(0.22))] {
+            ellipse(
+                center: CGPoint(x: jar.midX + jar.width * dx, y: jar.maxY + 10),
+                radii: CGSize(width: jar.width * 0.30, height: 46),
+                colors: [color(hex, alpha), color(hex, alpha * 0.42), color(hex, 0)],
+                locations: [0, 0.45, 1]
+            )
+        }
+        // The jar's light mirrored on the glass floor.
+        ellipse(
+            center: CGPoint(x: jar.midX, y: jar.maxY + 4),
+            radii: CGSize(width: jar.width * 0.40, height: 20),
+            colors: [color("#FFD9C2", 0.30), color("#C9A8FF", 0.12), color("#8068F6", 0)],
+            locations: [0, 0.5, 1]
+        )
+
+        // Rim bloom: the silhouette's glow, a Gaussian (shadow blur, no
+        // banding) warm on the left and cool on the right (masked by a
+        // horizontal ramp).
+        let pointsToPixels = context.userSpaceToDeviceSpaceTransform.a
+        for (hex, alpha, fromLeft) in [(Constants.Color.auroraWarm, CGFloat(0.55), true), ("#6FB6FF", CGFloat(0.48), false)] {
+            context.saveGState()
+            context.beginTransparencyLayer(auxiliaryInfo: nil)
+            context.saveGState()
+            // Shadow blur is in device pixels: 12 pt at any bake scale.
+            context.setShadow(offset: .zero, blur: 12 * max(1, abs(pointsToPixels)), color: color(hex, alpha))
+            context.setStrokeColor(color(hex, alpha * 0.55))
+            context.setLineWidth(3)
+            context.setLineJoin(.round)
+            context.addPath(outline)
+            context.strokePath()
+            context.restoreGState()
+            context.setBlendMode(.destinationIn)
+            let mask = [UIColor.white.cgColor, UIColor.white.withAlphaComponent(0.4).cgColor, UIColor.white.withAlphaComponent(0).cgColor] as CFArray
+            if let gradient = CGGradient(colorsSpace: space, colors: mask, locations: [0, 0.34, 0.6]) {
+                context.drawLinearGradient(
+                    gradient,
+                    start: CGPoint(x: fromLeft ? jar.minX - 30 : jar.maxX + 30, y: 0),
+                    end: CGPoint(x: fromLeft ? jar.maxX + 30 : jar.minX - 30, y: 0),
+                    options: [.drawsBeforeStartLocation]
+                )
+            }
+            context.endTransparencyLayer()
+            context.restoreGState()
+        }
+
+        // Interior light.
+        context.saveGState()
+        context.addPath(outline)
+        context.clip()
+        if let body = CGGradient(
+            colorsSpace: space,
+            colors: [
+                color("#3E3A80", 0.50),
+                color("#443A88", 0.46),
+                color("#563A8A", 0.50),
+                color("#8A5484", 0.60)
+            ] as CFArray,
+            locations: [0, 0.45, 0.75, 1]
+        ) {
+            context.drawLinearGradient(
+                body,
+                start: CGPoint(x: 0, y: jar.minY),
+                end: CGPoint(x: 0, y: jar.maxY),
+                options: []
+            )
+        }
+        // The pile's own glow pooled above the floor.
+        ellipse(
+            center: CGPoint(x: jar.midX, y: jar.maxY - 14),
+            radii: CGSize(width: jar.width * 0.56, height: 118),
+            colors: [color("#FFA27E", 0.52), color("#C46AA8", 0.26), color("#8068F6", 0)],
+            locations: [0, 0.5, 1]
+        )
+        // Side light through the thick walls: warm left, cool right.
+        for (hex, fromLeft) in [(Constants.Color.auroraWarm, true), ("#6FB6FF", false)] {
+            let side = [color(hex, 0.26), color(hex, 0.08), color(hex, 0)] as CFArray
+            if let gradient = CGGradient(colorsSpace: space, colors: side, locations: [0, 0.35, 1]) {
+                context.drawLinearGradient(
+                    gradient,
+                    start: CGPoint(x: fromLeft ? jar.minX : jar.maxX, y: 0),
+                    end: CGPoint(x: fromLeft ? jar.minX + jar.width * 0.28 : jar.maxX - jar.width * 0.28, y: 0),
+                    options: []
+                )
+            }
+        }
+        // A soft violet glow where the time core sits.
+        ellipse(
+            center: CGPoint(x: jar.midX, y: jar.minY + jar.height * 0.42),
+            radii: CGSize(width: jar.width * 0.40, height: jar.width * 0.40),
+            colors: [color("#8C78FF", 0.26), color("#8068F6", 0.09), color("#8068F6", 0)],
+            locations: [0, 0.5, 1]
+        )
+        // Still bokeh in the empty band beside the core column.
+        let bokeh: [(x: CGFloat, y: CGFloat, r: CGFloat, hex: String, a: CGFloat)] = [
+            (0.12, 0.30, 3.2, "#FFC27A", 0.42), (0.20, 0.52, 2.2, "#FF9E6B", 0.34),
+            (0.10, 0.66, 3.8, "#FFE3B0", 0.30), (0.24, 0.40, 1.6, "#8ACBFF", 0.40),
+            (0.17, 0.74, 2.6, "#FFC27A", 0.28), (0.86, 0.28, 2.6, "#8ACBFF", 0.38),
+            (0.80, 0.46, 3.6, "#FFE3B0", 0.30), (0.90, 0.60, 2.0, "#FF9E6B", 0.40),
+            (0.76, 0.70, 3.0, "#FFC27A", 0.26), (0.83, 0.36, 1.5, "#FFFFFF", 0.46)
+        ]
+        for dot in bokeh {
+            let center = CGPoint(x: jar.minX + jar.width * dot.x, y: jar.minY + jar.height * dot.y)
+            ellipse(
+                center: center,
+                radii: CGSize(width: dot.r * 2.2, height: dot.r * 2.2),
+                colors: [color(dot.hex, dot.a), color(dot.hex, dot.a * 0.55), color(dot.hex, 0)],
+                locations: [0, 0.42, 1]
+            )
+        }
+        context.restoreGState()
+    }
+}
+
+/// The centrepiece Home draws behind the bottle, as data a share snapshot
+/// can redraw: the time core (share fan and level) or, before 2.5 kg, the
+/// colourless vessel with its lit facets.
+struct JarShareCore: Equatable {
+    /// The lifetime theme fan as Home has it (unquantised; every consumer
+    /// quantises it the same way, and the marks need the themes).
+    let shares: [GemColorShare]
+    let level: Int
+    /// Lit facets of the colourless vessel; nil for the born core.
+    let vesselLitFacets: Int?
+    /// Diameter of the core frame on Home (points).
+    let diameter: CGFloat
+    /// Differentiate Without Color: the stone carries its theme marks.
+    var themeMarks = false
+    /// 演出の強さ in effect on Home (D17): 控えめ draws lighter lights.
+    var effects: JarEffectsIntensity = .standard
+}
+
+/// Core Graphics twin of `JarLifetimeCoreBackdrop` / `JarLifetimeCoreVessel`
+/// for share snapshots: bloom, the two halo lobes, girdle bloom, a quiet
+/// orbit ring and the same baked stone image.
+enum JarShareCoreArtwork {
+    /// Share snapshots place the centrepiece in the upper middle of the
+    /// bottle (there is no HUD on a card): this share of the jar height
+    /// from the top.
+    static let centerFraction: CGFloat = 0.42
+
+    static func stoneImage(for core: JarShareCore, scale: CGFloat) -> UIImage {
+        if let lit = core.vesselLitFacets {
+            return GemArtwork.vesselImage(litFacets: lit, scale: scale)
+        }
+        return GemArtwork.coreImage(shares: core.shares, level: core.level, scale: scale, themeMarks: core.themeMarks)
+    }
+
+    /// Frame of the stone image around `center` (points).
+    static func stoneRect(for core: JarShareCore, center: CGPoint) -> CGRect {
+        let side = core.vesselLitFacets == nil ? core.diameter : core.diameter * 0.92
+        return CGRect(x: center.x - side / 2, y: center.y - side / 2, width: side, height: side)
+    }
+
+    /// Draws the lights and the stone around `center` (y-down context).
+    static func draw(_ core: JarShareCore, center: CGPoint, in context: CGContext, scale: CGFloat) {
+        let space = CGColorSpaceCreateDeviceRGB()
+        let d = core.diameter
+        func radial(_ colors: [UIColor], _ locations: [CGFloat], from r0: CGFloat, to r1: CGFloat, clip: CGRect? = nil, offset: CGFloat = 0) {
+            guard let gradient = CGGradient(colorsSpace: space, colors: colors.map(\.cgColor) as CFArray, locations: locations) else { return }
+            context.saveGState()
+            let c = CGPoint(x: center.x + offset, y: center.y)
+            if let clip { context.addEllipse(in: clip.offsetBy(dx: c.x, dy: c.y)); context.clip() }
+            context.drawRadialGradient(gradient, startCenter: c, startRadius: r0, endCenter: c, endRadius: r1, options: [.drawsBeforeStartLocation])
+            context.restoreGState()
+        }
+        // 控えめ (D17): the bloom, the lobes and the girdle bloom at the
+        // halo scale; the colourless vessel's light at the inner-glow scale.
+        let halo = core.effects.haloScale
+        let inner = core.effects.innerGlowScale
+        if core.vesselLitFacets != nil {
+            let white = UIColor.white
+            radial([white.withAlphaComponent(0.30 * inner), white.withAlphaComponent(0.10 * inner), .clear], [0, 0.5, 1], from: d * 0.30, to: d * 0.65)
+        } else {
+            let haloColor = GemArtwork.coreHaloColor(shares: core.shares)
+            let lobes = GemArtwork.coreHaloLobeColors(shares: core.shares)
+            let rim = GemArtwork.coreRimGlowColor(shares: core.shares)
+            radial(
+                [haloColor.withAlphaComponent(0.24 * halo), GemColor(hex: Constants.Color.auroraViolet).withAlpha(0.05 * halo), .clear],
+                [0, 0.5, 1],
+                from: 3,
+                to: d * 1.25
+            )
+            // Quiet orbit ring (copper, dashed); the markers stay on Home.
+            context.saveGState()
+            context.setStrokeColor(GemColor(hex: "#D9967A").withAlpha(0.45).cgColor)
+            context.setLineWidth(1)
+            context.setLineDash(phase: 0, lengths: [3, 5])
+            let orbit = d * 1.075
+            context.strokeEllipse(in: CGRect(x: center.x - orbit, y: center.y - orbit, width: orbit * 2, height: orbit * 2))
+            context.restoreGState()
+            for (color, side) in [(lobes.left, CGFloat(-1)), (lobes.right, CGFloat(1))] {
+                radial(
+                    [color.withAlphaComponent(0.45 * halo), color.withAlphaComponent(0.20 * halo), .clear],
+                    [0, 0.5, 1],
+                    from: d * 0.30,
+                    to: d * 0.70,
+                    clip: CGRect(x: -d * 0.575, y: -d * 0.70, width: d * 1.15, height: d * 1.40),
+                    offset: side * d * 0.16
+                )
+            }
+            radial([rim.withAlphaComponent(0.95 * halo), rim.withAlphaComponent(0.34 * halo), .clear], [0, 0.5, 1], from: d * 0.44, to: d * 0.62)
+        }
+        guard let stone = stoneImage(for: core, scale: scale).cgImage else { return }
+        let rect = stoneRect(for: core, center: center)
+        context.saveGState()
+        context.translateBy(x: rect.minX, y: rect.maxY)
+        context.scaleBy(x: 1, y: -1)
+        context.interpolationQuality = .high
+        context.draw(stone, in: CGRect(origin: .zero, size: rect.size))
+        context.restoreGState()
+    }
+}
+
+/// What a share GIF animates over the flattened jar snapshot: the stone
+/// (for a slow 1.00 ↔ 1.04 breath and its glow) and a few glint anchors on
+/// the highest gems, all normalised to the snapshot (0…1, y down).
+struct ShareJarMotion {
+    /// The stone to breathe; nil when gems overlap it (it stays behind).
+    let stone: UIImage?
+    let stoneRect: CGRect
+    let glowColor: UIColor
+    let glints: [CGPoint]
+    /// 演出の強さ the jar showed (D17): 控えめ holds the breath, dims the
+    /// glow and lights no glints.
+    var effects: JarEffectsIntensity = .standard
+}
+
+/// Four static star glints on the floor, drawn once (no animation). Each is
+/// asymmetric — the horizontal arm 1.6× the vertical — so they read as light
+/// caught on glass rather than clip-art crosses.
+private struct JarFloorSparkles: View {
+    var body: some View {
+        Canvas { context, size in
+            let points: [(x: CGFloat, y: CGFloat, length: CGFloat, alpha: Double)] = [
+                (0.10, 0.42, 5.5, 0.55),
+                (0.31, 0.80, 3.8, 0.38),
+                (0.70, 0.58, 5.0, 0.50),
+                (0.92, 0.30, 3.6, 0.35)
+            ]
+            for point in points {
+                let center = CGPoint(x: size.width * point.x, y: size.height * point.y)
+                for vertical in [false, true] {
+                    let arm = vertical ? point.length : point.length * 1.6
+                    let rect = vertical
+                        ? CGRect(x: center.x - 0.6, y: center.y - arm, width: 1.2, height: arm * 2)
+                        : CGRect(x: center.x - arm, y: center.y - 0.6, width: arm * 2, height: 1.2)
+                    context.fill(
+                        Path(ellipseIn: rect),
+                        with: .radialGradient(
+                            Gradient(colors: [.white.opacity(point.alpha), .white.opacity(0)]),
+                            center: center,
+                            startRadius: 0,
+                            endRadius: arm
+                        )
+                    )
+                }
+                context.fill(
+                    Path(ellipseIn: CGRect(x: center.x - 1.8, y: center.y - 1.8, width: 3.6, height: 3.6)),
+                    with: .radialGradient(
+                        Gradient(colors: [.white.opacity(point.alpha), .white.opacity(0)]),
+                        center: center,
+                        startRadius: 0,
+                        endRadius: 1.8
+                    )
+                )
+            }
+        }
     }
 }

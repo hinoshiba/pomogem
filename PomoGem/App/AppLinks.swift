@@ -31,6 +31,9 @@ enum AppLinks {
         string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"
     )!
 
+    /// The raw-stone widget's link to the start screen (`StartFocusLink`).
+    static let startFocus = StartFocusLink.url
+
     /// The App Store ID of com.hinoshiba.pomogem (AppStore/configuration.yml).
     static let appStoreID = "6809139517"
 

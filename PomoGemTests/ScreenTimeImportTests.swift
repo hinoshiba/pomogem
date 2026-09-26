@@ -298,7 +298,7 @@ final class ScreenTimeImportTests: XCTestCase {
         let descriptor = PebbleDescriptor(session: session)
         XCTAssertEqual(descriptor.source, .screenTime)
         XCTAssertTrue(descriptor.isMeasured)
-        XCTAssertTrue(descriptor.accessibilityDescription.contains("Screen Time"))
+        XCTAssertTrue(descriptor.accessibilityDescription.contains("スクリーンタイムのつぶ"))
         let token = StudySessionSyncPolicy.changeToken(for: session)
         XCTAssertEqual(token.source, .screenTime)
         let legacy = StudySession(startAt: start, endAt: .now, seconds: 600, source: .manual, deviceDayKey: "day")
