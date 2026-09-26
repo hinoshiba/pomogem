@@ -493,23 +493,30 @@ final class EngagementOverviewUITests: XCTestCase {
         let recoveredProgress = app.descendants(matching: .any)["reward.fusion-progress"]
         XCTAssertTrue(recoveredProgress.waitForExistence(timeout: 3))
         XCTAssertTrue(recoveredProgress.label.contains("×10へ 1/10"), recoveredProgress.label)
+        // The saved gem waits above the jar while its card is up, and closing
+        // the card drops it (RuntimeFlowAuditUITests pins that order). A
+        // relaunch keeps the order: nothing in the jar yet, then one drop.
         XCTAssertTrue(
-            waitForProbeValue(
-                in: app,
-                containing: ["count=1", ":250"],
-                timeout: 8
-            ),
-            "Relaunch must retain exactly one persisted 250g pebble"
+            waitForProbeValue(in: app, containing: ["count=0;"], timeout: 8),
+            "The recovered card must still hold its gem back until it is closed"
         )
 
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        attachment.name = "Recovered Reward Receipt — one saved pebble"
+        attachment.name = "Recovered Reward Receipt — gem waiting for the card"
         attachment.lifetime = .keepAlways
         add(attachment)
 
         let dismiss = app.buttons["休憩の提案を閉じる"]
         XCTAssertTrue(dismiss.waitForExistence(timeout: 3))
         dismiss.tap()
+        XCTAssertTrue(
+            waitForProbeValue(
+                in: app,
+                containing: ["count=1;", ":250", "dropLanded=1"],
+                timeout: 10
+            ),
+            "Closing the recovered card must land exactly the one persisted 250g pebble"
+        )
         app.terminate()
         app.launch()
 
@@ -532,7 +539,7 @@ final class EngagementOverviewUITests: XCTestCase {
         XCTAssertTrue(
             waitForProbeValue(
                 in: app,
-                containing: ["count=1", ":250"],
+                containing: ["count=1;", ":250"],
                 timeout: 8
             ),
             "Acknowledging the receipt must not delete or duplicate the study record"
