@@ -124,7 +124,8 @@ UIKitが届ける向きの通知に追従します。手動固定はすべての
   通常の記録resetでは保持し、app削除時には消去される。timer画面を閉じたときやinactive／backgroundでは
   向きの更新を停止
 - Apple Music（1.1.0候補、[FocusMusic.md](../Docs/FocusMusic.md)）: 集中・休憩タイマーの見出しの音符
-  button（長押しでも可）→「集中用の音楽」。MusicKitの許可は画面内の「Apple Musicへのアクセスを許可」か
+  button（長押しでも可）→「集中用の音楽」。Settings → 集中 → 「集中用の音楽」からも同じ画面を開ける。
+  MusicKitの許可は画面内の「Apple Musicへのアクセスを許可」か
   一覧のtapでだけ求め、`NSAppleMusicUsageDescription`で目的を表示する。`SystemMusicPlayer`で「ミュージック」
   appに再生させ、PomoGemは前面のまま（音楽用のaudio session・background audioなし。効果音の`.ambient`は
   ミュージックの再生を止めない）。再生にはApple Musicの登録が必要で、未登録のreviewerには再生・一時停止・

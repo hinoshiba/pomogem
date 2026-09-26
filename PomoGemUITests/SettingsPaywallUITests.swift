@@ -160,6 +160,65 @@ final class SettingsPaywallUITests: XCTestCase {
         XCTAssertFalse(notice.exists, "Told once")
     }
 
+    /// F4 (Docs/FocusMusic.md). 設定 → 集中 → 「集中用の音楽」 names the chosen
+    /// music and opens the timer's music sheet. The choice is seeded through
+    /// the argument domain. Nothing here needs an Apple Music account: the
+    /// row and the sheet only read the MusicKit status, and the access
+    /// button a fresh Simulator shows is never tapped.
+    func testTheFocusMusicRowOpensTheMusicSheet() {
+        let classical = "pl.cf8514b686374fadbe6807a6339dfd89"
+        app.launchArguments += ["-music.focus.source", classical]
+        launchAndOpenSettings()
+
+        let row = app.buttons["settings.focus-music"]
+        XCTAssertTrue(reveal(row))
+        XCTAssertEqual(row.label, "集中用の音楽")
+        let value = row.value as? String ?? ""
+        XCTAssertTrue(value.contains("作業用BGM：クラシック"), value)
+        // In the 集中 card, after the timer's own rows.
+        let orientation = app.buttons["settings.timer-default-orientation"]
+        if orientation.exists {
+            XCTAssertLessThan(orientation.frame.minY, row.frame.minY)
+        }
+        let liveActivity = app.switches["settings.live-activity"]
+        if liveActivity.exists {
+            XCTAssertLessThan(row.frame.maxY, liveActivity.frame.minY)
+        }
+        attach("Settings — focus music row")
+
+        row.tap()
+        let close = app.buttons["focus-music.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 8))
+        XCTAssertTrue(app.navigationBars["集中用の音楽"].exists)
+        let chosen = element("focus-music.source.\(classical)")
+        XCTAssertTrue(chosen.waitForExistence(timeout: 4))
+        XCTAssertEqual(chosen.value as? String, "選択中")
+        for source in [
+            "ra.985486574",
+            "pl.cb4d1c09a2df4230a78d0395fe1f8fde",
+            "pl.f6ab843650ff4d6aafbd96de3a0b8a13",
+            "pl.9b8a976ba78741d9925e6e9a050703de"
+        ] {
+            let other = element("focus-music.source.\(source)")
+            XCTAssertTrue(other.exists, source)
+            XCTAssertEqual(other.value as? String, "未選択", source)
+        }
+        XCTAssertTrue(element("focus-music.autoplay").exists)
+        // Opening the sheet reads the status only; the MusicKit prompt
+        // appears solely from a tap on 「Apple Musicへのアクセスを許可」.
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let musicPrompt = springboard.alerts.matching(
+            NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS %@", "Apple Music", "メディア")
+        ).firstMatch
+        XCTAssertFalse(musicPrompt.waitForExistence(timeout: 2), "No MusicKit prompt without a tap")
+        attach("Focus music sheet — opened from Settings")
+
+        close.tap()
+        XCTAssertTrue(waitForAbsence(close, timeout: 6))
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
+        XCTAssertTrue(row.exists)
+    }
+
     // MARK: - Helpers
 
     private func waitForAbsence(_ element: XCUIElement, timeout: TimeInterval) -> Bool {

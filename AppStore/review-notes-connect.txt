@@ -21,7 +21,7 @@ SCREEN TIME
 
 APPLE MUSIC
 
-- 集中・休憩timerの見出しの音符button（長押しでも可）→「集中用の音楽」で、Apple Musicの固定のクラシック等のplaylist／stationを選びます。許可は画面内のtapでだけ求めます。
+- 集中・休憩timerの見出しの音符button（長押しでも可）、またはSettings→集中→「集中用の音楽」で、Apple Musicの固定のクラシック等のplaylist／stationを選びます。許可は画面内のtapでだけ求めます。
 - 再生はSystemMusicPlayerで「ミュージック」appが行い、PomoGemは前面のままです（background audioなし）。Apple Musicの登録が必要で、未登録ならAppleの登録画面（musicSubscriptionOffer）を表示します。無料機能で、Proとは無関係です。
 
 IN-APP PURCHASE
