@@ -12,22 +12,24 @@ import Foundation
 enum SubjectPalette {
     struct Swatch: Hashable, Sendable {
         let hex: String
+        /// The swatch's display name in the theme editor. Never stored: a
+        /// theme saves only the hex.
         let name: String
     }
 
     static let swatches: [Swatch] = [
-        Swatch(hex: Constants.Color.english, name: "朱色"),
-        Swatch(hex: Constants.Color.mathematics, name: "瑠璃"),
-        Swatch(hex: Constants.Color.japanese, name: "紅藤"),
-        Swatch(hex: Constants.Color.science, name: "緑青"),
-        Swatch(hex: Constants.Color.socialStudies, name: "菫"),
-        Swatch(hex: "#D6863A", name: "琥珀"),
-        Swatch(hex: "#36A7AE", name: "青緑"),
-        Swatch(hex: "#D56B82", name: "珊瑚"),
-        Swatch(hex: "#739B45", name: "若草"),
-        Swatch(hex: "#5967C8", name: "藍"),
-        Swatch(hex: "#A76A3F", name: "赤銅"),
-        Swatch(hex: "#5688A8", name: "空色")
+        Swatch(hex: Constants.Color.english, name: String(localized: "朱色", table: "Settings", comment: "Theme colour swatch name (Vermilion)")),
+        Swatch(hex: Constants.Color.mathematics, name: String(localized: "瑠璃", table: "Settings", comment: "Theme colour swatch name (Lapis lazuli)")),
+        Swatch(hex: Constants.Color.japanese, name: String(localized: "紅藤", table: "Settings", comment: "Theme colour swatch name (Pink wisteria)")),
+        Swatch(hex: Constants.Color.science, name: String(localized: "緑青", table: "Settings", comment: "Theme colour swatch name (Verdigris)")),
+        Swatch(hex: Constants.Color.socialStudies, name: String(localized: "菫", table: "Settings", comment: "Theme colour swatch name (Violet)")),
+        Swatch(hex: "#D6863A", name: String(localized: "琥珀", table: "Settings", comment: "Theme colour swatch name (Amber)")),
+        Swatch(hex: "#36A7AE", name: String(localized: "青緑", table: "Settings", comment: "Theme colour swatch name (Teal)")),
+        Swatch(hex: "#D56B82", name: String(localized: "珊瑚", table: "Settings", comment: "Theme colour swatch name (Coral)")),
+        Swatch(hex: "#739B45", name: String(localized: "若草", table: "Settings", comment: "Theme colour swatch name (Young leaf green)")),
+        Swatch(hex: "#5967C8", name: String(localized: "藍", table: "Settings", comment: "Theme colour swatch name (Indigo)")),
+        Swatch(hex: "#A76A3F", name: String(localized: "赤銅", table: "Settings", comment: "Theme colour swatch name (Copper)")),
+        Swatch(hex: "#5688A8", name: String(localized: "空色", table: "Settings", comment: "Theme colour swatch name (Sky blue)"))
     ]
 
     static var hexes: [String] { swatches.map(\.hex) }
