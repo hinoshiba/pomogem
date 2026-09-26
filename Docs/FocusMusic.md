@@ -102,6 +102,16 @@ Homeのメニューと設定からの入口はPhase Bで追加します（同じ
    「タイマー画面から『ミュージック』アプリで集中用の音楽を再生するために使います。」
 3. 一覧の内容と順序、Home・設定の入口（Phase B）、Web版プライバシーポリシーへの追記の要否。
 
+## テスト
+
+- `PomoGemTests/FocusMusicTests`: 一覧と順序、方針（許可・登録・見出しのタップ・シートの再生／一時停止・一覧の再生の印・
+  自動再生・シートを閉じる時点）、端末内の保存と削除、偽のplayer・許可・登録で動かす状態の変化
+  （同時に来た確認の共有を含む）、`prepareToPlay`の待ち時間の上限、MusicKit／MediaPlayerのエラーの振り分け。
+- `PomoGemUITests/AccessibilityAdversarialUITests/testAX5TimerHeaderMusicButtonPassesHitRegionAndClippingAudits`:
+  AX5の集中中の見出しで、音符ボタンが44pt・画面内・隣と重ならず、Appleのhit region／text clipping監査に通ること。
+  UIテストは毎回Simulatorを消去してから流します。前のテストが瓶の結果を残すとHomeの開始ボタンが押せず、
+  タイマーが開かないまま失敗します（`main`でも同じです）。
+
 ## 実機での確認（Simulatorではできません）
 
 iPhone 12 mini（iOS 26.3.x）で、Apple Musicの登録ありと登録なしのアカウントの両方で確認します。
