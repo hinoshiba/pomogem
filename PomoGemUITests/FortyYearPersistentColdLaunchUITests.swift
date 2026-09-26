@@ -496,7 +496,9 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
 
         let keepAwake = app.switches["settings.keep-screen-awake"]
-        XCTAssertTrue(keepAwake.waitForExistence(timeout: 5))
+        // On a 4.7-inch iPhone the switch is below the fold and the list has
+        // not laid it out yet, so scroll to it (as the 40-year test does).
+        XCTAssertTrue(scrollUntilHittable(keepAwake, in: app))
         let original = keepAwake.value as? String
         tapSwitchControl(keepAwake)
         let didChange = waitForValue(of: keepAwake, toDifferFrom: original)
