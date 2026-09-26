@@ -50,12 +50,17 @@ final class AlarmSoundSynthesisTests: XCTestCase {
 
     func testTheFiveAlarmSoundsAreLoudAndSitInThePhoneSpeakerBand() {
         for sound in AlarmSynthesizedSound.allCases {
-            let loop = rendering(AlarmSoundChoice(rawValue: sound.rawValue)!).loop
+            let rendered = rendering(AlarmSoundChoice(rawValue: sound.rawValue)!)
+            let loop = rendered.loop
             let measured = SoundMeasurement(loop)
             // Commercial alarm tones sit around −8 to −14 dBFS RMS; today's
-            // chime every 1.3 s is about −20 dBFS.
-            XCTAssertGreaterThan(measured.rmsDecibels, -14, "\(sound.rawValue) loop RMS")
-            XCTAssertGreaterThan(measured.loudestWindowRMSDecibels(window: 0.4), -11, "\(sound.rawValue) 400 ms RMS")
+            // chime every 1.3 s is about −20 dBFS. These all sit at the loud
+            // end (−7 to −10.5 dBFS as rendered today).
+            XCTAssertGreaterThan(measured.rmsDecibels, -11.5, "\(sound.rawValue) loop RMS")
+            XCTAssertGreaterThan(measured.loudestWindowRMSDecibels(window: 0.4), -10, "\(sound.rawValue) 400 ms RMS")
+            // The lock-screen ringtone keeps most of that loudness despite
+            // the gaps between cycles.
+            XCTAssertGreaterThan(SoundMeasurement(rendered.ringtone).rmsDecibels, -12, "\(sound.rawValue) ringtone RMS")
             XCTAssertGreaterThan(measured.bandFraction(800...3_000), 0.70, "\(sound.rawValue) energy in 800 Hz–3 kHz")
             XCTAssertLessThan(measured.bandFraction(5_000...22_050), 0.10, "\(sound.rawValue) shrill energy above 5 kHz")
             XCTAssertLessThan(measured.bandFraction(20...500), 0.05, "\(sound.rawValue) energy a phone speaker cannot play")
@@ -166,7 +171,7 @@ final class AlarmSoundSynthesisTests: XCTestCase {
             .digital: (1_212_750, -8.20),
             .marimba: (1_210_545, -10.55),
             .schoolChime: (1_223_775, -10.93),
-            .alarmClock: (1_212_750, -13.29)
+            .alarmClock: (1_212_750, -10.97)
         ]
         for choice in AlarmSoundChoice.allCases {
             let ringtone = rendering(choice).ringtone

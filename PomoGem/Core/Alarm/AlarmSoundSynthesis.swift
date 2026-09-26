@@ -346,14 +346,17 @@ enum AlarmSoundSynthesis {
         return AlarmSoundSource(oneShot: buffer, period: period, limiterDrive: 4)
     }
 
-    /// A 1.35 s burst of a hammer alternating between two small bells at
+    /// A 1.5 s burst of a hammer alternating between two small bells at
     /// 25 strikes a second, then a breath. Deterministic jitter in timing
-    /// and force, plus a little hammer rattle, keeps it mechanical.
+    /// and force, plus a little hammer rattle, keeps it mechanical. The
+    /// strikes come every 40 ms, faster than the limiter recovers, so the
+    /// full 6 dB drive acts as a steady gain on the burst rather than
+    /// pumping: this is the densest, loudest-feeling of the alarm sounds.
     static func alarmClock() -> AlarmSoundSource {
         let period = 2.0
         var buffer = makeBuffer(period: period)
         let strikeRate = 25.0
-        let burst = 1.35
+        let burst = 1.5
         var random = SeededRandom(seed: 0x5EED_A1A2)
         var bellA: [(time: Double, amplitude: Double)] = []
         var bellB: [(time: Double, amplitude: Double)] = []
@@ -372,7 +375,7 @@ enum AlarmSoundSynthesis {
             into: &buffer,
             strikes: bellA,
             modes: [
-                Mode(frequency: 1_720, amplitude: 1.00, decay: 0.16),
+                Mode(frequency: 1_720, amplitude: 1.00, decay: 0.22),
                 Mode(frequency: 3_950, amplitude: 0.50, decay: 0.08),
                 Mode(frequency: 5_870, amplitude: 0.24, decay: 0.04)
             ],
@@ -382,7 +385,7 @@ enum AlarmSoundSynthesis {
             into: &buffer,
             strikes: bellB,
             modes: [
-                Mode(frequency: 2_080, amplitude: 1.00, decay: 0.16),
+                Mode(frequency: 2_080, amplitude: 1.00, decay: 0.22),
                 Mode(frequency: 4_620, amplitude: 0.48, decay: 0.08),
                 Mode(frequency: 7_010, amplitude: 0.22, decay: 0.04)
             ],
@@ -398,7 +401,7 @@ enum AlarmSoundSynthesis {
             }
         }
         fadeTail(&buffer, period: period)
-        return AlarmSoundSource(oneShot: buffer, period: period, limiterDrive: 3)
+        return AlarmSoundSource(oneShot: buffer, period: period, limiterDrive: 6)
     }
 
     // MARK: Building blocks
