@@ -3501,6 +3501,11 @@ struct HomeView: View {
                 .forEach { PendingStratumCelebrationStore.remove(id: $0.id) }
             pendingCapacityCelebrations.removeAll()
             enqueueStratumCelebration(finalCelebration)
+            // The fusion sheet is the celebration. The toast is only the
+            // immediate notice when the sheet had to wait (rest, share, a
+            // sheet already up); fired together, the sheet covered it and
+            // VoiceOver announced both.
+            guard completedStratum?.id != finalCelebration.id else { return }
             let message = completedSteps > 1
                 ? String(localized: "小さな粒が\(completedSteps)段階で結晶になり、瓶に余白ができた", table: "Home",
                          comment: "Toast after a cascade of fusions; the argument is how many levels formed")
