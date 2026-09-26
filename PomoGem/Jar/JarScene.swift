@@ -2278,6 +2278,11 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         origin: DropOrigin = .interior
     ) -> Bool {
         guard acceptedPebbleIDs.insert(descriptor.id).inserted else { return false }
+        // jar-03: every queued gem lands with a thud and a haptic. Start both
+        // engines now, without blocking, while the gem is still falling,
+        // instead of cold-starting them inside the landing's contact callback.
+        soundSynth.prewarm()
+        haptics.prewarm()
         dropQueue.append(
             QueuedDrop(
                 descriptor: descriptor,
