@@ -13,6 +13,9 @@
     "Apple Musicへのアクセスが許可されていません。「設定」アプリのポモジェムで「メディアとApple Music」をオンにすると使えます。" : {
 
     },
+    "Apple Musicへのアクセスが許可されていません。集中が終わってから、「設定」アプリのポモジェムで「メディアとApple Music」をオンにすると使えます。" : {
+
+    },
     "Apple Musicへのアクセスを許可" : {
 
     },
@@ -43,11 +46,14 @@
     "このiPhoneでは、スクリーンタイムなどの制限でApple Musicを利用できません。" : {
 
     },
-    "このiPhoneで集中を始めたときに、選んだ音楽を自動で再生します。ほかの音楽を再生中のときは入れ替えません。" : {
+    "このiPhoneで集中を始めたときに、選んだ音楽を自動で再生します。ほかの音楽や音声を再生中のときは入れ替えません。" : {
 
     },
     "この地域のApple Musicでは、用意した音楽を再生できませんでした。" : {
 
+    },
+    "この音楽を選んでおきます。今は再生しません" : {
+      "comment" : "VoiceOver hint of a music row while Apple Music cannot play: the tap only remembers the choice"
     },
     "もう一度確認する" : {
 

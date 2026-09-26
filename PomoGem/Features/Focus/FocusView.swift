@@ -989,12 +989,21 @@ struct FocusView: View {
             }
             Spacer(minLength: 0)
             // Focus music (Docs/FocusMusic.md): owns its own sheet and the
-            // opt-in autoplay for a focus that has just started here.
-            FocusMusicButton(focusStart: FocusMusicButton.FocusStart(
-                sessionID: engine.phase == .focusing ? engine.currentSessionID : nil,
-                startedAt: engine.phaseStartedAt,
-                isStartedOnThisIPhone: recoveryOrigin == .local
-            ))
+            // opt-in autoplay for a focus that has just started here. The
+            // sheet closes before the end so the completion alarm's Stop is
+            // never under it.
+            FocusMusicButton(
+                focusStart: .make(
+                    phase: engine.phase,
+                    currentSessionID: engine.currentSessionID,
+                    phaseStartedAt: engine.phaseStartedAt,
+                    origin: recoveryOrigin
+                ),
+                keepsSheetClosed: FocusMusicSheetPolicy.keepsSheetClosed(
+                    isRunning: snapshot.phase == .focusing,
+                    remainingSeconds: snapshot.remainingSeconds
+                )
+            )
             TimerRotationControls()
         }
         .padding(.horizontal, 24)

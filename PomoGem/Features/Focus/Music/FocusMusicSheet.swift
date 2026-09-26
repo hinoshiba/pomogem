@@ -8,6 +8,10 @@ import UIKit
 /// person without Apple Music sees Apple's own subscription offer.
 struct FocusMusicSheet: View {
     let controller: FocusMusicController
+    /// False while a focus is on screen (D4.1: no link-outs during a focus).
+    /// Leaving PomoGem mid-focus can pause the timer, so the Settings button
+    /// is replaced by a line saying where to change the permission later.
+    let allowsLeavingApp: Bool
 
     @Environment(\.dismiss) private var dismiss
     @AppStorage(FocusMusicPreferences.sourceKey) private var chosenSourceID = ""
@@ -103,19 +107,31 @@ struct FocusMusicSheet: View {
                 Task { await controller.requestAuthorization() }
             }
         case .denied:
-            statusCard(
-                message: Text("Apple Musicへのアクセスが許可されていません。「設定」アプリのポモジェムで「メディアとApple Music」をオンにすると使えます。", tableName: "Focus"),
-                actionTitle: Text("「設定」アプリを開く", tableName: "Focus"),
-                identifier: "focus-music.open-settings",
-                action: openSettings
-            )
+            if allowsLeavingApp {
+                statusCard(
+                    message: Text("Apple Musicへのアクセスが許可されていません。「設定」アプリのポモジェムで「メディアとApple Music」をオンにすると使えます。", tableName: "Focus"),
+                    actionTitle: Text("「設定」アプリを開く", tableName: "Focus"),
+                    identifier: "focus-music.open-settings",
+                    action: openSettings
+                )
+            } else {
+                messageCard(
+                    Text("Apple Musicへのアクセスが許可されていません。集中が終わってから、「設定」アプリのポモジェムで「メディアとApple Music」をオンにすると使えます。", tableName: "Focus")
+                )
+            }
         case .restricted:
-            statusCard(
-                message: Text("このiPhoneでは、スクリーンタイムなどの制限でApple Musicを利用できません。", tableName: "Focus"),
-                actionTitle: Text("「設定」アプリを開く", tableName: "Focus"),
-                identifier: "focus-music.open-settings",
-                action: openSettings
-            )
+            if allowsLeavingApp {
+                statusCard(
+                    message: Text("このiPhoneでは、スクリーンタイムなどの制限でApple Musicを利用できません。", tableName: "Focus"),
+                    actionTitle: Text("「設定」アプリを開く", tableName: "Focus"),
+                    identifier: "focus-music.open-settings",
+                    action: openSettings
+                )
+            } else {
+                messageCard(
+                    Text("このiPhoneでは、スクリーンタイムなどの制限でApple Musicを利用できません。", tableName: "Focus")
+                )
+            }
         case .checkFailed:
             statusCard(
                 message: Text("Apple Musicの登録状況を確認できませんでした。通信を確認して、もう一度お試しください。", tableName: "Focus"),
@@ -133,13 +149,13 @@ struct FocusMusicSheet: View {
                 isOfferPresented = true
             }
         case .unavailable:
-            PomoGemCard {
-                Text("このiPhoneでは、Apple Musicの曲を再生できません。", tableName: "Focus")
-                    .font(.subheadline)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            messageCard(Text("このiPhoneでは、Apple Musicの曲を再生できません。", tableName: "Focus"))
         case .ready:
+            EmptyView()
+        }
+        // Always when ready; otherwise while the Music app has something to
+        // pause or resume, so music started earlier can still be paused here.
+        if controller.showsNowPlaying {
             nowPlayingCard
         }
     }
@@ -164,7 +180,11 @@ struct FocusMusicSheet: View {
                         }
                     }
                     .buttonStyle(PomoGemCompactButtonStyle())
-                    .disabled(controller.isBusy || (!controller.isPlaying && selectedSource == nil))
+                    // A pause is always allowed, even while a start is in flight.
+                    .disabled(
+                        controller.transportToggle == .unavailable
+                            || (controller.isBusy && controller.transportToggle != .pause)
+                    )
                     .accessibilityIdentifier("focus-music.play-pause")
 
                     Button {
@@ -222,6 +242,9 @@ struct FocusMusicSheet: View {
 
     private func sourceRow(_ source: FocusMusicSource) -> some View {
         let isSelected = source.id == chosenSourceID
+        // D4.3: without a way to play (no permission, or no subscription and
+        // no offer) a row only remembers the choice and shows no play mark.
+        let allowsPlayback = controller.availability.allowsRowPlayback
         return Button {
             Task {
                 if await controller.choose(source) == .presentOffer {
@@ -251,7 +274,7 @@ struct FocusMusicSheet: View {
                 }
                 .multilineTextAlignment(.leading)
                 Spacer(minLength: 8)
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "play.circle")
+                Image(systemName: isSelected ? "checkmark.circle.fill" : allowsPlayback ? "play.circle" : "circle")
                     .font(.title3)
                     .foregroundStyle(isSelected ? PomoGemTheme.amber : PomoGemTheme.muted)
                     .accessibilityHidden(true)
@@ -269,7 +292,12 @@ struct FocusMusicSheet: View {
                 ? Text("選択中", tableName: "Focus", comment: "VoiceOver value: this music is the chosen one")
                 : Text("未選択", tableName: "Focus", comment: "VoiceOver value: this music is not chosen")
         )
-        .accessibilityHint(Text("選んで再生します", tableName: "Focus", comment: "VoiceOver hint of a music row"))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityHint(
+            allowsPlayback
+                ? Text("選んで再生します", tableName: "Focus", comment: "VoiceOver hint of a music row")
+                : Text("この音楽を選んでおきます。今は再生しません", tableName: "Focus", comment: "VoiceOver hint of a music row while Apple Music cannot play: the tap only remembers the choice")
+        )
         .accessibilityIdentifier("focus-music.source.\(source.id)")
     }
 
@@ -279,7 +307,7 @@ struct FocusMusicSheet: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("集中を始めたら再生する", tableName: "Focus")
                         .font(.system(.body, design: .rounded, weight: .bold))
-                    Text("このiPhoneで集中を始めたときに、選んだ音楽を自動で再生します。ほかの音楽を再生中のときは入れ替えません。", tableName: "Focus")
+                    Text("このiPhoneで集中を始めたときに、選んだ音楽を自動で再生します。ほかの音楽や音声を再生中のときは入れ替えません。", tableName: "Focus")
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -291,6 +319,15 @@ struct FocusMusicSheet: View {
     }
 
     // MARK: - Helpers
+
+    private func messageCard(_ message: Text) -> some View {
+        PomoGemCard {
+            message
+                .font(.subheadline)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
 
     private func statusCard(
         message: Text,

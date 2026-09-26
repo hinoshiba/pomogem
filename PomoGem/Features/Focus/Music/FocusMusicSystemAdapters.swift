@@ -1,3 +1,4 @@
+import AVFAudio
 import Combine
 import Foundation
 import MediaPlayer
@@ -52,6 +53,11 @@ final class SystemFocusMusicPlayer: FocusMusicPlaying {
         case mediaPlayer
     }
 
+    /// MediaPlayer's `prepareToPlay` has been seen never to call back. The
+    /// controller stays busy (every music control disabled) until it does, so
+    /// the wait is bounded and a timeout reads as an ordinary failure.
+    static let prepareToPlayTimeout: Duration = .seconds(10)
+
     private var route: Route = .musicKit
     private var onChange: (@MainActor () -> Void)?
     private var stateObserver: AnyCancellable?
@@ -75,6 +81,13 @@ final class SystemFocusMusicPlayer: FocusMusicPlaying {
         }
     }
 
+    /// Any other app's audio, the Music app included: a podcast or another
+    /// music app is invisible to the Music app's player state. Reading the
+    /// shared session's hint neither configures nor activates it.
+    var isOtherAudioPlaying: Bool {
+        AVAudioSession.sharedInstance().isOtherAudioPlaying
+    }
+
     func play(_ source: FocusMusicSource) async throws {
         do {
             let player = SystemMusicPlayer.shared
@@ -92,7 +105,7 @@ final class SystemFocusMusicPlayer: FocusMusicPlaying {
         } catch let error as FocusMusicPlaybackError {
             throw error
         } catch {
-            switch FocusMusicCatalogRoutePolicy.route(for: source, after: Self.catalogFailure(error)) {
+            switch Self.route(after: error, for: source) {
             case .mediaPlayerQueue:
                 try await playByStoreID(source)
             case .fail(let failure):
@@ -171,15 +184,14 @@ final class SystemFocusMusicPlayer: FocusMusicPlaying {
         let player = MPMusicPlayerController.systemMusicPlayer
         player.setQueue(with: [source.id])
         do {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                player.prepareToPlay { error in
-                    if let error {
-                        continuation.resume(throwing: error)
-                    } else {
-                        continuation.resume()
-                    }
-                }
+            try await FocusMusicCallbackDeadline.wait(
+                timeout: Self.prepareToPlayTimeout,
+                timeoutError: FocusMusicPlaybackError.failed
+            ) { completion in
+                player.prepareToPlay(completionHandler: completion)
             }
+        } catch let error as FocusMusicPlaybackError {
+            throw error
         } catch {
             let nsError = error as NSError
             guard nsError.domain == MPErrorDomain else { throw FocusMusicPlaybackError.failed }
@@ -205,6 +217,19 @@ final class SystemFocusMusicPlayer: FocusMusicPlaying {
             throw FocusMusicPlaybackError.notInStorefront
         }
         return station
+    }
+
+    /// Where a failure of the MusicKit path leads. `SystemMusicPlayer.play()`
+    /// can fail with MediaPlayer's own errors after a successful catalog
+    /// lookup: those keep their meaning (a lapsed subscription re-checks and
+    /// offers; an item this storefront cannot play moves on to the next
+    /// source). Everything else is routed as a catalog failure.
+    static func route(after error: Error, for source: FocusMusicSource) -> FocusMusicCatalogRoute {
+        let nsError = error as NSError
+        if nsError.domain == MPErrorDomain {
+            return .fail(playbackError(forMediaPlayerCode: MPError.Code(rawValue: nsError.code)))
+        }
+        return FocusMusicCatalogRoutePolicy.route(for: source, after: catalogFailure(error))
     }
 
     static func catalogFailure(_ error: Error) -> FocusMusicCatalogFailure {
@@ -262,6 +287,71 @@ final class SystemFocusMusicPlayer: FocusMusicPlaying {
         case .interrupted: .interrupted
         case .stopped: .stopped
         @unknown default: .stopped
+        }
+    }
+}
+
+/// Waits for a completion handler, but no longer than `timeout`. The handler
+/// may run on any queue, and a late or repeated call after the deadline is
+/// ignored.
+enum FocusMusicCallbackDeadline {
+    static func wait(
+        timeout: Duration,
+        timeoutError: @autoclosure @escaping @Sendable () -> Error,
+        _ start: (@escaping @Sendable (Error?) -> Void) -> Void
+    ) async throws {
+        let gate = OneShotGate()
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            gate.arm(continuation)
+            let timer = Task {
+                do {
+                    try await Task.sleep(for: timeout)
+                } catch {
+                    return
+                }
+                gate.finish(.failure(timeoutError()))
+            }
+            gate.onFinish = { timer.cancel() }
+            start { error in
+                gate.finish(error.map { .failure($0) } ?? .success(()))
+            }
+        }
+    }
+
+    private final class OneShotGate: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Void, Error>?
+        private var finishHandler: (() -> Void)?
+        private var isFinished = false
+
+        var onFinish: (() -> Void)? {
+            get { lock.withLock { finishHandler } }
+            set {
+                let runNow = lock.withLock { () -> Bool in
+                    if isFinished { return true }
+                    finishHandler = newValue
+                    return false
+                }
+                if runNow { newValue?() }
+            }
+        }
+
+        func arm(_ continuation: CheckedContinuation<Void, Error>) {
+            lock.withLock { self.continuation = continuation }
+        }
+
+        func finish(_ result: Result<Void, Error>) {
+            let (continuation, handler) = lock.withLock { () -> (CheckedContinuation<Void, Error>?, (() -> Void)?) in
+                guard !isFinished else { return (nil, nil) }
+                isFinished = true
+                defer {
+                    self.continuation = nil
+                    finishHandler = nil
+                }
+                return (self.continuation, finishHandler)
+            }
+            handler?()
+            continuation?.resume(with: result)
         }
     }
 }

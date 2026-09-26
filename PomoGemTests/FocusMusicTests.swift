@@ -206,6 +206,23 @@ final class FocusMusicTests: XCTestCase {
         XCTAssertEqual(Adapter.playbackError(forMediaPlayerCode: .networkConnectionFailed), .failed)
         XCTAssertEqual(Adapter.playbackError(forMediaPlayerCode: nil), .failed)
 
+        // SystemMusicPlayer.play() failing with MediaPlayer's own errors keeps
+        // their meaning instead of reading as a generic failure.
+        func mediaPlayerError(_ code: MPError.Code) -> NSError {
+            NSError(domain: MPErrorDomain, code: code.rawValue)
+        }
+        XCTAssertEqual(Adapter.route(after: mediaPlayerError(.cloudServiceCapabilityMissing), for: classical), .fail(.subscriptionRequired))
+        XCTAssertEqual(Adapter.route(after: mediaPlayerError(.notFound), for: station), .fail(.notInStorefront))
+        XCTAssertEqual(Adapter.route(after: mediaPlayerError(.permissionDenied), for: classical), .fail(.permissionDenied))
+        XCTAssertEqual(Adapter.route(after: mediaPlayerError(.networkConnectionFailed), for: classical), .fail(.failed))
+        XCTAssertEqual(
+            Adapter.route(after: NSError(domain: "MPMusicPlayerControllerErrorDomain", code: 6), for: classical),
+            .fail(.failed)
+        )
+        XCTAssertEqual(Adapter.route(after: MusicTokenRequestError.developerTokenRequestFailed, for: classical), .mediaPlayerQueue)
+        XCTAssertEqual(Adapter.route(after: MusicTokenRequestError.developerTokenRequestFailed, for: station), .fail(.needsCatalogAccess))
+        XCTAssertEqual(Adapter.route(after: MusicTokenRequestError.userNotSignedIn, for: classical), .fail(.notSignedIn))
+
         XCTAssertEqual(Adapter.map(MusicKit.MusicPlayer.PlaybackStatus.seekingForward), .playing)
         XCTAssertEqual(Adapter.map(MusicKit.MusicPlayer.PlaybackStatus.interrupted), .interrupted)
         XCTAssertEqual(Adapter.map(MPMusicPlaybackState.seekingBackward), .playing)
@@ -232,6 +249,137 @@ final class FocusMusicTests: XCTestCase {
         XCTAssertEqual(Policy.action(availability: .ready, chosen: classical, nowPlaying: paused, queuedSourceID: station.id, isBusy: false), .resume)
         XCTAssertEqual(Policy.action(availability: .ready, chosen: classical, nowPlaying: paused, queuedSourceID: nil, isBusy: false), .play(classical))
         XCTAssertEqual(Policy.action(availability: .ready, chosen: classical, nowPlaying: stopped, queuedSourceID: nil, isBusy: true), .ignore)
+
+        // Music that is playing is paused from the timer in every authorized
+        // state, and even while a start is in flight.
+        for availability in [FocusMusicAvailability.ready, .checking, .checkFailed, .subscriptionOffer, .unavailable] {
+            for chosen in [classical, nil] {
+                for isBusy in [false, true] {
+                    XCTAssertEqual(
+                        Policy.action(availability: availability, chosen: chosen, nowPlaying: playing, queuedSourceID: nil, isBusy: isBusy),
+                        .pause,
+                        "\(availability) chosen: \(String(describing: chosen?.id)) busy: \(isBusy)"
+                    )
+                }
+            }
+            XCTAssertTrue(availability.isAuthorized)
+        }
+        // Paused music outside `.ready` is resumed from the sheet, not the timer.
+        for availability in [FocusMusicAvailability.checkFailed, .subscriptionOffer, .unavailable] {
+            XCTAssertEqual(
+                Policy.action(availability: availability, chosen: classical, nowPlaying: paused, queuedSourceID: classical.id, isBusy: false),
+                .presentSheet
+            )
+        }
+        for availability in [FocusMusicAvailability.needsAuthorization, .denied, .restricted] {
+            XCTAssertFalse(availability.isAuthorized)
+            XCTAssertEqual(
+                Policy.action(availability: availability, chosen: classical, nowPlaying: playing, queuedSourceID: nil, isBusy: false),
+                .presentSheet,
+                "PomoGem cannot control the player without permission: \(availability)"
+            )
+        }
+    }
+
+    func testAHeaderTapThatCouldNotPlayOpensTheSheet() {
+        typealias Policy = FocusMusicHeaderPolicy
+        XCTAssertTrue(Policy.presentsSheet(after: .presentSheet, availability: .ready, hint: nil, isPlaying: false))
+        for action in [FocusMusicHeaderAction.play(classical), .resume] {
+            XCTAssertFalse(Policy.presentsSheet(after: action, availability: .ready, hint: nil, isPlaying: true), "it played")
+            XCTAssertFalse(
+                Policy.presentsSheet(after: action, availability: .ready, hint: nil, isPlaying: false),
+                "started, and the Music app has not reported it yet"
+            )
+            XCTAssertTrue(Policy.presentsSheet(after: action, availability: .ready, hint: .openMusicOnce, isPlaying: false))
+            XCTAssertTrue(Policy.presentsSheet(after: action, availability: .ready, hint: .signIn, isPlaying: false))
+            XCTAssertTrue(Policy.presentsSheet(after: action, availability: .ready, hint: .noSourceAvailable, isPlaying: false))
+            for availability in [FocusMusicAvailability.subscriptionOffer, .denied, .unavailable, .checkFailed] {
+                XCTAssertTrue(
+                    Policy.presentsSheet(after: action, availability: availability, hint: nil, isPlaying: false),
+                    "the play revealed \(availability)"
+                )
+            }
+        }
+        XCTAssertFalse(Policy.presentsSheet(after: .pause, availability: .ready, hint: .openMusicOnce, isPlaying: false))
+        XCTAssertFalse(Policy.presentsSheet(after: .ignore, availability: .checkFailed, hint: nil, isPlaying: false))
+    }
+
+    func testTheSheetTransportPausesAndResumesInEveryAuthorizedState() {
+        typealias Policy = FocusMusicTransportPolicy
+        let stopped = FocusMusicNowPlaying(status: .stopped)
+        let playing = FocusMusicNowPlaying(status: .playing, title: "x")
+        let paused = FocusMusicNowPlaying(status: .paused, title: "x")
+        let interrupted = FocusMusicNowPlaying(status: .interrupted)
+
+        XCTAssertEqual(Policy.toggle(availability: .ready, chosen: classical, nowPlaying: stopped, queuedSourceID: nil), .play(classical))
+        XCTAssertEqual(Policy.toggle(availability: .ready, chosen: nil, nowPlaying: stopped, queuedSourceID: nil), .unavailable)
+        XCTAssertEqual(Policy.toggle(availability: .ready, chosen: classical, nowPlaying: paused, queuedSourceID: nil), .play(classical), "replaces a queue this process did not start")
+        XCTAssertEqual(Policy.toggle(availability: .ready, chosen: classical, nowPlaying: paused, queuedSourceID: station.id), .resume)
+        XCTAssertEqual(Policy.toggle(availability: .ready, chosen: nil, nowPlaying: paused, queuedSourceID: nil), .resume)
+        XCTAssertTrue(Policy.showsNowPlaying(availability: .ready, nowPlaying: stopped))
+
+        for availability in [FocusMusicAvailability.checking, .checkFailed, .subscriptionOffer, .unavailable] {
+            XCTAssertEqual(Policy.toggle(availability: availability, chosen: classical, nowPlaying: playing, queuedSourceID: nil), .pause, "\(availability)")
+            XCTAssertEqual(Policy.toggle(availability: availability, chosen: classical, nowPlaying: paused, queuedSourceID: nil), .resume, "\(availability)")
+            XCTAssertEqual(Policy.toggle(availability: availability, chosen: classical, nowPlaying: interrupted, queuedSourceID: nil), .resume, "\(availability)")
+            XCTAssertEqual(Policy.toggle(availability: availability, chosen: classical, nowPlaying: stopped, queuedSourceID: nil), .unavailable, "never starts catalog music: \(availability)")
+            XCTAssertTrue(Policy.showsNowPlaying(availability: availability, nowPlaying: playing), "\(availability)")
+            XCTAssertTrue(Policy.showsNowPlaying(availability: availability, nowPlaying: paused), "\(availability)")
+            XCTAssertFalse(Policy.showsNowPlaying(availability: availability, nowPlaying: stopped), "\(availability)")
+        }
+        for availability in [FocusMusicAvailability.needsAuthorization, .denied, .restricted] {
+            XCTAssertEqual(Policy.toggle(availability: availability, chosen: classical, nowPlaying: playing, queuedSourceID: nil), .unavailable)
+            XCTAssertFalse(Policy.showsNowPlaying(availability: availability, nowPlaying: playing))
+        }
+    }
+
+    func testRowsOfferPlaybackOnlyWhenATapCanLeadToIt() {
+        // D4.3: with no permission, or no subscription and no offer, the rows
+        // only remember a choice.
+        let expected: [FocusMusicAvailability: Bool] = [
+            .ready: true,
+            .checking: true,
+            .checkFailed: true,
+            .needsAuthorization: true,
+            .subscriptionOffer: true,
+            .denied: false,
+            .restricted: false,
+            .unavailable: false,
+        ]
+        for (availability, allows) in expected {
+            XCTAssertEqual(availability.allowsRowPlayback, allows, "\(availability)")
+        }
+    }
+
+    func testTheSheetClosesBeforeTheTimerEndsAndStaysClosed() {
+        typealias Policy = FocusMusicSheetPolicy
+        XCTAssertEqual(Policy.closesBeforeEndSeconds, 1)
+        XCTAssertFalse(Policy.keepsSheetClosed(isRunning: true, remainingSeconds: 25 * 60))
+        XCTAssertFalse(Policy.keepsSheetClosed(isRunning: true, remainingSeconds: 2))
+        XCTAssertTrue(Policy.keepsSheetClosed(isRunning: true, remainingSeconds: 1), "the last second, before the alarm")
+        XCTAssertTrue(Policy.keepsSheetClosed(isRunning: true, remainingSeconds: 0), "a break's end stays on screen with its alarm")
+        XCTAssertFalse(Policy.keepsSheetClosed(isRunning: false, remainingSeconds: 1), "a paused focus does not end")
+        XCTAssertFalse(Policy.keepsSheetClosed(isRunning: false, remainingSeconds: 0), "idle before the focus starts")
+    }
+
+    func testFocusViewFeedsAutoplayOnlyALocalRunningFocus() {
+        let session = UUID()
+        let start = clock.addingTimeInterval(-3)
+        typealias FocusStart = FocusMusicButton.FocusStart
+
+        let running = FocusStart.make(phase: .focusing, currentSessionID: session, phaseStartedAt: start, origin: .local)
+        XCTAssertEqual(running, FocusStart(sessionID: session, startedAt: start, isStartedOnThisIPhone: true))
+
+        let handedOff = FocusStart.make(phase: .focusing, currentSessionID: session, phaseStartedAt: start, origin: .iCloud)
+        XCTAssertEqual(handedOff.sessionID, session)
+        XCTAssertFalse(handedOff.isStartedOnThisIPhone, "a focus continued from iCloud never autoplays")
+
+        for phase in [PomodoroPhase.paused, .idle, .shortBreak, .longBreak, .focusCompleted, .breakCompleted] {
+            XCTAssertNil(
+                FocusStart.make(phase: phase, currentSessionID: session, phaseStartedAt: start, origin: .local).sessionID,
+                "\(phase)"
+            )
+        }
     }
 
     func testAutoplayPolicyStartsOnlyAFreshFocusOnce() {
@@ -245,7 +393,8 @@ final class FocusMusicTests: XCTestCase {
             isStartedOnThisIPhone: true,
             now: clock,
             lastAutoplayedSessionID: nil,
-            playback: .stopped
+            playback: .stopped,
+            isOtherAudioPlaying: false
         )
         XCTAssertTrue(FocusMusicAutoplayPolicy.shouldAutoplay(base))
 
@@ -265,6 +414,7 @@ final class FocusMusicTests: XCTestCase {
         refused({ $0.startedAt = self.clock.addingTimeInterval(-(FocusMusicAutoplayPolicy.freshStartWindow + 1)) }, "recovered, handed off or resumed focus")
         refused({ $0.startedAt = self.clock.addingTimeInterval(FocusMusicAutoplayPolicy.futureStartTolerance + 1) }, "start in the future")
         refused({ $0.playback = .playing }, "never replaces playing music")
+        refused({ $0.isOtherAudioPlaying = true }, "never interrupts another app's audio")
         refused({ $0.isStartedOnThisIPhone = false }, "continued from another iPhone through iCloud")
 
         var edge = base
@@ -388,15 +538,19 @@ final class FocusMusicTests: XCTestCase {
         await subscriptions.waitUntilCalled()
         // A second request, if one were made, would answer at once.
         subscriptions.suspends = false
-        let second = Task { await controller.refresh(forceSubscriptionCheck: true) }
+        let second = Task { () -> FocusMusicAvailability in
+            await controller.refresh(forceSubscriptionCheck: true)
+            return controller.availability
+        }
         for _ in 0..<5 { await Task.yield() }
         XCTAssertEqual(controller.availability, .checking)
 
         subscriptions.resume()
+        let secondSaw = await second.value
         await first.value
-        await second.value
 
         XCTAssertEqual(subscriptions.callCount, 1)
+        XCTAssertEqual(secondSaw, .ready, "the joining caller reads the answer as soon as its own await returns")
         XCTAssertEqual(controller.availability, .ready)
     }
 
@@ -721,6 +875,396 @@ final class FocusMusicTests: XCTestCase {
 
         XCTAssertEqual(player.attempts, [])
     }
+
+    // MARK: - Controller: callers joining a running subscription check
+
+    /// Waits until the fake player has been asked to play `count` times.
+    private func waitForPlayAttempts(_ count: Int) async {
+        for _ in 0..<100 where player.attempts.count < count {
+            await Task.yield()
+        }
+    }
+
+    func testAHeaderTapThatJoinsTheFirstCheckPlaysOnceItAnswers() async {
+        FocusMusicPreferences.setChosenSource(classical, defaults: defaults)
+        subscriptions.suspends = true
+        let controller = makeController()
+        // The button's `.task` owns the first check after launch.
+        let buttonAppeared = Task { await controller.refresh() }
+        await subscriptions.waitUntilCalled()
+        let tap = Task { () -> (FocusMusicHeaderAction, [String]) in
+            let action = await controller.handleHeaderTap()
+            return (action, self.player.attempts)
+        }
+        for _ in 0..<5 { await Task.yield() }
+        XCTAssertEqual(player.attempts, [])
+
+        subscriptions.resume()
+        let (action, attemptsWhenTapReturned) = await tap.value
+        await buttonAppeared.value
+
+        XCTAssertEqual(action, .play(classical), "not the sheet: the answer was ready when the tap resumed")
+        XCTAssertEqual(attemptsWhenTapReturned, [classical.id])
+        XCTAssertFalse(controller.presentsSheet(after: action))
+        XCTAssertEqual(subscriptions.callCount, 1)
+    }
+
+    func testARowTapThatJoinsTheFirstCheckPlaysOnceItAnswers() async {
+        subscriptions.suspends = true
+        let controller = makeController()
+        // The sheet's `.task` owns the check.
+        let sheetAppeared = Task { await controller.refresh(forceSubscriptionCheck: true) }
+        await subscriptions.waitUntilCalled()
+        let row = Task { () -> (FocusMusicChoiceOutcome, [String]) in
+            let outcome = await controller.choose(classical)
+            return (outcome, self.player.attempts)
+        }
+        for _ in 0..<5 { await Task.yield() }
+
+        subscriptions.resume()
+        let (outcome, attemptsWhenChooseReturned) = await row.value
+        await sheetAppeared.value
+
+        XCTAssertEqual(outcome, .handled)
+        XCTAssertEqual(attemptsWhenChooseReturned, [classical.id])
+        XCTAssertEqual(subscriptions.callCount, 1)
+    }
+
+    func testAutoplayThatJoinsTheFirstCheckAfterLaunchStillStarts() async {
+        FocusMusicPreferences.setChosenSource(pianoChill, defaults: defaults)
+        FocusMusicPreferences.setAutoplayEnabled(true, defaults: defaults)
+        subscriptions.suspends = true
+        let controller = makeController()
+        let buttonAppeared = Task { await controller.refresh() }
+        await subscriptions.waitUntilCalled()
+        let session = UUID()
+        let autoplay = Task { () -> [String] in
+            await controller.autoplayIfNeeded(
+                sessionID: session,
+                startedAt: self.clock,
+                isStartedOnThisIPhone: true
+            )
+            return self.player.attempts
+        }
+        for _ in 0..<5 { await Task.yield() }
+
+        subscriptions.resume()
+        let attemptsWhenAutoplayReturned = await autoplay.value
+        await buttonAppeared.value
+
+        XCTAssertEqual(attemptsWhenAutoplayReturned, [pianoChill.id], "the first focus after launch is not skipped")
+        XCTAssertEqual(FocusMusicPreferences.lastAutoplayedSessionID(defaults: defaults), session)
+        XCTAssertEqual(subscriptions.callCount, 1)
+    }
+
+    func testTheSheetsRecheckKeepsTheKnownAnswerSoARowTapPlaysAtOnce() async {
+        let controller = makeController()
+        await controller.refresh()
+        XCTAssertEqual(controller.availability, .ready)
+
+        subscriptions.suspends = true
+        let sheetAppeared = Task { await controller.refresh(forceSubscriptionCheck: true) }
+        await subscriptions.waitUntilCalled(times: 2)
+        XCTAssertEqual(controller.availability, .ready, "no spinner over a known answer")
+
+        let outcome = await controller.choose(classical)
+        XCTAssertEqual(outcome, .handled)
+        XCTAssertEqual(player.attempts, [classical.id], "played without waiting for the re-check")
+
+        subscriptions.resume()
+        await sheetAppeared.value
+        XCTAssertEqual(controller.availability, .ready)
+    }
+
+    func testSubscriptionChecksNeverMakeAKnownAnswerWorse() {
+        typealias Policy = FocusMusicSubscriptionPolicy
+        let subscriber = FocusMusicSubscriptionState.known(
+            FocusMusicSubscription(canPlayCatalogContent: true, canBecomeSubscriber: false)
+        )
+        let lapsed = FocusMusicSubscriptionState.known(
+            FocusMusicSubscription(canPlayCatalogContent: false, canBecomeSubscriber: true)
+        )
+        XCTAssertEqual(Policy.stateWhileChecking(.unknown), .checking)
+        XCTAssertEqual(Policy.stateWhileChecking(.failed), .checking)
+        XCTAssertEqual(Policy.stateWhileChecking(subscriber), subscriber)
+
+        XCTAssertEqual(Policy.stateAfterCheck(.checking, result: .failed), .failed)
+        XCTAssertEqual(Policy.stateAfterCheck(.checking, result: subscriber), subscriber)
+        XCTAssertEqual(Policy.stateAfterCheck(subscriber, result: .failed), subscriber, "a failed re-check keeps the answer")
+        XCTAssertEqual(Policy.stateAfterCheck(subscriber, result: lapsed), lapsed, "a real new answer wins")
+        XCTAssertEqual(Policy.stateAfterCheck(lapsed, result: subscriber), subscriber)
+    }
+
+    func testAFailedRecheckKeepsAKnownAnswer() async {
+        FocusMusicPreferences.setChosenSource(classical, defaults: defaults)
+        let controller = makeController()
+        await controller.refresh()
+        XCTAssertEqual(controller.availability, .ready)
+
+        subscriptions.result = .failure(URLError(.notConnectedToInternet))
+        await controller.refresh(forceSubscriptionCheck: true)
+        XCTAssertEqual(controller.availability, .ready)
+        let action = await controller.handleHeaderTap()
+        XCTAssertEqual(action, .play(classical))
+
+        // A successful answer still replaces it: a lapsed subscription shows.
+        subscriptions.result = .success(FocusMusicSubscription(canPlayCatalogContent: false, canBecomeSubscriber: true))
+        await controller.refresh(forceSubscriptionCheck: true)
+        XCTAssertEqual(controller.availability, .subscriptionOffer)
+    }
+
+    func testAFailedRecheckKeepsTheAnswerPlaybackProved() async {
+        // Offline, or MusicSubscription failing before the App Service is on.
+        subscriptions.result = .failure(URLError(.notConnectedToInternet))
+        let controller = makeController()
+        await controller.refresh()
+        _ = await controller.choose(classical)
+        XCTAssertEqual(controller.availability, .ready)
+
+        // The sheet opens again and its re-check still fails.
+        await controller.refresh(forceSubscriptionCheck: true)
+
+        XCTAssertEqual(controller.availability, .ready)
+        XCTAssertTrue(controller.showsNowPlaying)
+        let action = await controller.handleHeaderTap()
+        XCTAssertEqual(action, .pause)
+    }
+
+    // MARK: - Controller: pausing whatever the subscription says
+
+    func testANonSubscribersOwnMusicCanBePausedAndResumed() async {
+        subscriptions.result = .success(FocusMusicSubscription(canPlayCatalogContent: false, canBecomeSubscriber: true))
+        player.nowPlaying = FocusMusicNowPlaying(status: .playing, title: "Purchased album")
+        let controller = makeController()
+        await controller.refresh()
+        XCTAssertEqual(controller.availability, .subscriptionOffer)
+        XCTAssertEqual(controller.headerAction, .pause, "the label promises what the tap does")
+        XCTAssertTrue(controller.showsNowPlaying)
+
+        let action = await controller.handleHeaderTap()
+        XCTAssertEqual(action, .pause)
+        XCTAssertEqual(player.pauseCount, 1)
+        XCTAssertFalse(controller.presentsSheet(after: action))
+
+        // Paused, the sheet still shows the card and resumes the same music.
+        XCTAssertTrue(controller.showsNowPlaying)
+        XCTAssertEqual(controller.transportToggle, .resume)
+        await controller.togglePlayback()
+        XCTAssertEqual(player.resumeCount, 1)
+        XCTAssertTrue(controller.isPlaying)
+        XCTAssertEqual(player.attempts, [], "nothing from the catalog is started")
+    }
+
+    func testMusicStartedWhileUnavailableOrUncheckedCanBePaused() async {
+        for result: Result<FocusMusicSubscription, Error> in [
+            .success(FocusMusicSubscription(canPlayCatalogContent: false, canBecomeSubscriber: false)),
+            .failure(URLError(.notConnectedToInternet)),
+        ] {
+            subscriptions.result = result
+            player.nowPlaying = FocusMusicNowPlaying(status: .playing, title: "x")
+            let controller = makeController()
+            await controller.refresh()
+            XCTAssertNotEqual(controller.availability, .ready)
+            let action = await controller.handleHeaderTap()
+            XCTAssertEqual(action, .pause, "\(controller.availability)")
+            XCTAssertFalse(controller.isPlaying)
+        }
+    }
+
+    func testAPauseDuringAStartWinsAndTheStartEndsPaused() async {
+        player.nowPlaying = FocusMusicNowPlaying(status: .playing, title: "The person's own music")
+        let controller = makeController()
+        await controller.refresh()
+        player.suspendsPlay = true
+        let row = Task { await controller.choose(pianoChill) }
+        await waitForPlayAttempts(1)
+        XCTAssertTrue(controller.isBusy)
+        XCTAssertEqual(controller.headerAction, .pause, "a start in flight never blocks a pause")
+
+        let action = await controller.handleHeaderTap()
+        XCTAssertEqual(action, .pause)
+        player.releasePlay()
+        _ = await row.value
+
+        XCTAssertEqual(player.attempts, [pianoChill.id])
+        XCTAssertFalse(controller.isPlaying, "the start that was in flight ends paused")
+        XCTAssertEqual(player.pauseCount, 2)
+        XCTAssertFalse(controller.isBusy)
+    }
+
+    // MARK: - Controller: a header play that does not start
+
+    func testAHeaderPlayThatFailsOpensTheSheetWithItsHint() async {
+        FocusMusicPreferences.setChosenSource(classical, defaults: defaults)
+        let controller = makeController()
+
+        player.failures[classical.id] = .failed
+        var action = await controller.handleHeaderTap()
+        XCTAssertEqual(action, .play(classical))
+        XCTAssertEqual(controller.hint, .openMusicOnce)
+        XCTAssertTrue(controller.presentsSheet(after: action), "the hint is seen, not lost")
+
+        // A lapsed subscription turns into Apple's offer in the sheet.
+        player.failures[classical.id] = .subscriptionRequired
+        subscriptions.result = .success(FocusMusicSubscription(canPlayCatalogContent: false, canBecomeSubscriber: true))
+        action = await controller.handleHeaderTap()
+        XCTAssertEqual(action, .play(classical))
+        XCTAssertEqual(controller.availability, .subscriptionOffer)
+        XCTAssertTrue(controller.presentsSheet(after: action))
+
+        subscriptions.result = .success(FocusMusicSubscription(canPlayCatalogContent: true, canBecomeSubscriber: false))
+        await controller.refresh(forceSubscriptionCheck: true)
+        player.failures[classical.id] = nil
+        action = await controller.handleHeaderTap()
+        XCTAssertEqual(action, .play(classical))
+        XCTAssertFalse(controller.presentsSheet(after: action), "a play that started stays on the timer")
+    }
+
+    // MARK: - Controller: D4.3 branches
+
+    func testARowTapAsksForPermissionOnceThenPlays() async {
+        authorizer.status = .notDetermined
+        authorizer.requestResult = .authorized
+        let controller = makeController()
+
+        let outcome = await controller.choose(pianoChill)
+
+        XCTAssertEqual(outcome, .handled)
+        XCTAssertEqual(authorizer.requestCount, 1)
+        XCTAssertEqual(subscriptions.callCount, 1)
+        XCTAssertEqual(player.attempts, [pianoChill.id])
+        XCTAssertEqual(FocusMusicPreferences.chosenSource(defaults: defaults), pianoChill)
+    }
+
+    func testARowTapAnsweredWithDenyPlaysNothing() async {
+        authorizer.status = .notDetermined
+        authorizer.requestResult = .denied
+        let controller = makeController()
+
+        let outcome = await controller.choose(pianoChill)
+
+        XCTAssertEqual(outcome, .handled)
+        XCTAssertEqual(authorizer.requestCount, 1)
+        XCTAssertEqual(player.attempts, [])
+        XCTAssertEqual(controller.availability, .denied)
+        XCTAssertFalse(controller.availability.allowsRowPlayback)
+        XCTAssertEqual(subscriptions.callCount, 0)
+    }
+
+    func testASkipThatFailsShowsTheGentleHint() async {
+        let controller = makeController()
+        await controller.refresh()
+        player.skipError = FocusMusicPlaybackError.failed
+
+        await controller.skipToNext()
+
+        XCTAssertEqual(player.skipCount, 1)
+        XCTAssertEqual(controller.hint, .openMusicOnce)
+    }
+
+    func testAPermissionErrorWhileStillAuthorizedShowsTheGentleHint() async {
+        // MusicKit's privacyAcknowledgementRequired: the status stays
+        // authorized, and opening the Music app once clears it.
+        FocusMusicPreferences.setChosenSource(classical, defaults: defaults)
+        player.failures[classical.id] = .permissionDenied
+        let controller = makeController()
+
+        await controller.handleHeaderTap()
+
+        XCTAssertEqual(controller.availability, .ready)
+        XCTAssertEqual(controller.hint, .openMusicOnce)
+    }
+
+    func testASubscriptionErrorWhileStillSubscribedShowsTheGentleHint() async {
+        FocusMusicPreferences.setChosenSource(classical, defaults: defaults)
+        player.failures[classical.id] = .subscriptionRequired
+        let controller = makeController()
+
+        await controller.handleHeaderTap()
+
+        XCTAssertEqual(subscriptions.callCount, 2, "the error re-reads the subscription")
+        XCTAssertEqual(controller.availability, .ready)
+        XCTAssertEqual(controller.hint, .openMusicOnce)
+    }
+
+    // MARK: - Controller: other apps' audio
+
+    func testAutoplayLeavesAnotherAppsAudioAlone() async {
+        FocusMusicPreferences.setChosenSource(pianoChill, defaults: defaults)
+        FocusMusicPreferences.setAutoplayEnabled(true, defaults: defaults)
+        // A podcast or another music app: the Music app itself reports stopped.
+        player.nowPlaying = FocusMusicNowPlaying(status: .stopped)
+        player.isOtherAudioPlaying = true
+        let controller = makeController()
+
+        await controller.autoplayIfNeeded(sessionID: UUID(), startedAt: clock, isStartedOnThisIPhone: true)
+
+        XCTAssertEqual(player.attempts, [])
+        XCTAssertNil(FocusMusicPreferences.lastAutoplayedSessionID(defaults: defaults))
+
+        player.isOtherAudioPlaying = false
+        let session = UUID()
+        await controller.autoplayIfNeeded(sessionID: session, startedAt: clock, isStartedOnThisIPhone: true)
+        XCTAssertEqual(player.attempts, [pianoChill.id])
+    }
+
+    // MARK: - MediaPlayer's prepareToPlay deadline
+
+    func testACallbackThatNeverComesTimesOut() async {
+        do {
+            try await FocusMusicCallbackDeadline.wait(
+                timeout: .milliseconds(50),
+                timeoutError: FocusMusicPlaybackError.failed
+            ) { _ in }
+            XCTFail("a missing callback must not wait forever")
+        } catch {
+            XCTAssertEqual(error as? FocusMusicPlaybackError, .failed)
+        }
+    }
+
+    func testACallbackBeforeTheDeadlineDecidesTheResult() async throws {
+        try await FocusMusicCallbackDeadline.wait(
+            timeout: .seconds(30),
+            timeoutError: FocusMusicPlaybackError.failed
+        ) { completion in
+            DispatchQueue.global().async { completion(nil) }
+        }
+
+        do {
+            try await FocusMusicCallbackDeadline.wait(
+                timeout: .seconds(30),
+                timeoutError: FocusMusicPlaybackError.failed
+            ) { completion in
+                completion(URLError(.timedOut))
+                completion(nil)
+            }
+            XCTFail("the callback's error is thrown")
+        } catch {
+            XCTAssertEqual((error as? URLError)?.code, .timedOut, "only the first answer counts")
+        }
+    }
+
+    func testACallbackAfterTheDeadlineIsIgnored() async {
+        let late = LateCallback()
+        do {
+            try await FocusMusicCallbackDeadline.wait(
+                timeout: .milliseconds(20),
+                timeoutError: FocusMusicPlaybackError.failed
+            ) { completion in
+                late.completion = completion
+            }
+            XCTFail("timed out first")
+        } catch {
+            XCTAssertEqual(error as? FocusMusicPlaybackError, .failed)
+        }
+        // Resuming the continuation a second time would trap.
+        late.completion?(nil)
+        late.completion?(URLError(.cancelled))
+    }
+}
+
+private final class LateCallback: @unchecked Sendable {
+    var completion: (@Sendable (Error?) -> Void)?
 }
 
 // MARK: - Fakes
@@ -746,55 +1290,73 @@ private final class FakeMusicAuthorizer: FocusMusicAuthorizing {
 
 @MainActor
 private final class FakeMusicSubscriptions: FocusMusicSubscriptionChecking {
+    /// Read when a call answers, so a suspended call answers with the
+    /// result set before `resume()`.
     var result: Result<FocusMusicSubscription, Error> = .success(
         FocusMusicSubscription(canPlayCatalogContent: true, canBecomeSubscriber: false)
     )
     var suspends = false
     private(set) var callCount = 0
-    private var gate: CheckedContinuation<Void, Never>?
-    private var calledWaiters: [CheckedContinuation<Void, Never>] = []
+    private var gates: [CheckedContinuation<Void, Never>] = []
+    private var calledWaiters: [(count: Int, continuation: CheckedContinuation<Void, Never>)] = []
 
     func current() async throws -> FocusMusicSubscription {
         callCount += 1
-        calledWaiters.forEach { $0.resume() }
-        calledWaiters.removeAll()
+        let reached = calledWaiters.filter { $0.count <= callCount }
+        calledWaiters.removeAll { $0.count <= callCount }
+        reached.forEach { $0.continuation.resume() }
         if suspends {
-            await withCheckedContinuation { gate = $0 }
+            await withCheckedContinuation { gates.append($0) }
         }
         return try result.get()
     }
 
-    func waitUntilCalled() async {
-        guard callCount == 0 else { return }
-        await withCheckedContinuation { calledWaiters.append($0) }
+    /// Returns once `current()` has been called `times` times in total.
+    func waitUntilCalled(times: Int = 1) async {
+        guard callCount < times else { return }
+        await withCheckedContinuation { calledWaiters.append((times, $0)) }
     }
 
     func resume() {
-        gate?.resume()
-        gate = nil
+        let waiting = gates
+        gates.removeAll()
+        waiting.forEach { $0.resume() }
     }
 }
 
 @MainActor
 private final class FakeMusicPlayer: FocusMusicPlaying {
     var nowPlaying = FocusMusicNowPlaying()
+    var isOtherAudioPlaying = false
     var failures: [String: FocusMusicPlaybackError] = [:]
     var resumeError: Error?
+    var skipError: Error?
     var beforeFailure: (() -> Void)?
+    /// Holds each `play` until `releasePlay()`, like a slow catalog lookup.
+    var suspendsPlay = false
     private(set) var attempts: [String] = []
     private(set) var pauseCount = 0
     private(set) var resumeCount = 0
     private(set) var skipCount = 0
     private(set) var observeCount = 0
     private(set) var onChange: (@MainActor () -> Void)?
+    private var playGate: CheckedContinuation<Void, Never>?
 
     func play(_ source: FocusMusicSource) async throws {
         attempts.append(source.id)
+        if suspendsPlay {
+            await withCheckedContinuation { playGate = $0 }
+        }
         if let failure = failures[source.id] {
             beforeFailure?()
             throw failure
         }
         nowPlaying = FocusMusicNowPlaying(status: .playing, title: "T-\(source.id)")
+    }
+
+    func releasePlay() {
+        playGate?.resume()
+        playGate = nil
     }
 
     func pause() {
@@ -810,6 +1372,7 @@ private final class FakeMusicPlayer: FocusMusicPlaying {
 
     func skipToNext() async throws {
         skipCount += 1
+        if let skipError { throw skipError }
     }
 
     func observe(_ onChange: @escaping @MainActor () -> Void) {

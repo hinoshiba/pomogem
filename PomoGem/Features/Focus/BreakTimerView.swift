@@ -242,7 +242,14 @@ struct BreakTimerView: View {
     private var timerHeader: some View {
         HStack {
             TimerRotationControls()
-            FocusMusicButton()
+            // Closes its sheet before the break ends so the break-end
+            // alarm's pinned Stop is never under it (Docs/FocusMusic.md).
+            FocusMusicButton(
+                keepsSheetClosed: FocusMusicSheetPolicy.keepsSheetClosed(
+                    isRunning: true,
+                    remainingSeconds: remaining
+                )
+            )
             Spacer()
             Button { closeBreak() } label: {
                 Image(systemName: "xmark")

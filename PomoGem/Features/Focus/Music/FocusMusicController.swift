@@ -19,10 +19,14 @@ protocol FocusMusicSubscriptionChecking {
 }
 
 /// Drives the Music app (`SystemMusicPlayer`): PomoGem stays in the
-/// foreground and has no audio session or background mode of its own.
+/// foreground, and no music plays through PomoGem's own audio session or a
+/// background audio mode.
 @MainActor
 protocol FocusMusicPlaying: AnyObject {
     var nowPlaying: FocusMusicNowPlaying { get }
+    /// Whether any other app (including the Music app) is playing audio right
+    /// now. Reading it activates nothing.
+    var isOtherAudioPlaying: Bool { get }
     /// Replaces the Music app's queue with `source` and starts it. Throws
     /// `FocusMusicPlaybackError`.
     func play(_ source: FocusMusicSource) async throws
@@ -76,7 +80,9 @@ final class FocusMusicController {
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private var isObservingPlayer = false
     @ObservationIgnored private var didLoadCatalogTitles = false
-    @ObservationIgnored private var subscriptionCheck: Task<FocusMusicSubscriptionState, Never>?
+    @ObservationIgnored private var subscriptionCheck: Task<Void, Never>?
+    /// A pause tapped while a start was in flight: the start ends paused.
+    @ObservationIgnored private var pausesPendingStart = false
 
     init(
         authorizer: any FocusMusicAuthorizing,
@@ -106,6 +112,36 @@ final class FocusMusicController {
 
     var chosenSource: FocusMusicSource? {
         FocusMusicPreferences.chosenSource(defaults: defaults)
+    }
+
+    /// What a timer header tap would do with the state as it is now. The
+    /// button's icon and VoiceOver label follow it, so they never promise a
+    /// pause that the tap would not perform.
+    var headerAction: FocusMusicHeaderAction {
+        FocusMusicHeaderPolicy.action(
+            availability: availability,
+            chosen: chosenSource,
+            nowPlaying: nowPlaying,
+            queuedSourceID: queuedSourceID,
+            isBusy: isBusy
+        )
+    }
+
+    /// What the sheet's play/pause button would do now.
+    var transportToggle: FocusMusicTransportPolicy.Toggle {
+        FocusMusicTransportPolicy.toggle(
+            availability: availability,
+            chosen: chosenSource,
+            nowPlaying: nowPlaying,
+            queuedSourceID: queuedSourceID
+        )
+    }
+
+    var showsNowPlaying: Bool {
+        FocusMusicTransportPolicy.showsNowPlaying(
+            availability: availability,
+            nowPlaying: nowPlaying
+        )
     }
 
     /// The catalog's (localized) title when known, else our Japanese label.
@@ -157,25 +193,34 @@ final class FocusMusicController {
     }
 
     /// Concurrent callers (the sheet appearing while the timer button is
-    /// tapped) share one request instead of racing two answers.
+    /// tapped) share one request instead of racing two answers. The shared
+    /// task stores the answer itself before it finishes, so every caller,
+    /// whichever resumes first, reads the new answer when its await returns.
     private func checkSubscription() async {
         if let inFlight = subscriptionCheck {
-            _ = await inFlight.value
+            await inFlight.value
             return
         }
-        subscription = .checking
+        subscription = FocusMusicSubscriptionPolicy.stateWhileChecking(subscription)
         let subscriptions = self.subscriptions
-        let check = Task { @MainActor () -> FocusMusicSubscriptionState in
+        // Created and stored before this function suspends, and the main
+        // actor runs the task only after that, so it clears its own slot.
+        let check = Task { @MainActor [weak self] in
+            let result: FocusMusicSubscriptionState
             do {
-                return .known(try await subscriptions.current())
+                result = .known(try await subscriptions.current())
             } catch {
-                return .failed
+                result = .failed
             }
+            guard let self else { return }
+            subscriptionCheck = nil
+            subscription = FocusMusicSubscriptionPolicy.stateAfterCheck(
+                subscription,
+                result: result
+            )
         }
         subscriptionCheck = check
-        let result = await check.value
-        subscriptionCheck = nil
-        subscription = result
+        await check.value
     }
 
     // MARK: - Actions
@@ -212,6 +257,17 @@ final class FocusMusicController {
         return action
     }
 
+    /// Whether the timer button should open the sheet after a tap that
+    /// performed `action`: also when a play or resume did not work.
+    func presentsSheet(after action: FocusMusicHeaderAction) -> Bool {
+        FocusMusicHeaderPolicy.presentsSheet(
+            after: action,
+            availability: availability,
+            hint: hint,
+            isPlaying: isPlaying
+        )
+    }
+
     /// A row tap in the sheet: remember the choice, then play it when
     /// possible. A first tap may ask for permission (the person's own tap).
     @discardableResult
@@ -242,22 +298,23 @@ final class FocusMusicController {
 
     /// The sheet's play/pause control.
     func togglePlayback() async {
-        guard availability == .ready || isPlaying else { return }
-        if isPlaying {
+        switch transportToggle {
+        case .pause:
             pause()
-            return
-        }
-        guard let chosen = chosenSource else { return }
-        if queuedSourceID != nil,
-           nowPlaying.status == .paused || nowPlaying.status == .interrupted {
+        case .resume:
             await resume()
-        } else {
+        case .play(let chosen):
             await startPlayback(from: chosen)
+        case .unavailable:
+            break
         }
     }
 
+    /// Always allowed once authorized, even while a start is in flight: the
+    /// person's pause wins, and that start then ends paused.
     func pause() {
         guard authorization == .authorized else { return }
+        if isBusy { pausesPendingStart = true }
         player.pause()
         syncNowPlaying()
     }
@@ -290,22 +347,28 @@ final class FocusMusicController {
     private func startPlayback(from chosen: FocusMusicSource) async {
         guard authorization == .authorized, !isBusy else { return }
         isBusy = true
+        pausesPendingStart = false
         defer {
             isBusy = false
+            pausesPendingStart = false
             syncNowPlaying()
         }
         hint = nil
         for source in FocusMusicCatalog.fallbackOrder(startingWith: chosen) {
+            // Paused while an earlier source was being tried: start nothing.
+            if pausesPendingStart { return }
             do {
                 try await player.play(source)
                 queuedSourceID = source.id
-                if case .failed = subscription {
-                    // Catalog music just started, so this person can play it.
+                if case .known = subscription {} else {
+                    // Catalog music just started, so this person can play
+                    // it. A later failed re-check keeps this answer.
                     subscription = .known(FocusMusicSubscription(
                         canPlayCatalogContent: true,
                         canBecomeSubscriber: false
                     ))
                 }
+                if pausesPendingStart { player.pause() }
                 return
             } catch let error as FocusMusicPlaybackError where error.triesNextSource {
                 continue
@@ -339,7 +402,8 @@ final class FocusMusicController {
 
     /// D4.5: with 「集中を始めたら再生する」 on, a focus that has just started
     /// on this iPhone starts the chosen source once. It never prompts, never
-    /// replaces music that is already playing, and never stops music later.
+    /// replaces music or other audio (another app's podcast or music) that is
+    /// already playing, and never stops music later.
     func autoplayIfNeeded(
         sessionID: UUID?,
         startedAt: Date?,
@@ -362,7 +426,8 @@ final class FocusMusicController {
             isStartedOnThisIPhone: isStartedOnThisIPhone,
             now: now(),
             lastAutoplayedSessionID: FocusMusicPreferences.lastAutoplayedSessionID(defaults: defaults),
-            playback: nowPlaying.status
+            playback: nowPlaying.status,
+            isOtherAudioPlaying: player.isOtherAudioPlaying
         )
         guard FocusMusicAutoplayPolicy.shouldAutoplay(input),
               let chosen = input.chosen,

@@ -162,6 +162,55 @@ enum FocusMusicAvailability: Equatable, Sendable {
     /// No catalog playback and no offer: play controls are hidden.
     case unavailable
     case ready
+
+    /// PomoGem may read and control the Music app's player (pause, resume,
+    /// next), whatever the subscription says. Those are the Music app's
+    /// standard controls and never replace what it plays.
+    var isAuthorized: Bool {
+        switch self {
+        case .needsAuthorization, .denied, .restricted:
+            false
+        case .checking, .checkFailed, .subscriptionOffer, .unavailable, .ready:
+            true
+        }
+    }
+
+    /// A row tap in the sheet can lead to playback: it plays, asks for
+    /// permission first, waits for or retries the subscription check, or
+    /// opens Apple's offer. Otherwise (D4.3: no subscription and no offer, or
+    /// no permission) the rows only remember a choice and show no play mark.
+    var allowsRowPlayback: Bool {
+        switch self {
+        case .denied, .restricted, .unavailable:
+            false
+        case .checking, .needsAuthorization, .checkFailed, .subscriptionOffer, .ready:
+            true
+        }
+    }
+}
+
+/// How a subscription check updates the stored answer. The sheet re-checks
+/// every time it opens, so a check must never make a known answer worse.
+enum FocusMusicSubscriptionPolicy {
+    /// While a check runs, a known answer stays in place: the sheet does not
+    /// flash a spinner, and a row or timer tap during the check plays at once.
+    static func stateWhileChecking(
+        _ current: FocusMusicSubscriptionState
+    ) -> FocusMusicSubscriptionState {
+        if case .known = current { return current }
+        return .checking
+    }
+
+    /// A failed re-check (offline, or MusicKit unable to reach Apple) keeps a
+    /// known answer, including one that playback itself proved. A successful
+    /// check always wins, so a lapsed subscription is still noticed.
+    static func stateAfterCheck(
+        _ current: FocusMusicSubscriptionState,
+        result: FocusMusicSubscriptionState
+    ) -> FocusMusicSubscriptionState {
+        if result == .failed, case .known = current { return current }
+        return result
+    }
 }
 
 enum FocusMusicAvailabilityPolicy {
@@ -311,13 +360,13 @@ enum FocusMusicHeaderPolicy {
         queuedSourceID: String?,
         isBusy: Bool
     ) -> FocusMusicHeaderAction {
-        if isBusy { return .ignore }
-        // Music that is playing can always be paused from the timer, even if
-        // the subscription answer is still pending.
-        if availability == .ready || availability == .checking,
-           nowPlaying.status == .playing {
+        // Music that is playing can always be paused from the timer: while
+        // the subscription answer is pending, missing or negative (a
+        // person's own library music), and while a start is in flight.
+        if availability.isAuthorized, nowPlaying.status == .playing {
             return .pause
         }
+        if isBusy { return .ignore }
         guard availability == .ready, let chosen else { return .presentSheet }
         switch nowPlaying.status {
         case .playing:
@@ -329,6 +378,86 @@ enum FocusMusicHeaderPolicy {
         case .stopped:
             return .play(chosen)
         }
+    }
+
+    /// After a header tap: open the sheet when the tap asked for it, or when
+    /// a play or resume did not work, so the gentle hint, Apple's offer or
+    /// the permission card is seen instead of nothing happening (D4.3).
+    static func presentsSheet(
+        after action: FocusMusicHeaderAction,
+        availability: FocusMusicAvailability,
+        hint: FocusMusicHint?,
+        isPlaying: Bool
+    ) -> Bool {
+        switch action {
+        case .presentSheet:
+            true
+        case .play, .resume:
+            hint != nil || (availability != .ready && !isPlaying)
+        case .pause, .ignore:
+            false
+        }
+    }
+}
+
+/// The sheet's play/pause button and now-playing card.
+enum FocusMusicTransportPolicy {
+    enum Toggle: Equatable, Sendable {
+        case pause
+        case resume
+        case play(FocusMusicSource)
+        /// Nothing to pause or resume, and the chosen source cannot start.
+        case unavailable
+    }
+
+    /// Pause and resume work whatever the subscription says; starting the
+    /// chosen source needs `.ready`.
+    static func toggle(
+        availability: FocusMusicAvailability,
+        chosen: FocusMusicSource?,
+        nowPlaying: FocusMusicNowPlaying,
+        queuedSourceID: String?
+    ) -> Toggle {
+        guard availability.isAuthorized else { return .unavailable }
+        switch nowPlaying.status {
+        case .playing:
+            return .pause
+        case .paused, .interrupted:
+            // Ready with nothing queued by this process: the chosen source
+            // replaces the paused queue, as on the timer.
+            if availability == .ready, queuedSourceID == nil, let chosen {
+                return .play(chosen)
+            }
+            return .resume
+        case .stopped:
+            if availability == .ready, let chosen { return .play(chosen) }
+            return .unavailable
+        }
+    }
+
+    /// Always when ready. Otherwise only while the Music app has something to
+    /// pause or resume, so music started earlier can still be paused here.
+    static func showsNowPlaying(
+        availability: FocusMusicAvailability,
+        nowPlaying: FocusMusicNowPlaying
+    ) -> Bool {
+        availability == .ready
+            || (availability.isAuthorized && nowPlaying.status != .stopped)
+    }
+}
+
+/// When the timer's music sheet must be closed (#32 completion alarm).
+enum FocusMusicSheetPolicy {
+    /// The sheet closes this long before the end, so it is gone before the
+    /// completion alarm starts and VoiceOver focus moves to its Stop control.
+    static let closesBeforeEndSeconds = 1
+
+    /// True from the last second of a running phase on, including after its
+    /// end while the timer screen stays up (a break's end). False while idle
+    /// or paused. The sheet is modal: under it the pinned Stop button, the
+    /// VoiceOver focus move and Magic Tap on the timer would be out of reach.
+    static func keepsSheetClosed(isRunning: Bool, remainingSeconds: Int) -> Bool {
+        isRunning && remainingSeconds <= closesBeforeEndSeconds
     }
 }
 
@@ -350,11 +479,16 @@ enum FocusMusicAutoplayPolicy {
         var isStartedOnThisIPhone: Bool
         var now: Date
         var lastAutoplayedSessionID: UUID?
+        /// The Music app's own state.
         var playback: FocusMusicPlaybackStatus
+        /// Any other app playing audio (a podcast, another music app). The
+        /// Music app's non-mixable playback would interrupt it.
+        var isOtherAudioPlaying: Bool
     }
 
-    /// Autoplay never asks for permission and never replaces music that is
-    /// already playing; each focus session starts music at most once.
+    /// Autoplay never asks for permission and never replaces music or other
+    /// audio that is already playing; each focus session starts music at
+    /// most once.
     static func shouldAutoplay(_ input: Input) -> Bool {
         guard input.isEnabled,
               input.chosen != nil,
@@ -363,7 +497,8 @@ enum FocusMusicAutoplayPolicy {
               let sessionID = input.sessionID,
               sessionID != input.lastAutoplayedSessionID,
               let startedAt = input.startedAt,
-              input.playback != .playing
+              input.playback != .playing,
+              !input.isOtherAudioPlaying
         else { return false }
         let age = input.now.timeIntervalSince(startedAt)
         return age <= freshStartWindow && age >= -futureStartTolerance

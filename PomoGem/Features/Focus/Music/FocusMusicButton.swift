@@ -13,9 +13,32 @@ struct FocusMusicButton: View {
         var sessionID: UUID?
         var startedAt: Date?
         var isStartedOnThisIPhone: Bool
+
+        /// FocusView's timer state as the autoplay gate reads it: a session
+        /// only while the focus runs (not paused, not a break or an end),
+        /// and 「started on this iPhone」 only for a local start, never for a
+        /// focus continued from iCloud.
+        static func make(
+            phase: PomodoroPhase,
+            currentSessionID: UUID?,
+            phaseStartedAt: Date?,
+            origin: FocusRecoveryOrigin
+        ) -> FocusStart {
+            FocusStart(
+                sessionID: phase == .focusing ? currentSessionID : nil,
+                startedAt: phaseStartedAt,
+                isStartedOnThisIPhone: origin == .local
+            )
+        }
     }
 
+    /// Set by FocusView: a focus is on screen, so the sheet never offers a
+    /// way out of the app (D4.1), and autoplay may start.
     var focusStart: FocusStart?
+    /// `FocusMusicSheetPolicy.keepsSheetClosed`: the phase is about to end or
+    /// has ended. The sheet closes at once and cannot be opened, so the
+    /// completion alarm's Stop control is never under it (#32).
+    var keepsSheetClosed: Bool
 
     @Environment(TimerOrientationController.self) private var orientation: TimerOrientationController?
     @State private var music = FocusMusicController.shared
@@ -23,8 +46,9 @@ struct FocusMusicButton: View {
     @State private var suppressesNextTap = false
     @AppStorage(FocusMusicPreferences.sourceKey) private var chosenSourceID = ""
 
-    init(focusStart: FocusStart? = nil) {
+    init(focusStart: FocusStart? = nil, keepsSheetClosed: Bool = false) {
         self.focusStart = focusStart
+        self.keepsSheetClosed = keepsSheetClosed
     }
 
     var body: some View {
@@ -36,23 +60,34 @@ struct FocusMusicButton: View {
         }
         .foregroundStyle(music.isPlaying ? PomoGemTheme.amber : PomoGemTheme.muted)
         .buttonStyle(PomoGemBareButtonStyle())
+        // Near and after the end, a tap that could only open the sheet does
+        // nothing, so it is shown as unavailable instead.
+        .disabled(keepsSheetClosed && music.headerAction == .presentSheet)
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.5).onEnded { _ in
                 // The button's own tap still arrives when the finger lifts.
                 suppressesNextTap = true
-                isSheetPresented = true
+                presentSheet()
             }
         )
         .accessibilityLabel(accessibilityLabel)
         .accessibilityValue(accessibilityValue)
         .accessibilityHint(accessibilityHint)
         .accessibilityAction(named: Text("音楽を選ぶ", tableName: "Focus", comment: "Focus music list: its heading, and the timer button's VoiceOver action that opens it")) {
-            isSheetPresented = true
+            presentSheet()
         }
         .accessibilityIdentifier("timer.music")
         .sheet(isPresented: $isSheetPresented, onDismiss: { suppressesNextTap = false }) {
-            FocusMusicSheet(controller: music)
+            FocusMusicSheet(controller: music, allowsLeavingApp: focusStart == nil)
                 .modifier(FocusMusicSheetOrientation(isUpsideDown: isTimerUpsideDown))
+        }
+        .onChange(of: keepsSheetClosed) { _, closes in
+            guard closes, isSheetPresented else { return }
+            // Without the dismissal animation, so nothing modal is left on
+            // screen when the alarm starts and VoiceOver moves to its Stop.
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { isSheetPresented = false }
         }
         .task { await music.refresh() }
         .task(id: focusStart) {
@@ -65,14 +100,22 @@ struct FocusMusicButton: View {
         }
     }
 
+    private func presentSheet() {
+        guard !keepsSheetClosed else { return }
+        isSheetPresented = true
+    }
+
     private func tap() {
         if suppressesNextTap {
             suppressesNextTap = false
             return
         }
         Task {
-            if await music.handleHeaderTap() == .presentSheet {
-                isSheetPresented = true
+            let action = await music.handleHeaderTap()
+            // Also after a play that did not start, so its hint, Apple's
+            // offer or the permission card is seen (D4.3).
+            if music.presentsSheet(after: action) {
+                presentSheet()
             }
         }
     }
@@ -89,18 +132,17 @@ struct FocusMusicButton: View {
         FocusMusicCatalog.source(id: chosenSourceID).map(music.title(for:))
     }
 
-    private var isReadyToPlay: Bool {
-        music.availability == .ready && chosenTitle != nil
-    }
-
+    /// The label follows what the tap will do (`FocusMusicHeaderPolicy`),
+    /// never the playback state alone.
     private var accessibilityLabel: Text {
-        if music.isPlaying {
+        switch music.headerAction {
+        case .pause:
             return Text("集中用の音楽を一時停止", tableName: "Focus", comment: "VoiceOver label: pause the Music app from the timer")
-        }
-        if isReadyToPlay {
+        case .play, .resume, .ignore:
             return Text("集中用の音楽を再生", tableName: "Focus", comment: "VoiceOver label: play the chosen focus music from the timer")
+        case .presentSheet:
+            return Text("集中用の音楽を選ぶ", tableName: "Focus", comment: "VoiceOver label: open the focus music list from the timer")
         }
-        return Text("集中用の音楽を選ぶ", tableName: "Focus", comment: "VoiceOver label: open the focus music list from the timer")
     }
 
     private var accessibilityValue: Text {
@@ -114,10 +156,13 @@ struct FocusMusicButton: View {
     }
 
     private var accessibilityHint: Text {
-        if music.isPlaying || isReadyToPlay {
-            return Text("長押しで音楽を選べます", tableName: "Focus", comment: "VoiceOver hint: long press the timer music button to choose music")
+        if keepsSheetClosed {
+            return Text(verbatim: "")
         }
-        return Text("ミュージックアプリで再生する音楽を選びます", tableName: "Focus", comment: "VoiceOver hint: the timer music button opens the music list")
+        if music.headerAction == .presentSheet {
+            return Text("ミュージックアプリで再生する音楽を選びます", tableName: "Focus", comment: "VoiceOver hint: the timer music button opens the music list")
+        }
+        return Text("長押しで音楽を選べます", tableName: "Focus", comment: "VoiceOver hint: long press the timer music button to choose music")
     }
 }
 
