@@ -824,6 +824,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// The animated scale change whose rung is still baking off the main
     /// thread (its `jarScaleChangeCount`); nil once its textures are shown.
     private(set) var pendingScaleBakeChange: Int?
+    /// That change's background bake, which the deadline takes over.
+    private var pendingScaleBake: GemTextureAtlas.BackgroundBake?
     /// How many rung bakes missed `scaleBakeDeadline` and were finished in
     /// place for the visible bodies (Debug reviews and tests).
     private(set) var scaleBakeFallbackCount = 0
@@ -998,9 +1000,11 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         if bakesAhead {
             let change = jarScaleChangeCount
             pendingScaleBakeChange = change
-            GemTextureAtlas.shared.bakeInBackground(bakeRequests(for: bodies.map(\.descriptor))) { [weak self] in
+            pendingScaleBake = nil
+            let run = GemTextureAtlas.shared.bakeInBackground(bakeRequests(for: bodies.map(\.descriptor))) { [weak self] in
                 self?.adoptScaleBake(of: change)
             }
+            if pendingScaleBakeChange == change { pendingScaleBake = run }
             // Round 13: a bake still out after `scaleBakeDeadline` (a busy
             // device, a large pile) is finished in place for the bodies on
             // screen, so a stale texture never outlives the transition.
@@ -1013,6 +1017,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             }
         } else {
             pendingScaleBakeChange = nil
+            pendingScaleBake = nil
             bakeBodies(for: bodies.map(\.descriptor))
         }
         for pebble in bodies {
@@ -1048,22 +1053,34 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// of the scale it is moving to. A newer change hands its own over.
     private func adoptScaleBake(of change: Int) {
         guard jarScaleChangeCount == change else { return }
-        if pendingScaleBakeChange == change { pendingScaleBakeChange = nil }
+        if pendingScaleBakeChange == change {
+            pendingScaleBakeChange = nil
+            pendingScaleBake = nil
+        }
         livePebbles.forEach { $0.adoptJarScaleTexture() }
         if isIdlePaused { requestRedraw() }
     }
 
     /// `scaleBakeDeadline` passed and the background bake of `change` is
-    /// still out: bake what the visible bodies need here, in one parallel
-    /// pass, and show it. Bodies that are hidden or leaving for a fusion
-    /// wait for the background bake. Tests call it directly to stand in
-    /// for a slow bake.
+    /// still out: finish what the visible bodies need here and show it.
+    /// Round 14: the images the background bake has not started are baked
+    /// here in one parallel pass and the ones it is baking are waited for,
+    /// so none is baked twice (the two passes no longer compete for every
+    /// core at the end of the transition). Bodies that are hidden or
+    /// leaving for a fusion wait for the background bake. Tests call it
+    /// directly to stand in for a slow bake.
     func finishScaleBakeAtDeadline(of change: Int) {
         guard jarScaleChangeCount == change, pendingScaleBakeChange == change else { return }
         pendingScaleBakeChange = nil
         scaleBakeFallbackCount += 1
         let visible = livePebbles.filter { !$0.isHidden && !$0.isRemovedForBake && $0.alpha > 0 }
-        GemTextureAtlas.shared.bakeMissing(bakeRequests(for: visible.map(\.descriptor)))
+        let requests = bakeRequests(for: visible.map(\.descriptor))
+        if let run = pendingScaleBake {
+            pendingScaleBake = nil
+            GemTextureAtlas.shared.finishInBackgroundBake(run, names: Set(requests.map(\.name)))
+        }
+        // Anything the background bake never had (none, normally).
+        GemTextureAtlas.shared.bakeMissing(requests)
         visible.forEach { $0.adoptJarScaleTexture() }
         if isIdlePaused { requestRedraw() }
 #if DEBUG && targetEnvironment(simulator)
@@ -1279,6 +1296,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         appliesScheduledJarScale = false
         // The new bodies bake in place below: no rung bake is pending.
         pendingScaleBakeChange = nil
+        pendingScaleBake = nil
         let restoredScale = min(
             JarScalePolicy.resolvedScale(
                 current: jarScale,

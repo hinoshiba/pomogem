@@ -261,26 +261,42 @@ final class GemTextureAtlas {
     /// runs on the main actor once they are in, at once when nothing is
     /// missing. A jar-scale transition uses it (round 12), so the landing
     /// or fusion beat never waits for a whole pile's re-bake: the bodies
-    /// keep their current textures meanwhile.
+    /// keep their current textures meanwhile. The returned run (nil when
+    /// nothing was missing) can be finished early on the main thread
+    /// (`finishInBackgroundBake`).
+    @discardableResult
     func bakeInBackground(
         _ requests: [BakeRequest],
         completion: @escaping @MainActor @Sendable () -> Void
-    ) {
+    ) -> BackgroundBake? {
         var seen = Set<String>()
         let missing = requests.filter { entries[$0.name] == nil && seen.insert($0.name).inserted }
         guard !missing.isEmpty else {
             completion()
-            return
+            return nil
         }
+        let run = BackgroundBake(missing)
         DispatchQueue.global(qos: .userInitiated).async {
-            let images = Self.bake(missing)
+            run.bakeUnclaimed()
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
-                    GemTextureAtlas.shared.insert(images)
+                    GemTextureAtlas.shared.insert(run.takeResults())
                     completion()
                 }
             }
         }
+        return run
+    }
+
+    /// Finishes the images of `run` named in `names` now, on the calling
+    /// (main) thread (round 14): the ones no background worker has started
+    /// are baked here in one parallel pass, the ones already in flight are
+    /// waited for (at most one bake per core), and none is baked twice.
+    /// Everything `run` has finished by then is kept; the rest of it goes on
+    /// in the background and lands with its completion.
+    func finishInBackgroundBake(_ run: BackgroundBake, names: Set<String>) {
+        run.finish(names: names)
+        insert(run.takeResults())
     }
 
     /// Whether a launch pre-bake is still running (tests).
@@ -297,6 +313,75 @@ final class GemTextureAtlas {
         run.cancel()
         run.group.wait()
         insert(run.takeResults())
+    }
+
+    /// One background bake (`bakeInBackground`): each request is claimed
+    /// once, by a worker or by the main thread taking over at a deadline, so
+    /// no image is ever baked twice.
+    final class BackgroundBake: @unchecked Sendable {
+        private let requests: [BakeRequest]
+        private let condition = NSCondition()
+        private var claimed: [Bool]
+        private var finished: [Bool]
+        private var results: [(name: String, image: UIImage)] = []
+
+        init(_ requests: [BakeRequest]) {
+            self.requests = requests
+            claimed = Array(repeating: false, count: requests.count)
+            finished = Array(repeating: false, count: requests.count)
+        }
+
+        /// Every name the run bakes.
+        var names: [String] { requests.map(\.name) }
+
+        /// The workers' pass: bakes every request nobody has claimed yet.
+        func bakeUnclaimed() {
+            DispatchQueue.concurrentPerform(iterations: requests.count) { index in
+                guard claim(index) else { return }
+                complete(index, with: requests[index].make())
+            }
+        }
+
+        /// Bakes the unclaimed requests named in `names` on the calling
+        /// thread's pool, then waits until every one of `names` is done.
+        func finish(names: Set<String>) {
+            let wanted = requests.indices.filter { names.contains(requests[$0].name) }
+            let mine = wanted.filter(claim)
+            DispatchQueue.concurrentPerform(iterations: mine.count) { position in
+                let index = mine[position]
+                complete(index, with: requests[index].make())
+            }
+            condition.lock()
+            while wanted.contains(where: { !finished[$0] }) {
+                condition.wait()
+            }
+            condition.unlock()
+        }
+
+        /// Finished images not yet handed to the atlas.
+        func takeResults() -> [(name: String, image: UIImage)] {
+            condition.lock()
+            defer { condition.unlock() }
+            let taken = results
+            results = []
+            return taken
+        }
+
+        private func claim(_ index: Int) -> Bool {
+            condition.lock()
+            defer { condition.unlock() }
+            guard !claimed[index] else { return false }
+            claimed[index] = true
+            return true
+        }
+
+        private func complete(_ index: Int, with image: UIImage) {
+            condition.lock()
+            finished[index] = true
+            results.append((requests[index].name, image))
+            condition.broadcast()
+            condition.unlock()
+        }
     }
 
     /// One launch pre-bake: cancellation flag and finished images, shared

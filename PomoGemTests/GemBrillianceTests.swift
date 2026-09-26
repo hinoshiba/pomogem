@@ -2103,6 +2103,45 @@ extension GemBrillianceTests {
         rig.view.presentScene(nil)
     }
 
+    /// Round 14: at the deadline the main thread takes the background bake
+    /// over instead of baking the same images again: every image is baked
+    /// exactly once, the named ones are in when it returns, and the rest
+    /// still land with the background completion.
+    @MainActor
+    func testTheDeadlineTakesTheBackgroundBakeOverWithoutBakingTwice() throws {
+        final class Counter: @unchecked Sendable {
+            private let lock = NSLock()
+            private var counts: [String: Int] = [:]
+            func bump(_ name: String) { lock.lock(); counts[name, default: 0] += 1; lock.unlock() }
+            func count(_ name: String) -> Int { lock.lock(); defer { lock.unlock() }; return counts[name] ?? 0 }
+        }
+        let counter = Counter()
+        let tag = UUID().uuidString
+        let names = (0 ..< 48).map { "test.takeover.\(tag).\($0)" }
+        let requests = names.map { name in
+            GemTextureAtlas.BakeRequest(name: name) {
+                counter.bump(name)
+                // A few ms each, like a body bake, so some are in flight.
+                Thread.sleep(forTimeInterval: 0.004)
+                return UIGraphicsImageRenderer(size: CGSize(width: 4, height: 4)).image { _ in }
+            }
+        }
+        let landed = expectation(description: "background completion")
+        let run = try XCTUnwrap(GemTextureAtlas.shared.bakeInBackground(requests) { landed.fulfill() })
+        let visible = Set(names.prefix(20))
+        GemTextureAtlas.shared.finishInBackgroundBake(run, names: visible)
+        for name in visible {
+            XCTAssertTrue(GemTextureAtlas.shared.hasImage(named: name), "\(name) is in when the deadline returns")
+        }
+        wait(for: [landed], timeout: 30)
+        for name in names {
+            XCTAssertTrue(GemTextureAtlas.shared.hasImage(named: name))
+            XCTAssertEqual(counter.count(name), 1, "\(name) baked once")
+        }
+        GemTextureAtlas.shared.removeImages(named: names)
+        XCTAssertNil(GemTextureAtlas.shared.bakeInBackground([]) {}, "Nothing missing: no run")
+    }
+
     /// A presented, drawn jar whose area budget sets its scale (in colours
     /// no other test bakes), shrunk by a narrower stage: an animated rung
     /// change. The new rung's images are dropped first, so they are misses.
