@@ -1366,6 +1366,8 @@ struct JarAccumulationPresenceBackdrop: View {
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    /// The app's toast (optional: previews and share renders have none).
+    @Environment(AppRouter.self) private var router: AppRouter?
 
     private var reduceMotion: Bool {
         reduceMotionOverride ?? systemReduceMotion
@@ -1456,6 +1458,11 @@ struct JarAccumulationPresenceBackdrop: View {
                         y: lightFieldTop
                             + lightFieldHeight * CGFloat(layout.traceBandYFraction)
                     )
+                    // Round 14: a landing or manual-entry toast rests over
+                    // the collar for about 3 s; the pill steps back under
+                    // it instead of showing through.
+                    .opacity(router?.toast == nil ? 1 : 0)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: router?.toast == nil)
                 }
             }
         }
