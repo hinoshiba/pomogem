@@ -67,7 +67,10 @@ final class UITestLocalStateIsolationTests: XCTestCase {
 
     /// A pending completion from a test that ended during its alarm must not
     /// open the next test on the save-failure screen. The test's own
-    /// relaunches keep it, because relaunch tests recover that timer.
+    /// relaunches keep it, because relaunch tests recover that timer. The
+    /// timer's OS notification requests follow the same rule: the next test
+    /// retires them, so a forgotten 25-minute focus cannot put its banner
+    /// over a later test.
     func testANewUITestForgetsTheEarlierTestsTimerButItsOwnRelaunchKeepsIt() throws {
         let defaults = UserDefaults.standard
         let savedScenario = defaults.string(forKey: UITestLocalStateIsolation.scenarioDefaultsKey)
@@ -110,20 +113,34 @@ final class UITestLocalStateIsolationTests: XCTestCase {
             FocusRestCadenceStore.record(sessionID: sessionID, contributionGrams: 250)
         }
 
-        XCTAssertTrue(UITestLocalStateIsolation.beginScenarioIfNeeded(environment: [key: "test-a"]))
+        // Counts instead of clearing this test host's real notification center.
+        var notificationRetirements = 0
+        func begin(_ environment: [String: String]) -> Bool {
+            UITestLocalStateIsolation.beginScenarioIfNeeded(
+                environment: environment,
+                retireNotifications: { notificationRetirements += 1 }
+            )
+        }
+
+        XCTAssertTrue(begin([key: "test-a"]))
+        XCTAssertEqual(notificationRetirements, 1)
         try leaveATestBehind()
 
-        // Test A relaunches its own app: everything stays for it to recover.
-        XCTAssertFalse(UITestLocalStateIsolation.beginScenarioIfNeeded(environment: [key: "test-a"]))
+        // Test A relaunches its own app: everything stays for it to recover,
+        // including the focus-end request its recovered timer owns.
+        XCTAssertFalse(begin([key: "test-a"]))
         XCTAssertNotNil(FocusPersistence.load())
         XCTAssertEqual(DeferredFocusCompletionStore.sessionID(), sessionID)
+        XCTAssertEqual(notificationRetirements, 1)
 
         // No scenario (an ordinary Debug or Release-like launch): untouched.
-        XCTAssertFalse(UITestLocalStateIsolation.beginScenarioIfNeeded(environment: [:]))
+        XCTAssertFalse(begin([:]))
         XCTAssertNotNil(FocusPersistence.load())
+        XCTAssertEqual(notificationRetirements, 1)
 
-        // Test B's first launch starts clean.
-        XCTAssertTrue(UITestLocalStateIsolation.beginScenarioIfNeeded(environment: [key: "test-b"]))
+        // Test B's first launch starts clean, without test A's requests.
+        XCTAssertTrue(begin([key: "test-b"]))
+        XCTAssertEqual(notificationRetirements, 2)
         XCTAssertNil(FocusPersistence.load())
         XCTAssertNil(DeferredFocusCompletionStore.sessionID())
         XCTAssertFalse(TimerCompletionAlertAcknowledgementStore.contains(sessionID: sessionID))
