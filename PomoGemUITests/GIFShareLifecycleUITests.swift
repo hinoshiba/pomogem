@@ -414,7 +414,7 @@ final class GIFShareLifecycleUITests: XCTestCase {
         // it. Bring it back, clear of the navigation bar and the pinned
         // share bar, first.
         let primaryShare = app.descendants(matching: .any)["share.primary-action"]
-        XCTAssertTrue(scrollUntilHittable(include, avoiding: primaryShare))
+        XCTAssertTrue(scrollUntilHittable(include, avoiding: primaryShare, searchingTowardTop: true))
         tapUntilGone(include, "Including self-reported time must retire the inline button")
         XCTAssertTrue(waitForNonExistence(notice, timeout: 8))
         app.navigationBars["カードにする"].buttons["閉じる"].tap()
@@ -594,6 +594,7 @@ final class GIFShareLifecycleUITests: XCTestCase {
     private func scrollUntilHittable(
         _ element: XCUIElement,
         avoiding obstruction: XCUIElement,
+        searchingTowardTop: Bool = false,
         attempts: Int = 8
     ) -> Bool {
         // A fast fling can carry the element past the top, where XCTest still
@@ -612,14 +613,36 @@ final class GIFShareLifecycleUITests: XCTestCase {
                 && (!navigationBar.exists || element.frame.minY >= navigationBar.frame.maxY)
         }
         for _ in 0..<attempts {
+            if element.exists { _ = waitUntilFrameSettles(element, timeout: 3) }
             if isClear() { return true }
-            if navigationBar.exists,
-               element.exists,
-               element.frame.minY < navigationBar.frame.maxY {
-                app.swipeDown(velocity: .slow)
-            } else {
-                app.swipeUp(velocity: .slow)
+            guard element.exists, obstruction.exists else {
+                // Not laid out yet: search in the given direction.
+                if searchingTowardTop {
+                    app.swipeDown(velocity: .slow)
+                } else {
+                    app.swipeUp(velocity: .slow)
+                }
+                continue
             }
+            // Laid out but not clear: drag by the distance that is missing.
+            // At AX5 on a 4.7-inch iPhone the band between the navigation
+            // bar and the share bar is shorter than a slow swipe, and whole
+            // swipes kept carrying the element from one side to the other.
+            let top = navigationBar.exists ? navigationBar.frame.maxY : app.windows.firstMatch.frame.minY
+            let bottom = obstruction.frame.minY - 12
+            let frame = element.frame
+            let correction = frame.minY < top
+                ? top - frame.minY + 8
+                : bottom - frame.maxY - 8
+            let distance = min(300, max(40, abs(correction))) * (correction < 0 ? -1 : 1)
+            // Hold at the end so the list does not coast past the band.
+            let start = app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            start.press(
+                forDuration: 0.05,
+                thenDragTo: start.withOffset(CGVector(dx: 0, dy: distance)),
+                withVelocity: .slow,
+                thenHoldForDuration: 0.2
+            )
         }
         return isClear()
     }
