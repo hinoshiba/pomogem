@@ -39,6 +39,36 @@ def read_release_version(project_source: str) -> tuple[str, str]:
     return values[0], values[1]
 
 
+def read_app_usage_descriptions(configuration_source: str) -> tuple[str, ...]:
+    """Read the reviewed permission prompts from AppStore/configuration.yml.
+
+    The top-level `app_usage_descriptions:` list is the single reviewed list:
+    validate-store-metadata.py compares it with PomoGem/Info.plist and the
+    archive verifier with the archived app. A branch that adds a permission
+    prompt adds one line here (and its purpose string elsewhere); nothing else
+    hard-codes the set.
+    """
+    import re
+
+    lines = configuration_source.splitlines()
+    starts = [index for index, line in enumerate(lines) if line.rstrip() == "app_usage_descriptions:"]
+    if len(starts) != 1:
+        raise ValueError("configuration.yml must declare app_usage_descriptions exactly once")
+    values = []
+    for line in lines[starts[0] + 1:]:
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if not line.startswith(" "):
+            break
+        match = re.fullmatch(r"  - (NS[A-Za-z]+UsageDescription)\s*", line)
+        if match is None:
+            raise ValueError("configuration.yml app_usage_descriptions must list only NS*UsageDescription keys")
+        values.append(match.group(1))
+    if not values or len(values) != len(set(values)):
+        raise ValueError("configuration.yml app_usage_descriptions must be a non-empty list without duplicates")
+    return tuple(values)
+
+
 def validate_bundle_capability_allowlist(
     entitlements: dict,
     *,

@@ -392,7 +392,9 @@ if app_groups != [(2, "shared_screen_time: group.com.hinoshiba.pomogem")]:
     fail("configuration.yml must declare only the exact shared Screen Time App Group")
 # Permission prompts are part of the reviewed shipping surface. AlarmKit is
 # authorized by NSAlarmKitUsageDescription alone (no entitlement exists), so
-# its prompt is pinned here instead of in the capability allowlist.
+# its prompt is pinned here instead of in the capability allowlist. This list
+# is also what Scripts/verify-release-archive.sh accepts in the archive, so a
+# branch that adds a prompt adds exactly one line to configuration.yml.
 usage_descriptions = yaml_list(configuration_entries, 0, "app_usage_descriptions", "app_usage_descriptions")
 try:
     with (ROOT / "PomoGem/Info.plist").open("rb") as handle:
@@ -400,8 +402,13 @@ try:
 except (OSError, ValueError, plistlib.InvalidFileException):
     fail("PomoGem/Info.plist is missing or malformed")
 declared_usage = {key for key in app_info if key.startswith("NS") and key.endswith("UsageDescription")}
-if len(usage_descriptions) != len(set(usage_descriptions)) or set(usage_descriptions) != declared_usage:
-    fail("configuration.yml app_usage_descriptions differ from the permission prompts in PomoGem/Info.plist")
+if len(usage_descriptions) != len(set(usage_descriptions)):
+    fail("configuration.yml app_usage_descriptions lists a permission prompt twice")
+if set(usage_descriptions) != declared_usage:
+    unlisted = ", ".join(sorted(declared_usage - set(usage_descriptions))) or "none"
+    undeclared = ", ".join(sorted(set(usage_descriptions) - declared_usage)) or "none"
+    fail("configuration.yml app_usage_descriptions differ from the permission prompts in PomoGem/Info.plist "
+         f"(add to app_usage_descriptions: {unlisted}; not in Info.plist: {undeclared})")
 if any(not isinstance(app_info[key], str) or not app_info[key].strip() for key in declared_usage):
     fail("every permission prompt in PomoGem/Info.plist needs a purpose string")
 expected_source_entitlements = {

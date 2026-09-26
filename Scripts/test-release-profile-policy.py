@@ -16,6 +16,7 @@ from typing import Optional
 
 sys.dont_write_bytecode = True
 from release_profile_policy import (validate_profile_cloud_environment, read_release_version,
+                                    read_app_usage_descriptions,
                                     validate_bundle_capability_allowlist,
                                     validate_archive_signing_classes)
 
@@ -400,7 +401,7 @@ class SourceReleaseVersionTests(unittest.TestCase):
 
 
 class ArchiveMetadataTopologyTests(unittest.TestCase):
-    def run_archive_metadata(self, root: Path, *, mutation=None):
+    def run_archive_metadata(self, root: Path, *, mutation=None, reviewed_usage: Optional[str] = None):
         script = Path(__file__).with_name("verify-release-archive.sh").read_text()
         source = next(source for source in re.findall(r"<<'PY'\n(.*?)\nPY(?:\n|$)", script, re.DOTALL)
                       if "def validate_bundle_info(" in source)
@@ -449,6 +450,11 @@ class ArchiveMetadataTopologyTests(unittest.TestCase):
                   widget / "Info.plist": widget_info, monitor / "Info.plist": monitor_info,
                   app / "PrivacyInfo.xcprivacy": app_privacy, widget / "PrivacyInfo.xcprivacy": privacy,
                   monitor / "PrivacyInfo.xcprivacy": monitor_privacy}
+        # The reviewed prompts (configuration.yml app_usage_descriptions in a
+        # real run) are the fixture app's own, taken before any mutation: a
+        # branch that adds a prompt to the fixture needs no second list here.
+        reviewed_usage = reviewed_usage if reviewed_usage is not None else ",".join(
+            sorted(key for key in app_info if key.startswith("NS") and key.endswith("UsageDescription")))
         if mutation:
             mutation(values, app, monitor)
         for path, value in values.items():
@@ -456,7 +462,8 @@ class ArchiveMetadataTopologyTests(unittest.TestCase):
         environment = dict(os.environ, POMOGEM_AUDIT_APP_BUNDLE_ID=identifiers["app"],
             POMOGEM_AUDIT_WIDGET_BUNDLE_ID=identifiers["widget"], POMOGEM_AUDIT_MONITOR_BUNDLE_ID=identifiers["monitor"],
             POMOGEM_AUDIT_TEAM_ID="fixture-team", POMOGEM_AUDIT_MARKETING_VERSION="1.1.0",
-            POMOGEM_AUDIT_BUILD_NUMBER="10", POMOGEM_AUDIT_MINIMUM_IOS="17.0")
+            POMOGEM_AUDIT_BUILD_NUMBER="10", POMOGEM_AUDIT_MINIMUM_IOS="17.0",
+            POMOGEM_AUDIT_APP_USAGE_DESCRIPTIONS=reviewed_usage)
         return subprocess.run([sys.executable, "-c", source, str(root), str(root / "Info.plist"),
             str(app / "Info.plist"), str(widget / "Info.plist"), str(app / "PrivacyInfo.xcprivacy"),
             str(widget / "PrivacyInfo.xcprivacy"), str(monitor / "Info.plist"),
@@ -501,6 +508,14 @@ class ArchiveMetadataTopologyTests(unittest.TestCase):
                 result = self.run_archive_metadata(Path(directory), mutation=mutation)
                 self.assertEqual(result.returncode, 1)
                 self.assertIn(b"error:", result.stderr)
+    def test_the_archive_accepts_exactly_the_configured_permission_prompts(self):
+        for reviewed in ("", "NSMotionUsageDescription,NSPhotoLibraryAddUsageDescription",
+                         "NSMotionUsageDescription,NSPhotoLibraryAddUsageDescription,NSAlarmKitUsageDescription,"
+                         "NSMicrophoneUsageDescription", "not-a-usage-key"):
+            with self.subTest(reviewed=reviewed), tempfile.TemporaryDirectory() as directory:
+                result = self.run_archive_metadata(Path(directory), reviewed_usage=reviewed)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(b"permission prompts", result.stderr)
 
 
 class StoreShippingCapabilityTests(unittest.TestCase):
@@ -542,11 +557,19 @@ target_capabilities:
             root = Path(directory)
             (root / "project.yml").write_text('settings:\n  base:\n    MARKETING_VERSION: "1.1.0"\n    CURRENT_PROJECT_VERSION: "10"\n')
             for relative in ("PomoGem/PomoGem.entitlements", "PomoGemWidgets/PomoGemWidgets.entitlements",
-                             "PomoGemScreenTimeMonitor/PomoGemScreenTimeMonitor.entitlements",
-                             "PomoGem/Info.plist"):
+                             "PomoGemScreenTimeMonitor/PomoGemScreenTimeMonitor.entitlements"):
                 destination = root / relative
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 destination.write_bytes((repository / relative).read_bytes())
+            # A frozen Info.plist matching the fixture configuration above:
+            # the live one gains prompts on other branches, and running the
+            # validator on the repository already checks it.
+            (root / "PomoGem/Info.plist").write_bytes(plistlib.dumps({
+                "CFBundleDisplayName": "ポモジェム",
+                "NSMotionUsageDescription": "fixture",
+                "NSPhotoLibraryAddUsageDescription": "fixture",
+                "NSAlarmKitUsageDescription": "fixture",
+            }))
             if source_mutation:
                 source_mutation(root)
             namespace = {"ROOT": root, "read_release_version": read_release_version,
@@ -558,14 +581,21 @@ target_capabilities:
         self.check_metadata()
 
     def test_mismatched_version_or_unreviewed_target_capabilities_are_rejected(self):
-        mutations = [lambda text: text.replace('build_number: "10"', 'build_number: "9"'),
-                     lambda text: text.replace("    - time_sensitive_notifications\n", ""),
-                     lambda text: text.replace("  widget: []", "  widget:\n    - app_groups"),
-                     lambda text: text.replace("  screen_time_monitor:", "  unknown_extension:"),
-                     lambda text: text + "    - icloud_cloudkit\n",
-                     lambda text: text.replace("group.com.hinoshiba.pomogem", "group.unreviewed")]
-        for mutation in mutations:
-            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+        mutations = [
+            (lambda text: text.replace('build_number: "10"', 'build_number: "9"'), "build_number does not match"),
+            (lambda text: text.replace("    - time_sensitive_notifications\n", ""),
+             "app capabilities differ from the reviewed shipping allowlist"),
+            (lambda text: text.replace("  widget: []", "  widget:\n    - app_groups"),
+             "exactly the app, neutral Widget, and Screen Time monitor"),
+            (lambda text: text.replace("  screen_time_monitor:", "  unknown_extension:"),
+             "exactly the app, neutral Widget, and Screen Time monitor"),
+            (lambda text: text + "    - icloud_cloudkit\n",
+             "screen_time_monitor capabilities differ from the reviewed shipping allowlist"),
+            (lambda text: text.replace("group.com.hinoshiba.pomogem", "group.unreviewed"),
+             "exact shared Screen Time App Group"),
+        ]
+        for mutation, message in mutations:
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
                 self.check_metadata(config_mutation=mutation)
 
     def test_permission_prompts_must_match_the_reviewed_usage_descriptions(self):
@@ -625,8 +655,57 @@ target_capabilities:
                              "com.apple.developer.usernotifications.time-sensitive", value)
                       for value in (False, 1)]
         for mutation in mutations:
-            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+            with self.subTest(mutation=mutation), \
+                    self.assertRaisesRegex(ValueError, "differs from the reviewed shipping capability allowlist"):
                 self.check_metadata(source_mutation=mutation)
+
+
+class AppUsageDescriptionListTests(unittest.TestCase):
+    CONFIG = """app_groups:
+  shared_screen_time: group.com.hinoshiba.pomogem
+# Permission prompts
+app_usage_descriptions:
+  - NSMotionUsageDescription
+
+  # AlarmKit
+  - NSAlarmKitUsageDescription
+screen_time:
+  enabled_by_default: false
+"""
+
+    def test_the_list_is_read_in_order_up_to_the_next_top_level_key(self):
+        self.assertEqual(read_app_usage_descriptions(self.CONFIG),
+                         ("NSMotionUsageDescription", "NSAlarmKitUsageDescription"))
+
+    def test_missing_duplicate_empty_or_malformed_lists_are_refused(self):
+        for text in (
+            self.CONFIG.replace("app_usage_descriptions:", "usage_descriptions:"),
+            self.CONFIG + "app_usage_descriptions:\n  - NSCameraUsageDescription\n",
+            self.CONFIG.replace("  - NSAlarmKitUsageDescription", "  - NSMotionUsageDescription"),
+            self.CONFIG.replace("  - NSMotionUsageDescription\n", "").replace("  - NSAlarmKitUsageDescription\n", ""),
+            self.CONFIG.replace("  - NSAlarmKitUsageDescription", "  - NSAlarmKitUsageDescription extra"),
+            self.CONFIG.replace("  - NSAlarmKitUsageDescription", "    - NSAlarmKitUsageDescription"),
+            self.CONFIG.replace("  - NSAlarmKitUsageDescription", "  - com.apple.developer.alarmkit"),
+        ):
+            with self.subTest(text=text), self.assertRaisesRegex(ValueError, "app_usage_descriptions"):
+                read_app_usage_descriptions(text)
+
+    def test_the_repository_list_reads_the_same_in_both_release_scripts(self):
+        repository = Path(__file__).resolve().parents[1]
+        configuration = (repository / "AppStore/configuration.yml").read_text(encoding="utf-8")
+        source = (repository / "Scripts/validate-store-metadata.py").read_text()
+        module = ast.parse(source)
+        functions = [node for node in module.body if isinstance(node, ast.FunctionDef)
+                     and node.name in {"yaml_block", "yaml_list"}]
+        def fail(message):
+            raise ValueError(message)
+        namespace = {"fail": fail}
+        exec(compile(ast.Module(body=functions, type_ignores=[]), "metadata-functions", "exec"), namespace)
+        entries = [(len(line) - len(line.lstrip(" ")), line.strip())
+                   for line in configuration.splitlines() if line.strip()]
+        validator = namespace["yaml_list"](entries, 0, "app_usage_descriptions", "app_usage_descriptions")
+        self.assertEqual(tuple(validator), read_app_usage_descriptions(configuration))
+
 
 if __name__ == "__main__":
     unittest.main()
