@@ -1522,9 +1522,11 @@ struct LogView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
                         SectionEyebrow(text: "MONTHLY WRAPPED")
-                        Text("月ごとの瓶")
+                        // Not 「月ごとの瓶」: that is 積み上がり's 年月 shelf, a
+                        // different view (history-11).
+                        Text("月の振り返り", tableName: "Log", comment: "Log section title: the monthly Wrapped recaps")
                             .pomogemSectionTitle()
-                        Text("直近12か月を、月ごとの瓶で振り返れます。")
+                        Text("直近12か月を、月ごとにふり返れます。", tableName: "Log")
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
                     }
@@ -1615,7 +1617,11 @@ struct LogView: View {
                     }
 
                     if aggregatePageIsPartial {
-                        Text("ここでは最新\(BoundedHistoryPolicy.aggregateRootLimit)個を表示しています。生涯の質量は瓶の俯瞰画面で確認できます。")
+                        Text(
+                            "ここでは最新\(BoundedHistoryPolicy.aggregateRootLimit)個を表示しています。生涯の質量は、メニューの「積み上がりを見る」で確認できます。",
+                            tableName: "Log",
+                            comment: "Crystal archive note; the argument is how many crystals are listed"
+                        )
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
                             .fixedSize(horizontal: false, vertical: true)

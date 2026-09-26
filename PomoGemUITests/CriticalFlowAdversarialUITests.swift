@@ -406,7 +406,7 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         let olderMonths = app.buttons["log.past-history.from-months"]
         XCTAssertTrue(scrollUntilHittable(olderMonths, swiping: .up))
         let monthsAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        monthsAttachment.name = "記録 — 月ごとの瓶 leads to older months"
+        monthsAttachment.name = "記録 — 月の振り返り leads to older months"
         monthsAttachment.lifetime = .keepAlways
         add(monthsAttachment)
         olderMonths.tap()

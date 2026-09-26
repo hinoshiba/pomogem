@@ -1987,13 +1987,20 @@ struct HomeView: View {
 
     private var menuDestinationActions: some View {
         VStack(spacing: 2) {
-            menuActionButton(title: "記録を見る", detail: "推移・内訳・履歴", symbol: "chart.bar.fill") {
+            // The two subtitles name what only that screen holds (history-11):
+            // 記録 is where records and 記念石 are read and corrected;
+            // 積み上がり is the zoomable view of the jar.
+            menuActionButton(
+                title: "記録を見る",
+                detail: String(localized: "推移・履歴・記念石・月の振り返り", table: "Home", comment: "Home menu row detail: what 記録 holds"),
+                symbol: "chart.bar.fill"
+            ) {
                 showHomeMenu = false
                 router.selectedTab = .log
             }
             menuActionButton(
                 title: "積み上がりを見る",
-                detail: "まとまり粒・生涯の瓶・月ごとの瓶",
+                detail: String(localized: "今週・時間の核・結晶・年月の瓶", table: "Home", comment: "Home menu row detail: what 積み上がり holds"),
                 symbol: "circle.hexagongrid.fill"
             ) {
                 showHomeMenu = false
