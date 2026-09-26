@@ -1307,10 +1307,20 @@ struct HomeView: View {
             totalPebbleCount: totals.pebbleCount,
             projectionIsLowerBound: localProjectionNeedsMaintenance
         ) {
-            let physical = [physicalState.progressLabel, physicalState.nextFusionLabel]
-                .compactMap { $0 }
-                .joined(separator: "、")
-            components.append("瓶の物理整理：\(physical)")
+            // The count toward the next crystal, after the time value. It was
+            // prefixed 「瓶の物理整理：」, an accounting term.
+            components.append(contentsOf: [physicalState.progressLabel, physicalState.nextFusionLabel]
+                .compactMap { $0 })
+        }
+        let filledJarCount = JarAccumulationPresencePresentation
+            .state(totalGrams: totals.grams).completedCycleCount
+        if filledJarCount > 0 {
+            // The 「瓶N杯」 chip behind the glass is hidden from VoiceOver.
+            components.append(String(
+                localized: "瓶\(filledJarCount)杯ぶん満ちました",
+                table: "Home",
+                comment: "VoiceOver, jar value: how many times the jar has filled (2.5 kg each)"
+            ))
         }
         return components.joined(separator: "、")
     }

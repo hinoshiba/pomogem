@@ -998,6 +998,16 @@ enum JarAccumulationPresenceLayoutPresentation {
             traceBandYFraction: showsLifetimeCore ? 0.075 : 0.86
         )
     }
+
+    /// Home's metric HUD starts 88 pt below the top of the jar stage
+    /// (`HomeView.jarMetricHUD`). On a stage taller than the 420 pt bottle,
+    /// the band's fraction put the 「瓶N杯」 chip on 「積み上げた集中」
+    /// (walk-std-09), so with a core the chip is held above the HUD.
+    static let cycleChipMaximumCenterY: CGFloat = 72
+
+    static func cycleChipCenterY(bandY: CGFloat, showsLifetimeCore: Bool) -> CGFloat {
+        showsLifetimeCore ? min(bandY, cycleChipMaximumCenterY) : bandY
+    }
 }
 
 struct JarAccumulationLightFieldState: Equatable, Sendable {
@@ -1376,12 +1386,17 @@ struct JarAccumulationPresenceBackdrop: View {
                     }
                     .position(
                         x: proxy.size.width / 2,
-                        y: lightFieldTop
-                            + lightFieldHeight * CGFloat(layout.traceBandYFraction)
+                        y: JarAccumulationPresenceLayoutPresentation.cycleChipCenterY(
+                            bandY: lightFieldTop
+                                + lightFieldHeight * CGFloat(layout.traceBandYFraction),
+                            showsLifetimeCore: showsLifetimeCore
+                        )
                     )
                 }
             }
         }
+        // VoiceOver reads the filled-jar count from the jar itself
+        // (HomeView's fusion description), not from this hidden chip.
         .accessibilityHidden(true)
         .allowsHitTesting(false)
         .onAppear {
@@ -1805,6 +1820,17 @@ enum JarLifetimeCorePresentation {
     }
 }
 
+/// Where the time core's single label plate hangs (walk-std-09): its top
+/// edge sits a fixed optical gap below the prism's lower edge, measured from
+/// the core's centre, so it can never overlap the prism at any stage width.
+enum JarLifetimeCorePlateLayout {
+    static let prismGap: CGFloat = 8
+
+    static func plateTopOffset(dimension: CGFloat, prismDiameterFactor: CGFloat) -> CGFloat {
+        dimension * max(0, prismDiameterFactor) / 2 + prismGap
+    }
+}
+
 /// A noninteractive optical layer behind the SpriteKit bottle. The recent
 /// physical stones remain touchable in front; this centre makes compressed
 /// lifetime effort legible instead of letting higher tiers become a pile of
@@ -1822,11 +1848,6 @@ struct JarLifetimeCoreBackdrop: View {
         GeometryReader { proxy in
             let dimension = min(190, max(150, proxy.size.width * 0.48))
             let prismFactor = CGFloat(state.prismDiameterFactor)
-            // Place the label plate outside the prism with an optical 8–12 pt
-            // gap on the iPhone 15+ stage. It must never read as a sticker
-            // painted across the crystal.
-            let labelOffset = prismFactor / 2 + 0.17
-            let progressOffset = min(0.65, labelOffset + 0.19)
 
             ZStack {
                 Circle()
@@ -1860,14 +1881,33 @@ struct JarLifetimeCoreBackdrop: View {
                     radius: 18
                 )
 
+                // One plate under the prism (walk-std-09). There were two,
+                // centred 0.19 × dimension apart, so they overlapped at every
+                // stage width, and the first repeated the lifetime mass the
+                // HUD above already shows. The mass line remains only as the
+                // lower bound (「◯kg以上」) while the projection is partial.
+                // The plate's top edge hangs a fixed gap below the prism, so
+                // it can never cover the crystal it names.
                 VStack(spacing: 2) {
                     Text(state.title)
                         .font(.system(size: 10, weight: .black, design: .rounded))
                         .tracking(1.1)
-                    Text(state.countLabel)
-                        .font(.system(size: 13, weight: .black, design: .rounded))
+                    if state.litOrbitSlotCount == nil {
+                        Text(state.countLabel)
+                            .font(.system(size: 12, weight: .black, design: .rounded))
+                            .monospacedDigit()
+                    }
+                    Text(state.progressLabel)
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
                         .monospacedDigit()
+                        .foregroundStyle(.white.opacity(0.9))
+                    if let nextFusionLabel = state.nextFusionLabel {
+                        Text(nextFusionLabel)
+                            .font(.system(size: 9, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.76))
+                    }
                 }
+                .lineLimit(1)
                 .foregroundStyle(.white)
                 .padding(.horizontal, 9)
                 .padding(.vertical, 5)
@@ -1891,28 +1931,11 @@ struct JarLifetimeCoreBackdrop: View {
                             lineWidth: colorSchemeContrast == .increased ? 1.2 : 0.7
                         )
                 }
-                .offset(y: dimension * labelOffset)
-
-                VStack(spacing: 2) {
-                    Text(state.progressLabel)
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                    if let nextFusionLabel = state.nextFusionLabel {
-                        Text(nextFusionLabel)
-                            .font(.system(size: 9, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.72))
-                    }
-                }
-                .lineLimit(1)
-                .foregroundStyle(.white.opacity(0.86))
-                .padding(.horizontal, 9)
-                .padding(.vertical, 5)
-                .background(PomoGemTheme.raised.opacity(0.72), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(Color(hex: colorHex).opacity(0.28), lineWidth: 0.7)
-                }
-                .offset(y: dimension * progressOffset)
+                .alignmentGuide(VerticalAlignment.center) { $0[.top] }
+                .offset(y: JarLifetimeCorePlateLayout.plateTopOffset(
+                    dimension: dimension,
+                    prismDiameterFactor: prismFactor
+                ))
             }
             .frame(width: dimension * 1.42, height: dimension * 1.42)
             .position(x: proxy.size.width / 2, y: proxy.size.height * 0.51)

@@ -5,6 +5,56 @@ import XCTest
 /// manual save (walk-std-08, walk-std-09, dev-D7, history-02).
 @MainActor
 final class RewardVocabularyAndHUDTests: XCTestCase {
+    // MARK: HUD (walk-std-09)
+
+    func testTheCorePlateAlwaysHangsBelowThePrism() {
+        // Every stage width Home can produce (150...190 pt) and every prism
+        // size the core can grow to.
+        for dimension in stride(from: CGFloat(150), through: 190, by: 5) {
+            for factor in stride(from: CGFloat(0.20), through: 0.51, by: 0.01) {
+                let top = JarLifetimeCorePlateLayout.plateTopOffset(
+                    dimension: dimension,
+                    prismDiameterFactor: factor
+                )
+                XCTAssertGreaterThanOrEqual(
+                    top,
+                    dimension * factor / 2 + 8,
+                    "dimension \(dimension), factor \(factor)"
+                )
+            }
+        }
+    }
+
+    func testCycleChipStaysAboveTheHUDOnTallStages() {
+        // Home's HUD starts 88 pt down; the chip is about 16 pt tall.
+        XCTAssertEqual(
+            JarAccumulationPresenceLayoutPresentation.cycleChipCenterY(
+                bandY: 93.4,
+                showsLifetimeCore: true
+            ),
+            72
+        )
+        XCTAssertLessThanOrEqual(
+            JarAccumulationPresenceLayoutPresentation.cycleChipMaximumCenterY + 8,
+            88
+        )
+        XCTAssertEqual(
+            JarAccumulationPresenceLayoutPresentation.cycleChipCenterY(
+                bandY: 40,
+                showsLifetimeCore: true
+            ),
+            40
+        )
+        // Without a core the band sits near the base and is left alone.
+        XCTAssertEqual(
+            JarAccumulationPresenceLayoutPresentation.cycleChipCenterY(
+                bandY: 380,
+                showsLifetimeCore: false
+            ),
+            380
+        )
+    }
+
     // MARK: dev-D7
 
     func testTheJarReadoutCountsAGemWhenItLands() {
