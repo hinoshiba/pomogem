@@ -1535,6 +1535,33 @@ final class GemBrillianceTests: XCTestCase {
 // MARK: - Round 12 (the round-3 review's fixes)
 
 extension GemBrillianceTests {
+    /// The core shows at most four colour fields: small themes widen the
+    /// kept colour nearest in hue, and the spans still add up.
+    func testTheCoreShowsAFewLargeColourFields() {
+        let shares = [
+            GemColorShare(hex: Constants.Color.english, fraction: 0.33),
+            GemColorShare(hex: Constants.Color.mathematics, fraction: 0.20),
+            GemColorShare(hex: Constants.Color.socialStudies, fraction: 0.20),
+            GemColorShare(hex: Constants.Color.japanese, fraction: 0.13),
+            GemColorShare(hex: Constants.Color.science, fraction: 0.07)
+        ]
+        let fields = GemArtwork.CoreColorField.fieldShares(shares)
+        XCTAssertEqual(fields.count, 3, "A fourth field needs 15 %")
+        XCTAssertEqual(fields.reduce(0) { $0 + $1.fraction }, 0.93, accuracy: 0.000_1)
+        XCTAssertEqual(Set(fields.map(\.hex)), [Constants.Color.english, Constants.Color.mathematics, Constants.Color.socialStudies])
+        // Green joins blue (the nearest hue), magenta joins coral.
+        XCTAssertEqual(fields.first { $0.hex == Constants.Color.mathematics }?.fraction ?? 0, 0.27, accuracy: 0.000_1)
+        XCTAssertEqual(fields.first { $0.hex == Constants.Color.english }?.fraction ?? 0, 0.46, accuracy: 0.000_1)
+        let four = GemArtwork.CoreColorField.fieldShares(shares.map {
+            $0.hex == Constants.Color.japanese ? GemColorShare(hex: $0.hex, fraction: 0.18) : $0
+        })
+        XCTAssertEqual(four.count, 4)
+        XCTAssertEqual(GemArtwork.CoreColorField.fieldShares(shares, fourthShare: nil).count, 3, "A crystal keeps three")
+        let field = GemArtwork.CoreColorField(shares: GemArtwork.quantizedCoreShares(shares))
+        XCTAssertLessThanOrEqual(field.arcs.count, 4)
+        XCTAssertEqual(field.arcs.last!.end - field.arcs.first!.start, 1, accuracy: 0.000_1)
+    }
+
     /// The scene's light fades out before the SKView's edge (no visible
     /// rectangle) and the bottle itself is never dimmed.
     func testTheLightBoundsFadeBeforeTheViewEdge() throws {

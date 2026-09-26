@@ -239,16 +239,21 @@ final class GemThemeDistinctionTests: XCTestCase {
         }
     }
 
-    /// The core marks every theme arc but not the mixed その他 arc.
+    /// The core marks every theme field it shows (at most four since round
+    /// 12: smaller themes widen a neighbour's field) but not a mixed その他
+    /// field.
     func testCoreMarksEveryThemeArcButNotTheMixedRest() {
         let themes = (0 ..< min(7, palette.count)).map { palette[$0] }
         let fractions: [Double] = [0.30, 0.22, 0.16, 0.12, 0.10, 0.06, 0.04]
         let shares = zip(themes, fractions).map { GemColorShare(hex: $0.0, fraction: $0.1) }
         let placements = GemArtwork.coreThemeMarkPlacements(shares: shares)
         let quantized = GemArtwork.quantizedCoreShares(shares)
-        let expected = quantized.filter { share in themes.contains { SubjectPalette.normalized($0) == SubjectPalette.normalized(share.hex) } }
+        let field = GemArtwork.CoreColorField(shares: quantized)
+        XCTAssertLessThanOrEqual(field.arcs.count, 4)
+        let expected = field.arcs.filter { arc in themes.contains { SubjectPalette.normalized($0) == SubjectPalette.normalized(arc.hex) } }
         XCTAssertEqual(placements.count, expected.count)
-        XCTAssertLessThan(placements.count, quantized.count, "その他 carries no mark")
+        XCTAssertGreaterThan(placements.count, 0)
+        XCTAssertTrue(placements.contains { $0.mark == GemThemeMark(hex: themes[0]) }, "The largest theme is marked")
         XCTAssertEqual(Set(placements.map(\.mark)).count, placements.count)
         let single = GemArtwork.coreThemeMarkPlacements(shares: [GemColorShare(hex: palette[0], fraction: 1)])
         XCTAssertEqual(single.map(\.mark), [GemThemeMark(hex: palette[0])])

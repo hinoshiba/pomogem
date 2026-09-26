@@ -88,10 +88,10 @@ struct GemCutLadder: Sendable {
                 cut: .tumbled, symmetry: 12, haloScale: 2.3, haloAlpha: 0.60,
                 glintCount: 1, glintScale: 0.9, sparkleCount: 2, facetContrast: 0.85
             ),
-            // A1 (2.5–25 kg)
+            // A1 (2.5–25 kg): two glints like the larger cuts (round 12).
             GemCutRung(
                 cut: .step, symmetry: 8, haloScale: 2.4, haloAlpha: 0.60,
-                glintCount: 1, glintScale: 0.95, sparkleCount: 2, facetContrast: 0.75
+                glintCount: 2, glintScale: 0.95, sparkleCount: 2, facetContrast: 0.75
             ),
             // A2 (25–250 kg)
             GemCutRung(
@@ -489,7 +489,7 @@ enum GemArtwork {
         let palette = quantizedCoreShares(shares)
             .map { "\($0.hex)@\(Int(($0.fraction * 20).rounded()))" }
             .joined(separator: ",")
-        return "core4|\(palette)|L\(min(max(level, 1), 6))|x\(renderScale(rawScale))" + (themeMarks ? "|t" : "")
+        return "core5|\(palette)|L\(min(max(level, 1), 6))|x\(renderScale(rawScale))" + (themeMarks ? "|t" : "")
     }
 
     /// Cache key of a vessel bake.
@@ -1600,7 +1600,11 @@ enum GemArtwork {
         let isGlass = spec.cut == .glass
         let tones = SectorTones(spec: spec)
         let dominant = tones.dominant
-        let contrast = min(max(spec.facetContrast + dominant.contrastBoost, 0), 1)
+        // Round 12: a step cut's concentric bands at half their former
+        // contrast, so the crystal reads as a lit stone, not as a target or
+        // a parasol.
+        let stepSoftening: CGFloat = spec.cut == .step ? 0.5 : 1
+        let contrast = min(max(spec.facetContrast + dominant.contrastBoost, 0), 1) * stepSoftening
         let jitterLimit: CGFloat = spec.cut == .brilliant || spec.cut == .radiant ? 0.12 : 0.18
         var jitter = GemRandom(seed: UInt64(0xF1CE &+ spec.variant &* 131 &+ spec.symmetry))
 
@@ -1623,13 +1627,17 @@ enum GemArtwork {
             }
             shade = min(max(shade, 0), 1)
             let floor = 1 - 0.7 * contrast
-            var brightness = (floor + (1 - floor) * shade) * (0.55 + 0.45 * pow(nz, 0.6))
+            let tiltShading = 0.45 * stepSoftening
+            var brightness = (floor + (1 - floor) * shade) * (1 - tiltShading + tiltShading * pow(nz, 0.6))
             if spec.isMuted { brightness = 0.25 + brightness * 0.7 }
             brightness = min(max(brightness, 0.08), 1)
 
             let center = centroid(facet.points)
-            let tone = tones.tone(atAngle: atan2(center.y, center.x))
-            var color = tone.facet(brightness: brightness, hueJitter: shade * 2 - 1)
+            let sector = tones.blend(atAngle: atan2(center.y, center.x))
+            var color = sector.tone.facet(brightness: brightness, hueJitter: shade * 2 - 1)
+            if let neighbour = sector.neighbour, sector.weight > 0 {
+                color = color.mixed(with: neighbour.facet(brightness: brightness, hueJitter: shade * 2 - 1), amount: sector.weight)
+            }
             // Fresnel rim: (1 − N·V)^3 × 0.35 toward white/#8ACBFF.
             let fresnel = pow(1 - nz, 3) * 0.35 * (isGlass ? 1.2 : 1)
             color = color.mixed(with: GemColor.fresnelTint, amount: fresnel)
@@ -1951,10 +1959,14 @@ enum GemArtwork {
     /// The core's colour field (Docs/GemExperienceDesign.md §7.9). The share
     /// fan keeps its proportions (top five + その他, 5 % steps) but is laid
     /// out in hue order, clockwise from 7:30, starting after the widest hue
-    /// gap, and neighbouring colours melt into each other over one 5 % slot.
-    /// So the stone reads as a few large fields of colour (blue on one side,
-    /// warm on the other) crossed by facet ridges — not as a beach ball of
-    /// twenty alternating wedges. Deterministic for the quantised shares.
+    /// gap, and neighbouring colours melt into each other over one facet
+    /// (a tenth of the turn). Round 12: at most four fields — the three
+    /// largest shares, and a fourth that holds at least 15 % — while each
+    /// smaller share widens the kept colour nearest in hue. So the stone
+    /// reads as a few large fields of colour (blue on one side, warm on the
+    /// other) crossed by facet ridges — not as a colour wheel of every
+    /// theme or a beach ball of alternating wedges. Deterministic for the
+    /// quantised shares.
     struct CoreColorField: Sendable {
         struct Arc: Sendable {
             let hex: String
@@ -1967,9 +1979,10 @@ enum GemArtwork {
         /// Where the first colour starts: 7:30, so hue order runs up the
         /// left side, over the top and down the right.
         static let startTurn: CGFloat = 0.625
-        /// Width of the blend between neighbouring colours (about 1.5 of the
-        /// 5 % slots).
-        static let blendTurns: CGFloat = 0.08
+        /// Width of the blend between neighbouring colours: one facet.
+        static let blendTurns: CGFloat = 0.10
+        /// A fourth field needs at least this share of the fan.
+        static let fourthFieldShare: Double = 0.15
 
         let arcs: [Arc]
 
@@ -1980,10 +1993,11 @@ enum GemArtwork {
                 arcs = [Arc(hex: Constants.Color.textMute, color: fallback, start: Self.startTurn, end: Self.startTurn + 1)]
                 return
             }
-            let total = valid.reduce(0) { $0 + $1.fraction }
+            let fields = Self.fieldShares(valid)
+            let total = fields.reduce(0) { $0 + $1.fraction }
             // Hue order (neutral colours last, ties by hex), then rotate so
             // the sequence starts right after the widest gap in hue.
-            let entries = valid.map { share -> (share: GemColorShare, hue: CGFloat, neutral: Bool) in
+            let entries = fields.map { share -> (share: GemColorShare, hue: CGFloat, neutral: Bool) in
                 let hsb = GemColor(hex: share.hex).hsb
                 return (share, hsb.hue, hsb.saturation < 0.08)
             }
@@ -2014,6 +2028,40 @@ enum GemArtwork {
                 defer { cursor += span }
                 return Arc(hex: entry.share.hex, color: GemColor(hex: entry.share.hex), start: cursor, end: cursor + span)
             }
+        }
+
+        /// The shares the field shows: the three largest, a fourth when it
+        /// holds `fourthFieldShare` of the fan, and every smaller share
+        /// added to the kept colour nearest in hue (a neutral one to the
+        /// largest), so the spans still add up to the whole fan.
+        /// A crystal's body keeps three (`fourthShare` nil).
+        static func fieldShares(_ shares: [GemColorShare], fourthShare: Double? = fourthFieldShare) -> [GemColorShare] {
+            let ranked = shares.sorted {
+                $0.fraction == $1.fraction ? $0.hex < $1.hex : $0.fraction > $1.fraction
+            }
+            let total = ranked.reduce(0) { $0 + $1.fraction }
+            guard ranked.count > 3, total > 0 else { return ranked }
+            let keepsFourth = fourthShare.map { ranked[3].fraction / total >= $0 } ?? false
+            var kept = Array(ranked.prefix(keepsFourth ? 4 : 3))
+            for share in ranked.dropFirst(kept.count) {
+                let hsb = GemColor(hex: share.hex).hsb
+                var target = 0
+                if hsb.saturation >= 0.08 {
+                    var nearest = CGFloat.greatestFiniteMagnitude
+                    for (index, candidate) in kept.enumerated() {
+                        let other = GemColor(hex: candidate.hex).hsb
+                        guard other.saturation >= 0.08 else { continue }
+                        var distance = abs(other.hue - hsb.hue)
+                        distance = min(distance, 1 - distance)
+                        if distance < nearest - 0.000_1 {
+                            nearest = distance
+                            target = index
+                        }
+                    }
+                }
+                kept[target] = GemColorShare(hex: kept[target].hex, fraction: kept[target].fraction + share.fraction)
+            }
+            return kept
         }
 
         /// Field colour at `turn` (clockwise from 12 o'clock).
@@ -2105,10 +2153,10 @@ enum GemArtwork {
 
         init(color: GemColor, slot: Int, turn: CGFloat, vessel: Bool, lit: Bool) {
             let parity = slot % 2
-            // Sector-wise hue breathing (±4°) and a key light from the upper
+            // Sector-wise hue breathing (±2°) and a key light from the upper
             // left (±7 %), fixed per slot so the bake is deterministic.
             let sector = (slot / 2) % 10
-            let jitter: [CGFloat] = [0, 3, -2, 4, -3, 1, -4, 2, -1, 3]
+            let jitter: [CGFloat] = [0, 1.5, -1, 2, -1.5, 0.5, -2, 1, -0.5, 1.5]
             let center = CGFloat.pi / 2 - turn * .pi * 2
             let key = cos(center - .pi * 0.75)
             let lightFactor = 1 + 0.07 * key
@@ -2128,7 +2176,7 @@ enum GemArtwork {
             }
             let raw = color.hsb
             let neutral = raw.saturation < 0.08
-            let hue = raw.hue + (jitter[sector] + (parity == 0 ? 0 : 7)) / 360
+            let hue = raw.hue + (jitter[sector] + (parity == 0 ? 0 : 4)) / 360
             // Theme colours keep a vivid floor (0.66); the pale seams where
             // distant hues meet keep their own low saturation.
             let saturation = neutral
@@ -2322,6 +2370,8 @@ enum GemArtwork {
 
             // 4. Facet ridges: white lines laid over the colour field
             // (fading toward the crown), finer mid-ridges, and the crown ring.
+            // Round 12: white α0.35 at most, so the ridges cross the colour
+            // fields instead of cutting the stone into wedges.
             for boundary in 0 ..< 20 {
                 let tip = map(CoreGeometry.crown(boundary))
                 let major = boundary.isMultiple(of: 2)
@@ -2330,7 +2380,7 @@ enum GemArtwork {
                     from: map(.zero),
                     to: tip,
                     width: radius * (major ? 0.016 : 0.009),
-                    alphas: major ? (0.55, 0.30) : (0.26, 0.08)
+                    alphas: major ? (0.35, 0.18) : (0.16, 0.05)
                 )
             }
             context.setLineJoin(.round)
@@ -2712,18 +2762,24 @@ enum GemToneLightness {
     }
 }
 
-/// Tones by angular sector (clockwise from 12 o'clock). Colours change on
-/// facet boundaries (each facet takes the tone at its centroid), so a
-/// multi-theme stone reads as cut glass rather than a pie chart.
+/// Tones by angular sector (clockwise from 12 o'clock). Each facet takes
+/// the tone at its centroid, so a multi-theme stone reads as cut glass
+/// rather than a pie chart. Round 12: at most the three largest themes
+/// (a smaller one widens the kept theme nearest in hue), and within one
+/// facet's angle of a boundary the two tones blend, so a two-theme crystal
+/// no longer reads as a beach ball split in half.
 private struct SectorTones {
     private let entries: [(end: CGFloat, tone: GemTone)]
     let dominant: GemTone
+    /// Half the angular width of a boundary's blend (radians).
+    private let blendHalfWidth: CGFloat
 
     init(spec: GemArtworkSpec) {
         let glass = spec.cut == .glass
-        let shares = spec.colors.filter { $0.fraction > 0 }
+        let shares = GemArtwork.CoreColorField.fieldShares(spec.colors.filter { $0.fraction > 0 }, fourthShare: nil)
         let fallback = GemTone(hex: shares.first?.hex ?? "#8A9BB8", muted: spec.isMuted, glass: glass)
         dominant = fallback
+        blendHalfWidth = .pi / CGFloat(max(spec.symmetry, 8))
         guard shares.count > 1, !glass else {
             entries = [(.pi * 2, fallback)]
             return
@@ -2739,11 +2795,36 @@ private struct SectorTones {
     }
 
     func tone(atAngle mathAngle: CGFloat) -> GemTone {
-        guard entries.count > 1 else { return dominant }
+        blend(atAngle: mathAngle).tone
+    }
+
+    /// The tone at `mathAngle`, and near a boundary the neighbouring tone
+    /// with its weight (0…0.5, smoothstep across the blend).
+    func blend(atAngle mathAngle: CGFloat) -> (tone: GemTone, neighbour: GemTone?, weight: CGFloat) {
+        guard entries.count > 1 else { return (dominant, nil, 0) }
+        let turn = CGFloat.pi * 2
         var clockwise = CGFloat.pi / 2 - mathAngle
-        clockwise = clockwise.truncatingRemainder(dividingBy: .pi * 2)
-        if clockwise < 0 { clockwise += .pi * 2 }
-        return entries.first { clockwise < $0.end }?.tone ?? entries[entries.count - 1].tone
+        clockwise = clockwise.truncatingRemainder(dividingBy: turn)
+        if clockwise < 0 { clockwise += turn }
+        let index = entries.firstIndex { clockwise < $0.end } ?? entries.count - 1
+        let start = index == 0 ? 0 : entries[index - 1].end
+        let end = entries[index].end
+        let tone = entries[index].tone
+        func smooth(_ t: CGFloat) -> CGFloat {
+            let u = min(max(t, 0), 1)
+            return u * u * (3 - 2 * u)
+        }
+        let half = min(blendHalfWidth, (end - start) / 2)
+        guard half > 0.000_1 else { return (tone, nil, 0) }
+        if clockwise - start < half {
+            let previous = entries[(index + entries.count - 1) % entries.count].tone
+            return (tone, previous, 1 - smooth(0.5 + 0.5 * (clockwise - start) / half))
+        }
+        if end - clockwise < half {
+            let next = entries[(index + 1) % entries.count].tone
+            return (tone, next, 1 - smooth(0.5 + 0.5 * (end - clockwise) / half))
+        }
+        return (tone, nil, 0)
     }
 }
 
@@ -3213,7 +3294,9 @@ extension GemArtwork {
     /// crystal too small for those to reach `minimumGlyphSize` (`radius`
     /// in points) shows its largest theme's mark on the table instead.
     static func themeMarkPlacements(for colors: [GemColorShare], radius: CGFloat? = nil) -> [ThemeMarkPlacement] {
-        let shares = colors.filter { $0.fraction > 0 }
+        // The same three largest themes the body's sectors show (round 12);
+        // the breakdown lists the rest.
+        let shares = CoreColorField.fieldShares(colors.filter { $0.fraction > 0 }, fourthShare: nil)
         let sectorMarksFit = radius.map { $0 * 0.23 * 2 >= minimumThemeMarkGlyphSize } ?? true
         guard shares.count > 1, sectorMarksFit else {
             let largest = shares.max { $0.fraction < $1.fraction }
