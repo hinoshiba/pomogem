@@ -410,7 +410,7 @@ struct PebbleDescriptor: Identifiable {
         if let achievementKind {
             return "\(subjectName)、\(achievementKind.title)の記念石、質量には含まれません"
         }
-        let measurement = source == .screenTime ? "Screen Time" : (isMeasured ? "実測" : "自己申告")
+        let measurement = source == .screenTime ? "スクリーンタイム" : (isMeasured ? "実測" : "自己申告")
         let material: String
         let presentationKind = RareRewardPresentationPolicy.kind(kind)
         switch presentationKind {
