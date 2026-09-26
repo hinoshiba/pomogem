@@ -2271,8 +2271,8 @@ struct JarLifetimeCoreBackdrop: View {
 
     /// The drawn stone's smallest diameter on Home (round 12): 1.25 × a
     /// 25-minute gem at the jar's largest scale or 0.21 of the jar width,
-    /// whichever is larger, never above 0.24 of the jar width. About 70 pt
-    /// on an iPhone 17 Pro and 69 pt on a 12 mini, so the core always reads
+    /// whichever is larger, never above 0.24 of the jar width. About 78 pt
+    /// on an iPhone 17 Pro and 72 pt on a 12 mini, so the core always reads
     /// larger than the loose gems around it.
     static func minimumStoneDiameter(jarWidth: CGFloat) -> CGFloat {
         let width = max(1, jarWidth)
