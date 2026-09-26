@@ -59,6 +59,10 @@ final class JarEffectsIntensityTests: XCTestCase {
         XCTAssertEqual(JarEffectsIntensity.resolved(preference: .standard, reduceMotion: true), .subtle)
         XCTAssertEqual(JarEffectsIntensity.resolved(preference: .subtle, reduceMotion: false), .subtle)
         XCTAssertEqual(JarEffectsIntensity.resolved(preference: .subtle, reduceMotion: true), .subtle)
+        // D17 as decided: Reduce Motion takes 控えめ's light too (halos at
+        // 0.7, inner light at 0.8), not only its motion (§8.9).
+        XCTAssertEqual(JarEffectsIntensity.resolved(preference: .standard, reduceMotion: true).haloScale, 0.70)
+        XCTAssertEqual(JarEffectsIntensity.resolved(preference: .standard, reduceMotion: true).innerGlowScale, 0.80)
 
         let suiteName = "JarEffectsIntensityTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
