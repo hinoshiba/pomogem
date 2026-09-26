@@ -371,6 +371,29 @@ final class LogHistoryReadsTests: XCTestCase {
         )
     }
 
+    /// 今月's chart is labelled on the 1st, 8th, 15th and 22nd in every
+    /// month length; a week on each of its days.
+    func testChartAxisLabelsDaysChartsCanDraw() throws {
+        let calendar = japaneseCalendar
+        for (now, count) in [
+            (date(2026, 2, 10), 28),
+            (date(2026, 9, 24), 30),
+            (date(2026, 10, 5), 31)
+        ] {
+            let month = try XCTUnwrap(LogPeriodPolicy.interval(for: .month, now: now, calendar: calendar))
+            let days = LogPeriodPresentation(records: [], interval: month, calendar: calendar).dailyMass
+            XCTAssertEqual(days.count, count)
+            XCTAssertEqual(
+                LogPeriodPolicy.axisDays(of: days, period: .month).map { calendar.component(.day, from: $0) },
+                [1, 8, 15, 22]
+            )
+        }
+        let week = try XCTUnwrap(LogPeriodPolicy.interval(for: .week, now: date(2026, 9, 24), calendar: calendar))
+        let weekDays = LogPeriodPresentation(records: [], interval: week, calendar: calendar).dailyMass
+        XCTAssertEqual(LogPeriodPolicy.axisDays(of: weekDays, period: .week), weekDays.map(\.date))
+        XCTAssertEqual(weekDays.count, 7)
+    }
+
     /// A failed read always ends in a final state. Most people never reset
     /// their data, so the epoch is nil; with nothing read yet, the old
     /// check compared nil with nil and left 最近の記録 loading forever.

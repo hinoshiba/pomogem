@@ -913,6 +913,21 @@ enum LogPeriodPolicy {
         return days
     }
 
+    /// The days 「質量の推移」 labels: every day of a week; in a month the
+    /// 1st, 8th, 15th and 22nd. Not `.stride(by: .weekOfMonth)`: Swift
+    /// Charts stops the app on it (iOS 26.5: "BinningUnit+Calendar.swift:314:
+    /// Component is not supported") as soon as 今月 has a bar to draw. Not
+    /// the 29th either: its label starts too close to the end of the plot,
+    /// and Charts cuts it to 「…」.
+    static func axisDays(of days: [LogDailyMass], period: LogView.Period) -> [Date] {
+        switch period {
+        case .week:
+            days.map(\.date)
+        case .month:
+            stride(from: 0, to: min(days.count, 28), by: 7).map { days[$0].date }
+        }
+    }
+
     /// 「9月21日(日)〜9月27日(土)」: says which days 「今週」 covers.
     static func rangeLabel(
         for interval: DateInterval,
@@ -1500,12 +1515,7 @@ struct LogView: View {
                         .cornerRadius(4)
                     }
                     .chartXAxis {
-                        // A month is marked every seven days (1, 8, 15…).
-                        // Not `.weekOfMonth`: Swift Charts stops the app on
-                        // it (iOS 26.5: "BinningUnit+Calendar.swift:314:
-                        // Component is not supported"), as soon as 今月 has
-                        // a bar to draw.
-                        AxisMarks(values: .stride(by: .day, count: shownPeriod == .week ? 1 : 7)) { value in
+                        AxisMarks(values: LogPeriodPolicy.axisDays(of: values, period: shownPeriod)) { value in
                             AxisValueLabel(format: shownPeriod == .week ? .dateTime.weekday(.narrow) : .dateTime.day())
                             AxisGridLine().foregroundStyle(.clear)
                         }
