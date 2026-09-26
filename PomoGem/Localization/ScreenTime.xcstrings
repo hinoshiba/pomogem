@@ -58,6 +58,9 @@
     "スクリーンタイムへのアクセスを確認できませんでした。少し時間をおいて、もう一度お試しください。" : {
       "comment" : "Screen Time access failed for another reason"
     },
+    "スクリーンタイムへのアクセスを許可すると使えます。" : {
+      "comment" : "Focus shield footer: the shield needs Screen Time access"
+    },
     "スクリーンタイム：%@ +%lld分（%lld粒）" : {
       "comment" : "Toast: study-app time added. 1 = theme name, 2 = minutes, 3 = pebbles",
       "localizations" : {
@@ -119,6 +122,12 @@
     "タイマーの計測中は勉強アプリの自動記録を休止し、終了後に自動で再開します。" : {
 
     },
+    "ポモジェムで集中しているあいだ、控えたいアプリを開けなくします。休憩になるか集中が終わると解除します。一時停止中は、予定の終了時刻の1分後まで続きます。" : {
+      "comment" : "Footer under the focus shield toggle: when apps are blocked and when they are released"
+    },
+    "今すぐ制限を解除" : {
+      "comment" : "Button: lift the focus shield now (escape hatch)"
+    },
     "保存して戻る" : {
       "comment" : "Dialog action: save the Screen Time edits, then go back"
     },
@@ -130,6 +139,9 @@
     },
     "保存しました。自動記録中です" : {
       "comment" : "Toast after saving Screen Time settings with recording on"
+    },
+    "制限を自動で解除する準備ができなかったため、今回の集中では制限していません。" : {
+      "comment" : "Notice: the failsafe that lifts the shield could not be registered, so nothing was shielded"
     },
     "勉強アプリ" : {
       "comment" : "Picker title: study apps"
@@ -170,11 +182,20 @@
     "控えたいアプリ" : {
       "comment" : "Picker title: apps to cut down"
     },
+    "控えたいアプリが%lld個あります。集中中に開けないようにできるのは50個までなので、いまは制限していません。" : {
+      "comment" : "Focus shield warning. %lld is the number of apps to cut down, always more than 50 (Apple's limit). en needs plural variations."
+    },
     "控えたいアプリだけ自動記録中" : {
       "comment" : "Status: only the black-stone lane is recording"
     },
+    "控えたいアプリを1つ以上選ぶと使えます。" : {
+      "comment" : "Focus shield footer: the shield needs at least one app to cut down"
+    },
     "控えたいアプリを選ぶ" : {
       "comment" : "VoiceOver: open the picker for apps to cut down"
+    },
+    "気が散るアプリを制限中" : {
+      "comment" : "Focus screen notice line: the apps to cut down are shielded right now"
     },
     "無料では5つまで選べます" : {
       "comment" : "VoiceOver hint: the free plan's study-app limit"
@@ -206,6 +227,9 @@
     "要確認：記録先のテーマが削除されました" : {
       "comment" : "Settings row subtitle: the study-app destination theme was deleted"
     },
+    "解除するのはこの集中のあいだだけです。次の集中では、また開けないようにします。" : {
+      "comment" : "Footer under the escape hatch: it lifts the shield for this focus only"
+    },
     "記録先のテーマが削除されたため、勉強アプリの記録を止めました" : {
       "comment" : "Toast: the Screen Time destination theme was deleted, so study-app recording stopped"
     },
@@ -235,6 +259,9 @@
     },
     "開くのはポモジェムの設定ページです。左上の「<」で設定の最初の画面まで戻ってください。" : {
       "comment" : "Caption under the button that opens the Settings app: how to reach the page the message names"
+    },
+    "集中中は気が散るアプリを開けないようにする" : {
+      "comment" : "Toggle: shield the apps to cut down while a PomoGem focus runs"
     },
     "黒い石" : {
       "comment" : "Section header: apps to cut down that add black stones"

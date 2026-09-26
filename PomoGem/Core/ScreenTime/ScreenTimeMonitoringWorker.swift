@@ -63,9 +63,10 @@ extension ScreenTimeMonitoring: ScreenTimeMonitoringDriving {}
 
 /// Keeps the app running long enough to finish a queued DeviceActivity call
 /// after the user leaves. Without it the process can be suspended mid-call,
-/// still holding the monitoring lock the extension needs.
+/// still holding the monitoring lock the extension needs. The focus shield's
+/// controller uses it for the same reason.
 @MainActor
-private final class ScreenTimeBackgroundAssertion {
+final class ScreenTimeBackgroundAssertion {
     private var identifier = UIBackgroundTaskIdentifier.invalid
 
     init(name: String) {

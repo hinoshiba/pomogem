@@ -51,6 +51,9 @@ final class ScreenTimeController: ObservableObject {
     private(set) lazy var negativeGemCountChanges: AnyPublisher<Int, Never> =
         $negativeGemCount.removeDuplicates().eraseToAnyPublisher()
     let store: ScreenTimeStore
+    /// F2's shield. Owned here because every path that retires the owner,
+    /// voids the tokens or erases the App Group must lift it too.
+    let focusShield: FocusShieldController
     private let worker: ScreenTimeMonitoringWorker
     /// A read-only copy of the callback diagnostics into the app's own
     /// container. The monitor extension counts the callbacks but cannot write
@@ -104,9 +107,14 @@ final class ScreenTimeController: ObservableObject {
         authorizationSettlingWindow: TimeInterval = 10,
         authorizationSettlingObservations: Int = 4,
         diagnosticsMirror: ScreenTimeDiagnosticsMirror = ScreenTimeDiagnosticsMirror(),
-        noticeDefaults: UserDefaults = .standard
+        noticeDefaults: UserDefaults = .standard,
+        focusShield: FocusShieldController? = nil
     ) {
         self.store = store
+        // The record sits next to THIS store's ledger, so a controller built
+        // on a temporary directory never reads or writes the real App Group.
+        self.focusShield = focusShield
+            ?? FocusShieldController(engine: .live(directory: store.directoryURL))
         self.noticeDefaults = noticeDefaults
         self.currentContextKey = currentContextKey
         self.authorization = authorization
@@ -234,7 +242,10 @@ final class ScreenTimeController: ObservableObject {
         guard !isSaving, !isResetting, !isErasing else { throw OperationError.busy }
         try ScreenTimePolicy.validate(newConfiguration, isPro: isPro)
         let lease = try boundLease()
-        if newConfiguration.enabled, !Self.isAuthorized(authorization()) { throw ScreenTimeError.unauthorized }
+        // Switching the focus shield on needs the same approval as recording;
+        // switching either off never does.
+        if newConfiguration.enabled || newConfiguration.shieldsDistractionDuringFocusEnabled,
+           !Self.isAuthorized(authorization()) { throw ScreenTimeError.unauthorized }
         isSaving = true
         let operation = beginOperation()
         defer {
@@ -325,6 +336,7 @@ final class ScreenTimeController: ObservableObject {
                 // launch, and a wipe there costs a new picker session.
                 if authorization() == .denied { state.invalidateAuthorization() }
             }
+            if authorization() == .denied { focusShield.retire(reason: .authorizationDenied, now: now) }
             reload()
             return lease
         } catch {
@@ -405,6 +417,8 @@ final class ScreenTimeController: ObservableObject {
                 try validate(state, lease: lease)
                 state.invalidateAuthorization()
             }
+            // A shield written with the voided tokens goes with them.
+            focusShield.retire(reason: .authorizationRevoked, now: now)
             // The registrations carry tokens the OS has already voided. Stop
             // them so a later re-approval registers a fresh selection instead
             // of reviving events that can never fire.
@@ -553,6 +567,9 @@ final class ScreenTimeController: ObservableObject {
 
     func suspendForContextRetirement() {
         guard let retiring = lease else { return }
+        // An account change, a storage relaunch or a new reset generation:
+        // the focus the shield belongs to is not this owner's any more.
+        focusShield.retire(reason: .ownerRetired)
         retiring.invalidate()
         lease = nil
         bindingTask = nil
@@ -586,6 +603,9 @@ final class ScreenTimeController: ObservableObject {
         try await worker.perform {
             try worker.store.eraseAllData { worker.monitoring.stop() }
         }
+        // The lane registrations use a prefix the shield's failsafe does not,
+        // so it is stopped here by name, with its store and record.
+        try await focusShield.eraseAllData()
         // The lease is retired and queued writers have drained. A reload
         // cannot recreate this app-container copy until a new owner binds.
         try diagnosticsMirror.eraseAllData()
@@ -594,6 +614,27 @@ final class ScreenTimeController: ObservableObject {
     /// A barrier for lifecycle cleanup and deterministic regression tests.
     func waitForPendingOperations() async throws {
         try await worker.perform {}
+        await focusShield.waitForPendingOperations()
+    }
+
+    /// F2: shield or unshield the distraction apps for the saved timer.
+    /// `ScreenTimeIntegrationModifier` calls this on every timer save or
+    /// clear, every foreground pass (`force` on activation) and every
+    /// configuration change. Only a bound owner decides: before binding, the
+    /// published configuration is empty and would read as "switched off".
+    func reconcileFocusShield(
+        contextKey: String,
+        dataEpochID: UUID?,
+        focus: FocusShieldFocusState,
+        now: Date = .now,
+        force: Bool = false
+    ) {
+        guard isBound(contextKey: contextKey, dataEpochID: dataEpochID) else { return }
+        focusShield.reconcile(
+            configuration: configuration,
+            authorization: FocusShieldAuthorization(authorization()),
+            focus: focus, now: now, force: force
+        )
     }
 
     private func synchronize(_ lease: ScreenTimeContextLease) async throws {
