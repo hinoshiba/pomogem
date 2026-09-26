@@ -405,21 +405,23 @@ struct AccumulationPlanView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("\(previewPeriodTitle)の予測")
                 .font(PomoGemTheme.brand(20))
-            LazyVGrid(
-                columns: [GridItem(.flexible()), GridItem(.flexible())],
-                spacing: 10
-            ) {
-                metric(title: "集中時間", value: DurationPresentation.minutesLabel(projection.focusMinutes))
-                metric(title: "質量", value: formattedMass(projection.grams))
-                metric(title: "予定リズム", value: "\(projection.completionCount.formatted())回")
-                metric(title: "表示する可動体", value: "\(projection.studyBodyCount)体")
+            // An eager Grid, not a LazyVGrid: `.combine` below does not
+            // reach into a lazy container, so VoiceOver heard only the title
+            // (and, before home-02, the test string) instead of the metrics.
+            Grid(horizontalSpacing: 10, verticalSpacing: 10) {
+                GridRow {
+                    metric(title: "集中時間", value: DurationPresentation.minutesLabel(projection.focusMinutes))
+                    metric(title: "質量", value: formattedMass(projection.grams))
+                }
+                GridRow {
+                    metric(title: "予定リズム", value: "\(projection.completionCount.formatted())回")
+                    metric(title: "表示する可動体", value: "\(projection.studyBodyCount)体")
+                }
             }
         }
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("planning.accumulation.result")
-        .accessibilityValue(Text(verbatim:
-            "months=\(projection.elapsedMonths);sessions=\(projection.completionCount);minutes=\(projection.focusMinutes);grams=\(projection.grams);bodies=\(projection.studyBodyCount);consistent=\(projection.isInternallyConsistent)"
-        ))
+        .modifier(PlanResultUITestValue(projection: projection))
     }
 
     private var calculationNote: some View {
@@ -519,5 +521,26 @@ struct AccumulationPlanView: View {
         // mutating `soundEnabled` / `hapticsEnabled` here because JarScene's
         // default dependencies are app-wide shared instances.
         previewScene.restore(pebbles: projection.descriptors)
+    }
+}
+
+/// home-02: the machine-readable projection summary exists for the planning
+/// UI test only. It used to be the grid's accessibility value in every build,
+/// so VoiceOver read "months=…;consistent=true" after the Japanese metrics.
+private struct PlanResultUITestValue: ViewModifier {
+    let projection: AccumulationPlanProjection
+
+    func body(content: Content) -> some View {
+#if DEBUG
+        if LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess {
+            content.accessibilityValue(Text(verbatim:
+                "months=\(projection.elapsedMonths);sessions=\(projection.completionCount);minutes=\(projection.focusMinutes);grams=\(projection.grams);bodies=\(projection.studyBodyCount);consistent=\(projection.isInternallyConsistent)"
+            ))
+        } else {
+            content
+        }
+#else
+        content
+#endif
     }
 }
