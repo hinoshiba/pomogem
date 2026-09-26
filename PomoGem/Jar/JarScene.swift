@@ -3089,9 +3089,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
             // Wall specular lines (round 12): down each wall, from the
             // shoulder to 75 % of the height, fading at both ends, a 1.5 pt
-            // white core (α0.92 left, 0.8 right) in a 5 pt glow (α0.25).
+            // white core (α0.95) in a 5 pt glow (α0.25).
             context.saveGState()
-            for (x, alpha) in [(CGFloat(5.5), CGFloat(0.92)), (width - 5.5, CGFloat(0.80))] {
+            for (x, alpha) in [(CGFloat(5.5), CGFloat(0.95)), (width - 5.5, CGFloat(0.95))] {
                 let top = shoulderY + 8
                 let bottom = height * 0.75
                 for (lineWidth, lineAlpha) in [(CGFloat(5), CGFloat(0.25)), (CGFloat(1.5), alpha)] {
@@ -3151,8 +3151,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             // Two soft vertical reflection bands (0.2 and 0.75 of the width).
             for (center, bandWidth) in [(width * 0.20, width * 0.05), (width * 0.75, width * 0.03)] {
                 let band = [
-                    UIColor.white.withAlphaComponent(0.08).cgColor,
-                    UIColor.white.withAlphaComponent(0.04).cgColor,
+                    UIColor.white.withAlphaComponent(0.12).cgColor,
+                    UIColor.white.withAlphaComponent(0.06).cgColor,
                     UIColor.clear.cgColor
                 ] as CFArray
                 guard let gradient = CGGradient(colorsSpace: space, colors: band, locations: [0, 0.6, 1]) else { continue }
@@ -3170,12 +3170,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             // Specular streaks on the glass (round 12): the window light
             // seen in the front wall, 18 % in from the left and 10 % in
             // from the right, from the shoulder to 75 % of the height: a
-            // 1.5 pt white core (α0.8) in a 5 pt glow (α0.25), tapered at
+            // 2 pt white core (α0.85) in an 8 pt glow (α0.3), tapered at
             // both ends. Additive, so they ride the tilt with the bands.
-            for (center, alpha) in [(width * 0.18, CGFloat(0.8)), (width * 0.90, CGFloat(0.66))] {
+            for (center, alpha) in [(width * 0.18, CGFloat(0.85)), (width * 0.90, CGFloat(0.8))] {
                 let top = shoulderY + 12
                 let bottom = height * 0.75
-                for (lineWidth, lineAlpha) in [(CGFloat(5), CGFloat(0.25)), (CGFloat(1.5), alpha)] {
+                for (lineWidth, lineAlpha) in [(CGFloat(8), CGFloat(0.3)), (CGFloat(2), alpha)] {
                     context.saveGState()
                     context.clip(to: CGRect(x: center - lineWidth / 2, y: top, width: lineWidth, height: bottom - top))
                     let streak = [
