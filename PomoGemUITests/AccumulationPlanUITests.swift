@@ -61,11 +61,17 @@ final class AccumulationPlanUITests: XCTestCase {
         let timeline = app.sliders["planning.accumulation.timeline"]
         XCTAssertTrue(scrollUntilHittable(timeline, upward: true))
         // The slider speaks 「40年後」 rather than a percentage, so XCUITest
-        // cannot adjust it by position; drag the thumb past the left end.
-        timeline.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).press(
-            forDuration: 0.2,
-            thenDragTo: timeline.coordinate(withNormalizedOffset: CGVector(dx: -0.2, dy: 0.5))
-        )
+        // cannot adjust it by position; drag the thumb past the left end,
+        // slowly (a fast drag can read as a sheet pan), and retry once or
+        // twice when the press misses the thumb.
+        for startX in [0.97, 0.95, 0.99] where !waitForValue(timeline, containing: "今日", timeout: 0.5) {
+            timeline.coordinate(withNormalizedOffset: CGVector(dx: startX, dy: 0.5)).press(
+                forDuration: 0.4,
+                thenDragTo: timeline.coordinate(withNormalizedOffset: CGVector(dx: -0.2, dy: 0.5)),
+                withVelocity: .slow,
+                thenHoldForDuration: 0.2
+            )
+        }
         XCTAssertTrue(waitForValue(timeline, containing: "今日"), "value=\(timeline.value ?? "<nil>")")
         saveScreenshot("plan-today")
         let todayBreakdown = app.staticTexts.matching(
