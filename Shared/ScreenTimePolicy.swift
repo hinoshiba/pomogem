@@ -261,13 +261,17 @@ struct ScreenTimeState: Codable {
     var callbackCounters: ScreenTimeCallbackCounters?
 
     /// Evidence in the ledger that a Family Controls approval once existed.
-    /// `ScreenTimeController.save` refuses to write `enabled` while the status
-    /// is not approved, and FamilyActivityPicker cannot hand out an
-    /// application token without one — so either is proof enough to treat a
-    /// settled not-approved status as a revocation. Recording being switched
-    /// off does not make the stored opaque tokens any less voided by the OS.
+    /// `ScreenTimeController.save` refuses to write `enabled` or the focus
+    /// shield's opt-in while the status is not approved, and
+    /// FamilyActivityPicker cannot hand out an application token without one
+    /// — so any of them is proof enough to treat a settled not-approved
+    /// status as a revocation. Recording being switched off does not make the
+    /// stored opaque tokens any less voided by the OS, and a shield-only
+    /// opt-in with no apps left must not survive to switch shielding back on
+    /// the moment apps are picked again after a re-grant.
     var recordsAnApproval: Bool {
         configuration.enabled
+            || configuration.shieldsDistractionDuringFocusEnabled
             || !configuration.learningSelection.applicationTokens.isEmpty
             || !configuration.distractionSelection.applicationTokens.isEmpty
     }

@@ -490,13 +490,31 @@ final class FocusShieldControllerTests: XCTestCase {
         XCTAssertEqual(fixture.settings.clearCount, 1, "Saving it off again does not touch the store")
     }
 
-    func testARevocationAlsoWipesAShieldOnlyOptInWithoutApps() {
+    func testARevocationAlsoWipesAShieldOnlyOptInWithoutApps() async throws {
         var state = ScreenTimeState()
         state.configuration.shieldsDistractionDuringFocusEnabled = true
+        XCTAssertTrue(state.recordsAnApproval, "Saving the opt-in needs an approval, so it proves one")
         XCTAssertTrue(state.invalidateAuthorization())
         XCTAssertFalse(state.configuration.shieldsDistractionDuringFocusEnabled)
         var empty = ScreenTimeState()
+        XCTAssertFalse(empty.recordsAnApproval)
         XCTAssertFalse(empty.invalidateAuthorization(), "An empty setup has nothing to invalidate")
+
+        // Through the real detector: a revocation reads `.notDetermined`, and
+        // only a ledger that records an approval gets past the settling window.
+        let fixture = makeController()
+        var status = AuthorizationStatus.approved
+        let (controller, store) = try await boundScreenTimeController(
+            shield: fixture.controller, authorization: { status }, distractionApps: 0)
+        XCTAssertTrue(controller.configuration.shieldsDistractionDuringFocusEnabled)
+        status = .notDetermined
+        controller.beginAuthorizationObservation()
+        for second in stride(from: 0.0, through: 16, by: 4) {
+            await controller.invalidateAuthorizationIfRevoked(now: now.addingTimeInterval(second))
+        }
+        XCTAssertFalse(try store.snapshot().configuration.shieldsDistractionDuringFocusEnabled,
+                       "The opt-in goes with the revoked approval")
+        XCTAssertFalse(controller.configuration.shieldsDistractionDuringFocusEnabled)
     }
 
     func testAnAccountChangeLiftsTheShieldEvenWithNoBoundOwner() async throws {
@@ -657,10 +675,11 @@ final class FocusShieldControllerTests: XCTestCase {
 
     private func boundScreenTimeController(
         shield: FocusShieldController,
-        authorization: @escaping () -> AuthorizationStatus = { .approved }
+        authorization: @escaping () -> AuthorizationStatus = { .approved },
+        distractionApps: Int = 3
     ) async throws -> (ScreenTimeController, ScreenTimeStore) {
         let store = ScreenTimeStore(directory: makeDirectory())
-        let distraction = try selection(count: 3, seed: 0x72)
+        let distraction = try selection(count: distractionApps, seed: 0x72)
         try store.update { state in
             state.contextKey = "owner"
             state.contextIsActive = true

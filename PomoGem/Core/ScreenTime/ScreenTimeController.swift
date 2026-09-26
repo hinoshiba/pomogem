@@ -387,8 +387,9 @@ final class ScreenTimeController: ObservableObject {
     /// `.denied` is the user answering 「許可しない」 and is settled at once.
     /// `.notDetermined` needs the settling window AND a ledger that could not
     /// exist without an approval (`ScreenTimeState.recordsAnApproval`): an
-    /// enabled configuration, or a saved application token the picker could
-    /// only have produced under an approval. Recording being switched off does
+    /// enabled configuration, the focus shield's opt-in, or a saved
+    /// application token the picker could only have produced under an
+    /// approval. Recording being switched off does
     /// not protect the stored tokens — the OS voids them either way, and a
     /// ledger left holding them would arm a re-registration that matches no
     /// application the next time the user turns recording back on.
