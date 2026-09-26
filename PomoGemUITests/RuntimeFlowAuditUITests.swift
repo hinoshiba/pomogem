@@ -374,7 +374,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
     func testSettingsTimerDisplayChoicesPersistAndFocusKeepsPauseAndCancel() throws {
         let presentation = app.descendants(matching: .any)["jar.presentation.probe"]
         XCTAssertTrue(presentation.waitForExistence(timeout: 5))
-        let initialPresentation = presentationValue(from: presentation)
+        let initialPresentation = jarPresentation(from: presentation)
         openTimerDisplaySettings()
         for rawValue in ["ringAndTime", "filledDial", "timeOnly", "ringOnly"] {
             let option = app.buttons["timer-display.option.\(rawValue)"]
@@ -414,7 +414,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(scrollUntilHittable(app.buttons["今日はここまで"]))
         cancelPresentedFocusIfNeeded()
         XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 6))
-        XCTAssertEqual(presentationValue(from: presentation), initialPresentation)
+        XCTAssertEqual(jarPresentation(from: presentation), initialPresentation)
 
         openTimerDisplaySettings()
         XCTAssertTrue(scrollUntilHittable(dial))
@@ -912,7 +912,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
     func testFreeTimersStartPauseResumeAndCancelWithoutCreatingEffort() throws {
         let presentationProbe = app.descendants(matching: .any)["jar.presentation.probe"]
         XCTAssertTrue(presentationProbe.waitForExistence(timeout: 5))
-        let initialPresentation = presentationValue(from: presentationProbe)
+        let initialPresentation = jarPresentation(from: presentationProbe)
 
         try exerciseInterruptibleFocus(
             durationButtonPrefix: "25分",
@@ -921,7 +921,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             attachmentName: "25-minute focus — paused and reversible"
         )
         XCTAssertEqual(
-            presentationValue(from: presentationProbe),
+            jarPresentation(from: presentationProbe),
             initialPresentation,
             "Cancelling 25 minutes must not invent a study pebble"
         )
@@ -933,7 +933,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             attachmentName: "45-minute focus — paused and reversible"
         )
         XCTAssertEqual(
-            presentationValue(from: presentationProbe),
+            jarPresentation(from: presentationProbe),
             initialPresentation,
             "Cancelling 45 minutes must not invent a study pebble"
         )
@@ -945,7 +945,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             attachmentName: "60-minute focus — paused and reversible"
         )
         XCTAssertEqual(
-            presentationValue(from: presentationProbe),
+            jarPresentation(from: presentationProbe),
             initialPresentation,
             "Cancelling 60 minutes must not invent a study pebble"
         )
@@ -957,7 +957,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             attachmentName: "90-minute focus — paused and reversible"
         )
         XCTAssertEqual(
-            presentationValue(from: presentationProbe),
+            jarPresentation(from: presentationProbe),
             initialPresentation,
             "Cancelling 90 minutes must not invent a study pebble"
         )
@@ -1790,9 +1790,16 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             "Closing Reward Bridge \(expectedPresentationCount) must add exactly one live particle"
         )
         XCTAssertTrue(
-            waitForHittable(demoLauncherForVisualAudit, timeout: 6),
+            waitForHittable(app.buttons["home.focus-launcher"], timeout: 6),
             "The launcher must become operable after Reward Bridge \(expectedPresentationCount) closes"
         )
+        waitForLauncherEnabled()
+        // 12秒、DEMO is Debug-only and never saved as the preferred duration.
+        // Home restores the saved duration when it reappears or its
+        // preferences change, which a completion can do; pick the demo again.
+        if !waitForHittable(demoLauncherForVisualAudit, timeout: 2) {
+            selectDemoDurationForVisualAudit()
+        }
     }
 
     private func retainScreenshot(named name: String) {
@@ -1820,6 +1827,17 @@ final class RuntimeFlowAuditUITests: XCTestCase {
 
     private func presentationValue(from probe: XCUIElement) -> String {
         (probe.value as? String) ?? probe.label
+    }
+
+    /// The probe without `homeBodyEvaluations`. That field counts Home's
+    /// re-renders for HomeIdleRenderUITests, and closing a focus re-renders
+    /// Home, so comparing it made "the jar did not change" fail every time.
+    /// Every field about what the jar holds and shows is still compared.
+    private func jarPresentation(from probe: XCUIElement) -> String {
+        presentationValue(from: probe)
+            .split(separator: ";")
+            .filter { !$0.hasPrefix("homeBodyEvaluations=") }
+            .joined(separator: ";")
     }
 
     private func waitForPresentationCount(
