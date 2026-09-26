@@ -175,10 +175,12 @@ enum JarScalePolicy {
     /// (Σπ(s·r)² ≤ budget while s > 1). Well below the ~66 % at which the
     /// shipping worst case still keeps 17 % free under the mouth.
     static let interiorAreaBudgetFraction: CGFloat = 0.30
-    /// A 25-minute gem is about 55 pt across at this scale: 0.18 of the
+    /// A 25-minute gem is about 57 pt across at this scale: 0.19 of the
     /// iPhone 17 Pro Home interior (306 pt) and 0.20 of the 12 mini's
-    /// (279 pt); the reference image shows 0.15–0.20.
-    static let maximumScale: CGFloat = 2.4
+    /// (279 pt); the reference image shows 0.15–0.20. The top is a rung of
+    /// the ladder itself (1.04²³ ≈ 2.46, round 12; it was 2.4, one 1.3 %
+    /// step above 1.04²²), so the top keeps the two-rung hysteresis too.
+    static let maximumScale: CGFloat = pow(rungRatio, 23)
     static let minimumScale: CGFloat = 1
     /// Scales move on a geometric ladder of 4 % rungs, so a landing that
     /// changes the target by a hair never re-bakes the jar.
