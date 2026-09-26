@@ -442,14 +442,15 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
     /// first exists: asking whether it is hittable can then throw
     /// ("Activation point invalid"), and a tap can be lost. A recording of a
     /// failed run shows the sheet at rest with no duration chosen. So wait
-    /// for the tile to stop moving, and tap it again if no confirmation came.
+    /// for the tile to stop moving (`waitUntilFrameSettles`), and tap it again
+    /// if no confirmation came.
     /// Choosing a duration only sets it, so a second tap changes nothing
     /// else. Callers still check that the confirmation is on screen without
     /// a swipe.
     private func chooseThirtyMinutes(scrolling: Bool) -> XCUIElement {
         let thirtyMinutes = app.buttons["30分、300グラム加算"]
         XCTAssertTrue(thirtyMinutes.waitForExistence(timeout: 5))
-        XCTAssertTrue(waitForSettledFrame(thirtyMinutes), "The 手動で積む sheet must come to rest")
+        XCTAssertTrue(waitUntilFrameSettles(thirtyMinutes), "The 手動で積む sheet must come to rest")
         if scrolling {
             XCTAssertTrue(scrollUntilHittable(thirtyMinutes))
         }
@@ -460,19 +461,6 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         }
         XCTAssertTrue(confirm.waitForExistence(timeout: 5), "Choosing 30分 must show 確認して積む")
         return confirm
-    }
-
-    /// True once two reads of the element's frame 0.25 s apart agree.
-    private func waitForSettledFrame(_ element: XCUIElement, timeout: TimeInterval = 8) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        var previous = element.frame
-        while Date() < deadline {
-            pause(0.25)
-            let current = element.frame
-            if current == previous, !current.isEmpty { return true }
-            previous = current
-        }
-        return false
     }
 
     /// The UI-test store starts with one theme (英語); add a second one.
