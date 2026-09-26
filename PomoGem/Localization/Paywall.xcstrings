@@ -79,6 +79,9 @@
     "自由な集中時間" : {
       "comment" : "Paywall feature title: any focus length"
     },
+    "自由な集中時間を選べます。" : {
+      "comment" : "Paywall subtitle when opened from the custom focus duration control"
+    },
     "表示の例：%@" : {
       "comment" : "VoiceOver: an example month label; the argument is a month such as 2026年9月"
     },

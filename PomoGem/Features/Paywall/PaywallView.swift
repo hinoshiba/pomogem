@@ -108,7 +108,8 @@ struct PaywallView: View {
     private var contextCopy: String {
         switch context {
         case .customTimer:
-            "任意の集中時間を選べます。"
+            // The same noun as the first feature row and Settings' Pro row.
+            String(localized: "自由な集中時間を選べます。", table: "Paywall", comment: "Paywall subtitle when opened from the custom focus duration control")
         case .aggregateLabels:
             String(localized: "結晶に、作った月を刻めます。", table: "Paywall", comment: "Paywall subtitle when opened from the crystal month-label hint")
         case .screenTimeApps:
@@ -228,12 +229,12 @@ struct PaywallView: View {
                     // request sends no signal, so asking again must stay
                     // possible. It is the quieter button while a request is
                     // out, so it does not read as "buy again".
-                    purchaseButton(product) {
+                    purchaseButton(product, spinnerTint: PomoGemTheme.text) {
                         Text("もう一度リクエスト", tableName: "Paywall", comment: "Paywall button while a purchase awaits approval: ask again")
                     }
                     .buttonStyle(PomoGemSecondaryButtonStyle())
                 } else {
-                    purchaseButton(product) {
+                    purchaseButton(product, spinnerTint: PomoGemTheme.background) {
                         Text("\(product.displayPrice)でProを購入")
                     }
                     .buttonStyle(PomoGemPrimaryButtonStyle())
@@ -247,8 +248,11 @@ struct PaywallView: View {
         }
     }
 
+    /// `spinnerTint` follows the button's style: the dark background on the
+    /// amber primary button, the text colour on the dark secondary one.
     private func purchaseButton<Label: View>(
         _ product: Product,
+        spinnerTint: Color,
         @ViewBuilder label: () -> Label
     ) -> some View {
         let idleLabel = label()
@@ -257,7 +261,7 @@ struct PaywallView: View {
         } label: {
             if purchase.isPurchasing {
                 HStack(spacing: 8) {
-                    ProgressView().tint(PomoGemTheme.background)
+                    ProgressView().tint(spinnerTint)
                     Text("購入処理中…")
                 }
             } else {
