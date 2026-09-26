@@ -164,6 +164,9 @@
     "時間と粒には、自己申告の記録も含みます。" : {
 
     },
+    "最近の記録を読み込めませんでした。" : {
+      "comment" : "Log: shown under 最近の記録 when the newest records could not be read"
+    },
     "月の記録へ戻る" : {
       "comment" : "Wrapped opened from a month in 年月: returns to that month's sheet"
     },

@@ -254,11 +254,15 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
 
-        // 記録 over 350,640 sessions. The twelve month summaries and 年月 are
-        // read off the main thread, and a 今週／今月 toggle reads only the
-        // period page, so the page answers while those reads are running.
-        // XCUI waits for the app to be idle before each step, so a blocked
-        // main thread shows up in these timings.
+        // 記録 over 350,640 sessions. Its period page, newest records,
+        // aggregates, twelve month summaries and 年月 are all read off the
+        // main thread, and a 今週／今月 toggle reads only the period page, so
+        // the page answers while those reads are running. The budgets below
+        // are the app's own measurements (LogLoadAudit). While one runs the
+        // test leaves the app alone and waits for the audit's Darwin
+        // notification: every XCUI query snapshots the app's accessibility
+        // tree on the app's main thread, hundreds of milliseconds over this
+        // screen, and would read as a stall of the app's own.
         secondColdLaunch.navigationBars["設定"].buttons.element(boundBy: 0).tap()
         XCTAssertTrue(secondColdLaunch.buttons["メニュー"].waitForExistence(timeout: 5))
         secondColdLaunch.buttons["メニュー"].tap()
@@ -267,7 +271,18 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(scrollUntilHittable(log, in: secondColdLaunch))
         let logStartedAt = ProcessInfo.processInfo.systemUptime
+        let openFinished = logLoadAuditFinished()
         log.tap()
+        // 0.6 s after the push; the screenshot needs no query. Depending on
+        // the Mac, the period page may already have arrived by then. The
+        // placeholders themselves are pinned by
+        // CriticalFlowAdversarialUITests.testLogSaysItIsReadingWhileItReads.
+        RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+        let openingAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        openingAttachment.name = "40-year persistent Log 0.6 s after opening"
+        openingAttachment.lifetime = .keepAlways
+        add(openingAttachment)
+        wait(for: [openFinished], timeout: 60)
         XCTAssertTrue(secondColdLaunch.navigationBars["記録"].waitForExistence(timeout: 10))
         let period = secondColdLaunch.segmentedControls.firstMatch
         XCTAssertTrue(period.waitForExistence(timeout: 10))
@@ -275,25 +290,107 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
         let month = period.buttons["今月"]
         XCTAssertTrue(month.waitForExistence(timeout: 5))
         let logElapsed = ProcessInfo.processInfo.systemUptime - logStartedAt
-        // Straight away, while the month summaries may still be loading.
-        let toggleElapsed = measureSelection(of: month, after: { month.tap() })
-        let roundTripElapsed = measureSelection(of: week, after: { week.tap() })
+        // Years of history never read as an empty list. (This week is empty
+        // in the fixture, so 「この期間の粒は、まだありません。」 is right.)
+        XCTAssertFalse(secondColdLaunch.staticTexts["一粒積むと、ここに記録が残ります。"].exists)
+        let openAudit = try waitForLogLoadAudit(
+            in: secondColdLaunch,
+            trigger: "open",
+            afterGeneration: 0
+        )
+        // A toggle reads the period page only.
+        let monthAudit = try auditPeriodToggle(
+            to: month,
+            in: secondColdLaunch,
+            afterGeneration: try integerField("generation", in: openAudit)
+        )
+        let weekAudit = try auditPeriodToggle(
+            to: week,
+            in: secondColdLaunch,
+            afterGeneration: try integerField("generation", in: monthAudit)
+        )
 
-        // Background, then back: 記録 reads again and still answers.
+        // Background, then back: 記録 reads everything again and still
+        // answers.
         XCUIDevice.shared.press(.home)
         XCTAssertTrue(
             secondColdLaunch.wait(for: .runningBackground, timeout: 10)
                 || secondColdLaunch.wait(for: .runningBackgroundSuspended, timeout: 10)
         )
-        let foregroundStartedAt = ProcessInfo.processInfo.systemUptime
+        let resumeFinished = logLoadAuditFinished()
         secondColdLaunch.activate()
         XCTAssertTrue(secondColdLaunch.wait(for: .runningForeground, timeout: 10))
+        wait(for: [resumeFinished], timeout: 60)
+        let resumeAudit = try waitForLogLoadAudit(
+            in: secondColdLaunch,
+            trigger: "resume",
+            afterGeneration: try integerField("generation", in: weekAudit)
+        )
         XCTAssertTrue(week.isSelected, "Returning must keep the chosen period")
-        month.tap()
-        XCTAssertTrue(waitForSelection(month, timeout: 10))
-        let foregroundElapsed = ProcessInfo.processInfo.systemUptime - foregroundStartedAt
+        let resumedMonthAudit = try auditPeriodToggle(
+            to: month,
+            in: secondColdLaunch,
+            afterGeneration: try integerField("generation", in: resumeAudit)
+        )
         week.tap()
         XCTAssertTrue(waitForSelection(week, timeout: 10))
+
+        let audits = [
+            ("open", openAudit),
+            ("今月", monthAudit),
+            ("今週", weekAudit),
+            ("resume", resumeAudit),
+            ("今月 after resume", resumedMonthAudit)
+        ]
+        XCTContext.runActivity(named: String(
+            format: "40-year Log in app: open %ldms (push and first frame %ldms; longest main-thread stall while reading %ldms; period %ldms, newest %ldms, months %ldms), 今月 %ldms (stall %ldms), 今週 %ldms (stall %ldms), back from the background %ldms (stall %ldms), then 今月 %ldms (stall %ldms)",
+            try integerField("milliseconds", in: openAudit),
+            try integerField("openingStallMilliseconds", in: openAudit),
+            try integerField("longestStallMilliseconds", in: openAudit),
+            try integerField("periodMilliseconds", in: openAudit),
+            try integerField("recentMilliseconds", in: openAudit),
+            try integerField("monthsMilliseconds", in: openAudit),
+            try integerField("milliseconds", in: monthAudit),
+            try integerField("longestStallMilliseconds", in: monthAudit),
+            try integerField("milliseconds", in: weekAudit),
+            try integerField("longestStallMilliseconds", in: weekAudit),
+            try integerField("milliseconds", in: resumeAudit),
+            try integerField("longestStallMilliseconds", in: resumeAudit),
+            try integerField("milliseconds", in: resumedMonthAudit),
+            try integerField("longestStallMilliseconds", in: resumedMonthAudit)
+        )) { _ in }
+        XCTContext.runActivity(
+            named: "40-year Log milestone read on the main thread: open \(openAudit["milestonesMilliseconds"] ?? "-")ms, back from the background \(resumeAudit["milestonesMilliseconds"] ?? "-")ms"
+        ) { _ in }
+        // The screen keeps scrolling, animating and answering taps while
+        // forty years are read: the main thread never stops for a noticeable
+        // moment, whether 記録 opens, switches period or comes back. The
+        // push to 記録 and its first frame come before any read and have a
+        // budget of their own.
+        for (name, audit) in audits {
+            XCTAssertLessThan(
+                try integerField("longestStallMilliseconds", in: audit),
+                Self.logMainThreadStallBudgetMilliseconds,
+                "記録 (\(name)) blocked the main thread while reading: \(audit)"
+            )
+            XCTAssertLessThan(
+                try integerField("openingStallMilliseconds", in: audit),
+                Self.logOpeningBudgetMilliseconds,
+                "記録 (\(name)) took too long to appear: \(audit)"
+            )
+        }
+        // Every read arrives. They are bounded, so their time does not grow
+        // with the years behind them beyond one pass over the table.
+        XCTAssertLessThan(
+            try integerField("periodMilliseconds", in: openAudit),
+            Self.logReadBudgetMilliseconds,
+            "記録's figures for 今週 must arrive: \(openAudit)"
+        )
+        XCTAssertLessThan(
+            try integerField("milliseconds", in: openAudit),
+            Self.logReadBudgetMilliseconds,
+            "Every part of 記録 must arrive: \(openAudit)"
+        )
 
         // Years of history never read as an empty list, before or after the
         // return from the background.
@@ -328,27 +425,51 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
         let pastElapsed = ProcessInfo.processInfo.systemUptime - pastStartedAt
 
         XCTContext.runActivity(named: String(
-            format: "40-year Log open: %.3fs, 今月 at once: %.3fs, back to 今週: %.3fs, foreground to 今月: %.3fs, 過去の記録 open and close: %.3fs",
+            format: "40-year Log (XCUI): open and every read arrived %.3fs, 過去の記録 open and close: %.3fs",
             logElapsed,
-            toggleElapsed,
-            roundTripElapsed,
-            foregroundElapsed,
             pastElapsed
         )) { _ in }
         XCTAssertLessThan(logElapsed, 10, "記録 must open within ten seconds over forty years")
-        XCTAssertLessThan(toggleElapsed, 4, "今月 must answer within four seconds while the month list loads")
-        XCTAssertLessThan(roundTripElapsed, 4, "今週 must answer within four seconds")
-        XCTAssertLessThan(foregroundElapsed, 8, "記録 must answer within eight seconds of returning to the foreground")
         XCTAssertLessThan(pastElapsed, 8, "過去の記録 must open and close while its year is still being counted")
         secondColdLaunch.terminate()
     }
 
-    /// Seconds from `action` until `element` reads as selected.
-    private func measureSelection(of element: XCUIElement, after action: () -> Void) -> TimeInterval {
-        let startedAt = ProcessInfo.processInfo.systemUptime
-        action()
-        XCTAssertTrue(waitForSelection(element, timeout: 10))
-        return ProcessInfo.processInfo.systemUptime - startedAt
+    /// The longest the main thread may go without turning its run loop while
+    /// 記録 reads forty years. A frame is 16 ms; an idle simulator stays far
+    /// below this, and it leaves room for a busy build machine.
+    private static let logMainThreadStallBudgetMilliseconds = 500
+
+    /// From the tap until 記録 is on screen and its first read starts: the
+    /// push and the first frame, on a busy build machine.
+    private static let logOpeningBudgetMilliseconds = 1_500
+
+    /// How long 記録's reads may take off the main thread.
+    private static let logReadBudgetMilliseconds = 15_000
+
+    /// Fulfilled when 記録's next load audit has its timings. Create it
+    /// before the action: a Darwin notification is not queued.
+    private func logLoadAuditFinished() -> XCTDarwinNotificationExpectation {
+        XCTDarwinNotificationExpectation(
+            notificationName: "com.hinoshiba.pomogem.log-load-audit.finished"
+        )
+    }
+
+    /// Picks 今週 or 今月 and returns the app's audit of that pick, without
+    /// querying the app until its read has arrived.
+    private func auditPeriodToggle(
+        to segment: XCUIElement,
+        in app: XCUIApplication,
+        afterGeneration generation: Int
+    ) throws -> [String: String] {
+        let finished = logLoadAuditFinished()
+        segment.tap()
+        wait(for: [finished], timeout: 60)
+        XCTAssertTrue(waitForSelection(segment, timeout: 10))
+        return try waitForLogLoadAudit(
+            in: app,
+            trigger: "period",
+            afterGeneration: generation
+        )
     }
 
     private func waitForSelection(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
@@ -557,6 +678,33 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
             latest: canonicalDescription(of: latest),
             observed: observed.sorted()
         )
+    }
+
+    /// Waits for 記録's in-app load audit (LogLoadAudit) to finish a load
+    /// newer than `generation` that `trigger` started.
+    private func waitForLogLoadAudit(
+        in app: XCUIApplication,
+        trigger: String,
+        afterGeneration generation: Int,
+        timeout: TimeInterval = 60
+    ) throws -> [String: String] {
+        let probe = app.descendants(matching: .any)["log.load-audit.probe"]
+        XCTAssertTrue(probe.waitForExistence(timeout: 10))
+        let deadline = Date().addingTimeInterval(timeout)
+        var latest: [String: String] = [:]
+        repeat {
+            latest = try fields(from: probe)
+            if latest["state"] == "done",
+               latest["trigger"] == trigger,
+               let raw = latest["generation"],
+               let observed = Int(raw),
+               observed > generation {
+                return latest
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        } while Date() < deadline
+        XCTFail("記録's load audit did not finish: \(canonicalDescription(of: latest))")
+        return latest
     }
 
     private func waitForSettingsRenderAudit(
