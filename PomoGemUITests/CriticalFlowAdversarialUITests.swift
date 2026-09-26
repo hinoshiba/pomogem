@@ -558,6 +558,115 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         add(pastShot)
     }
 
+    /// While 記録 reads, it says so. Placeholders stand in for the figures,
+    /// never 「この期間の粒は、まだありません。」 over a week that has a record,
+    /// and VoiceOver hears 「記録を読み込み中」 instead of the placeholder
+    /// figures (「0分、積んだ時間」). A DEBUG hook holds every read for a few
+    /// seconds, because the preview store answers before XCUI can look.
+    func testLogSaysItIsReadingWhileItReads() {
+        app.terminate()
+        app.launchEnvironment["POMOGEM_UI_TEST_LOG_READS"] = "slow"
+        app.launch()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
+        addThirtyMinutesByHand()
+
+        openMenuAction(containing: "記録を見る")
+        XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 5))
+        let tilesLoading = app.descendants(matching: .any)["log.summary.loading"].firstMatch
+        XCTAssertTrue(tilesLoading.waitForExistence(timeout: 3), "The tiles say 記録 is loading")
+        XCTAssertEqual(tilesLoading.label, "記録を読み込み中")
+        // XCUI still lists the hidden tiles by identifier, but without a
+        // label: VoiceOver has nothing to read there. Only redacted, the
+        // tile read 「0g、今週の質量」.
+        let mass = app.descendants(matching: .any)["log.summary.mass"].firstMatch
+        XCTAssertTrue(!mass.exists || mass.label.isEmpty, "VoiceOver must not read the placeholder figures: \(mass.label)")
+        XCTAssertTrue(app.descendants(matching: .any)["log.loading"].firstMatch.exists)
+        XCTAssertFalse(app.staticTexts["この期間の粒は、まだありません。"].exists)
+        let range = app.descendants(matching: .any)["log.period-range"].firstMatch
+        XCTAssertTrue(range.exists, "The dates show while the page loads")
+        let loadingShot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        loadingShot.name = "記録 — while it reads"
+        loadingShot.lifetime = .keepAlways
+        add(loadingShot)
+
+        // The page arrives.
+        XCTAssertTrue(tilesLoading.waitForNonExistence(timeout: 30))
+        let selfReported = app.descendants(matching: .any)["log.self-reported-share"].firstMatch
+        XCTAssertTrue(selfReported.waitForExistence(timeout: 5))
+        XCTAssertTrue(mass.label.contains("300g") && mass.label.contains("今週の質量"), mass.label)
+
+        // A slow 今月: 今週's figures give way to placeholders, never shown
+        // under 今月's name.
+        let period = app.segmentedControls.firstMatch
+        period.buttons["今月"].tap()
+        XCTAssertTrue(tilesLoading.waitForExistence(timeout: 5), "A slow 今月 shows placeholders")
+        XCTAssertTrue(!mass.exists || mass.label.isEmpty, mass.label)
+        let toggleShot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        toggleShot.name = "記録 — a slow 今月 shows placeholders"
+        toggleShot.lifetime = .keepAlways
+        add(toggleShot)
+        XCTAssertTrue(tilesLoading.waitForNonExistence(timeout: 30))
+        XCTAssertTrue(mass.label.contains("300g") && mass.label.contains("今月の質量"), mass.label)
+        // 今月 with a bar to draw: its axis once stopped the app.
+        let chart = app.descendants(matching: .any)["log.mass-chart"].firstMatch
+        XCTAssertTrue(chart.waitForExistence(timeout: 5))
+        XCTAssertEqual(app.state, .runningForeground)
+        let monthShot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        monthShot.name = "記録 — 今月 with a record"
+        monthShot.lifetime = .keepAlways
+        add(monthShot)
+    }
+
+    /// When the newest records cannot be read, 最近の記録 says so. It must not
+    /// keep loading (most people never reset, so there is no epoch to tell
+    /// "nothing read yet" apart), nor say 「一粒積むと、ここに記録が残ります。」
+    /// over a history that has records. A DEBUG hook fails that one read.
+    func testLogSaysWhenItCannotReadTheNewestRecords() {
+        app.terminate()
+        app.launchEnvironment["POMOGEM_UI_TEST_LOG_READS"] = "fail-recent"
+        app.launch()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
+        addThirtyMinutesByHand()
+
+        openMenuAction(containing: "記録を見る")
+        XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.staticTexts["記録の一部を読み込めませんでした。もう一度この画面を開いてください。"]
+                .waitForExistence(timeout: 5)
+        )
+        // The period page still reads.
+        let mass = app.descendants(matching: .any)["log.summary.mass"].firstMatch
+        XCTAssertTrue(mass.waitForExistence(timeout: 5))
+        XCTAssertTrue(mass.label.contains("300g"), mass.label)
+
+        let unavailable = app.staticTexts["log.recent.unavailable"]
+        XCTAssertTrue(scrollUntilHittable(unavailable, swiping: .up))
+        XCTAssertEqual(unavailable.label, "最近の記録を読み込めませんでした。")
+        XCTAssertFalse(app.staticTexts["一粒積むと、ここに記録が残ります。"].exists)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["log.loading"].firstMatch.waitForNonExistence(timeout: 5),
+            "Nothing on 記録 keeps loading"
+        )
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "記録 — the newest records could not be read"
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+
+    private func addThirtyMinutesByHand() {
+        openMenuAction(containing: "時間を手動で積む")
+        let thirtyMinutes = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "30分")
+        ).firstMatch
+        XCTAssertTrue(thirtyMinutes.waitForExistence(timeout: 4))
+        thirtyMinutes.tap()
+        let manualConfirm = app.buttons["manual.confirm"]
+        XCTAssertTrue(manualConfirm.waitForExistence(timeout: 4))
+        XCTAssertTrue(scrollUntilHittable(manualConfirm, swiping: .up))
+        manualConfirm.tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
+    }
+
     /// Deleting a theme keeps its history. Correcting only the memo of a
     /// milestone recorded under it must not move the milestone to whichever
     /// theme happens to sort first.

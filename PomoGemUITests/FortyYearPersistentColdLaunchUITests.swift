@@ -273,13 +273,15 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
         let logStartedAt = ProcessInfo.processInfo.systemUptime
         let openFinished = logLoadAuditFinished()
         log.tap()
-        // Right after the push, while forty years are being read: the
-        // screenshot needs no query.
+        // 0.6 s after the push; the screenshot needs no query. Depending on
+        // the Mac, the period page may already have arrived by then. The
+        // placeholders themselves are pinned by
+        // CriticalFlowAdversarialUITests.testLogSaysItIsReadingWhileItReads.
         RunLoop.current.run(until: Date().addingTimeInterval(0.6))
-        let loadingAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        loadingAttachment.name = "40-year persistent Log while it loads"
-        loadingAttachment.lifetime = .keepAlways
-        add(loadingAttachment)
+        let openingAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        openingAttachment.name = "40-year persistent Log 0.6 s after opening"
+        openingAttachment.lifetime = .keepAlways
+        add(openingAttachment)
         wait(for: [openFinished], timeout: 60)
         XCTAssertTrue(secondColdLaunch.navigationBars["記録"].waitForExistence(timeout: 10))
         let period = secondColdLaunch.segmentedControls.firstMatch

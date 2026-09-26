@@ -1983,7 +1983,10 @@ struct LogView: View {
         do {
             let container = modelContext.container
             let content = try await readQueue.run(first: true) {
-                try await AccumulationTimelineLoader.read(from: container) { repository in
+#if DEBUG && targetEnvironment(simulator)
+                try await LogReadFaultInjection.beforeRead(.period)
+#endif
+                return try await AccumulationTimelineLoader.read(from: container) { repository in
                     try await repository.logPeriodContent(
                         period: period,
                         interval: interval,
@@ -2026,7 +2029,10 @@ struct LogView: View {
         do {
             let container = modelContext.container
             let content = try await readQueue.run {
-                try await AccumulationTimelineLoader.read(from: container) { repository in
+#if DEBUG && targetEnvironment(simulator)
+                try await LogReadFaultInjection.beforeRead(.recent)
+#endif
+                return try await AccumulationTimelineLoader.read(from: container) { repository in
                     try await repository.logRecentContent(
                         currentEpochID: epochID,
                         aggregateCacheStamp: aggregateCacheStamp
@@ -2120,7 +2126,10 @@ struct LogView: View {
         do {
             let container = modelContext.container
             let summaries = try await readQueue.run {
-                try await AccumulationTimelineLoader.read(from: container) { repository in
+#if DEBUG && targetEnvironment(simulator)
+                try await LogReadFaultInjection.beforeRead(.months)
+#endif
+                return try await AccumulationTimelineLoader.read(from: container) { repository in
                     try await repository.recentMonthSummaries(
                         endingAt: now,
                         currentEpochID: epochID,
