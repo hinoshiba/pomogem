@@ -1133,6 +1133,13 @@ struct LogView: View {
         Binding(
             get: { period },
             set: { newValue in
+#if DEBUG
+                if newValue != period {
+                    // Before the change, so the audit is running when the
+                    // new page's load starts.
+                    router.logLoadAudit.begin(.period)
+                }
+#endif
                 periodReloadIsSlow = false
                 period = newValue
             }
@@ -1295,11 +1302,11 @@ struct LogView: View {
             // Coming back from the background reads the milestones again,
             // like everything else on this screen.
             achievementLoadKey = nil
+#if DEBUG
+            router.logLoadAudit.noteHidden()
+#endif
         }
 #if DEBUG
-        .onChange(of: period) { _, _ in
-            router.logLoadAudit.begin(.period)
-        }
         .overlay(alignment: .topLeading) {
             if LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess {
                 LogLoadAuditProbe(audit: router.logLoadAudit)
@@ -1961,6 +1968,13 @@ struct LogView: View {
     /// thread ran that read.
     @MainActor
     private func loadAchievementsBeforeLifetimeReads() {
+#if DEBUG
+        // The first load after a return from the background starts the
+        // UI-test audit of that return, and every load marks when reading
+        // starts, both before anything is read.
+        router.logLoadAudit.beginResumeIfReturning()
+        router.logLoadAudit.loadStarting()
+#endif
         let key = recentHistoryKey
         guard achievementLoadKey != key else { return }
         achievementLoadKey = key
@@ -1973,6 +1987,14 @@ struct LogView: View {
     @MainActor
     private func loadAchievements() {
         guard LogHistoryLoadPolicy.isVisible(scenePhase) else { return }
+#if DEBUG
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        defer {
+            router.logLoadAudit.noteMilestoneRead(
+                seconds: ProcessInfo.processInfo.systemUptime - startedAt
+            )
+        }
+#endif
         let epochID = currentEpochID
         do {
             let achievementRaw = try modelContext.fetch(BoundedHistoryPolicy.achievementCandidateDescriptor(
