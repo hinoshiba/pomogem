@@ -639,6 +639,7 @@ struct StorageTransferRecoveryCloudTransport {
                     return try Self.response(value)
                 })
             }
+            CloudKitRoundTripLedger.record(.controlFetch)
             database.add(operation)
             return operation
         }

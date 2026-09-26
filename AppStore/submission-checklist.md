@@ -261,8 +261,10 @@ HTTPS証明書の是正もユーザーが担当し、その完了を待たず提
   最終一巡が1,024-row budgetへ入らない異常密度はv0のまま抑止する。late winner、2×256 dense member、
   count→fetch間変更、kill／checkpoint replay、ancestor全field再導出の回帰testを最新RCで合格する
 - [ ] cloud modeは起動直後を未検証とし、source／reset save、remote-store change、初回60秒、真正な
-  foreground復帰、active継続15分ごとにsessions verificationを要求する。pending中は生涯正確値、`+`、
-  `以上`を表示せず「再集計中」「この端末で確認済み」とするfocused testを合格する
+  foreground復帰、active継続15分ごとにsessions verificationを要求する。pending中はaggregate由来の値を
+  生涯の正確値として表示せず、Homeの見出し・メニュー・瓶のVoiceOverは、この端末が責任を持てる値（全session
+  を覆う端末の合計、または同じdataの直前の検証済み合計に新しい記録を足した値。`PendingMassPresentationPolicy`）
+  だけを「iCloudを確認中」付きで表示し、それ以外は「再集計中」とするfocused testを合格する
 - [x] 同一focus sessionのterminal／active／claim duplicateを全物理row保持のままread-onlyで論理解決し、
   異なるsession UUIDを破壊的にcancelしない実装を追加。materialized `StudySession`で閉じたことをexact確認した
   active tailだけを別cleanupとして削除可能
