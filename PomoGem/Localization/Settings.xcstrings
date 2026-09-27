@@ -28,6 +28,9 @@
     "iOS：%@" : {
       "comment" : "Support mail line; the argument is the iOS version, e.g. 26.5"
     },
+    "「抽選しない」を選択として保存" : {
+
+    },
     "「集中に戻るお知らせ」は既定でオフです。オンにすると、集中タイマー中にホーム画面や別のアプリへ移ったとき、30秒後に一度通知し、戻ると取り消します。画面をロックしただけなら通知しません（パスコードを使っていないiPhoneなどでは届くことがあります）。一時停止中・休憩中・終了間際も通知しません。" : {
       "comment" : "Settings caption under the return-to-focus reminder switch"
     },
@@ -139,6 +142,9 @@
     "毎月1日に一度だけ" : {
       "comment" : "Settings switch subtitle: the monthly notification is sent on the 1st"
     },
+    "結晶" : {
+      "comment" : "Export progress: the collection being written (crystals)"
+    },
     "自由な集中時間・結晶の月刻印・勉強アプリ数の無制限" : {
       "comment" : "Settings Pro row subtitle for free users: what Pro adds"
     },
@@ -147,6 +153,9 @@
     },
     "見出し書体" : {
       "comment" : "About page row: the heading typeface"
+    },
+    "記念石" : {
+      "comment" : "Export progress: the collection being written (achievement stones)"
     },
     "記録の書き出しとリセット" : {
       "comment" : "Settings section header: export and reset"

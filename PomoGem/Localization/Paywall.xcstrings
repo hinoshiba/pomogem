@@ -28,6 +28,9 @@
     "スクリーンタイムで記録する勉強アプリ。無料は5つまで" : {
       "comment" : "Paywall feature detail: the free plan records up to five study apps"
     },
+    "ポモジェムPro" : {
+      "comment" : "Paywall: title of the card shown once Pro is owned"
+    },
     "ポモジェムProが使えるようになりました" : {
       "comment" : "Toast: an approved (Ask to Buy) Pro purchase arrived"
     },
