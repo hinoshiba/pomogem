@@ -1,5 +1,24 @@
 import AVFoundation
 import Foundation
+import UserNotifications
+
+/// The samples one choice plays in the app, rendered off the main thread:
+/// the seamless loop (standard and maximum) and one cycle (the gentle
+/// preset's repeat and the single cue after a return).
+struct RenderedAlarmSound: Sendable {
+    let loop: [Float]
+    let cue: [Float]
+}
+
+/// The two Library/Sounds files a choice can have.
+enum AlarmSoundFileKind: String, Sendable {
+    /// ≤ 28 s: the Time Sensitive notification at the standard and maximum
+    /// presets, and the AlarmKit alarm.
+    case ringtone
+    /// One cycle: the notification at the gentle preset, for the five new
+    /// sounds (the original chimes keep `TimerCompletionSoundLibrary`).
+    case cue
+}
 
 /// Turns `AlarmSoundSynthesis` renderings into playable buffers and into the
 /// long CAF files that notifications and AlarmKit play from Library/Sounds.
@@ -39,6 +58,33 @@ enum AlarmSoundLibrary {
 
     static func synthesizedSource(for sound: AlarmSynthesizedSound) -> AlarmSoundSource {
         AlarmSoundSynthesis.source(for: sound)
+    }
+
+    /// The only part of rendering that needs the main actor: a legacy
+    /// choice's original chime from `SoundSynth`. Nil for the new sounds.
+    @MainActor
+    static func legacyChime(for choice: AlarmSoundChoice) -> [Float]? {
+        choice.legacySound.map {
+            samples(of: SoundSynth.makeTimerCompletionBuffer(for: $0))
+        }
+    }
+
+    /// Nonisolated `source(for:)`, given `legacyChime(for:)`.
+    static func source(for choice: AlarmSoundChoice, legacyChime: [Float]?) -> AlarmSoundSource {
+        if let sound = choice.synthesizedSound {
+            return synthesizedSource(for: sound)
+        }
+        return AlarmSoundSynthesis.legacySource(chime: legacyChime ?? [])
+    }
+
+    /// Renders the in-app loop and cue. A legacy choice's cue is its
+    /// original chime, untouched (the gentle preset is today's sound).
+    static func render(_ choice: AlarmSoundChoice, legacyChime: [Float]?) -> RenderedAlarmSound {
+        let source = source(for: choice, legacyChime: legacyChime)
+        return RenderedAlarmSound(
+            loop: AlarmSoundSynthesis.loop(source),
+            cue: legacyChime ?? AlarmSoundSynthesis.preview(source)
+        )
     }
 
     // MARK: Buffers
@@ -95,6 +141,25 @@ enum AlarmSoundLibrary {
 
     static func fileName(for choice: AlarmSoundChoice) -> String {
         "\(fileNamePrefix)\(choice.rawValue)-v\(fileVersion).\(fileExtension)"
+    }
+
+    static func fileName(_ kind: AlarmSoundFileKind, for choice: AlarmSoundChoice) -> String {
+        switch kind {
+        case .ringtone:
+            fileName(for: choice)
+        case .cue:
+            "\(fileNamePrefix)\(choice.rawValue)-cue-v\(fileVersion).\(fileExtension)"
+        }
+    }
+
+    /// Every file name this version writes. Anything else with the prefix
+    /// is stale (`removeStaleRingtoneFiles`).
+    static var currentFileNames: Set<String> {
+        var names = Set(AlarmSoundChoice.allCases.map { fileName(.ringtone, for: $0) })
+        for choice in AlarmSoundChoice.allCases where choice.synthesizedSound != nil {
+            names.insert(fileName(.cue, for: choice))
+        }
+        return names
     }
 
     static func soundsDirectory(
@@ -206,7 +271,7 @@ enum AlarmSoundLibrary {
             libraryDirectory: libraryDirectory,
             fileManager: fileManager
         )
-        let current = Set(AlarmSoundChoice.allCases.map(fileName(for:)))
+        let current = currentFileNames
         let contents = try fileManager.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: nil
@@ -237,6 +302,123 @@ enum AlarmSoundLibrary {
             if name.hasPrefix(fileNamePrefix) || name.hasPrefix(".\(fileNamePrefix)") {
                 try fileManager.removeItem(at: url)
             }
+        }
+    }
+
+    // MARK: Prepared off the main thread
+
+    /// Writes (or finds) `kind` for `choice` without rendering on the main
+    /// thread, and returns its URL. Concurrent requests for the same file
+    /// share one write. A cue for one of the three original chimes is not
+    /// written here (`TimerCompletionSoundLibrary` owns those).
+    @MainActor
+    static func preparedFile(
+        _ kind: AlarmSoundFileKind,
+        for choice: AlarmSoundChoice,
+        libraryDirectory: URL? = nil
+    ) async throws -> URL {
+        if kind == .cue, choice.legacySound != nil {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        let name = fileName(kind, for: choice)
+        let key = "\(libraryDirectory?.path ?? "")/\(name)"
+        if let inFlight = preparations[key] {
+            return try await inFlight.value
+        }
+        let legacyChime = legacyChime(for: choice)
+        let task = Task<URL, Error> {
+            try await Task.detached(priority: .utility) {
+                if let existing = try existingFile(kind, for: choice, libraryDirectory: libraryDirectory) {
+                    return existing
+                }
+                let source = source(for: choice, legacyChime: legacyChime)
+                return try writeFile(kind, for: choice, source: source, libraryDirectory: libraryDirectory)
+            }.value
+        }
+        preparations[key] = task
+        defer { preparations[key] = nil }
+        return try await task.value
+    }
+
+    @MainActor
+    private static var preparations: [String: Task<URL, Error>] = [:]
+
+    /// The notification sound for a prepared file, or nil when it could not
+    /// be written (the caller falls back to the short chime).
+    @MainActor
+    static func notificationSound(
+        _ kind: AlarmSoundFileKind,
+        for choice: AlarmSoundChoice
+    ) async -> UNNotificationSound? {
+        guard let url = try? await preparedFile(kind, for: choice) else { return nil }
+        return UNNotificationSound(named: UNNotificationSoundName(rawValue: url.lastPathComponent))
+    }
+
+    /// `existingRingtoneFile` for either kind.
+    static func existingFile(
+        _ kind: AlarmSoundFileKind,
+        for choice: AlarmSoundChoice,
+        libraryDirectory: URL? = nil,
+        fileManager: FileManager = .default
+    ) throws -> URL? {
+        let destination = try soundsDirectory(
+            libraryDirectory: libraryDirectory,
+            fileManager: fileManager
+        ).appendingPathComponent(fileName(kind, for: choice))
+        guard fileManager.fileExists(atPath: destination.path),
+              let file = try? AVAudioFile(forReading: destination),
+              file.length > 0,
+              file.fileFormat.channelCount == 1,
+              file.fileFormat.sampleRate == AlarmSoundSynthesis.sampleRate,
+              Double(file.length) / file.fileFormat.sampleRate
+                <= AlarmSoundSynthesis.ringtoneMaximumDuration
+        else { return nil }
+        return destination
+    }
+
+    /// `writeRingtoneFile` for either kind.
+    @discardableResult
+    static func writeFile(
+        _ kind: AlarmSoundFileKind,
+        for choice: AlarmSoundChoice,
+        source: AlarmSoundSource,
+        libraryDirectory: URL? = nil,
+        fileManager: FileManager = .default
+    ) throws -> URL {
+        switch kind {
+        case .ringtone:
+            return try writeRingtoneFile(
+                for: choice,
+                source: source,
+                libraryDirectory: libraryDirectory,
+                fileManager: fileManager
+            )
+        case .cue:
+            let directory = try soundsDirectory(
+                libraryDirectory: libraryDirectory,
+                fileManager: fileManager
+            )
+            let name = fileName(.cue, for: choice)
+            let destination = directory.appendingPathComponent(name)
+            let temporary = directory.appendingPathComponent(".\(name).writing")
+            if fileManager.fileExists(atPath: temporary.path) {
+                try fileManager.removeItem(at: temporary)
+            }
+            do {
+                try writeCAF(AlarmSoundSynthesis.preview(source), to: temporary)
+                if fileManager.fileExists(atPath: destination.path) {
+                    try fileManager.removeItem(at: destination)
+                }
+                try fileManager.moveItem(at: temporary, to: destination)
+            } catch {
+                try? fileManager.removeItem(at: temporary)
+                throw error
+            }
+            var excluded = destination
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            try? excluded.setResourceValues(values)
+            return destination
         }
     }
 

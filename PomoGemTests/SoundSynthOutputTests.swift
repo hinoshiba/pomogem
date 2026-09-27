@@ -153,6 +153,152 @@ final class SoundSynthOutputTests: XCTestCase {
         XCTAssertEqual(AVSoundSynthOutput.sessionCategoryOptions, [])
     }
 
+    // MARK: - F5 alarm loop and session
+
+    func testTheStandardLoopPlaysSeamlesslyAndStaysAmbient() async {
+        let fixture = Fixture()
+        await fixture.synth.prepareAlarmSoundAndWait(.bell)
+        fixture.synth.sustainTimerCompletionLoop(.bell, session: .ambient)
+        fixture.synth.sustainTimerCompletionLoop(.bell, session: .ambient)
+        fixture.drain()
+        XCTAssertEqual(
+            fixture.output.calls.map(\.name),
+            ["ensureRunning", "playTimerCompletionLoop"],
+            "One loop, however often a cycle asks; no session switch for .ambient"
+        )
+        XCTAssertTrue(fixture.synth.isTimerCompletionLoopRequested)
+        XCTAssertTrue(fixture.output.calls.allSatisfy { !$0.onMainThread })
+
+        fixture.synth.stopTimerCompletion()
+        fixture.drain()
+        XCTAssertEqual(fixture.output.calls.last?.name, "stopTimerCompletion")
+        XCTAssertFalse(fixture.synth.isTimerCompletionLoopRequested)
+        XCTAssertEqual(fixture.synth.currentAlarmSessionMode, .ambient)
+    }
+
+    func testTheMaximumLoopOverridesTheSilentSwitchAndGivesTheMusicBack() async {
+        let fixture = Fixture()
+        await fixture.synth.prepareAlarmSoundAndWait(.digital)
+        fixture.synth.sustainTimerCompletionLoop(.digital, session: .playbackDuckingOthers)
+        fixture.drain()
+        XCTAssertEqual(fixture.output.calls.map(\.name), [
+            "useSessionMode(playbackDuckingOthers)",
+            "ensureRunning",
+            "playTimerCompletionLoop"
+        ], "The category changes before the engine starts, so ducking starts with it")
+        XCTAssertEqual(fixture.synth.currentAlarmSessionMode, .playbackDuckingOthers)
+
+        fixture.synth.stopTimerCompletion()
+        fixture.drain()
+        XCTAssertEqual(Array(fixture.output.calls.map(\.name).suffix(2)), [
+            "stop(deactivatingSession: true)",
+            "useSessionMode(ambient)"
+        ], "Released at once with notifyOthersOnDeactivation, then back to .ambient")
+        XCTAssertEqual(fixture.synth.currentAlarmSessionMode, .ambient)
+
+        // The next jar sound plays .ambient without another switch.
+        fixture.synth.playThud(impactSpeed: 4)
+        fixture.drain()
+        XCTAssertEqual(
+            fixture.output.calls.filter { $0.name.hasPrefix("useSessionMode") }.count,
+            2
+        )
+    }
+
+    func testTheSessionConfigurationsArePinned() {
+        let ambient = AVSoundSynthOutput.sessionConfiguration(for: .ambient)
+        XCTAssertEqual(ambient.category, .ambient)
+        XCTAssertEqual(ambient.options, [])
+        let maximum = AVSoundSynthOutput.sessionConfiguration(for: .playbackDuckingOthers)
+        XCTAssertEqual(maximum.category, .playback, "Plays with the Ring/Silent switch on")
+        XCTAssertTrue(maximum.options.contains(.duckOthers), "Music is lowered")
+        XCTAssertTrue(maximum.options.contains(.mixWithOthers), "Music is never stopped")
+        XCTAssertFalse(maximum.options.contains(.defaultToSpeaker))
+    }
+
+    func testALoopKeepsTheEngineUntilItStopsThenLingersAsUsual() async throws {
+        let checks = ManualIdleChecks()
+        let fixture = Fixture(idleLinger: 0.4, idleChecks: checks)
+        await fixture.synth.prepareAlarmSoundAndWait(.marimba)
+        fixture.synth.playThud(impactSpeed: 4)
+        fixture.synth.sustainTimerCompletionLoop(.marimba, session: .ambient)
+        fixture.drain()
+        for _ in 0 ..< 5 {
+            fixture.wait(seconds: 0.05)
+            checks.fireAll()
+            fixture.drain()
+        }
+        XCTAssertFalse(
+            fixture.output.calls.contains { $0.name.hasPrefix("stop(") },
+            "An idle check never stops a looping alarm"
+        )
+
+        fixture.synth.stopTimerCompletion()
+        let check = try XCTUnwrap(checks.pending.last)
+        XCTAssertGreaterThanOrEqual(check.delay, 0.4, "Back to the ordinary linger (#41)")
+    }
+
+    func testLeavingForgetsTheLoopSoTheNextCycleRestartsIt() async {
+        let fixture = Fixture()
+        await fixture.synth.prepareAlarmSoundAndWait(.bell)
+        fixture.synth.sustainTimerCompletionLoop(.bell, session: .playbackDuckingOthers)
+        fixture.synth.applicationWillResignActive()
+        XCTAssertFalse(fixture.synth.isTimerCompletionLoopRequested)
+        XCTAssertEqual(fixture.synth.currentAlarmSessionMode, .ambient)
+        fixture.synth.sustainTimerCompletionLoop(.bell, session: .playbackDuckingOthers)
+        XCTAssertFalse(fixture.synth.isTimerCompletionLoopRequested, "Nothing starts while inactive")
+
+        fixture.synth.applicationDidBecomeActive()
+        fixture.synth.sustainTimerCompletionLoop(.bell, session: .playbackDuckingOthers)
+        fixture.drain()
+        XCTAssertTrue(fixture.synth.isTimerCompletionLoopRequested)
+        XCTAssertEqual(
+            fixture.output.calls.filter { $0.name == "playTimerCompletionLoop" }.count,
+            2
+        )
+    }
+
+    func testAnAlarmWaitingForItsSoundStartsWhenTheRenderingIsDone() async {
+        let fixture = Fixture()
+        XCTAssertFalse(fixture.synth.hasPreparedAlarmSound(.schoolChime))
+        fixture.synth.sustainTimerCompletionLoop(.schoolChime, session: .ambient)
+        XCTAssertFalse(fixture.synth.isTimerCompletionLoopRequested)
+        await fixture.synth.prepareAlarmSoundAndWait(.schoolChime)
+        fixture.drain()
+        XCTAssertTrue(fixture.synth.isTimerCompletionLoopRequested)
+        XCTAssertTrue(fixture.output.calls.contains { $0.name == "playTimerCompletionLoop" })
+
+        // A stop while rendering drops the request.
+        fixture.synth.stopTimerCompletion()
+        fixture.synth.sustainTimerCompletionLoop(.alarmClock, session: .ambient)
+        fixture.synth.stopTimerCompletion()
+        await fixture.synth.prepareAlarmSoundAndWait(.alarmClock)
+        XCTAssertFalse(fixture.synth.isTimerCompletionLoopRequested)
+    }
+
+    func testACueIsNotCutOffByTheNextCycleButAPreviewIs() async {
+        let fixture = Fixture()
+        await fixture.synth.prepareAlarmSoundAndWait(.digital)
+        fixture.synth.playTimerCompletionCue(.digital, session: .ambient)
+        fixture.synth.playTimerCompletionCue(.digital, session: .ambient)
+        fixture.drain()
+        XCTAssertEqual(fixture.output.calls.filter { $0.name == "playTimerCompletion" }.count, 1)
+
+        fixture.synth.playAlarmPreview(.digital, session: .ambient)
+        fixture.drain()
+        XCTAssertEqual(fixture.output.calls.filter { $0.name == "playTimerCompletion" }.count, 2)
+    }
+
+    func testSoundOffPlaysNoAlarm() async {
+        let fixture = Fixture()
+        await fixture.synth.prepareAlarmSoundAndWait(.bell)
+        fixture.synth.isEnabled = false
+        fixture.synth.sustainTimerCompletionLoop(.bell, session: .playbackDuckingOthers)
+        fixture.synth.playTimerCompletionCue(.bell, session: .ambient)
+        fixture.drain()
+        XCTAssertEqual(fixture.output.calls.map(\.name), [])
+    }
+
     private func gems(count: Int) -> [PebbleDescriptor] {
         (0 ..< count).map { index in
             PebbleDescriptor(
@@ -310,7 +456,14 @@ private struct Fixture {
             audioQueue: queue,
             idleLinger: idleLinger,
             scheduleIdleCheck: idleChecks?.scheduler ?? SoundSynth.mainQueueIdleCheckScheduler,
-            observesApplicationLifecycle: false
+            observesApplicationLifecycle: false,
+            // A few milliseconds of samples: rendering is AlarmSoundSynthesisTests' job.
+            renderAlarm: { _, _ in
+                RenderedAlarmSound(
+                    loop: [Float](repeating: 0.25, count: 4_410),
+                    cue: [Float](repeating: 0.25, count: 44_100)
+                )
+            }
         )
     }
 
@@ -428,8 +581,16 @@ private final class RecordingSoundSynthOutput: SoundSynthOutput, @unchecked Send
         record("playTimerCompletion")
     }
 
+    func playTimerCompletionLoop(_ buffer: AVAudioPCMBuffer, volume: Float) {
+        record("playTimerCompletionLoop")
+    }
+
     func stopTimerCompletion() {
         record("stopTimerCompletion")
+    }
+
+    func useSessionMode(_ mode: AlarmAudioSessionMode) {
+        record("useSessionMode(\(mode))")
     }
 
     func stop(deactivatingSession: Bool) {

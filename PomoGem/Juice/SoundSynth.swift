@@ -225,13 +225,24 @@ struct TimerCompletionAlertConfiguration: Equatable, Sendable {
     var isSilent: Bool { sound == nil && haptic == nil }
 }
 
-/// Repeats a short, bounded completion cue while the app is in the foreground.
+/// Rings the completion alarm while the app is in the foreground.
+///
+/// WHETHER a completion rings is decided by the timer screens
+/// (`TimerCompletionForegroundFeedbackPolicy`); this controller decides HOW,
+/// through `TimerCompletionAlarmRequest` (the strength and sound this iPhone
+/// chose, F5): the gentle preset repeats today's short cue every 1.3 s, the
+/// standard and maximum presets loop the chosen sound seamlessly with a
+/// continuous vibration and stop by themselves after
+/// `AlarmStrength.automaticStopDuration`. An alarm that stopped by itself
+/// stays active (the Stop control remains, `isRinging` is false) so the
+/// timer screen still waits for the person, and a later screen lock counts
+/// as Stop like any other departure.
 ///
 /// iOS suspends ordinary apps in the background, where the scheduled local
-/// notification remains the only supported completion cue. The logical alert
-/// stays alive while the scene is only inactive (Control Center, a banner),
-/// so it continues when that closes, without requesting background audio or
-/// bypassing the silent switch. Leaving the app ends it: the person had to
+/// notification (or the system alarm) remains the only supported completion
+/// cue. The logical alert stays alive while the scene is only inactive
+/// (Control Center, a banner), so it continues when that closes, without
+/// requesting background audio. Leaving the app ends it: the person had to
 /// pick up the phone to leave, so that counts as Stop (see
 /// `acknowledgeOnLeavingApp`).
 /// Generation fencing protects a newer timer from a late, non-cooperative
@@ -245,51 +256,108 @@ final class TimerCompletionAlertController {
     ) -> Void
     typealias StopPlayback = @MainActor @Sendable () -> Void
     typealias ApplicationIsActive = @MainActor @Sendable () -> Bool
+    typealias Planner = @MainActor (
+        TimerCompletionAlertConfiguration,
+        TimerCompletionForegroundFeedbackPolicy.Cue
+    ) -> TimerCompletionAlarmRequest
+    typealias Uptime = @MainActor () -> TimeInterval
 
-    static let shared = TimerCompletionAlertController()
+    static let shared = TimerCompletionAlertController(
+        player: LiveTimerCompletionAlarmPlayer(),
+        planner: { TimerCompletionAlarmRequest.live($0, $1) }
+    )
 
     private(set) var activeConfiguration: TimerCompletionAlertConfiguration?
+    /// How the active alarm rings. Nil while nothing is active.
+    private(set) var activeRequest: TimerCompletionAlarmRequest?
+    /// The active alarm reached `automaticStopInterval` and went quiet by
+    /// itself. It stays active until Stop, leaving, or the timer closing.
+    private(set) var isSilenced = false
     /// An alarm cut off by an iCloud container retirement while the app stayed
     /// on screen (an Apple Account check). Process-local on purpose: only the
     /// next view for the same session in this process may restore it. After a
     /// relaunch nothing is remembered, so a recovered completion never rings.
-    private var suspendedConfiguration: TimerCompletionAlertConfiguration?
+    private var suspended: SuspendedAlert?
+
+    private struct SuspendedAlert {
+        let configuration: TimerCompletionAlertConfiguration
+        let ringStartedAt: TimeInterval
+        let wasSilenced: Bool
+    }
 
     private let sleeper: Sleeper
-    private let playback: Playback
-    private let stopPlayback: StopPlayback
+    private let player: TimerCompletionAlarmPlayer
+    private let planner: Planner
     private let applicationIsActive: ApplicationIsActive
+    private let uptime: Uptime
     private var task: Task<Void, Never>?
     private var generation: UInt64 = 0
+    private var ringStartedAt: TimeInterval = 0
+    /// The loop was silenced because the scene went inactive; it resumes
+    /// on the first active cycle.
+    private var isPausedForInactivity = false
 
-    init(
+    /// Plain closures, every cycle one `playback` call: today's gentle
+    /// behaviour whatever this iPhone chose (tests and previews).
+    convenience init(
         sleeper: @escaping Sleeper = {
             try await Task.sleep(for: .milliseconds(1_300))
         },
-        playback: @escaping Playback = { configuration in
-            if let sound = configuration.sound {
-                SoundSynth.shared.playTimerCompletion(sound)
-            }
-            if let haptic = configuration.haptic {
-                Haptics.shared.playTimerCompletion(haptic)
-            }
-        },
-        stopPlayback: @escaping StopPlayback = {
-            SoundSynth.shared.stopTimerCompletion()
-            Haptics.shared.stopTimerCompletion()
-        },
+        playback: @escaping Playback,
+        stopPlayback: @escaping StopPlayback,
         applicationIsActive: @escaping ApplicationIsActive = {
             UIApplication.shared.applicationState == .active
         }
     ) {
+        self.init(
+            sleeper: sleeper,
+            player: ClosureTimerCompletionAlarmPlayer(
+                playback: playback,
+                stopPlayback: stopPlayback
+            ),
+            planner: { TimerCompletionAlarmRequest.gentle($0, $1) },
+            applicationIsActive: applicationIsActive
+        )
+    }
+
+    /// `sleeper` paces the cycles (the gentle repeat, and the checks that
+    /// keep a loop going and stop it on time); `uptime` measures the
+    /// automatic stop on the monotonic clock.
+    init(
+        sleeper: @escaping Sleeper = {
+            try await Task.sleep(for: .milliseconds(1_300))
+        },
+        player: TimerCompletionAlarmPlayer,
+        planner: @escaping Planner,
+        applicationIsActive: @escaping ApplicationIsActive = {
+            UIApplication.shared.applicationState == .active
+        },
+        uptime: @escaping Uptime = { ProcessInfo.processInfo.systemUptime }
+    ) {
         self.sleeper = sleeper
-        self.playback = playback
-        self.stopPlayback = stopPlayback
+        self.player = player
+        self.planner = planner
         self.applicationIsActive = applicationIsActive
+        self.uptime = uptime
     }
 
     func isActive(sessionID: UUID) -> Bool {
         activeConfiguration?.sessionID == sessionID
+    }
+
+    /// Sound or vibration is (meant to be) playing for `sessionID`: active
+    /// and not yet stopped by itself.
+    func isRinging(sessionID: UUID) -> Bool {
+        isActive(sessionID: sessionID) && !isSilenced
+    }
+
+    /// Whether the timer screen should keep the display on for `sessionID`
+    /// (`TimerScreenAwakePolicy`): the standard and maximum presets hold it
+    /// while ringing, so auto-lock cannot end the alarm (leaving counts as
+    /// Stop). Released once the alarm stops by itself.
+    func keepsScreenAwake(sessionID: UUID) -> Bool {
+        isRinging(sessionID: sessionID)
+            && activeRequest?.plan.keepsScreenAwake == true
     }
 
     func start(
@@ -304,39 +372,19 @@ final class TimerCompletionAlertController {
         }
         guard activeConfiguration != configuration else { return }
 
-        suspendedConfiguration = nil
+        suspended = nil
         generation &+= 1
-        let alertGeneration = generation
         task?.cancel()
         if activeConfiguration != nil {
-            stopPlayback()
+            player.stop()
         }
+        let request = planner(configuration, .repeating)
         activeConfiguration = configuration
-
-        if playsImmediately, applicationIsActive() {
-            playback(configuration)
-        }
-
-        let sleeper = self.sleeper
-        let playback = self.playback
-        let applicationIsActive = self.applicationIsActive
-        task = Task { @MainActor [weak self] in
-            while true {
-                do {
-                    try await sleeper()
-                } catch {
-                    return
-                }
-                guard let self,
-                      !Task.isCancelled,
-                      self.generation == alertGeneration,
-                      self.activeConfiguration == configuration
-                else { return }
-                if applicationIsActive() {
-                    playback(configuration)
-                }
-            }
-        }
+        activeRequest = request
+        isSilenced = false
+        isPausedForInactivity = false
+        ringStartedAt = uptime()
+        arm(request, playsImmediately: playsImmediately)
     }
 
     /// Plays the chosen completion cue exactly once without arming the
@@ -346,14 +394,16 @@ final class TimerCompletionAlertController {
         guard !configuration.isSilent,
               activeConfiguration == nil,
               applicationIsActive() else { return }
-        playback(configuration)
+        let request = planner(configuration, .single)
+        guard request.plan.playback != .none else { return }
+        player.playCue(request)
     }
 
     /// Ends the alarm. With a `sessionID` it also forgets a suspended alarm
     /// for that session, since the caller is closing that timer for good.
     func stop(sessionID: UUID? = nil) {
-        if let sessionID, suspendedConfiguration?.sessionID == sessionID {
-            suspendedConfiguration = nil
+        if let sessionID, suspended?.configuration.sessionID == sessionID {
+            suspended = nil
         }
         guard let activeConfiguration else { return }
         if let sessionID, activeConfiguration.sessionID != sessionID { return }
@@ -362,7 +412,10 @@ final class TimerCompletionAlertController {
         task?.cancel()
         task = nil
         self.activeConfiguration = nil
-        stopPlayback()
+        activeRequest = nil
+        isSilenced = false
+        isPausedForInactivity = false
+        player.stop()
     }
 
     /// The app is entering the background while the alarm repeats. Leaving
@@ -373,8 +426,8 @@ final class TimerCompletionAlertController {
     /// written before the caller retires the container, while the account
     /// scope of the defaults key still names the timer's account.
     func acknowledgeOnLeavingApp(defaults: UserDefaults = .standard) {
-        let ringing = activeConfiguration ?? suspendedConfiguration
-        suspendedConfiguration = nil
+        let ringing = activeConfiguration ?? suspended?.configuration
+        suspended = nil
         guard let ringing else { return }
         TimerCompletionAlertAcknowledgementStore.mark(
             sessionID: ringing.sessionID,
@@ -389,19 +442,99 @@ final class TimerCompletionAlertController {
     /// next view in this process can restore it for someone who stepped away.
     func suspendForContainerRetirement() {
         guard let activeConfiguration else { return }
-        let configuration = activeConfiguration
+        let memory = SuspendedAlert(
+            configuration: activeConfiguration,
+            ringStartedAt: ringStartedAt,
+            wasSilenced: isSilenced
+        )
         stop()
-        suspendedConfiguration = configuration
+        suspended = memory
     }
 
     /// Restores an alarm that `suspendForContainerRetirement` cut off for this
-    /// session, returning whether it did. Consumed on use.
+    /// session, returning whether it did. Consumed on use. The automatic stop
+    /// still counts from the original end, and an alarm that had already
+    /// stopped by itself comes back quiet, with its Stop control.
     func resumeSuspendedAlert(sessionID: UUID) -> Bool {
-        guard let configuration = suspendedConfiguration,
-              configuration.sessionID == sessionID else { return false }
-        suspendedConfiguration = nil
-        start(configuration)
-        return isActive(sessionID: sessionID)
+        guard let memory = suspended,
+              memory.configuration.sessionID == sessionID else { return false }
+        suspended = nil
+        start(memory.configuration, playsImmediately: !memory.wasSilenced)
+        guard isActive(sessionID: sessionID) else { return false }
+        ringStartedAt = memory.ringStartedAt
+        if memory.wasSilenced {
+            silence()
+        }
+        return true
+    }
+
+    // MARK: Private
+
+    private func arm(
+        _ request: TimerCompletionAlarmRequest,
+        playsImmediately: Bool
+    ) {
+        let alertGeneration = generation
+        if playsImmediately, applicationIsActive() {
+            perform(request)
+        }
+        let sleeper = self.sleeper
+        task = Task { @MainActor [weak self] in
+            while true {
+                do {
+                    try await sleeper()
+                } catch {
+                    return
+                }
+                guard let self,
+                      !Task.isCancelled,
+                      self.generation == alertGeneration,
+                      self.activeRequest == request
+                else { return }
+                if let limit = request.plan.automaticStopInterval,
+                   self.uptime() - self.ringStartedAt >= limit {
+                    self.silence()
+                    return
+                }
+                self.cycle(request)
+            }
+        }
+    }
+
+    private func cycle(_ request: TimerCompletionAlarmRequest) {
+        guard applicationIsActive() else {
+            // Control Center or a banner: the sound engine already stopped;
+            // a looping vibration stops with it and both resume together.
+            if request.plan.playback == .loop, !isPausedForInactivity {
+                isPausedForInactivity = true
+                player.stop()
+            }
+            return
+        }
+        isPausedForInactivity = false
+        perform(request)
+    }
+
+    private func perform(_ request: TimerCompletionAlarmRequest) {
+        switch request.plan.playback {
+        case .loop:
+            player.sustainLoop(request)
+        case .repeating, .once:
+            player.playCue(request)
+        case .none:
+            break
+        }
+    }
+
+    /// The automatic stop: quiet, but still active with its Stop control.
+    private func silence() {
+        guard activeConfiguration != nil, !isSilenced else { return }
+        generation &+= 1
+        task?.cancel()
+        task = nil
+        isSilenced = true
+        isPausedForInactivity = false
+        player.stop()
     }
 }
 
@@ -540,6 +673,49 @@ final class SoundSynth {
     private var latestScheduledClinkUptime = -Double.greatestFiniteMagnitude
     private var timerCompletionBusyUntilUptime = -Double.greatestFiniteMagnitude
 
+    /// F5 alarm state. `alarmLoop` is the loop the output was last asked to
+    /// play; anything that stops the engine or the completion player
+    /// forgets it, so the controller's next cycle starts it again.
+    private struct AlarmLoop: Equatable {
+        let choice: AlarmSoundChoice
+        let session: AlarmAudioSessionMode
+    }
+
+    private enum PendingAlarm: Equatable {
+        case loop(AlarmLoop)
+        case cue(AlarmLoop)
+
+        var choice: AlarmSoundChoice {
+            switch self {
+            case let .loop(loop), let .cue(loop): loop.choice
+            }
+        }
+    }
+
+    private struct AlarmBuffers {
+        let loop: AVAudioPCMBuffer
+        let cue: AVAudioPCMBuffer
+    }
+
+    private var alarmLoop: AlarmLoop?
+    /// A loop or cue waiting for its buffers to finish rendering.
+    private var pendingAlarm: PendingAlarm?
+    /// The session a single cue at the maximum preset needs until it ends.
+    private var alarmCueSession: AlarmAudioSessionMode?
+    /// The session mode last handed to the output. Everything but an alarm
+    /// plays `.ambient`.
+    private var outputSessionMode: AlarmAudioSessionMode = .ambient
+    private var alarmBuffers: [AlarmSoundChoice: AlarmBuffers] = [:]
+    private var alarmRenderTasks: [AlarmSoundChoice: Task<Void, Never>] = [:]
+    private let renderAlarm: AlarmRenderer
+
+    /// Renders an alarm's samples. Pure and nonisolated: it runs off the
+    /// main thread (the school chime takes about 0.1 s to synthesize).
+    typealias AlarmRenderer = @Sendable (
+        _ choice: AlarmSoundChoice,
+        _ legacyChime: [Float]?
+    ) -> RenderedAlarmSound
+
     private let thuds: [AVAudioPCMBuffer]
     private let tick: AVAudioPCMBuffer
     private let gemClinks: [AVAudioPCMBuffer]
@@ -574,13 +750,15 @@ final class SoundSynth {
         audioQueue: DispatchQueue,
         idleLinger: TimeInterval,
         scheduleIdleCheck: @escaping IdleCheckScheduler = SoundSynth.mainQueueIdleCheckScheduler,
-        observesApplicationLifecycle: Bool
+        observesApplicationLifecycle: Bool,
+        renderAlarm: @escaping AlarmRenderer = { AlarmSoundLibrary.render($0, legacyChime: $1) }
     ) {
         self.output = output
         self.audioQueue = audioQueue
         self.idleLinger = max(idleLinger, 0)
         self.scheduleIdleCheck = scheduleIdleCheck
         self.observesApplicationLifecycle = observesApplicationLifecycle
+        self.renderAlarm = renderAlarm
         voiceBusyUntilUptime = Array(
             repeating: -Double.greatestFiniteMagnitude,
             count: max(Constants.Sound.maxVoices, 1)
@@ -636,6 +814,7 @@ final class SoundSynth {
     func prewarm() {
         guard isEnabled, canRequestOutput else { return }
         engineRunRequested = true
+        requestSession(desiredSessionMode)
         enqueueOutputWork { output, queue in
             _ = Self.startIfNeeded(output, on: queue)
         }
@@ -722,6 +901,7 @@ final class SoundSynth {
             return
         }
         engineRunRequested = true
+        requestSession(desiredSessionMode)
         let duration = Double(buffer.frameLength) / buffer.format.sampleRate
         timerCompletionBusyUntilUptime = ProcessInfo.processInfo.systemUptime
             + duration
@@ -733,10 +913,193 @@ final class SoundSynth {
         scheduleIdleShutdown(after: duration)
     }
 
+    // MARK: F5 alarm
+
+    /// Renders `choice`'s loop and cue off the main thread and keeps them
+    /// for this process. Nothing plays; the engine is not touched. Call it
+    /// ahead of time (launch, a choice in Settings); an alarm that finds its
+    /// buffers missing renders them first and plays a moment later.
+    func prepareAlarmSound(_ choice: AlarmSoundChoice) {
+        guard alarmBuffers[choice] == nil, alarmRenderTasks[choice] == nil else { return }
+        let legacyChime = choice.legacySound
+            .flatMap { timerCompletionSounds[$0] }
+            .map(AlarmSoundLibrary.samples(of:))
+        let render = renderAlarm
+        alarmRenderTasks[choice] = Task { @MainActor [weak self] in
+            let rendered = await Task.detached(priority: .userInitiated) {
+                render(choice, legacyChime)
+            }.value
+            guard let self else { return }
+            self.alarmRenderTasks[choice] = nil
+            guard let loop = AlarmSoundLibrary.pcmBuffer(rendered.loop),
+                  let cue = AlarmSoundLibrary.pcmBuffer(rendered.cue)
+            else { return }
+            self.alarmBuffers[choice] = AlarmBuffers(loop: loop, cue: cue)
+            self.playPendingAlarm(for: choice)
+        }
+    }
+
+    /// Waits for `prepareAlarmSound` (tests and the Settings preview).
+    func prepareAlarmSoundAndWait(_ choice: AlarmSoundChoice) async {
+        prepareAlarmSound(choice)
+        await alarmRenderTasks[choice]?.value
+    }
+
+    func hasPreparedAlarmSound(_ choice: AlarmSoundChoice) -> Bool {
+        alarmBuffers[choice] != nil
+    }
+
+    /// Whether the output was asked to loop the alarm and nothing has
+    /// stopped it since.
+    var isTimerCompletionLoopRequested: Bool { alarmLoop != nil }
+
+    /// The session mode the output last switched to.
+    var currentAlarmSessionMode: AlarmAudioSessionMode { outputSessionMode }
+
+    /// Loops `choice` seamlessly on the completion player
+    /// (`AVAudioPlayerNode` with `.loops`), or leaves the loop playing. The
+    /// maximum preset passes `.playbackDuckingOthers`: the loop then plays
+    /// with the silent switch on and other apps' audio (focus music) is
+    /// ducked, never stopped; `stopTimerCompletion` gives it back.
+    func sustainTimerCompletionLoop(
+        _ choice: AlarmSoundChoice,
+        session: AlarmAudioSessionMode
+    ) {
+        guard isEnabled else { return }
+        guard canRequestOutput else {
+            // Dropped, not queued: the controller's next active cycle asks
+            // again.
+            engineRunRequested = false
+            return
+        }
+        let loop = AlarmLoop(choice: choice, session: session)
+        guard alarmLoop != loop else { return }
+        guard let buffers = alarmBuffers[choice] else {
+            pendingAlarm = .loop(loop)
+            prepareAlarmSound(choice)
+            return
+        }
+        startAlarmLoop(loop, buffer: buffers.loop)
+    }
+
+    /// One cycle of `choice` (the gentle preset's repeat with one of the new
+    /// sounds, and the single cue at the maximum preset). A cue still
+    /// sounding is not cut off by the next cycle.
+    func playTimerCompletionCue(
+        _ choice: AlarmSoundChoice,
+        session: AlarmAudioSessionMode
+    ) {
+        guard isEnabled else { return }
+        guard canRequestOutput else {
+            engineRunRequested = false
+            return
+        }
+        guard alarmLoop == nil,
+              ProcessInfo.processInfo.systemUptime >= timerCompletionBusyUntilUptime
+        else { return }
+        let buffer: AVAudioPCMBuffer
+        if let legacy = choice.legacySound, let chime = timerCompletionSounds[legacy] {
+            buffer = chime
+        } else if let buffers = alarmBuffers[choice] {
+            buffer = buffers.cue
+        } else {
+            pendingAlarm = .cue(AlarmLoop(choice: choice, session: session))
+            prepareAlarmSound(choice)
+            return
+        }
+        playAlarmCue(buffer, session: session)
+    }
+
+    /// The Settings preview: one cycle, cutting off a preview still
+    /// playing so the latest choice is the one heard. Never plays over an
+    /// alarm that is looping.
+    func playAlarmPreview(_ choice: AlarmSoundChoice, session: AlarmAudioSessionMode) {
+        guard alarmLoop == nil else { return }
+        timerCompletionBusyUntilUptime = -Double.greatestFiniteMagnitude
+        playTimerCompletionCue(choice, session: session)
+    }
+
+    private func startAlarmLoop(_ loop: AlarmLoop, buffer: AVAudioPCMBuffer) {
+        pendingAlarm = nil
+        alarmLoop = loop
+        alarmCueSession = nil
+        engineRunRequested = true
+        requestSession(loop.session)
+        // Never idle while looping; `stopTimerCompletion` ends it.
+        timerCompletionBusyUntilUptime = -Double.greatestFiniteMagnitude
+        idleShutdownGeneration &+= 1
+        let volume = masterVolume
+        enqueueOutputWork { [weak self] output, queue in
+            let started = Self.startIfNeeded(output, on: queue)
+            if started {
+                output.playTimerCompletionLoop(buffer, volume: volume)
+            }
+            Task { @MainActor [weak self] in
+                // The session or engine was unavailable: forget the loop so
+                // the next cycle tries again from a clean state.
+                guard !started, let self, self.alarmLoop == loop else { return }
+                self.alarmLoop = nil
+            }
+        }
+    }
+
+    private func playAlarmCue(_ buffer: AVAudioPCMBuffer, session: AlarmAudioSessionMode) {
+        pendingAlarm = nil
+        engineRunRequested = true
+        alarmCueSession = session == .ambient ? nil : session
+        requestSession(session)
+        let duration = Double(buffer.frameLength) / buffer.format.sampleRate
+        timerCompletionBusyUntilUptime = ProcessInfo.processInfo.systemUptime + duration
+        let volume = masterVolume
+        enqueueOutputWork { output, queue in
+            guard Self.startIfNeeded(output, on: queue) else { return }
+            output.playTimerCompletion(buffer, volume: volume)
+        }
+        scheduleIdleShutdown(after: duration)
+    }
+
+    private func playPendingAlarm(for choice: AlarmSoundChoice) {
+        guard let pending = pendingAlarm, pending.choice == choice else { return }
+        pendingAlarm = nil
+        switch pending {
+        case let .loop(loop):
+            sustainTimerCompletionLoop(loop.choice, session: loop.session)
+        case let .cue(cue):
+            playTimerCompletionCue(cue.choice, session: cue.session)
+        }
+    }
+
+    /// Everything but an alarm plays `.ambient`: mixed with other audio and
+    /// silenced by the Ring/Silent switch.
+    private var desiredSessionMode: AlarmAudioSessionMode {
+        alarmLoop?.session ?? alarmCueSession ?? .ambient
+    }
+
+    /// Queues a session switch ahead of the work that needs it, only when
+    /// the mode changes, so ordinary sounds never pay for it.
+    private func requestSession(_ mode: AlarmAudioSessionMode) {
+        guard mode != outputSessionMode else { return }
+        outputSessionMode = mode
+        enqueueOutputWork { output, _ in
+            output.useSessionMode(mode)
+        }
+    }
+
     /// Stops an in-app completion cue without mutating the person's sound
     /// preference or interrupting a gem/drop sound that happens to overlap it.
+    /// Also ends the alarm loop. After a silent-switch override the engine
+    /// stops and the session is released at once, notifying other apps, so
+    /// ducked music comes back to full volume without waiting for the
+    /// linger; the next sound starts `.ambient` again.
     func stopTimerCompletion() {
         timerCompletionBusyUntilUptime = -Double.greatestFiniteMagnitude
+        pendingAlarm = nil
+        alarmLoop = nil
+        alarmCueSession = nil
+        if outputSessionMode != .ambient {
+            stopEngine(clearRunRequest: true, deactivateSession: true)
+            return
+        }
         if outputMayBeActive {
             let output = self.output
             audioQueue.async {
@@ -843,6 +1206,7 @@ final class SoundSynth {
             interrupting = true
         }
 
+        requestSession(desiredSessionMode)
         let rate = min(max(pitchRate, 0.25), 4)
         let gain = min(max(volume * masterVolume, 0), 1)
         let duration = Double(buffer.frameLength) / buffer.format.sampleRate
@@ -913,14 +1277,35 @@ final class SoundSynth {
         }
         resetVoiceBookkeeping()
         timerCompletionBusyUntilUptime = -Double.greatestFiniteMagnitude
-        guard outputMayBeActive else { return }
+        forgetAlarmPlayback()
+        let output = self.output
+        let restoresAmbient = deactivateSession && outputSessionMode != .ambient
+        if restoresAmbient {
+            outputSessionMode = .ambient
+        }
+        guard outputMayBeActive else {
+            if restoresAmbient {
+                audioQueue.async { output.useSessionMode(.ambient) }
+            }
+            return
+        }
         if deactivateSession {
             outputMayBeActive = false
         }
-        let output = self.output
         audioQueue.async {
             output.stop(deactivatingSession: deactivateSession)
+            if restoresAmbient {
+                output.useSessionMode(.ambient)
+            }
         }
+    }
+
+    /// A stopped engine plays nothing: the controller's next cycle restarts
+    /// a loop that should still ring.
+    private func forgetAlarmPlayback() {
+        alarmLoop = nil
+        alarmCueSession = nil
+        pendingAlarm = nil
     }
 
     private func resetVoiceBookkeeping() {
@@ -935,8 +1320,15 @@ final class SoundSynth {
         let generation = idleShutdownGeneration
         scheduleIdleShutdownCheck(
             generation: generation,
-            after: max(playbackDuration, 0) + idleLinger
+            after: max(playbackDuration, 0) + currentIdleLinger
         )
+    }
+
+    /// A silent-switch override (a single cue at the maximum preset) ducks
+    /// other apps' audio for as long as the session is active, so it is
+    /// released right after the cue instead of lingering.
+    private var currentIdleLinger: TimeInterval {
+        outputSessionMode == .ambient ? idleLinger : min(idleLinger, 0.25)
     }
 
     private func scheduleIdleShutdownCheck(
@@ -946,7 +1338,8 @@ final class SoundSynth {
         scheduleIdleCheck(max(delay, 0)) { [weak self] in
             guard let self,
                   self.idleShutdownGeneration == generation,
-                  self.engineRunRequested
+                  self.engineRunRequested,
+                  self.alarmLoop == nil
             else { return }
 
             let now = ProcessInfo.processInfo.systemUptime
@@ -962,7 +1355,7 @@ final class SoundSynth {
             if remainingActivity > 0 {
                 self.scheduleIdleShutdownCheck(
                     generation: generation,
-                    after: remainingActivity + self.idleLinger
+                    after: remainingActivity + self.currentIdleLinger
                 )
                 return
             }
@@ -983,6 +1376,8 @@ final class SoundSynth {
         isApplicationInactive = UIApplication.shared.applicationState != .active
         resetVoiceBookkeeping()
         timerCompletionBusyUntilUptime = -Double.greatestFiniteMagnitude
+        forgetAlarmPlayback()
+        outputSessionMode = .ambient
         nextImportantVoice = 0
         lastTickUptime = -Double.greatestFiniteMagnitude
         outputMayBeActive = false
@@ -1028,6 +1423,7 @@ final class SoundSynth {
                     // Stopped voices aren't replayed after an interruption;
                     // the resumed engine only lingers, then stops.
                     self.engineRunRequested = true
+                    self.requestSession(self.desiredSessionMode)
                     self.enqueueOutputWork { output, queue in
                         _ = Self.startIfNeeded(output, on: queue)
                     }
@@ -1053,9 +1449,15 @@ final class SoundSynth {
                       self.isEnabled,
                       self.canRequestOutput
                 else { return }
+                // A configuration change stops the engine and its player
+                // nodes: a looping alarm is started again with it.
+                let loopBuffer = self.alarmLoop.flatMap { self.alarmBuffers[$0.choice]?.loop }
+                let volume = self.masterVolume
                 self.enqueueOutputWork { output, queue in
                     guard output.isCurrentEngine(changedEngine) else { return }
-                    _ = Self.startIfNeeded(output, on: queue)
+                    guard Self.startIfNeeded(output, on: queue),
+                          let loopBuffer else { return }
+                    output.playTimerCompletionLoop(loopBuffer, volume: volume)
                 }
             }
         }
@@ -1096,11 +1498,19 @@ final class SoundSynth {
         latestScheduledClinkUptime = -Double.greatestFiniteMagnitude
         resetVoiceBookkeeping()
         timerCompletionBusyUntilUptime = -Double.greatestFiniteMagnitude
+        forgetAlarmPlayback()
         guard outputMayBeActive else { return }
         outputMayBeActive = false
         let output = self.output
+        let restoresAmbient = outputSessionMode != .ambient
+        if restoresAmbient {
+            outputSessionMode = .ambient
+        }
         audioQueue.async {
             output.stopAfterInterruption()
+            if restoresAmbient {
+                output.useSessionMode(.ambient)
+            }
         }
     }
 
@@ -1143,7 +1553,14 @@ protocol SoundSynthOutput: AnyObject, Sendable {
         interrupting: Bool
     )
     func playTimerCompletion(_ buffer: AVAudioPCMBuffer, volume: Float)
+    /// Loops `buffer` seamlessly on the completion player until
+    /// `stopTimerCompletion` (F5, the standard and maximum presets).
+    func playTimerCompletionLoop(_ buffer: AVAudioPCMBuffer, volume: Float)
     func stopTimerCompletion()
+    /// Switches the session category for what plays next. A running engine
+    /// is stopped and an active session released first (other apps are
+    /// notified), so ducking starts or ends with the next activation.
+    func useSessionMode(_ mode: AlarmAudioSessionMode)
     func stop(deactivatingSession: Bool)
     /// The system already deactivated the session and stopped the engine.
     func stopAfterInterruption()
@@ -1164,6 +1581,29 @@ final class AVSoundSynthOutput: SoundSynthOutput, @unchecked Sendable {
     static let sessionMode: AVAudioSession.Mode = .default
     static let sessionCategoryOptions: AVAudioSession.CategoryOptions = []
 
+    /// F5, the maximum preset only, while its alarm plays in the foreground:
+    /// `.playback` sounds with the Ring/Silent switch on. `.duckOthers`
+    /// (which also mixes) lowers the person's music instead of stopping it,
+    /// and the session is released with `.notifyOthersOnDeactivation` as
+    /// soon as the alarm stops, so the music returns to full volume. No
+    /// background audio mode is involved: leaving the app stops the alarm.
+    static let alarmSessionCategory: AVAudioSession.Category = .playback
+    static let alarmSessionCategoryOptions: AVAudioSession.CategoryOptions = [
+        .mixWithOthers,
+        .duckOthers
+    ]
+
+    static func sessionConfiguration(
+        for mode: AlarmAudioSessionMode
+    ) -> (category: AVAudioSession.Category, options: AVAudioSession.CategoryOptions) {
+        switch mode {
+        case .ambient:
+            return (category: sessionCategory, options: sessionCategoryOptions)
+        case .playbackDuckingOthers:
+            return (category: alarmSessionCategory, options: alarmSessionCategoryOptions)
+        }
+    }
+
     private final class Voice {
         let player = AVAudioPlayerNode()
         let pitch = AVAudioUnitVarispeed()
@@ -1181,6 +1621,7 @@ final class AVSoundSynthOutput: SoundSynthOutput, @unchecked Sendable {
     private var isEngineConfigured = false
     private var isCategoryConfigured = false
     private var isSessionActive = false
+    private var sessionModeInUse: AlarmAudioSessionMode = .ambient
     private var primedVoices = Set<Int>()
     private var isTimerCompletionPlayerPrimed = false
 
@@ -1207,10 +1648,11 @@ final class AVSoundSynthOutput: SoundSynthOutput, @unchecked Sendable {
                 // alone: the mixer converts these 44.1 kHz buffers, so turning
                 // the session on never reconfigures the route under someone
                 // else's audio.
+                let configuration = Self.sessionConfiguration(for: sessionModeInUse)
                 try session.setCategory(
-                    Self.sessionCategory,
+                    configuration.category,
                     mode: Self.sessionMode,
-                    options: Self.sessionCategoryOptions
+                    options: configuration.options
                 )
                 isCategoryConfigured = true
             }
@@ -1280,8 +1722,34 @@ final class AVSoundSynthOutput: SoundSynthOutput, @unchecked Sendable {
         isTimerCompletionPlayerPrimed = true
     }
 
+    func playTimerCompletionLoop(_ buffer: AVAudioPCMBuffer, volume: Float) {
+        guard isEngineConfigured, engine.isRunning else { return }
+        timerCompletionPlayer.stop()
+        timerCompletionPlayer.volume = volume
+        timerCompletionPlayer.scheduleBuffer(buffer, at: nil, options: [.loops, .interrupts])
+        timerCompletionPlayer.play()
+        isTimerCompletionPlayerPrimed = true
+    }
+
     func stopTimerCompletion() {
         timerCompletionPlayer.stop()
+    }
+
+    func useSessionMode(_ mode: AlarmAudioSessionMode) {
+        guard mode != sessionModeInUse else { return }
+        sessionModeInUse = mode
+        isCategoryConfigured = false
+        stopNodesAndEngine()
+        guard isSessionActive else { return }
+        isSessionActive = false
+        do {
+            try AVAudioSession.sharedInstance().setActive(
+                false,
+                options: .notifyOthersOnDeactivation
+            )
+        } catch {
+            // An interruption may already own/deactivate the shared session.
+        }
     }
 
     func stop(deactivatingSession: Bool) {
@@ -1311,6 +1779,7 @@ final class AVSoundSynthOutput: SoundSynthOutput, @unchecked Sendable {
         isEngineConfigured = false
         isCategoryConfigured = false
         isSessionActive = false
+        sessionModeInUse = .ambient
         primedVoices.removeAll()
         isTimerCompletionPlayerPrimed = false
     }

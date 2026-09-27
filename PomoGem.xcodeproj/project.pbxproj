@@ -203,6 +203,7 @@
 		78F28B907BD71D887F0CDF95 /* JarFrameProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 624C92181EF2C67AD84D3051 /* JarFrameProbe.swift */; };
 		795717D40AD45DBD4E597038 /* Planning.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 6F28264310D4A9D7A573B945 /* Planning.xcstrings */; };
 		79B08CBDCD1ED01E5818E371 /* AlarmSoundLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 473E7452428555204954E1B4 /* AlarmSoundLibrary.swift */; };
+		7B6706A3DCC2BB609F716A2A /* TimerCompletionAlarmPlaybackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E55BE2E216999E6AB8BE495D /* TimerCompletionAlarmPlaybackTests.swift */; };
 		7B86CB735F54DC1AF1A5A912 /* StringInterpolationLintTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77C0B9A0C05D63E3E3866203 /* StringInterpolationLintTests.swift */; };
 		7C2E5D1DC101CB6C3C6322B1 /* FocusMusicSystemAdapters.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5CFD7AB2B24346430CB54C6 /* FocusMusicSystemAdapters.swift */; };
 		7CB82FE804B2887172375629 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EFB20CEF01CE01A6FC6CBB9 /* Constants.swift */; };
@@ -385,6 +386,7 @@
 		DAF9A9D09FE8ED18C5347118 /* AlarmPreferencesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2CE3D9EE63886A1945A8AF /* AlarmPreferencesTests.swift */; };
 		DB0BFAAA0DE4A42003FE5E6D /* RealDeviceStorageTransferLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFDE9F0BB6142B51EBA85B6F /* RealDeviceStorageTransferLifecycleTests.swift */; };
 		DB581C5F804C40DDBCA4B0C5 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8018C65F844DB234D0AAC3E /* NotificationManager.swift */; };
+		DBDB07EE35BE3C3D96ABAF39 /* TimerCompletionAlarmPlayback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38EA06D44A1275A4F99EA7C1 /* TimerCompletionAlarmPlayback.swift */; };
 		DC702BF0089B8AB32FE1E788 /* StorageTransferRemoteRecoveryCloudKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 304682ED2010B4AFADAD2F75 /* StorageTransferRemoteRecoveryCloudKit.swift */; };
 		DC90ADA9D0794047850E597F /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D58C3C1A3A761BDD16883051 /* SettingsView.swift */; };
 		DD1BACFFFF45E35EDFD1AB8B /* RecentCustomFocusDurationsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FB3F01D57F09524E40FC6B2 /* RecentCustomFocusDurationsTests.swift */; };
@@ -608,6 +610,7 @@
 		3829BEEEE6E394C43D37A09B /* PersistenceSessionLifetimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceSessionLifetimeTests.swift; sourceTree = "<group>"; };
 		3858B0996F1F682B20D5D407 /* RealDeviceSwiftDataLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealDeviceSwiftDataLifecycleTests.swift; sourceTree = "<group>"; };
 		38D472A1DA7AE5AE7B665ABD /* Analytics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Analytics.swift; sourceTree = "<group>"; };
+		38EA06D44A1275A4F99EA7C1 /* TimerCompletionAlarmPlayback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerCompletionAlarmPlayback.swift; sourceTree = "<group>"; };
 		38FAB623C083BB7575458F1D /* FocusLeavePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusLeavePolicyTests.swift; sourceTree = "<group>"; };
 		3957DF0895E16174A29B4580 /* AccumulationPlanUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccumulationPlanUITests.swift; sourceTree = "<group>"; };
 		3A649EB4D46EB1C08F6C5390 /* StorageTransferPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferPersistenceTests.swift; sourceTree = "<group>"; };
@@ -896,6 +899,7 @@
 		E3EFE561D47563975C72F2D5 /* StorageTransferLeftoverStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferLeftoverStoreTests.swift; sourceTree = "<group>"; };
 		E40EF438546DB8AEDAF9186F /* FocusShieldControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusShieldControllerTests.swift; sourceTree = "<group>"; };
 		E44B05ED15660B2277666445 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		E55BE2E216999E6AB8BE495D /* TimerCompletionAlarmPlaybackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerCompletionAlarmPlaybackTests.swift; sourceTree = "<group>"; };
 		E571A7097C77DBE0A728C04E /* StorageTransferReplacementWatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferReplacementWatch.swift; sourceTree = "<group>"; };
 		E6747F1397898870822EA204 /* FocusLeavePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusLeavePolicy.swift; sourceTree = "<group>"; };
 		E6C6D396C5FB8FF2FEC27957 /* LocalPreviewLaunchPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalPreviewLaunchPolicyTests.swift; sourceTree = "<group>"; };
@@ -1259,6 +1263,7 @@
 				2EBA8A3A0E6FE1CFBF349B1F /* AlarmSoundSynthesis.swift */,
 				7FE46D29513151E06FA3D21E /* FocusEndAlarmKitClient.swift */,
 				CB0817271B34E2012BCA56C5 /* FocusEndAlarmScheduler.swift */,
+				38EA06D44A1275A4F99EA7C1 /* TimerCompletionAlarmPlayback.swift */,
 			);
 			path = Alarm;
 			sourceTree = "<group>";
@@ -1493,6 +1498,7 @@
 				A4D1D7004B0720A74A6DC480 /* SubjectPaletteTests.swift */,
 				A55BD40B48DA6E4872504D29 /* SupportMailDraftTests.swift */,
 				E2FBF7E577EC280E22DDC78A /* SyncMaintenanceWorkerTests.swift */,
+				E55BE2E216999E6AB8BE495D /* TimerCompletionAlarmPlaybackTests.swift */,
 				2D1D4B6D38CB4FBD9FC29391 /* TimerForegroundResolutionTests.swift */,
 				04E9E2DA32B1E56F9400B993 /* TimerOrientationTests.swift */,
 				909E691ADDFFF328BCF51110 /* UITestLocalStateIsolationTests.swift */,
@@ -2122,6 +2128,7 @@
 				145C9139EA0BD9916E3F4457 /* SyntheticJarMotionSource.swift in Sources */,
 				53FE675CF48B37882F6017A3 /* Theme.swift in Sources */,
 				7F2F837530C911AC9DC1F981 /* ThemeSelectionMenu.swift in Sources */,
+				DBDB07EE35BE3C3D96ABAF39 /* TimerCompletionAlarmPlayback.swift in Sources */,
 				1DA315121C0364E0A70DEE9E /* TimerDefaultOrientationSettingsView.swift in Sources */,
 				36692E1841949143EDE1393D /* TimerOrientationContainer.swift in Sources */,
 				BF7DD5350DC9AC367DB53339 /* TimerSceneOrientation.swift in Sources */,
@@ -2301,6 +2308,7 @@
 				5A466DC8AB090D60789AF952 /* SubjectPaletteTests.swift in Sources */,
 				672D257E0ACC81756AD73AB0 /* SupportMailDraftTests.swift in Sources */,
 				DA1920C5349796A55548304A /* SyncMaintenanceWorkerTests.swift in Sources */,
+				7B6706A3DCC2BB609F716A2A /* TimerCompletionAlarmPlaybackTests.swift in Sources */,
 				251EA1D02132943EE8F446A9 /* TimerForegroundResolutionTests.swift in Sources */,
 				C1A6F71A16C201FA8B534B8B /* TimerOrientationTests.swift in Sources */,
 				9A1242D53D644B46E2D21070 /* UITestLocalStateIsolationTests.swift in Sources */,

@@ -103,7 +103,13 @@ struct AlarmHapticPattern: Equatable, Sendable {
     }
 
     func makeHapticPattern() throws -> CHHapticPattern {
-        let hapticEvents = events.map { event -> CHHapticEvent in
+        try CHHapticPattern(events: makeHapticEvents(), parameters: [])
+    }
+
+    /// The events of `makeHapticPattern()`, for players that build their
+    /// own pattern (`Haptics` defers a cue until its engine has started).
+    func makeHapticEvents() -> [CHHapticEvent] {
+        events.map { event -> CHHapticEvent in
             let parameters = [
                 CHHapticEventParameter(parameterID: .hapticIntensity, value: event.intensity),
                 CHHapticEventParameter(parameterID: .hapticSharpness, value: event.sharpness)
@@ -124,6 +130,5 @@ struct AlarmHapticPattern: Equatable, Sendable {
                 )
             }
         }
-        return try CHHapticPattern(events: hapticEvents, parameters: [])
     }
 }
