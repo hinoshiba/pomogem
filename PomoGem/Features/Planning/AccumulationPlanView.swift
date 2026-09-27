@@ -103,8 +103,12 @@ struct AccumulationPlanView: View {
         start.jarGrams(adding: projection.grams)
     }
 
-    private var accumulationPresence: JarAccumulationPresenceState {
-        JarAccumulationPresencePresentation.state(totalGrams: jarGrams)
+    /// Where the jar stands in its bottle cycle and long-term milestones.
+    /// Nil while Home re-counts today's jar: a position computed from the
+    /// plan alone would read as an empty jar (「最初の2.50kgへ」, 0段階).
+    private var jarPosition: JarAccumulationPresenceState? {
+        guard start.certainty != .recounting else { return nil }
+        return JarAccumulationPresencePresentation.state(totalGrams: jarGrams)
     }
 
     private var simulationNotice: some View {
@@ -278,7 +282,7 @@ struct AccumulationPlanView: View {
                         Circle()
                             .stroke(PomoGemTheme.glassEdge.opacity(0.18), lineWidth: 7)
                         Circle()
-                            .trim(from: 0, to: accumulationPresence.cycleProgressFraction)
+                            .trim(from: 0, to: jarPosition?.cycleProgressFraction ?? 0)
                             .stroke(
                                 PomoGemTheme.amber,
                                 style: StrokeStyle(lineWidth: 7, lineCap: .round)
@@ -300,12 +304,14 @@ struct AccumulationPlanView: View {
                     }
                 }
 
-                ProgressView(value: accumulationPresence.cycleProgressFraction)
-                    .tint(PomoGemTheme.amber)
-                    .accessibilityLabel(Text("その時点の瓶が満ちるまで", tableName: "Planning", comment: "VoiceOver: progress of the bottle cycle at the previewed month"))
-                    .accessibilityValue(
-                        "\(Int((accumulationPresence.cycleProgressFraction * 100).rounded()))パーセント"
-                    )
+                if let jarPosition {
+                    ProgressView(value: jarPosition.cycleProgressFraction)
+                        .tint(PomoGemTheme.amber)
+                        .accessibilityLabel(Text("その時点の瓶が満ちるまで", tableName: "Planning", comment: "VoiceOver: progress of the bottle cycle at the previewed month"))
+                        .accessibilityValue(
+                            "\(Int((jarPosition.cycleProgressFraction * 100).rounded()))パーセント"
+                        )
+                }
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .firstTextBaseline) {
@@ -339,12 +345,14 @@ struct AccumulationPlanView: View {
                             .foregroundStyle(Color(hex: "#5DE0BD"))
                     }
 
-                    ProgressView(value: accumulationPresence.majorMilestoneProgressFraction)
-                        .tint(Color(hex: "#5DE0BD"))
-                        .accessibilityLabel(majorMilestoneAccessibilityLabel)
-                        .accessibilityValue(
-                            "\(Int((accumulationPresence.majorMilestoneProgressFraction * 100).rounded()))パーセント"
-                        )
+                    if let jarPosition {
+                        ProgressView(value: jarPosition.majorMilestoneProgressFraction)
+                            .tint(Color(hex: "#5DE0BD"))
+                            .accessibilityLabel(majorMilestoneAccessibilityLabel(jarPosition))
+                            .accessibilityValue(
+                                "\(Int((jarPosition.majorMilestoneProgressFraction * 100).rounded()))パーセント"
+                            )
+                    }
                 }
 
                 Text("瓶は2.50kg（集中250分相当）ごとに必ず満ち、満杯の光を見届けてから次の巡へ進みます。累計は消えず、2.50kg → 25kg → 250kg…の長期段階として別に残ります。回数ではなく、集中1分＝\(Constants.Mass.gramsPerMinute)gで両方が進みます。")
@@ -508,27 +516,33 @@ struct AccumulationPlanView: View {
     }
 
     private var bottleCycleTitle: String {
-        if accumulationPresence.isCycleBoundary {
-            return "\(accumulationPresence.completedCycleCount.formatted())巡目が満ちた"
+        guard let jarPosition else {
+            return String(localized: "今日の瓶を確認中", table: "Planning", comment: "Bottle-cycle title while Home re-counts today's jar, so the jar's position is not shown")
         }
-        let percent = Int((accumulationPresence.cycleProgressFraction * 100).rounded())
+        if jarPosition.isCycleBoundary {
+            return "\(jarPosition.completedCycleCount.formatted())巡目が満ちた"
+        }
+        let percent = Int((jarPosition.cycleProgressFraction * 100).rounded())
         return jarGrams == 0
             ? "最初の2.50kgへ"
             : "瓶の\(percent)%まで積んだ"
     }
 
     private var bottleCycleStatus: String {
-        if accumulationPresence.isCycleBoundary {
+        guard let jarPosition else {
+            return String(localized: "確認が済むと、今日の瓶の続きから表示します", table: "Planning", comment: "Bottle-cycle caption while Home re-counts today's jar")
+        }
+        if jarPosition.isCycleBoundary {
             return "満杯を確認 · 累計はそのまま次の巡へ"
         }
-        guard let next = accumulationPresence.nextCycleBoundaryGrams else {
+        guard let next = jarPosition.nextCycleBoundaryGrams else {
             return "1巡 2.50kg · 集中250分相当"
         }
         return "あと\(formattedMass(max(0, next - jarGrams))) · 1巡は集中250分相当"
     }
 
-    /// Today's jar plus the plan. While Home re-counts the jar, it shows
-    /// no mass, so neither does the plan.
+    /// Today's jar plus the plan. While Home shows 「再集計中」, it shows no
+    /// mass, so neither does the plan.
     private var jarTotalValue: String {
         switch start.certainty {
         case .exact:
@@ -540,29 +554,48 @@ struct AccumulationPlanView: View {
                 comment: "Jar total when today's jar is a lower bound; the argument is a mass such as 3.68t"
             )
         case .recounting:
-            return String(localized: "確認中", table: "Planning", comment: "Jar total while Home re-counts today's jar")
+            return Self.recountingValue
         }
     }
 
+    /// In place of a mass or a milestone while Home re-counts today's jar.
+    private static var recountingValue: String {
+        String(localized: "確認中", table: "Planning", comment: "Shown instead of the jar total and its long-term milestone while Home re-counts today's jar")
+    }
+
     /// How the total splits into today's jar and the plan. Hidden for an
-    /// empty jar, where the total is the plan alone.
+    /// empty, verified jar, where the total is the plan alone. While iCloud
+    /// is checked, today's jar carries the same caveat as Home's caption.
     private var startBreakdown: String? {
         let plan = formattedMass(projection.grams)
-        switch start.certainty {
-        case .exact:
+        let today = formattedMass(start.grams)
+        switch (start.certainty, start.isBeingChecked) {
+        case (.exact, false):
             guard start.grams > 0 else { return nil }
             return String(
-                localized: "今日の瓶 \(formattedMass(start.grams)) ＋ この計画 \(plan)",
+                localized: "今日の瓶 \(today) ＋ この計画 \(plan)",
                 table: "Planning",
                 comment: "Breakdown of the jar total: today's jar mass, then the mass the plan adds"
             )
-        case .atLeast:
+        case (.exact, true):
             return String(
-                localized: "今日の瓶 \(formattedMass(start.grams))以上 ＋ この計画 \(plan)",
+                localized: "今日の瓶 \(today)（集計を確認中）＋ この計画 \(plan)",
+                table: "Planning",
+                comment: "Breakdown while Home still checks today's jar (iCloud or this iPhone): today's jar mass, then the mass the plan adds"
+            )
+        case (.atLeast, false):
+            return String(
+                localized: "今日の瓶 \(today)以上 ＋ この計画 \(plan)",
                 table: "Planning",
                 comment: "Breakdown when today's jar is a lower bound: today's jar mass, then the mass the plan adds"
             )
-        case .recounting:
+        case (.atLeast, true):
+            return String(
+                localized: "今日の瓶 \(today)以上（集計を確認中）＋ この計画 \(plan)",
+                table: "Planning",
+                comment: "Breakdown when today's jar is a lower bound still being checked (iCloud or this iPhone): today's jar mass, then the mass the plan adds"
+            )
+        case (.recounting, _):
             return String(
                 localized: "今日の瓶の合計を確認しているあいだは、この計画で積む分だけを表示します。",
                 table: "Planning",
@@ -572,19 +605,20 @@ struct AccumulationPlanView: View {
     }
 
     private var majorMilestoneStatus: String {
-        let reached = "\(accumulationPresence.completedMajorMilestoneCount.formatted())段階"
-        if accumulationPresence.isMajorMilestoneBoundary,
-           let next = accumulationPresence.nextMajorMilestoneGrams {
+        guard let jarPosition else { return Self.recountingValue }
+        let reached = "\(jarPosition.completedMajorMilestoneCount.formatted())段階"
+        if jarPosition.isMajorMilestoneBoundary,
+           let next = jarPosition.nextMajorMilestoneGrams {
             return "\(reached)到達 · 次 \(formattedMass(next))"
         }
-        guard let next = accumulationPresence.nextMajorMilestoneGrams else {
+        guard let next = jarPosition.nextMajorMilestoneGrams else {
             return "\(reached)到達"
         }
         return "\(reached) · 次 \(formattedMass(next))"
     }
 
-    private var majorMilestoneAccessibilityLabel: String {
-        accumulationPresence.isMajorMilestoneBoundary
+    private func majorMilestoneAccessibilityLabel(_ position: JarAccumulationPresenceState) -> String {
+        position.isMajorMilestoneBoundary
             ? "到達した長期の質量段階"
             : "次の長期の質量段階まで"
     }

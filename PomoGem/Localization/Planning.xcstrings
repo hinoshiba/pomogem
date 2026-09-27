@@ -38,8 +38,33 @@
         }
       }
     },
+    "今日の瓶 %@以上（集計を確認中）＋ この計画 %@" : {
+      "comment" : "Breakdown when today's jar is a lower bound still being checked (iCloud or this iPhone): today's jar mass, then the mass the plan adds",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "今日の瓶 %1$@以上（集計を確認中）＋ この計画 %2$@"
+          }
+        }
+      }
+    },
+    "今日の瓶 %@（集計を確認中）＋ この計画 %@" : {
+      "comment" : "Breakdown while Home still checks today's jar (iCloud or this iPhone): today's jar mass, then the mass the plan adds",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "今日の瓶 %1$@（集計を確認中）＋ この計画 %2$@"
+          }
+        }
+      }
+    },
     "今日の瓶の合計を確認しているあいだは、この計画で積む分だけを表示します。" : {
       "comment" : "Shown while Home re-counts today's jar (iCloud or this iPhone)"
+    },
+    "今日の瓶を確認中" : {
+      "comment" : "Bottle-cycle title while Home re-counts today's jar, so the jar's position is not shown"
     },
     "増える質量" : {
       "comment" : "Mass the plan adds, in the results grid"
@@ -50,8 +75,11 @@
     "瓶の合計" : {
       "comment" : "Label: today's jar mass plus the mass the plan adds"
     },
+    "確認が済むと、今日の瓶の続きから表示します" : {
+      "comment" : "Bottle-cycle caption while Home re-counts today's jar"
+    },
     "確認中" : {
-      "comment" : "Jar total while Home re-counts today's jar"
+      "comment" : "Shown instead of the jar total and its long-term milestone while Home re-counts today's jar"
     }
   },
   "version" : "1.0"

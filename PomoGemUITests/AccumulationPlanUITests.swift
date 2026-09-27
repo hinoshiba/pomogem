@@ -123,6 +123,61 @@ final class AccumulationPlanUITests: XCTestCase {
         saveScreenshot("plan-jar-total-ax5")
     }
 
+    /// Review of PR #41: every iCloud launch starts with iCloud being
+    /// checked, and Home keeps showing the jar's mass meanwhile. The plan
+    /// continues from that mass, with the same caveat, instead of from zero.
+    func testAPendingJarStillStartsFromTheMassHomeShows() {
+        app.launchEnvironment["POMOGEM_UI_TEST_CLOUD_VERIFICATION"] = "pending"
+        app.launch()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 10))
+        addThirtyMinutesManually()
+        pause(3.5)
+        openPlan()
+
+        let breakdown = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "今日の瓶 300g（集計を確認中）＋ この計画 ")
+        ).firstMatch
+        XCTAssertTrue(scrollUntilHittable(breakdown), "The plan must start from the 300g Home shows")
+        XCTAssertFalse(app.staticTexts["今日の瓶を確認中"].exists)
+        saveScreenshot("plan-pending-jar-total")
+
+        let result = app.descendants(matching: .any)["planning.accumulation.result"]
+        XCTAssertTrue(scrollUntilExists(result))
+        XCTAssertTrue(
+            waitForValue(result, containing: "start=300;jar=3652800"),
+            "value=\(result.value ?? "<nil>")"
+        )
+        XCTAssertFalse(result.label.contains("確認中"), result.label)
+    }
+
+    /// Only when Home itself shows 「再集計中」 (more history than pending Home
+    /// holds and no verified total yet) does the plan show no mass, and then
+    /// no bottle position either, rather than an empty jar's.
+    func testARecountingJarShowsNeitherMassNorPosition() {
+        app.launchEnvironment["POMOGEM_UI_TEST_CLOUD_VERIFICATION"] = "pending"
+        app.launchEnvironment["POMOGEM_UI_TEST_CLOUD_VERIFICATION_HISTORY"] = "200"
+        app.launch()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 10))
+        openPlan()
+
+        XCTAssertTrue(scrollUntilHittable(app.staticTexts["今日の瓶を確認中"]))
+        XCTAssertTrue(app.staticTexts["確認が済むと、今日の瓶の続きから表示します"].exists)
+        XCTAssertFalse(app.staticTexts["最初の2.50kgへ"].exists)
+        XCTAssertFalse(app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "今日の瓶 ")
+        ).firstMatch.exists, "No mass for today's jar while it is re-counted")
+        // Bring the whole bottle card on screen for the screenshot.
+        XCTAssertTrue(scrollUntilHittable(
+            app.staticTexts["今日の瓶の合計を確認しているあいだは、この計画で積む分だけを表示します。"]
+        ))
+        saveScreenshot("plan-recounting")
+
+        let result = app.descendants(matching: .any)["planning.accumulation.result"]
+        XCTAssertTrue(scrollUntilExists(result))
+        XCTAssertTrue(waitForValue(result, containing: "start=0;jar=3652500"))
+        XCTAssertTrue(result.label.contains("確認中"), result.label)
+    }
+
     /// home-02: outside a UI-test process (as in every Release build) the
     /// results grid carries no machine-readable value, so VoiceOver reads the
     /// Japanese metrics only.

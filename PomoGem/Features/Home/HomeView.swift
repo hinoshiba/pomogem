@@ -1326,16 +1326,15 @@ struct HomeView: View {
         )
     }
 
-    /// home-07: the planning sheet continues from the jar this screen
-    /// shows, qualified the same way (「+」 while older records are still
-    /// being folded in, no mass at all while the total is re-counted).
+    /// home-07: the planning sheet continues from the lifetime mass this
+    /// screen presents, qualified the same way: 「以上」 for a lower bound,
+    /// still being checked while iCloud is verified, and no mass at all only
+    /// when Home itself shows 「再集計中」.
     private var accumulationPlanStart: AccumulationPlanStart {
-        if aggregateProjectionPresentation.isCloudVerificationPending {
-            return AccumulationPlanStart(grams: 0, certainty: .recounting)
-        }
-        return AccumulationPlanStart(
-            grams: totalGrams,
-            certainty: localProjectionNeedsMaintenance ? .atLeast : .exact
+        .homeHeadline(
+            presentedGrams: presentedLifetimeGrams,
+            isLowerBound: presentedLifetimeIsLowerBound,
+            isBeingChecked: aggregateProjectionPresentation.isCloudVerificationPending
         )
     }
 

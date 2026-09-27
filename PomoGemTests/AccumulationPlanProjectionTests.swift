@@ -257,6 +257,52 @@ final class AccumulationPlanProjectionTests: XCTestCase {
         )
     }
 
+    /// Review of PR #41: the plan starts from the lifetime mass Home
+    /// presents, not from zero whenever iCloud is being checked. Every iCloud
+    /// launch starts pending, and Home keeps showing a mass then.
+    func testThePlanStartsFromTheMassHomePresents() {
+        // Verified, and verified with older records still being folded in.
+        XCTAssertEqual(
+            AccumulationPlanStart.homeHeadline(presentedGrams: 250_000, isLowerBound: false, isBeingChecked: false),
+            AccumulationPlanStart(grams: 250_000, certainty: .exact)
+        )
+        XCTAssertEqual(
+            AccumulationPlanStart.homeHeadline(presentedGrams: 250_000, isLowerBound: true, isBeingChecked: false),
+            AccumulationPlanStart(grams: 250_000, certainty: .atLeast)
+        )
+
+        // Pending with a headline: Home's own sum when it covers every
+        // session, or the last verified total (here partial, 「以上」).
+        for (headline, certainty) in [
+            (PendingMassPresentationPolicy.Headline.device(grams: 250_000, pebbleCount: 1_000), AccumulationPlanStart.Certainty.exact),
+            (.lastVerified(grams: 3_200_000, pebbleCount: 12_800, isLowerBound: true), .atLeast)
+        ] {
+            let start = AccumulationPlanStart.homeHeadline(
+                presentedGrams: headline.grams,
+                isLowerBound: headline.isLowerBound,
+                isBeingChecked: true
+            )
+            XCTAssertEqual(start.grams, headline.grams, "\(headline)")
+            XCTAssertEqual(start.certainty, certainty, "\(headline)")
+            XCTAssertTrue(start.isBeingChecked, "\(headline)")
+            XCTAssertEqual(start.jarGrams(adding: 2_500), (headline.grams ?? 0) + 2_500)
+        }
+
+        // Pending with nothing Home can stand behind: Home shows 「再集計中」,
+        // and only then does the plan show no mass and add to zero.
+        let hidden = PendingMassPresentationPolicy.Headline.hidden
+        let recounting = AccumulationPlanStart.homeHeadline(
+            presentedGrams: hidden.grams,
+            isLowerBound: hidden.isLowerBound,
+            isBeingChecked: true
+        )
+        XCTAssertEqual(recounting.certainty, .recounting)
+        XCTAssertEqual(recounting.grams, 0)
+        XCTAssertTrue(recounting.isBeingChecked)
+        XCTAssertTrue(AccumulationPlanStart(grams: 1, certainty: .recounting).isBeingChecked)
+        XCTAssertFalse(AccumulationPlanStart.empty.isBeingChecked)
+    }
+
     func testThePlanOffersTheFreeTimerPresets() {
         // AccumulationPlanView lists these as its duration choices.
         XCTAssertEqual(
