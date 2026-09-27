@@ -724,6 +724,61 @@ final class FocusLeavePolicyTests: XCTestCase {
         )
     }
 
+    // MARK: - Distraction shield (F2)
+
+    /// Leaving PomoGem must not be the way out of F2's shield: the automatic
+    /// pause reads as an ordinary pause, so the shield that is up stays with
+    /// the deadline it already has and is never extended by the absence.
+    /// The learning hold is the same before and after, so leaving asks the
+    /// learning lane for no DeviceActivity change either.
+    func testAnAutoPausedFocusKeepsTheShieldWithItsDeadline() throws {
+        let epoch = UUID()
+        var running = try runningEnvelope(minutes: 25)
+        running.dataEpochID = epoch
+        let leftAt = start.addingTimeInterval(300)
+        let decidedAt = leftAt.addingTimeInterval(FocusLeavePolicy.lockDetectionWindow)
+        let away = try XCTUnwrap(FocusLeaveTransition.beginningExcursion(
+            running, featureEnabled: true, at: leftAt
+        ))
+        let paused = FocusLeaveTransition.pausedForLeaving(away, decidedAt: decidedAt)
+        let plannedEnd = start.addingTimeInterval(1_500)
+        let deadline = FocusShieldPolicy.deadline(forPlannedEnd: plannedEnd)
+        let shield = FocusShieldRecord(active: true, sessionID: sessionID, deadline: deadline, appliedAt: start)
+        func decide(_ focus: FocusShieldFocusState, at now: Date) -> FocusShieldDecision {
+            FocusShieldReconcilePolicy.decide(
+                enabled: true,
+                applicationCount: 1,
+                authorization: .approved,
+                focus: focus,
+                record: shield,
+                now: now
+            )
+        }
+
+        let whileRunning = FocusShieldFocusState(envelope: running, dataEpochID: epoch)
+        XCTAssertEqual(whileRunning, .running(sessionID: sessionID, plannedEnd: plannedEnd))
+        XCTAssertEqual(decide(whileRunning, at: leftAt), .apply(sessionID: sessionID, deadline: deadline))
+
+        // The undecided absence is still the running focus with the same end.
+        XCTAssertEqual(FocusShieldFocusState(envelope: away, dataEpochID: epoch), whileRunning)
+
+        let afterLeaving = FocusShieldFocusState(envelope: paused, dataEpochID: epoch)
+        XCTAssertEqual(afterLeaving, .paused(sessionID: sessionID), "never .none: that would lift the shield on leaving")
+        XCTAssertEqual(decide(afterLeaving, at: decidedAt), .keep)
+        XCTAssertEqual(decide(afterLeaving, at: deadline.addingTimeInterval(-1)), .keep)
+        XCTAssertEqual(
+            decide(afterLeaving, at: deadline),
+            .clear(.deadlinePassed),
+            "a long absence never extends the shield past its deadline"
+        )
+
+        XCTAssertEqual(
+            ScreenTimeTimerHold.learningPause(for: paused, dataEpochID: epoch, at: decidedAt),
+            ScreenTimeTimerHold.learningPause(for: running, dataEpochID: epoch, at: leftAt),
+            "the same hold, so ScreenTimeIntegrationModifier skips the learning reconcile"
+        )
+    }
+
     // MARK: - Helpers
 
     private func runningEnvelope(
