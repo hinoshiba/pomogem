@@ -675,7 +675,7 @@ final class AccessibilityAdversarialUITests: XCTestCase {
             if auditName == "text clipping", !includesTextClipping { continue }
             try XCTContext.runActivity(named: "\(name) — \(auditName)") { _ in
                 let windowFrame = app.windows.firstMatch.frame
-                let scrollView = app.scrollViews.firstMatch
+                let scrollView = frontScrollView()
                 let navigationBar = app.navigationBars.firstMatch
                 let navigationLabels = navigationBar.exists
                     ? Set(navigationBar.descendants(
@@ -794,7 +794,7 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         // view (home-03). It is on screen without scrolling and outside the
         // scrolling content, so the content viewport does not apply to it.
         let window = app.windows.firstMatch.frame
-        let scrollView = app.scrollViews.firstMatch
+        let scrollView = frontScrollView()
         if element.exists, element.isHittable, scrollView.exists,
            window.contains(element.frame),
            element.frame.minY >= scrollView.frame.maxY - 1 {
@@ -836,9 +836,23 @@ final class AccessibilityAdversarialUITests: XCTestCase {
             && frame.maxY <= viewport.maxY
     }
 
+    /// The vertical scroll view of the screen in front. Home stays in the
+    /// hierarchy under a sheet, and at accessibility sizes its scroll view
+    /// now ends above the pinned start button (home-03), so a bare
+    /// `firstMatch` measured Home's shorter frame for 積み上がり and the menu
+    /// and reported their text as outside a viewport it was not in. The
+    /// navigation bar is still the first match, as before.
+    private func frontScrollView() -> XCUIElement {
+        for marker in ["overview.introduction", "planning.accumulation.open"] {
+            let sheet = app.scrollViews.containing(.any, identifier: marker).firstMatch
+            if sheet.exists { return sheet }
+        }
+        return app.scrollViews.firstMatch
+    }
+
     private func visibleContentViewport() -> CGRect {
         let windowFrame = app.windows.firstMatch.frame
-        let scrollView = app.scrollViews.firstMatch
+        let scrollView = frontScrollView()
         let navigationBar = app.navigationBars.firstMatch
         let scrollFrame = scrollView.exists
             ? windowFrame.intersection(scrollView.frame)
