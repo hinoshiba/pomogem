@@ -1,3 +1,4 @@
+import SpriteKit
 import XCTest
 @testable import PomoGem
 
@@ -206,5 +207,141 @@ final class AccumulationPlanProjectionTests: XCTestCase {
         XCTAssertEqual(projection.grams, 156_540)
         XCTAssertEqual(projection.representedGrams, projection.grams)
         XCTAssertTrue(projection.isInternallyConsistent)
+    }
+
+    // MARK: - Starting from today's jar (home-07)
+
+    func testThePlanContinuesFromTodaysJar() {
+        let projection = AccumulationPlanProjection.make(
+            plan: .suggested,
+            elapsedMonths: 12
+        )
+        // 200kg today: one year of the suggested plan (about 91kg) crosses
+        // the 250kg milestone only when today's jar is counted.
+        let start = AccumulationPlanStart(grams: 200_000, certainty: .exact)
+
+        XCTAssertEqual(start.jarGrams(adding: projection.grams), 200_000 + projection.grams)
+        // The bottle cycle and the long-term milestones run on the jar total,
+        // not on the plan alone.
+        let presence = JarAccumulationPresencePresentation.state(
+            totalGrams: start.jarGrams(adding: projection.grams)
+        )
+        XCTAssertEqual(presence.totalGrams, 200_000 + projection.grams)
+        XCTAssertGreaterThan(
+            presence.completedMajorMilestoneCount,
+            JarAccumulationPresencePresentation.state(
+                totalGrams: projection.grams
+            ).completedMajorMilestoneCount
+        )
+        // Month zero is today's jar, not an empty one.
+        let today = AccumulationPlanProjection.make(plan: .suggested, elapsedMonths: 0)
+        XCTAssertEqual(start.jarGrams(adding: today.grams), 200_000)
+        XCTAssertTrue(JarAccumulationPresencePresentation.state(
+            totalGrams: start.jarGrams(adding: today.grams)
+        ).isVisible)
+    }
+
+    func testARecountingJarStartsTheProjectionFromZero() {
+        let recounting = AccumulationPlanStart(grams: 30_000, certainty: .recounting)
+        XCTAssertEqual(recounting.grams, 0)
+        XCTAssertEqual(recounting.jarGrams(adding: 2_500), 2_500)
+
+        let atLeast = AccumulationPlanStart(grams: 30_000, certainty: .atLeast)
+        XCTAssertEqual(atLeast.jarGrams(adding: 2_500), 32_500)
+
+        XCTAssertEqual(AccumulationPlanStart(grams: -5, certainty: .exact).grams, 0)
+        XCTAssertEqual(AccumulationPlanStart.empty.jarGrams(adding: 250), 250)
+        XCTAssertEqual(
+            AccumulationPlanStart(grams: .max, certainty: .exact).jarGrams(adding: 1),
+            .max
+        )
+    }
+
+    /// Review of PR #41: the plan starts from the lifetime mass Home
+    /// presents, not from zero whenever iCloud is being checked. Every iCloud
+    /// launch starts pending, and Home keeps showing a mass then.
+    func testThePlanStartsFromTheMassHomePresents() {
+        // Verified, and verified with older records still being folded in.
+        XCTAssertEqual(
+            AccumulationPlanStart.homeHeadline(presentedGrams: 250_000, isLowerBound: false, isBeingChecked: false),
+            AccumulationPlanStart(grams: 250_000, certainty: .exact)
+        )
+        XCTAssertEqual(
+            AccumulationPlanStart.homeHeadline(presentedGrams: 250_000, isLowerBound: true, isBeingChecked: false),
+            AccumulationPlanStart(grams: 250_000, certainty: .atLeast)
+        )
+
+        // Pending with a headline: Home's own sum when it covers every
+        // session, or the last verified total (here partial, 「以上」).
+        for (headline, certainty) in [
+            (PendingMassPresentationPolicy.Headline.device(grams: 250_000, pebbleCount: 1_000), AccumulationPlanStart.Certainty.exact),
+            (.lastVerified(grams: 3_200_000, pebbleCount: 12_800, isLowerBound: true), .atLeast)
+        ] {
+            let start = AccumulationPlanStart.homeHeadline(
+                presentedGrams: headline.grams,
+                isLowerBound: headline.isLowerBound,
+                isBeingChecked: true
+            )
+            XCTAssertEqual(start.grams, headline.grams, "\(headline)")
+            XCTAssertEqual(start.certainty, certainty, "\(headline)")
+            XCTAssertTrue(start.isBeingChecked, "\(headline)")
+            XCTAssertEqual(start.jarGrams(adding: 2_500), (headline.grams ?? 0) + 2_500)
+        }
+
+        // Pending with nothing Home can stand behind: Home shows 「再集計中」,
+        // and only then does the plan show no mass and add to zero.
+        let hidden = PendingMassPresentationPolicy.Headline.hidden
+        let recounting = AccumulationPlanStart.homeHeadline(
+            presentedGrams: hidden.grams,
+            isLowerBound: hidden.isLowerBound,
+            isBeingChecked: true
+        )
+        XCTAssertEqual(recounting.certainty, .recounting)
+        XCTAssertEqual(recounting.grams, 0)
+        XCTAssertTrue(recounting.isBeingChecked)
+        XCTAssertTrue(AccumulationPlanStart(grams: 1, certainty: .recounting).isBeingChecked)
+        XCTAssertFalse(AccumulationPlanStart.empty.isBeingChecked)
+    }
+
+    func testThePlanOffersTheFreeTimerPresets() {
+        // AccumulationPlanView lists these as its duration choices.
+        XCTAssertEqual(
+            PomodoroDuration.freePresets.compactMap(\.minutes),
+            [25, 45, 60, 90]
+        )
+        XCTAssertTrue(PomodoroDuration.freePresets.compactMap(\.minutes).contains(
+            AccumulationPlanProjection.Plan.suggested.minutesPerSession
+        ))
+    }
+
+    // MARK: - Preview jar (jar-05)
+
+    /// The planning preview restores its jar again whenever the timeline
+    /// rests on a new month. The same gems keep the same angles, so the jar
+    /// does not visibly reshuffle.
+    @MainActor
+    func testRebuildingThePreviewJarKeepsEveryGemsAngle() {
+        let descriptors = AccumulationPlanProjection.make(
+            plan: .suggested,
+            elapsedMonths: 120
+        ).descriptors
+        let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
+
+        scene.restore(pebbles: descriptors)
+        let first = Self.angles(in: scene)
+        scene.restore(pebbles: descriptors)
+
+        XCTAssertFalse(first.isEmpty)
+        XCTAssertEqual(Self.angles(in: scene), first)
+    }
+
+    @MainActor
+    private static func angles(in scene: JarScene) -> [UUID: CGFloat] {
+        var angles: [UUID: CGFloat] = [:]
+        scene.enumerateChildNodes(withName: "//*") { node, _ in
+            guard let pebble = node as? PebbleNode else { return }
+            angles[pebble.descriptor.id] = pebble.zRotation
+        }
+        return angles
     }
 }
