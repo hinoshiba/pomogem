@@ -38,6 +38,9 @@
     "この画面を開いたままお待ちください。" : {
       "comment" : "Restore waiting screen: keep the app open while records arrive"
     },
+    "これはお試しなので、記録には入りません。「次へ」で省略できます。" : {
+      "comment" : "Onboarding trial drop page: the trial gem is never recorded, and the page can be skipped"
+    },
     "しばらく新しい記録が届いていません。通信状態を確認するか、待たずに「新しく始める」を選べます。" : {
       "comment" : "Restore waiting screen: shown when nothing new has arrived for a while"
     },
