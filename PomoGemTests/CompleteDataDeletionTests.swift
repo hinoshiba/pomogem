@@ -5,6 +5,33 @@ import XCTest
 
 @MainActor
 final class CompleteDataDeletionTests: XCTestCase {
+    /// a11y-07. The failure card shows the phase's own title above this
+    /// message; the message must not repeat it as a Swift case name or pass
+    /// CloudKit's own (often English) text through.
+    func testPhaseFailureMessageUsesCuratedWordsOnly() throws {
+        let cloudKit = CKError(.networkUnavailable)
+        let message = try XCTUnwrap(
+            CompleteDataDeletionError.phaseFailed(.establishRemoteFence, cloudKit).errorDescription
+        )
+        XCTAssertTrue(message.hasPrefix("データ削除を完了できませんでした。\n"), message)
+        XCTAssertFalse(message.contains("establishRemoteFence"), message)
+        XCTAssertFalse(message.contains(cloudKit.localizedDescription), message)
+        XCTAssertTrue(message.contains("iCloudに接続できません"), message)
+
+        struct Opaque: Error {}
+        let unknown = try XCTUnwrap(
+            CompleteDataDeletionError.phaseFailed(.deleteLocalModels, Opaque()).errorDescription
+        )
+        XCTAssertEqual(unknown, "データ削除を完了できませんでした。\n再試行すると、安全な位置から続けます。")
+
+        let curated = try XCTUnwrap(
+            CompleteDataDeletionError.phaseFailed(
+                .deletePrivateCloudData, CompleteDataDeletionCloudError.concurrentDeletion
+            ).errorDescription
+        )
+        XCTAssertTrue(curated.hasSuffix("別の端末でデータ削除が進行中です。"), curated)
+    }
+
     func testExperimentalCompleteDeletionIsNotExposedInVersionOne() {
         XCTAssertFalse(CompleteDataDeletionReleasePolicy.isEnabled)
     }

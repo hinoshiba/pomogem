@@ -411,6 +411,8 @@ class ArchiveMetadataTopologyTests(unittest.TestCase):
             "LSRequiresIPhoneOS": True, "CFBundleURLTypes": [{"CFBundleURLName": identifiers["app"],
                 "CFBundleURLSchemes": ["pomogem"]}], "POMOGEM_PRIVACY_POLICY_URL": "https://pomogem.hinoshiba.com/#privacy",
             "ITSAppUsesNonExemptEncryption": False, "NSSupportsLiveActivities": True,
+            "NSAppleMusicUsageDescription": "タイマー画面から『ミュージック』アプリで集中用の音楽を再生するために使います。",
+            "UIBackgroundModes": ["remote-notification"],
         }
         widget_info = info("widget", "PomoGemWidgets", "XPC!") | {
             "NSExtension": {"NSExtensionPointIdentifier": "com.apple.widgetkit-extension"}}
@@ -462,6 +464,21 @@ class ArchiveMetadataTopologyTests(unittest.TestCase):
             lambda values, app, monitor: values[monitor / "PrivacyInfo.xcprivacy"].update(
                 NSPrivacyCollectedDataTypes=[{"NSPrivacyCollectedDataType": "unexpected"}]),
             lambda values, app, monitor: (app / "PlugIns/Unexpected.appex").mkdir(),
+        ]
+        for mutation in mutations:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                result = self.run_archive_metadata(Path(directory), mutation=mutation)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(b"error:", result.stderr)
+
+    def test_missing_music_purpose_or_background_audio_is_rejected(self):
+        # Focus music drives the Music app (Docs/FocusMusic.md): the MusicKit
+        # prompt needs its purpose string and the app never plays audio itself.
+        mutations = [
+            lambda values, app, monitor: values[app / "Info.plist"].pop("NSAppleMusicUsageDescription"),
+            lambda values, app, monitor: values[app / "Info.plist"].update(NSAppleMusicUsageDescription="音楽"),
+            lambda values, app, monitor: values[app / "Info.plist"].update(
+                UIBackgroundModes=["remote-notification", "audio"]),
         ]
         for mutation in mutations:
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:

@@ -61,6 +61,18 @@ UIKitが届ける向きの通知に追従します。手動固定はすべての
   本体・Monitor拡張のFamily Controls distribution承認は[ScreenTimeGems.md](../Docs/ScreenTimeGems.md)に記載。
   この追記はApp Store Connectへの転記・Apple承認・実機検証の完了を示しません。
 
+- Screen Time 集中中のアプリ制限（1.1.0候補、任意・無料、既定オフ）: 上と同じ画面でアクセスを許可し、
+  「黒い石」の「アプリを選ぶ」で控えたいアプリを1つ以上選び、「集中中のアプリ制限」の
+  「集中中は気が散るアプリを開けないようにする」をオンにして「保存」。Homeで集中を開始し、ホーム画面から
+  選んだアプリを開くと、iOS標準のScreen Time制限画面（ManagedSettingsのshield。独自のShield画面や
+  Shield拡張はありません）が表示されます。集中画面の「今日はここまで」で中断するか、集中が終わって休憩に
+  入ると解除します。一時停止中も予定の終了時刻まで続きます。設定をオフにして保存しても解除します。
+  集中画面は全画面表示のため、集中中は設定画面を開けません。集中画面の外で制限が残っている場合は
+  Settings → スクリーンタイムに「今すぐ制限を解除」を表示し、その集中のあいだだけすぐに解除できます。アプリが終了していても、予定の終了時刻に始まるDevice Activityの
+  区間でMonitor拡張が解除を試み、次にアプリを開いたときにも解除します。対象は本人が選んだアプリだけで、
+  50個を超えると制限せずに理由を表示します。本人が自分の端末で使う自己管理の機能で、他者を管理しません
+  （individual authorization）。制限中は控えたいアプリを使えないため、黒い石は増えません。購入は不要です。
+
 - SwiftData private CloudKit: iCloudを選び確認した場合だけ、テーマ名、成果memo、記録、設定、進行中
   timerを含む7種類の同期元modelを一つのprivate containerへ保存し、同じApple Accountの対応iPhone間で
   同期。初回取得と同期再開にはaccount・保存先・リセット履歴をオンラインで確認する。通常起動の
@@ -111,6 +123,15 @@ UIKitが届ける向きの通知に追従します。手動固定はすべての
   設定で選ぶ既定の向きだけをこのiPhoneのUserDefaultsに保存し、同期・送信・JSON書き出しはしない。
   通常の記録resetでは保持し、app削除時には消去される。timer画面を閉じたときやinactive／backgroundでは
   向きの更新を停止
+- Apple Music（1.1.0候補、[FocusMusic.md](../Docs/FocusMusic.md)）: 集中・休憩タイマーの見出しの音符
+  button（長押しでも可）→「集中用の音楽」。Settings → 集中 → 「集中用の音楽」からも同じ画面を開ける。
+  MusicKitの許可は画面内の「Apple Musicへのアクセスを許可」か
+  一覧のtapでだけ求め、`NSAppleMusicUsageDescription`で目的を表示する。`SystemMusicPlayer`で「ミュージック」
+  appに再生させ、PomoGemは前面のまま（音楽用のaudio session・background audioなし。効果音の`.ambient`は
+  ミュージックの再生を止めない）。再生にはApple Musicの登録が必要で、未登録のreviewerには再生・一時停止・
+  次の曲のbuttonの代わりにAppleの`musicSubscriptionOffer`（登録・お試しの画面）を表示し、一覧のtapも同じ画面を
+  開く。無料機能でPro・広告・affiliateとは無関係。自動再生は既定offの「集中を始めたら再生する」をオンにした
+  場合だけで、ほかのappの音声が再生中なら入れ替えない。選んだ音楽のIDなどは端末内UserDefaultsだけに保存し、送信しない
 - Photos add-only: 利用者が静止画の保存を選んだ場合だけrequest
 - StoreKit 2: productとverified entitlementの確認。独自purchase serverなし
 

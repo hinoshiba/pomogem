@@ -3150,6 +3150,8 @@ struct MainNavigationView: View {
         }) {
             PaywallView(context: router.paywallContext)
         }
+        // settings-05. An Ask to Buy approval can arrive hours later.
+        .modifier(ProApprovalNoticeModifier(router: router))
         .sheet(isPresented: $router.sharePresented) {
             // Like the covers below: a sheet does not inherit a Dynamic Type
             // size set above it, so pass the resolved one through.

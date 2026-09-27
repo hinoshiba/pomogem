@@ -57,8 +57,10 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         app.navigationBars["タイマーの表示"].buttons.element(boundBy: 0).tap()
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
 
+        // The default duration leads the 集中 card (settings-06), so the
+        // presets sit above the display row the page came back to.
         let firstPreset = app.buttons["settings.focus-preset.25"]
-        XCTAssertTrue(scrollUntilHittable(firstPreset, attempts: 20))
+        XCTAssertTrue(scrollUntilHittable(firstPreset, attempts: 20, swipingDown: true))
         let presetColumnX = firstPreset.frame.minX
         for minutes in [25, 45, 60, 90] {
             let preset = app.buttons["settings.focus-preset.\(minutes)"]
@@ -340,11 +342,7 @@ final class AccessibilityAdversarialUITests: XCTestCase {
     /// On a 4.7-inch iPhone at AX5 the repeating alarm's only Stop control
     /// used to start below the screen. It must be visible without scrolling.
     func testAX5CompletionAlarmStopIsOnScreenWithoutScrolling() throws {
-        let staleDismiss = app.buttons["reward.dismiss"]
-        if staleDismiss.waitForExistence(timeout: 2), staleDismiss.isHittable {
-            staleDismiss.tap()
-            XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
-        }
+        assertNoRewardCardFromAnEarlierTest()
         startAX5DemoFocus()
         let timer = app.descendants(matching: .any)["focus.timer-display"].firstMatch
         XCTAssertTrue(timer.waitForExistence(timeout: 8))
@@ -436,6 +434,74 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
     }
 
+    /// The in-memory store starts empty, and the app drops the reward
+    /// receipts an earlier test's store left in UserDefaults
+    /// (`UITestLocalStateIsolation`). Tapping such a card away used to leave
+    /// a gem that could never land, and the start button stayed disabled.
+    private func assertNoRewardCardFromAnEarlierTest() {
+        XCTAssertFalse(
+            app.descendants(matching: .any)["reward.bridge"].waitForExistence(timeout: 1),
+            "A new in-memory store must not show another test's completion card"
+        )
+    }
+
+    /// D4.4(a) (Docs/FocusMusic.md): the focus music button in the running
+    /// timer's header keeps a full 44 pt target beside the rotation control,
+    /// stays inside the AX5 viewport, and passes Apple's hit-region and
+    /// text-clipping audits together with the rest of that header.
+    func testAX5TimerHeaderMusicButtonPassesHitRegionAndClippingAudits() throws {
+        let durationPicker = app.buttons["home.duration-picker"]
+        XCTAssertTrue(scrollUntilFullyVisibleInContent(durationPicker, attempts: 12))
+        durationPicker.tap()
+        let twentyFive = app.buttons["25分"].firstMatch
+        XCTAssertTrue(twentyFive.waitForExistence(timeout: 4))
+        XCTAssertTrue(scrollUntilHittable(twentyFive))
+        twentyFive.tap()
+        let launcher = app.buttons["home.focus-launcher"]
+        XCTAssertTrue(scrollUntilFullyVisibleInContent(launcher, attempts: 12))
+        launcher.tap()
+        let rareChoice = app.descendants(matching: .any)["focus.rare-reward-choice"]
+        if rareChoice.waitForExistence(timeout: 1) {
+            app.buttons["rare-reward.choice.off"].tap()
+            app.buttons["focus.rare-reward-choice.confirm"].tap()
+        }
+
+        let music = app.buttons["timer.music"]
+        // Home can hold the launcher disabled for a while on a loaded
+        // machine before the timer opens; the header is what this audits.
+        XCTAssertTrue(music.waitForExistence(timeout: 30))
+        XCTAssertTrue(music.isHittable)
+        let viewport = app.windows.firstMatch.frame
+        let frame = music.frame
+        XCTAssertTrue(viewport.contains(frame), "music button \(frame) outside \(viewport)")
+        // XCTest may bridge a 44pt SwiftUI frame as 43.99999999999994.
+        XCTAssertGreaterThanOrEqual(frame.width, 43.5)
+        XCTAssertGreaterThanOrEqual(frame.height, 43.5)
+        let rotate = app.buttons["timer.rotate"]
+        if rotate.exists {
+            XCTAssertLessThanOrEqual(frame.maxX, rotate.frame.minX + 0.5, "the two header buttons must not overlap")
+        }
+        let subject = app.staticTexts["focus.subject"]
+        if subject.exists {
+            XCTAssertLessThanOrEqual(subject.frame.maxX, frame.minX + 0.5, "the subject name must not run under the button")
+        }
+        let header = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        header.name = "AX5 running focus — header with the music button"
+        header.lifetime = .keepAlways
+        add(header)
+
+        try app.performAccessibilityAudit(for: .hitRegion)
+        try app.performAccessibilityAudit(for: .textClipped)
+
+        let giveUp = app.buttons["今日はここまで"]
+        XCTAssertTrue(giveUp.waitForExistence(timeout: 4))
+        giveUp.tap()
+        let confirmation = app.alerts["今日はここまで"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 4))
+        confirmation.buttons["今日はここまで"].tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
+    }
+
     private func waitForEnabled(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
         let enabled = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "exists == true AND enabled == true"),
@@ -475,14 +541,7 @@ final class AccessibilityAdversarialUITests: XCTestCase {
     }
 
     func testAX5RewardBridgeKeepsActionsBeforeUnclippedProgress() throws {
-        // A durable receipt can outlive the in-memory SwiftData fixture when a
-        // prior UI-test process is interrupted. Acknowledge it before earning
-        // the one completion under test.
-        let staleDismiss = app.buttons["reward.dismiss"]
-        if staleDismiss.waitForExistence(timeout: 2), staleDismiss.isHittable {
-            staleDismiss.tap()
-            XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
-        }
+        assertNoRewardCardFromAnEarlierTest()
 
         let durationPicker = app.buttons["home.duration-picker"]
         XCTAssertTrue(scrollUntilFullyVisibleInContent(durationPicker, attempts: 12))
@@ -819,19 +878,6 @@ final class AccessibilityAdversarialUITests: XCTestCase {
             components.month ?? 0,
             components.day ?? 0
         )
-    }
-
-    @discardableResult
-    private func stopCompletionAlertIfPresented(
-        in app: XCUIApplication,
-        timeout: TimeInterval = 25
-    ) -> Bool {
-        let stop = app.buttons["focus.completion-alert.stop"]
-        guard stop.waitForExistence(timeout: timeout) else { return false }
-        XCTAssertEqual(stop.label, "終了アラートを止める")
-        XCTAssertTrue(stop.isHittable)
-        stop.tap()
-        return true
     }
 }
 

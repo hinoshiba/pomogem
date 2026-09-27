@@ -93,23 +93,11 @@
         }
       }
     },
-    "iCloudの結晶を再集計中です。この端末で確認できた個別記録は引き続き表示しています。" : {
-
-    },
-    "×%lld の結晶" : {
-      "comment" : "Crystal archive row title; the argument is how many gems it holds"
-    },
     "「%@」は今のテーマ一覧にありません。ほかのテーマを選ばなければ、このまま残ります。" : {
       "comment" : "Milestone editor: why a theme missing from the list is shown; the argument is the theme name"
     },
     "「%@」は設定で削除したテーマです。ほかのテーマを選ばなければ、このまま残ります。" : {
       "comment" : "Milestone editor: why a deleted theme is shown; the argument is the theme name"
-    },
-    "ここでは最新%lld個を表示しています。生涯の質量は、メニューの「積み上がりを見る」で確認できます。" : {
-      "comment" : "Crystal archive note; the argument is how many crystals are listed"
-    },
-    "このiPhoneの結晶を確認中です。確認できた個別記録は引き続き表示しています。" : {
-
     },
     "このうち自己申告 %@" : {
       "comment" : "Log: how much of the period's mass was self-reported; the argument is a mass such as 300g"
@@ -149,7 +137,7 @@
     "もっと前の月を見る" : {
       "comment" : "Log: row under the twelve monthly jars that opens 年月 for older months"
     },
-    "スクリーンタイムの%@は、完走した回数に含みません" : {
+    "スクリーンタイムの%@は、完走ポモに含みません" : {
       "comment" : "Log: Screen Time learning in the period is not counted as completed timers; the argument is a duration"
     },
     "テーマ別" : {
@@ -170,20 +158,14 @@
     "今週の質量" : {
       "comment" : "Log tile: mass added this calendar week"
     },
-    "完走した回数" : {
-      "comment" : "Log tile: timers that ran to their end"
-    },
-    "小さな粒は消えません。10粒ずつ結晶になり、瓶の中で動き続けます。" : {
-
-    },
     "年と月を選んで、日ごとの記録までたどれます" : {
 
     },
     "時間と粒には、自己申告の記録も含みます。" : {
 
     },
-    "月の振り返り" : {
-      "comment" : "Log section title: the monthly Wrapped recaps"
+    "最近の記録を読み込めませんでした。" : {
+      "comment" : "Log: shown under 最近の記録 when the newest records could not be read"
     },
     "月の記録へ戻る" : {
       "comment" : "Wrapped opened from a month in 年月: returns to that month's sheet"
@@ -191,17 +173,11 @@
     "棒を選ぶと、その日の記録を一件ずつ見られます。" : {
 
     },
-    "直近12か月を、月ごとにふり返れます。" : {
-
-    },
     "確認済みのテーマ別の時間" : {
       "comment" : "Wrapped: heading of the time per theme when only part of the month is shown or iCloud is re-counting"
     },
     "積んだ粒" : {
       "comment" : "Day summary tile: number of gems"
-    },
-    "結晶アーカイブ" : {
-      "comment" : "Log section title: the jar's crystals"
     },
     "虹の粒" : {
       "comment" : "VoiceOver: a rainbow gem"

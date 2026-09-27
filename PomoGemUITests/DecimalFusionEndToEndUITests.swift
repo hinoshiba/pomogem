@@ -146,7 +146,7 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         // is wider than the SpriteKit view, so a normalized offset in it lands
         // up to ~25 pt right of the gem, enough to miss depending on where
         // the new crystal came to rest.
-        let resting = try presentationSample(from: presentationProbe)
+        let resting = try waitForRestingTarget(from: presentationProbe)
         XCTAssertGreaterThanOrEqual(resting.targetWindowX, 0, "The probe must report the crystal's window position")
         app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
             dx: resting.targetWindowX,
@@ -238,6 +238,61 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         return condition()
     }
 
+    /// settings-04. A free user's first fusion offers one quiet link to Pro's
+    /// month label, below every celebration action. Tapping it closes the
+    /// sheet first; the paywall then opens on its own, leading with the
+    /// month-label row. The "offered once" flag is pinned to NO through the
+    /// argument domain so the link is deterministic on a reused Simulator.
+    func testFreeFusionOffersAQuietMonthLabelLinkThatOpensThePaywallAfterTheSheet() throws {
+        app.terminate()
+        app.launchArguments += ["-pro.month-label-hint.offered", "NO"]
+        app.launch()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
+        selectDemoDuration()
+
+        for _ in 1 ... 9 {
+            completeDemoFocusAndDismissBreak()
+        }
+        startDemoFocus()
+        stopCompletionAlertIfPresented(in: app)
+        let dismissBreak = app.buttons["休憩の提案を閉じる"]
+        XCTAssertTrue(dismissBreak.waitForExistence(timeout: 28))
+        dismissBreak.tap()
+
+        let celebrationTitle = app.staticTexts["10粒を、ひとつに整理した"]
+        XCTAssertTrue(celebrationTitle.waitForExistence(timeout: 10))
+        let hint = app.buttons["fusion.celebration.month-label-hint"]
+        XCTAssertTrue(hint.waitForExistence(timeout: 4))
+        XCTAssertTrue(hint.label.contains("Proなら、この結晶に"), hint.label)
+        let rest = app.buttons["ここで休む"]
+        XCTAssertTrue(rest.exists)
+        for _ in 0 ..< 4 where !hint.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(hint.isHittable)
+        XCTAssertGreaterThan(hint.frame.minY, rest.frame.minY, "The link sits below every celebration action")
+        let hintAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        hintAttachment.name = "First ×10 crystal — free user's month-label link"
+        hintAttachment.lifetime = .keepAlways
+        add(hintAttachment)
+
+        hint.tap()
+        let close = app.buttons["paywall.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 8), "The paywall opens once the fusion sheet has closed")
+        XCTAssertFalse(celebrationTitle.exists)
+        let monthRow = app.descendants(matching: .any)["paywall.feature.monthLabel"].firstMatch
+        let timerRow = app.descendants(matching: .any)["paywall.feature.customDuration"].firstMatch
+        XCTAssertTrue(monthRow.waitForExistence(timeout: 4))
+        XCTAssertLessThan(monthRow.frame.minY, timerRow.frame.minY, "The month label leads when it was the reason")
+        let paywallAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        paywallAttachment.name = "Paywall — opened from the fusion sheet's month-label link"
+        paywallAttachment.lifetime = .keepAlways
+        add(paywallAttachment)
+
+        close.tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
+    }
+
     private func selectDemoDuration() {
         app.buttons["home.duration-picker"].tap()
         let demoDuration = app.buttons["12秒、DEMO"]
@@ -274,19 +329,6 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
             selectDemoDuration()
         }
         XCTAssertTrue(demoLauncher.waitForExistence(timeout: 5))
-    }
-
-    @discardableResult
-    private func stopCompletionAlertIfPresented(
-        in app: XCUIApplication,
-        timeout: TimeInterval = 25
-    ) -> Bool {
-        let stop = app.buttons["focus.completion-alert.stop"]
-        guard stop.waitForExistence(timeout: timeout) else { return false }
-        XCTAssertEqual(stop.label, "終了アラートを止める")
-        XCTAssertTrue(stop.isHittable)
-        stop.tap()
-        return true
     }
 
     private func dismissBreakOfferIfPresent() {
@@ -333,6 +375,38 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
             latest.count,
             expectedCount,
             "Expected \(expectedCount) live jar bodies; latest records=\(latest.rawRecords)"
+        )
+        return latest
+    }
+
+    /// The new crystal enters the jar from above once Home is visible again
+    /// and keeps falling and rolling for a moment. A single probe read can
+    /// catch it mid-fall, and a tap placed there lands where the crystal used
+    /// to be. Wait until its window position has held still before tapping.
+    private func waitForRestingTarget(
+        from probe: XCUIElement,
+        timeout: TimeInterval = 10,
+        stillFor: TimeInterval = 0.6,
+        tolerance: Double = 0.5
+    ) throws -> PresentationSample {
+        let deadline = Date().addingTimeInterval(timeout)
+        var latest = try presentationSample(from: probe)
+        var stillSince = Date()
+        while Date() < deadline {
+            usleep(100_000)
+            let next = try presentationSample(from: probe)
+            let moved = abs(next.targetWindowX - latest.targetWindowX) > tolerance
+                || abs(next.targetWindowY - latest.targetWindowY) > tolerance
+            if moved || next.targetWindowX < 0 {
+                stillSince = Date()
+            } else if Date().timeIntervalSince(stillSince) >= stillFor {
+                return next
+            }
+            latest = next
+        }
+        XCTFail(
+            "The crystal did not come to rest within \(timeout) s; last window position "
+                + "(\(latest.targetWindowX), \(latest.targetWindowY))"
         )
         return latest
     }
