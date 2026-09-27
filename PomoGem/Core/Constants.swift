@@ -5,9 +5,8 @@ import Foundation
 /// app can be adjusted without hunting for magic numbers in feature code.
 enum Constants {
     enum App {
+        /// One theme per `SubjectPalette` swatch.
         static let maximumSubjects = 12
-        static let subjectColorSaturation = 0.62
-        static let subjectColorBrightness = 0.80
     }
 
     enum Timer {
