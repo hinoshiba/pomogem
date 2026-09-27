@@ -169,6 +169,31 @@ struct TimerForegroundResolutionGate: Equatable, Sendable {
     }
 }
 
+/// Whether a recovered timer's end had already passed before it was seen
+/// running again. Only such an end counts as `recoveredAfterExpiration`: an
+/// end that comes later with the app on screen is a live end and repeats
+/// until stopped (`TimerCompletionForegroundFeedbackPolicy`). The answer must
+/// not depend on which path happens to resolve the end, or on the scene
+/// phase the recovery was read in.
+struct TimerRecoveryActivation: Equatable, Sendable {
+    private(set) var isAwaiting: Bool
+
+    init(isRecovery: Bool) {
+        isAwaiting = isRecovery
+    }
+
+    /// The recovered timer was found still running.
+    mutating func observeRunning() {
+        isAwaiting = false
+    }
+
+    /// Asked once, by whichever path resolves the end first.
+    mutating func consumeRecoveredAfterExpiration() -> Bool {
+        defer { isAwaiting = false }
+        return isAwaiting
+    }
+}
+
 /// The end-of-timer alert is the core cue of a focus on a locked phone, so
 /// permission is asked in context: once, at the first focus the person
 /// starts themselves, and never for a recovered or adopted timer. The flag is

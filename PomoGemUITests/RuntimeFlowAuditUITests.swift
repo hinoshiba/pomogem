@@ -727,6 +727,30 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         finishBreakEnd(breakEnd)
     }
 
+    /// The relaunch counterpart: a break that ended while the app was not
+    /// running is recovered silently, never re-armed as a loop.
+    func testRelaunchAfterTheBreakEndDoesNotStartTheAlarm() throws {
+        executionTimeAllowance = 600
+        enterFiveMinuteBreakFromDemoReward()
+        app.terminate()
+        sleep(310)
+        app.launch()
+        let breakEnd = app.buttons["break.completion-alert.stop"]
+        XCTAssertTrue(breakEnd.waitForExistence(timeout: 15))
+        let alarm = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "停止して瓶へ戻る"),
+            object: breakEnd
+        )
+        alarm.isInverted = true
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [alarm], timeout: 3), .completed,
+            "A break that ended before the relaunch must not start the repeating alarm"
+        )
+        XCTAssertEqual(breakEnd.label, "瓶へ戻る")
+        retainScreenshot(named: "Relaunched after the break end — no alarm")
+        finishBreakEnd(breakEnd)
+    }
+
     /// A focus recovered by a relaunch that then ends with the app on screen
     /// is a live end: its alarm repeats until stopped. The recovered view
     /// appears while the cold-launched scene is still inactive, the order

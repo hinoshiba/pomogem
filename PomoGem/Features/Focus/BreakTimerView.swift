@@ -30,6 +30,7 @@ struct BreakTimerView: View {
     @State private var isBreakActive = true
     @State private var didEnterBackgroundSinceLastActive = false
     @State private var foregroundResolution = TimerForegroundResolutionGate()
+    @State private var recoveryActivation: TimerRecoveryActivation
     @State private var scheduledCompletionNotificationDeliveryDate: Date? = nil
     @AccessibilityFocusState private var breakEndButtonFocused: Bool
     private let ticker = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
@@ -39,6 +40,9 @@ struct BreakTimerView: View {
         originatingFocusSessionID = nil
         _sessionID = State(initialValue: UUID())
         _clockAnchor = State(initialValue: nil)
+        _recoveryActivation = State(
+            initialValue: TimerRecoveryActivation(isRecovery: false)
+        )
         _preferences = Query(PrefsConsumerPolicy.descriptor())
         _activityResetMarkers = Query(
             ActivityResetPolicy.currentMarkerDescriptor()
@@ -51,6 +55,9 @@ struct BreakTimerView: View {
         _sessionID = State(initialValue: recovery.id)
         _endDate = State(initialValue: recovery.endDate)
         _clockAnchor = State(initialValue: recovery.clockAnchor)
+        _recoveryActivation = State(
+            initialValue: TimerRecoveryActivation(isRecovery: true)
+        )
         _scheduledCompletionNotificationDeliveryDate = State(
             initialValue: recovery.scheduledCompletionNotificationDeliveryDate
         )
@@ -171,7 +178,8 @@ struct BreakTimerView: View {
                     cue: completionCue(
                         at: date,
                         uptime: completionUptime,
-                        recoveredAfterExpiration: false,
+                        recoveredAfterExpiration: recoveryActivation
+                            .consumeRecoveredAfterExpiration(),
                         returnedFromBackground: returnedFromBackground
                     )
                 )
@@ -460,6 +468,11 @@ struct BreakTimerView: View {
         endDate = resolvedEndDate
         clockAnchor = resolvedClockAnchor
         now = startedAt
+        if resolvedEndDate > startedAt {
+            // Still running when recovered: an end the person later sees on
+            // screen is a live end, and rings until stopped.
+            recoveryActivation.observeRunning()
+        }
         updateIdleTimer()
         FocusPersistence.saveBreak(recovery, at: startedAt)
         guard !Task.isCancelled, isBreakActive else { return }
@@ -468,7 +481,8 @@ struct BreakTimerView: View {
         guard !Task.isCancelled, isBreakActive else { return }
         foregroundResolution.finishAuthorizationRefresh(startedIn: refreshGeneration)
         if resolvedEndDate <= .now {
-            // Never while inactive or in the background.
+            // Never while inactive or in the background: the activation that
+            // follows resolves it, still as a recovered end.
             guard foregroundResolution.authorizationIsCurrent else { return }
             let completionDate = Date.now
             let completionUptime = ContinuousUptime.now()
@@ -476,7 +490,8 @@ struct BreakTimerView: View {
                 cue: completionCue(
                     at: completionDate,
                     uptime: completionUptime,
-                    recoveredAfterExpiration: true,
+                    recoveredAfterExpiration: recoveryActivation
+                        .consumeRecoveredAfterExpiration(),
                     returnedFromBackground: false
                 )
             )
@@ -504,12 +519,14 @@ struct BreakTimerView: View {
                 cue: completionCue(
                     at: now,
                     uptime: completionUptime,
-                    recoveredAfterExpiration: false,
+                    recoveredAfterExpiration: recoveryActivation
+                        .consumeRecoveredAfterExpiration(),
                     returnedFromBackground: returnedFromBackground
                 )
             )
             return
         }
+        recoveryActivation.observeRunning()
         Task { await refreshNotificationScheduling() }
     }
 
