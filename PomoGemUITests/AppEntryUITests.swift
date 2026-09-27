@@ -56,6 +56,31 @@ final class AppEntryUITests: XCTestCase {
         retain("Start link from Settings — 45-minute focus")
     }
 
+    /// main's focus music sheet (#48) is presented by Settings. Leaving
+    /// Settings for the jar takes it down too, so the focus still opens.
+    func testStartLinkFromTheSettingsMusicSheetStarts() throws {
+        openMenuAction(containing: "設定")
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
+        let row = app.buttons["settings.focus-music"]
+        for _ in 0 ..< 10 where !(row.exists && row.isHittable) {
+            app.swipeUp()
+        }
+        XCTAssertTrue(waitForHittable(row, timeout: 3))
+        row.tap()
+        XCTAssertTrue(app.buttons["focus-music.close"].waitForExistence(timeout: 8))
+
+        openLink(URL(string: "pomogem://focus/start?minutes=25")!)
+
+        let timer = focusTimerDisplay
+        XCTAssertTrue(
+            timer.waitForExistence(timeout: 10),
+            "The music sheet and Settings close, and the focus opens"
+        )
+        let remaining = try timerRemainingSeconds(timer)
+        XCTAssertGreaterThan(remaining, 24 * 60)
+        XCTAssertFalse(app.buttons["focus-music.close"].exists)
+    }
+
     func testHomeLinkLeavesLogForTheJarWithoutStarting() {
         openMenuAction(containing: "記録")
         XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 6))
