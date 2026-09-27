@@ -179,6 +179,12 @@ struct HomeView: View {
     @State private var announcedPostDropOfferID: UUID?
     /// The completion card's 「しくみ」 is closed for every new card.
     @State private var postDropMechanicsExpanded = false
+    /// D18: the first completion's 「明日もこの時間に？」, for that card only.
+    @State private var reminderOffer: CompletionReminderOffer?
+    /// Read only to keep 月のまとめ as it is when the card's reminder
+    /// offer books the daily reminder (Settings owns the switch).
+    @AppStorage(AccountScopedLocalState.defaultsKey(base: "notifications.wrapped"))
+    private var wrappedNotifications = false
     @State private var announcedPostDropShareOfferID: UUID?
     /// The short settle before an outside focus start (FocusStartEntryPolicy).
     @State private var focusStartEntryTask: Task<Void, Never>?
@@ -2448,6 +2454,7 @@ struct HomeView: View {
                         .frame(width: 56, height: 56)
                         postDropWeekLine(shown)
                     }
+                    postDropReminderOffer(shown)
                     postDropMechanics(offer)
                 }
             } else {
@@ -2465,6 +2472,7 @@ struct HomeView: View {
                         .layoutPriority(1)
                     }
                     postDropAwaitingDropNote(offer)
+                    postDropReminderOffer(shown)
                     postDropMechanics(offer)
                     postDropActions(offer)
                 }
@@ -2602,6 +2610,178 @@ struct HomeView: View {
                 .accessibilityIdentifier("reward.week")
                 // The heading already reads it.
                 .accessibilityHidden(true)
+        }
+    }
+
+    /// D18. Only on the very first completion: one quiet, dismissible row.
+    /// A tap writes the existing daily reminder (at this completion's local
+    /// time) and asks for notification permission only then; when iOS has
+    /// already said no it points to Settings instead of asking. It never
+    /// turns anything on by itself and says nothing about streaks.
+    @ViewBuilder
+    private func postDropReminderOffer(_ offer: BreakOffer) -> some View {
+        if CompletionCardPresentation.offersReminder(
+            fusionState: offer.fusionState,
+            projectionIsLowerBound: offer.projectionIsLowerBound
+        ) {
+            let time = CompletionCardPresentation.reminderTimeLabel(offer.createdAt)
+            let phase = reminderOffer?.offerID == offer.id ? reminderOffer?.phase ?? .offered : .offered
+            if phase != .dismissed {
+                HStack(alignment: .center, spacing: 8) {
+                    switch phase {
+                    case .offered, .working:
+                        Button {
+                            acceptReminderOffer(offer)
+                        } label: {
+                            HStack(spacing: 9) {
+                                if phase == .working {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                        .tint(PomoGemTheme.amber)
+                                } else {
+                                    Image(systemName: "bell")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(PomoGemTheme.amber)
+                                        .accessibilityHidden(true)
+                                }
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text("明日もこの時間に？", tableName: "Home",
+                                         comment: "First completion card: optional offer of a daily reminder at this time. en: 'Same time tomorrow?'")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(PomoGemTheme.text)
+                                    Text(CompletionCardPresentation.reminderOfferDetail(time: time))
+                                        .font(.caption)
+                                        .foregroundStyle(PomoGemTheme.muted)
+                                }
+                                .fixedSize(horizontal: false, vertical: true)
+                                Spacer(minLength: 0)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PomoGemBareButtonStyle())
+                        .disabled(phase == .working)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(Text("明日もこの時間に？", tableName: "Home",
+                                                 comment: "First completion card: optional offer of a daily reminder at this time. en: 'Same time tomorrow?'"))
+                        .accessibilityValue(CompletionCardPresentation.reminderOfferDetail(time: time))
+                        .accessibilityHint(Text("毎日のリマインダーをこの時刻にします。通知の許可を求めることがあります", tableName: "Home",
+                                                comment: "VoiceOver hint on the first completion card's reminder offer"))
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityIdentifier("reward.reminder-offer")
+                        Button {
+                            reminderOffer = .init(offerID: offer.id, phase: .dismissed)
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(PomoGemTheme.muted)
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PomoGemBareButtonStyle())
+                        .accessibilityLabel(Text("リマインダーの提案を閉じる", tableName: "Home",
+                                                 comment: "VoiceOver: dismisses the first completion card's reminder offer"))
+                        .accessibilityIdentifier("reward.reminder-offer.dismiss")
+                    case .scheduled:
+                        Label {
+                            Text(CompletionCardPresentation.reminderScheduled(time: time))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(PomoGemTheme.text)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } icon: {
+                            Image(systemName: "bell.fill")
+                                .foregroundStyle(PomoGemTheme.amber)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("reward.reminder-offer.scheduled")
+                    case .needsSettings:
+                        Text(CompletionCardPresentation.reminderNeedsPermission(time: time))
+                            .font(.caption)
+                            .foregroundStyle(PomoGemTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Button(String(localized: "設定を開く", table: "Home",
+                                      comment: "Opens the iOS notification settings for PomoGem. en: 'Open Settings'")) {
+                            guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return }
+                            UIApplication.shared.open(url)
+                        }
+                        .buttonStyle(PomoGemCompactButtonStyle(
+                            tint: PomoGemTheme.text,
+                            foreground: PomoGemTheme.background,
+                            isProminent: false
+                        ))
+                        .accessibilityIdentifier("reward.reminder-offer.settings")
+                    case .failed:
+                        Text("リマインダーを保存できませんでした。設定からも選べます。", tableName: "Home",
+                             comment: "First completion card: the reminder could not be saved")
+                            .font(.caption)
+                            .foregroundStyle(PomoGemTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    case .dismissed:
+                        EmptyView()
+                    }
+                }
+                .padding(.leading, 11)
+                .padding(.trailing, 2)
+                .background(PomoGemTheme.raised.opacity(0.62), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+        }
+    }
+
+    private func acceptReminderOffer(_ offer: BreakOffer) {
+        guard reminderOffer?.offerID != offer.id || reminderOffer?.phase == .offered else { return }
+        reminderOffer = .init(offerID: offer.id, phase: .working)
+        let components = Calendar.autoupdatingCurrent.dateComponents([.hour, .minute], from: offer.createdAt)
+        let hour = components.hour ?? Constants.Notification.defaultReminderHour
+        let minute = components.minute ?? Constants.Notification.defaultReminderMinute
+        Task { @MainActor in
+            let manager = NotificationManager.shared
+            let status = await manager.refreshAuthorizationStatus()
+            guard reminderOffer?.offerID == offer.id else { return }
+            switch status {
+            case .denied:
+                // Asked before: iOS will not ask again, so point to Settings.
+                reminderOffer = .init(offerID: offer.id, phase: .needsSettings)
+                return
+            case .notDetermined:
+                let granted = await manager.requestAuthorization()
+                guard reminderOffer?.offerID == offer.id else { return }
+                guard granted else {
+                    reminderOffer = .init(offerID: offer.id, phase: .needsSettings)
+                    return
+                }
+            default:
+                break
+            }
+            // The existing daily reminder (a synced preference) at this
+            // completion's local time; no new field.
+            do {
+                try PrefsConsumerPolicy.mutate(.reminderEnabled, context: modelContext, markers: resetSnapshots) {
+                    $0.reminderEnabled = true
+                }
+                try PrefsConsumerPolicy.mutate(.reminderTime, context: modelContext, markers: resetSnapshots) {
+                    $0.reminderHour = hour
+                    $0.reminderMinute = minute
+                }
+                try modelContext.save()
+            } catch {
+                modelContext.rollback()
+                reminderOffer = .init(offerID: offer.id, phase: .failed)
+                return
+            }
+            let activity = PassiveReminderActivityReader.read(context: modelContext, markers: resetSnapshots)
+            try? await manager.synchronizePassiveNotifications(
+                dailyReminderEnabled: manager.isAuthorized,
+                wrappedEnabled: wrappedNotifications && manager.isAuthorized,
+                hour: hour,
+                minute: minute,
+                playsSound: resolvedPreferences?.soundOn ?? false,
+                activity: activity
+            )
+            guard reminderOffer?.offerID == offer.id else { return }
+            reminderOffer = .init(offerID: offer.id, phase: .scheduled)
         }
     }
 
@@ -4909,6 +5089,46 @@ enum CompletionCardPresentation {
         return MassText.kilograms(kilograms)
     }
 
+    // MARK: 「明日もこの時間に？」 (D18)
+
+    /// Only the jar's very first completion offers the reminder, and only
+    /// when that is certain (a lower-bound projection may hide earlier gems).
+    static func offersReminder(
+        fusionState: FusionRewardBridgeState,
+        projectionIsLowerBound: Bool
+    ) -> Bool {
+        !projectionIsLowerBound && fusionState.totalPebbleCount == 1
+    }
+
+    /// 「7:30」 in the person's locale.
+    static func reminderTimeLabel(_ date: Date, locale: Locale = PomoGemLocale.current) -> String {
+        date.formatted(.dateTime.hour().minute().locale(locale))
+    }
+
+    static func reminderOfferDetail(time: String) -> String {
+        String(
+            localized: "毎日 \(time) にお知らせします",
+            table: "Home",
+            comment: "First completion card, under 「明日もこの時間に？」: what a tap turns on. %@ is a time of day (7:30). en: 'Remind me daily at %@'"
+        )
+    }
+
+    static func reminderScheduled(time: String) -> String {
+        String(
+            localized: "毎日 \(time) にお知らせします。設定でいつでも変えられます。",
+            table: "Home",
+            comment: "First completion card after the reminder was turned on. %@ is a time of day. en: 'I'll remind you daily at %@. You can change this in Settings.'"
+        )
+    }
+
+    static func reminderNeedsPermission(time: String) -> String {
+        String(
+            localized: "通知がオフになっています。設定で許可すると、毎日 \(time) にお知らせできます。",
+            table: "Home",
+            comment: "First completion card when iOS notifications are off for PomoGem. %@ is a time of day"
+        )
+    }
+
     // MARK: 「しくみ」
 
     struct Mechanics: Equatable {
@@ -4999,6 +5219,21 @@ enum CompletionCardPresentation {
         while value.hasSuffix("0"), !value.hasSuffix(".0") { value.removeLast() }
         return value
     }
+}
+
+/// D18: where the first completion card's 「明日もこの時間に？」 stands.
+private struct CompletionReminderOffer: Equatable {
+    enum Phase: Equatable {
+        case offered
+        case working
+        case scheduled
+        case needsSettings
+        case failed
+        case dismissed
+    }
+
+    let offerID: UUID
+    let phase: Phase
 }
 
 /// The completion card's hero (§8.3): this focus's own gem in the jar's art,

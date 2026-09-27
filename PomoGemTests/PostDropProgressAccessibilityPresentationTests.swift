@@ -219,4 +219,34 @@ final class CompletionCardPresentationTests: XCTestCase {
         XCTAssertEqual(CompletionCardPresentation.mass(grams: 2_500), "2.5kg")
         XCTAssertEqual(CompletionCardPresentation.mass(grams: 1_250), "1.25kg")
     }
+
+    /// D18: only the jar's very first completion offers 「明日もこの時間に？」.
+    func testReminderIsOfferedOnlyOnTheCertainFirstCompletion() {
+        XCTAssertTrue(CompletionCardPresentation.offersReminder(
+            fusionState: FusionRewardBridgePresentation.state(totalPebbleCount: 1),
+            projectionIsLowerBound: false
+        ))
+        XCTAssertFalse(CompletionCardPresentation.offersReminder(
+            fusionState: FusionRewardBridgePresentation.state(totalPebbleCount: 2),
+            projectionIsLowerBound: false
+        ))
+        XCTAssertFalse(
+            CompletionCardPresentation.offersReminder(
+                fusionState: FusionRewardBridgePresentation.state(totalPebbleCount: 1),
+                projectionIsLowerBound: true
+            ),
+            "A lower bound may hide earlier gems"
+        )
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let date = calendar.date(from: DateComponents(year: 2026, month: 9, day: 27, hour: 7, minute: 30))!
+        XCTAssertEqual(
+            CompletionCardPresentation.reminderTimeLabel(date, locale: Locale(identifier: "ja_JP")),
+            "7:30"
+        )
+        XCTAssertEqual(
+            CompletionCardPresentation.reminderOfferDetail(time: "7:30"),
+            "毎日 7:30 にお知らせします"
+        )
+    }
 }

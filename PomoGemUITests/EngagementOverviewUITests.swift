@@ -61,6 +61,8 @@ final class EngagementOverviewUITests: XCTestCase {
         for jargon in ["TIME CORE", "25分 = 1.0標準単位 ・ 粒の10→1は瓶の整理"] {
             XCTAssertFalse(app.staticTexts[jargon].exists, "「\(jargon)」 left the card")
         }
+        // D18: the very first completion offers one quiet reminder row.
+        XCTAssertTrue(app.buttons["reward.reminder-offer"].exists)
 
         let rewardBridgeAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         rewardBridgeAttachment.name = "Reward Bridge — weekly and fusion progress"
