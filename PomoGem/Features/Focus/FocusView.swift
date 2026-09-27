@@ -100,6 +100,75 @@ enum TimerCompletionForegroundFeedbackPolicy {
     }
 }
 
+/// Whether a focus or break that has reached its end may be resolved on
+/// screen now. The cue needs notification permission as it stands after this
+/// activation (`notificationMayHaveDelivered`), so every activation re-reads
+/// it first, and only a refresh that finished inside the same activation
+/// opens the gate.
+///
+/// Only scene phases delivered fresh to the view may move the gate: the phase
+/// the view appeared with and each `onChange(of: scenePhase)`. Work started
+/// from `.task` runs on a copy of the view taken when the task began, and an
+/// `@Environment(\.scenePhase)` read from that copy after an `await` still
+/// returns the phase from then. A recovered timer's view can appear while a
+/// cold-launched scene is still inactive. Its task used to write "current =
+/// (that stale `.inactive` == `.active`)" after the activation had already
+/// opened the gate, and nothing opened it again while the app stayed on
+/// screen: the timer reached 00:00 without its alarm. A refresh that finishes
+/// for an older generation now changes nothing.
+struct TimerForegroundResolutionGate: Equatable, Sendable {
+    /// Read just before a permission refresh starts; the refresh counts only
+    /// for the generation it began in.
+    private(set) var generation: UInt64 = 0
+    /// The latest phase delivered to the view, not a copy's stale one.
+    private(set) var sceneIsActive = false
+    private(set) var authorizationIsCurrent = false
+    private var hasObservedScene = false
+
+    /// The phase the view appeared with, read before the task's first
+    /// suspension. A phase change already delivered by `onChange` wins.
+    mutating func observeAppearance(sceneIsActive isActive: Bool) {
+        guard !hasObservedScene else { return }
+        observeScene(isActive: isActive)
+    }
+
+    /// A phase delivered by `onChange(of: scenePhase)`. Every change starts a
+    /// new generation, so a refresh begun before it cannot open the gate.
+    @discardableResult
+    mutating func observeScene(isActive: Bool) -> UInt64 {
+        hasObservedScene = true
+        generation &+= 1
+        sceneIsActive = isActive
+        authorizationIsCurrent = false
+        return generation
+    }
+
+    /// A permission refresh begun in generation `start` has finished. It
+    /// opens the gate only when no phase change came in between and the scene
+    /// is active; an older refresh neither opens nor closes it.
+    @discardableResult
+    mutating func finishAuthorizationRefresh(startedIn start: UInt64) -> Bool {
+        guard start == generation, sceneIsActive else { return false }
+        authorizationIsCurrent = true
+        return true
+    }
+
+    /// `scenePhaseIsActive` is the phase the caller was handed fresh (the
+    /// ticker's); the gate adds the permission refresh.
+    func allowsForegroundResolution(scenePhaseIsActive: Bool) -> Bool {
+        scenePhaseIsActive && sceneIsActive && authorizationIsCurrent
+    }
+
+    /// The view disappeared: fence every callback it started. A view that
+    /// appears again reads its phase afresh.
+    mutating func close() {
+        generation &+= 1
+        sceneIsActive = false
+        authorizationIsCurrent = false
+        hasObservedScene = false
+    }
+}
+
 /// The end-of-timer alert is the core cue of a focus on a locked phone, so
 /// permission is asked in context: once, at the first focus the person
 /// starts themselves, and never for a recovered or adopted timer. The flag is
@@ -252,8 +321,7 @@ struct FocusView: View {
     @State private var didEnterBackgroundSinceLastActive = false
     @State private var isAwaitingRecoveryActivation = false
     @State private var scheduledCompletionNotificationDeliveryDate: Date? = nil
-    @State private var notificationAuthorizationIsCurrent = false
-    @State private var notificationAuthorizationRefreshGeneration: UInt64 = 0
+    @State private var foregroundResolution = TimerForegroundResolutionGate()
     @State private var viewLifecycleGeneration: UInt64 = 0
     @State private var isViewActive = false
     @AccessibilityFocusState private var completionSaveRetryFocused: Bool
@@ -757,8 +825,9 @@ struct FocusView: View {
             // not consume completion in the brief inactive run-loop window:
             // doing so can cancel the already-scheduled OS notification before
             // it is delivered. The active transition resolves the same end date.
-            guard scenePhase == .active,
-                  notificationAuthorizationIsCurrent else { return }
+            guard foregroundResolution.allowsForegroundResolution(
+                scenePhaseIsActive: scenePhase == .active
+            ) else { return }
             let completionIsElapsed = (engine.endDate ?? .distantFuture) <= date
             if completionIsElapsed {
                 // Resolve a foreground return only after an in-flight
@@ -785,22 +854,20 @@ struct FocusView: View {
             )
         }
         .onChange(of: scenePhase) { _, newPhase in
-            notificationAuthorizationRefreshGeneration &+= 1
-            let refreshGeneration = notificationAuthorizationRefreshGeneration
+            let refreshGeneration = foregroundResolution.observeScene(
+                isActive: newPhase == .active
+            )
             guard newPhase == .active else {
-                notificationAuthorizationIsCurrent = false
                 handleScenePhase(to: newPhase)
                 return
             }
-            notificationAuthorizationIsCurrent = false
             acknowledgeAlarmLeftWhileAway()
             Task { @MainActor in
                 await notifications.refreshAuthorizationStatus()
                 guard !Task.isCancelled,
-                      refreshGeneration
-                        == notificationAuthorizationRefreshGeneration,
-                      scenePhase == .active else { return }
-                notificationAuthorizationIsCurrent = true
+                      foregroundResolution.finishAuthorizationRefresh(
+                          startedIn: refreshGeneration
+                      ) else { return }
                 handleScenePhase(to: .active)
                 if pendingCompletion == nil,
                    completion == nil,
@@ -831,8 +898,7 @@ struct FocusView: View {
             // RootView may be torn down solely to revalidate the CloudKit
             // account. Keep the accepted OS request, but fence every callback
             // owned by this disappearing view from rewriting recovery later.
-            notificationAuthorizationIsCurrent = false
-            notificationAuthorizationRefreshGeneration &+= 1
+            foregroundResolution.close()
             notificationScheduleGeneration &+= 1
             viewLifecycleGeneration &+= 1
             isViewActive = false
@@ -1234,6 +1300,11 @@ struct FocusView: View {
 
     @MainActor
     private func beginActivation() async {
+        // Before the first suspension: this copy's scene phase is current
+        // only until then (`TimerForegroundResolutionGate`).
+        foregroundResolution.observeAppearance(
+            sceneIsActive: scenePhase == .active
+        )
         guard !Task.isCancelled else { return }
         isViewActive = true
         viewLifecycleGeneration &+= 1
@@ -1252,10 +1323,11 @@ struct FocusView: View {
         guard !needsRareRewardChoice else { return }
         didActivate = true
         configureSensoryPreferences()
+        let refreshGeneration = foregroundResolution.generation
         await notifications.refreshAuthorizationStatus()
         guard !Task.isCancelled,
               lifecycleGeneration == viewLifecycleGeneration else { return }
-        notificationAuthorizationIsCurrent = scenePhase == .active
+        foregroundResolution.finishAuthorizationRefresh(startedIn: refreshGeneration)
 
         if didStart {
             guard ActivityResetPolicy.state(
@@ -1281,7 +1353,9 @@ struct FocusView: View {
                 .remainingSeconds == 0
             // Never consume an elapsed recovery while inactive/backgrounded:
             // doing so cancels the OS request before it can notify the user.
-            guard !completionIsAlreadyElapsed || scenePhase == .active else {
+            // The activation that follows resolves it, still as a recovery.
+            guard !completionIsAlreadyElapsed
+                    || foregroundResolution.authorizationIsCurrent else {
                 return
             }
             let cue: TimerCompletionForegroundFeedbackPolicy.Cue
@@ -2940,8 +3014,9 @@ struct FocusView: View {
             // A query callback can arrive while Notification Center is about
             // to deliver the same end. Defer local completion until active so
             // the pending request is not cancelled from the background.
-            guard scenePhase == .active,
-                  notificationAuthorizationIsCurrent,
+            guard foregroundResolution.allowsForegroundResolution(
+                      scenePhaseIsActive: scenePhase == .active
+                  ),
                   !notificationScheduleState.isScheduling else {
                 // Do not let a remote terminal row erase an already elapsed
                 // local completion while delivery state is still unresolved.

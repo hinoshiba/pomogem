@@ -29,8 +29,7 @@ struct BreakTimerView: View {
     @State private var notificationGeneration = 0
     @State private var isBreakActive = true
     @State private var didEnterBackgroundSinceLastActive = false
-    @State private var notificationAuthorizationIsCurrent = false
-    @State private var notificationAuthorizationRefreshGeneration = 0
+    @State private var foregroundResolution = TimerForegroundResolutionGate()
     @State private var scheduledCompletionNotificationDeliveryDate: Date? = nil
     @AccessibilityFocusState private var breakEndButtonFocused: Bool
     private let ticker = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
@@ -161,8 +160,9 @@ struct BreakTimerView: View {
             now = date
             updateIdleTimer(at: date)
             if remaining == 0,
-               scenePhase == .active,
-               notificationAuthorizationIsCurrent {
+               foregroundResolution.allowsForegroundResolution(
+                   scenePhaseIsActive: scenePhase == .active
+               ) {
                 guard !notificationScheduleState.isScheduling else { return }
                 let completionUptime = ContinuousUptime.now()
                 let returnedFromBackground = didEnterBackgroundSinceLastActive
@@ -206,22 +206,18 @@ struct BreakTimerView: View {
             if newPhase == .background {
                 didEnterBackgroundSinceLastActive = true
             }
-            notificationAuthorizationRefreshGeneration += 1
-            let refreshGeneration = notificationAuthorizationRefreshGeneration
-            guard newPhase == .active else {
-                notificationAuthorizationIsCurrent = false
-                return
-            }
-            notificationAuthorizationIsCurrent = false
+            let refreshGeneration = foregroundResolution.observeScene(
+                isActive: newPhase == .active
+            )
+            guard newPhase == .active else { return }
             Task { @MainActor in
                 await notifications.refreshAuthorizationStatus()
                 guard !Task.isCancelled,
-                      refreshGeneration
-                        == notificationAuthorizationRefreshGeneration,
-                      scenePhase == .active,
                       isBreakActive,
-                      !didSignalCompletion else { return }
-                notificationAuthorizationIsCurrent = true
+                      !didSignalCompletion,
+                      foregroundResolution.finishAuthorizationRefresh(
+                          startedIn: refreshGeneration
+                      ) else { return }
                 handleActiveSceneAfterAuthorizationRefresh()
             }
         }
@@ -232,7 +228,7 @@ struct BreakTimerView: View {
             // the explicit close/completion/account-boundary paths own the OS
             // notification and persisted recovery cleanup.
             isBreakActive = false
-            notificationAuthorizationIsCurrent = false
+            foregroundResolution.close()
             notificationGeneration += 1
             notificationSchedulingTask?.cancel()
             notificationSchedulingTask = nil
@@ -409,6 +405,11 @@ struct BreakTimerView: View {
 
     @MainActor
     private func prepareBreak() async {
+        // Before the first suspension: this copy's scene phase is current
+        // only until then (`TimerForegroundResolutionGate`).
+        foregroundResolution.observeAppearance(
+            sceneIsActive: scenePhase == .active
+        )
         guard !Task.isCancelled, isBreakActive else { return }
         // Rest may already be counting down while Home reveals the gem. Join
         // its one registration before this view replaces the same OS request.
@@ -462,11 +463,13 @@ struct BreakTimerView: View {
         updateIdleTimer()
         FocusPersistence.saveBreak(recovery, at: startedAt)
         guard !Task.isCancelled, isBreakActive else { return }
+        let refreshGeneration = foregroundResolution.generation
         await notifications.refreshAuthorizationStatus()
         guard !Task.isCancelled, isBreakActive else { return }
-        notificationAuthorizationIsCurrent = scenePhase == .active
+        foregroundResolution.finishAuthorizationRefresh(startedIn: refreshGeneration)
         if resolvedEndDate <= .now {
-            guard scenePhase == .active else { return }
+            // Never while inactive or in the background.
+            guard foregroundResolution.authorizationIsCurrent else { return }
             let completionDate = Date.now
             let completionUptime = ContinuousUptime.now()
             signalBreakCompletionIfNeeded(
@@ -651,12 +654,13 @@ struct BreakTimerView: View {
         }
 
         let generationBeforeRefresh = notificationGeneration
+        let refreshGeneration = foregroundResolution.generation
         await notifications.refreshAuthorizationStatus()
         guard !Task.isCancelled,
               isBreakActive,
               !didSignalCompletion,
               generationBeforeRefresh == notificationGeneration else { return }
-        notificationAuthorizationIsCurrent = scenePhase == .active
+        foregroundResolution.finishAuthorizationRefresh(startedIn: refreshGeneration)
 
         switch notifications.authorizationStatus {
         case .authorized, .provisional, .ephemeral:
