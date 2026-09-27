@@ -4519,7 +4519,7 @@ struct HomeView: View {
             guard !Task.isCancelled else { return }
             // One message at a time: the first gem's toast goes first.
             var waitedForToast = 0
-            while router.toast != nil, waitedForToast < 40 {
+            while router.toast != nil || newestGemIsStillFalling, waitedForToast < 40 {
                 try? await Task.sleep(for: .milliseconds(250))
                 guard !Task.isCancelled else { return }
                 waitedForToast += 1
@@ -4539,6 +4539,15 @@ struct HomeView: View {
             }
             tiltHintTask = nil
         }
+    }
+
+    /// The newest gem is still queued or falling. Its landing brings the drop
+    /// toast, which the one-time jar hint must not talk over. The hint's
+    /// wait is bounded, so a gem that never shows in the scene only delays it.
+    private var newestGemIsStillFalling: Bool {
+        if scene.queuedDropCount > 0 { return true }
+        guard let newest = looseSessions.first else { return false }
+        return !scene.hasLandedPebble(withID: newest.id)
     }
 
     private var jarInteractionHintText: String {
