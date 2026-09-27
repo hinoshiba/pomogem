@@ -112,6 +112,15 @@ struct SettingsView: View {
     @State private var showCompleteDeletionConfirmation = false
     @State private var booleanSettingsCommitGeneration = 0
     @State private var completionPreview = TimerCompletionPreviewController()
+    /// F5, device-local (`AlarmPreferences`): the strength, and a sound
+    /// chosen on this iPhone (nil follows the synced chime).
+    @AppStorage(AlarmPreferences.strengthDefaultsKey)
+    private var alarmStrengthRawValue = AlarmStrength.defaultValue.rawValue
+    @AppStorage(AlarmPreferences.soundDefaultsKey)
+    private var alarmSoundRawValue: String?
+    /// Read on appear and on every return to the app (the Settings app is
+    /// where a denial is undone). Asked only when 最大 is chosen.
+    @State private var alarmAuthorization: AlarmKitAuthorization = .unsupported
 #if DEBUG
     @State private var lastBooleanSettingsCommitMilliseconds = -1
     @State private var lastBooleanSettingsCommitSucceeded = false
@@ -828,26 +837,35 @@ struct SettingsView: View {
                     synchronizeNotifications()
                 }
             )) {
-                SettingLabel(title: "音", subtitle: "サイレントスイッチに従います", symbol: "speaker.wave.2")
-            }
-
-            Picker(selection: timerCompletionSoundBinding) {
-                ForEach(TimerCompletionSound.allCases) { style in
-                    Text(style.title)
-                        .tag(style)
-                        .accessibilityLabel("\(style.title)。\(style.detail)")
-                        .accessibilityIdentifier(
-                            "settings.completion-sound.\(style.rawValue)"
-                        )
-                }
-            } label: {
                 SettingLabel(
-                    title: "タイマー終了音",
-                    subtitle: sensoryPreferences.timerCompletionSound.detail,
-                    symbol: sensoryPreferences.timerCompletionSound.systemImage
+                    title: "音",
+                    subtitle: AlarmSettingsCopy.soundSubtitle(strength: alarmStrength),
+                    symbol: "speaker.wave.2"
                 )
             }
-            .pickerStyle(.navigationLink)
+            .accessibilityIdentifier("settings.sound")
+
+            NavigationLink {
+                AlarmSoundPickerView(
+                    selection: alarmSound,
+                    strength: alarmStrength,
+                    onSelect: selectAlarmSound
+                )
+            } label: {
+                HStack(spacing: 8) {
+                    SettingLabel(
+                        title: AlarmSettingsCopy.soundRowTitle,
+                        subtitle: alarmSound.detail,
+                        symbol: alarmSound.systemImage
+                    )
+                    Spacer(minLength: 4)
+                    Text(verbatim: alarmSound.title)
+                        .foregroundStyle(PomoGemTheme.muted)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(verbatim: AlarmSettingsCopy.soundRowTitle))
+                .accessibilityValue(Text(verbatim: alarmSound.title))
+            }
             .disabled(!sensoryPreferences.soundOn)
             .accessibilityIdentifier("settings.completion-sound")
 
@@ -889,6 +907,31 @@ struct SettingsView: View {
             .disabled(!sensoryPreferences.hapticsOn)
             .accessibilityIdentifier("settings.completion-haptic")
 
+            NavigationLink {
+                AlarmStrengthPickerView(
+                    selection: alarmStrength,
+                    onSelect: selectAlarmStrength
+                )
+            } label: {
+                HStack(spacing: 8) {
+                    SettingLabel(
+                        title: AlarmSettingsCopy.strengthRowTitle,
+                        subtitle: alarmStrength.detail,
+                        symbol: "alarm"
+                    )
+                    Spacer(minLength: 4)
+                    Text(verbatim: alarmStrength.title)
+                        .foregroundStyle(PomoGemTheme.muted)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(verbatim: AlarmSettingsCopy.strengthRowTitle))
+                .accessibilityValue(Text(verbatim: alarmStrength.title))
+                .accessibilityHint(Text(verbatim: alarmStrength.detail))
+            }
+            .accessibilityIdentifier("settings.alarm-strength")
+
+            alarmMaximumStatusRow
+
             TimerCompletionPreviewRow(
                 controller: completionPreview,
                 configuration: completionPreviewConfiguration
@@ -897,7 +940,99 @@ struct SettingsView: View {
         } header: {
             Text("音と触覚")
         } footer: {
-            Text("アプリを開いている間にタイマーが終わったときは、終了音と触覚を停止操作まで繰り返します。通知で知らせたあとや、あとからアプリに戻ったときは繰り返さず、そのまま記録を表示します。音はサイレントモードに従います。通知を許可している場合、ロック中は1回の通知となり、音と触覚はiPhoneの通知設定に従います。")
+            Text(verbatim: AlarmSettingsCopy.sectionFooter(strength: alarmStrength))
+                .accessibilityIdentifier("settings.sensory-footer")
+        }
+        .onAppear { refreshAlarmAuthorization() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { refreshAlarmAuthorization() }
+        }
+    }
+
+    // MARK: F5 alarm sound and strength
+
+    private var alarmStrength: AlarmStrength {
+        AlarmStrength(rawValue: alarmStrengthRawValue) ?? .defaultValue
+    }
+
+    /// This iPhone's choice, else the synced chime (`AlarmPreferences.sound`).
+    private var alarmSound: AlarmSoundChoice {
+        alarmSoundRawValue.flatMap(AlarmSoundChoice.init(rawValue:))
+            ?? AlarmSoundChoice(legacy: sensoryPreferences.timerCompletionSound)
+    }
+
+    /// Choosing one of the original chimes writes the synced preference and
+    /// clears the device-local choice; a new sound stays on this iPhone.
+    private func selectAlarmSound(_ choice: AlarmSoundChoice) {
+        completionPreview.cancel()
+        if let legacy = AlarmPreferences().select(choice) {
+            updateTimerCompletionSound(legacy)
+        }
+        FocusEndAlarmMaintenance.prepare(choice, strength: alarmStrength)
+    }
+
+    /// Choosing 最大 asks for the Alarms permission (iOS 26+), once; a
+    /// denial is explained under the row with a way to the Settings app.
+    private func selectAlarmStrength(_ strength: AlarmStrength) {
+        completionPreview.cancel()
+        AlarmPreferences().setStrength(strength)
+        FocusEndAlarmMaintenance.prepare(alarmSound, strength: strength)
+        guard strength.usesSystemAlarmWhenAway else { return }
+        Task { await requestAlarmAuthorizationIfNeeded() }
+    }
+
+    private func refreshAlarmAuthorization() {
+        alarmAuthorization = FocusEndAlarmScheduler.shared.authorization
+    }
+
+    private func requestAlarmAuthorizationIfNeeded() async {
+        refreshAlarmAuthorization()
+        guard alarmAuthorization == .notDetermined else { return }
+        alarmAuthorization = await FocusEndAlarmScheduler.shared.requestAuthorization()
+    }
+
+    @ViewBuilder
+    private var alarmMaximumStatusRow: some View {
+        if let status = AlarmSettingsCopy.maximumStatus(
+            strength: alarmStrength,
+            authorization: alarmAuthorization,
+            soundOn: sensoryPreferences.soundOn
+        ) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(verbatim: status.message)
+                    .font(.footnote)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("settings.alarm-maximum-status")
+                switch status.action {
+                case .none:
+                    EmptyView()
+                case .requestPermission:
+                    Button {
+                        Task { await requestAlarmAuthorizationIfNeeded() }
+                    } label: {
+                        Text("アラームを許可", tableName: "Settings", comment: "Button under the Maximum alarm strength: asks for the Alarms permission. Suggested English: Allow Alarms")
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PomoGemBareButtonStyle())
+                    .foregroundStyle(PomoGemTheme.amber)
+                    .accessibilityIdentifier("settings.alarm-permission")
+                case .openSettings:
+                    Button {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            openURL(url)
+                        }
+                    } label: {
+                        Text("「設定」アプリを開く", tableName: "Settings", comment: "Button under the Maximum alarm strength when alarms are denied: opens PomoGem in the Settings app. Suggested English: Open Settings")
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PomoGemBareButtonStyle())
+                    .foregroundStyle(PomoGemTheme.amber)
+                    .accessibilityIdentifier("settings.alarm-open-settings")
+                }
+            }
         }
     }
 
@@ -1589,13 +1724,6 @@ struct SettingsView: View {
                 }
 #endif
             }
-        )
-    }
-
-    private var timerCompletionSoundBinding: Binding<TimerCompletionSound> {
-        Binding(
-            get: { sensoryPreferences.timerCompletionSound },
-            set: { updateTimerCompletionSound($0) }
         )
     }
 
@@ -2523,14 +2651,23 @@ final class TimerCompletionPreviewController {
             try await Task.sleep(for: .seconds(1))
         },
         playback: @escaping Playback = { configuration in
-            if let sound = configuration.sound {
+            // One cue as a return would play it: this iPhone's sound and
+            // strength (F5), today's chime for the original three.
+            if configuration.sound != nil {
                 SoundSynth.shared.isEnabled = true
-                SoundSynth.shared.playTimerCompletion(sound)
             }
-            if let haptic = configuration.haptic {
+            if configuration.haptic != nil {
                 Haptics.shared.isEnabled = true
-                Haptics.shared.playTimerCompletion(haptic)
             }
+            let request = TimerCompletionAlarmRequest.live(
+                TimerCompletionAlertConfiguration(
+                    sessionID: UUID(),
+                    sound: configuration.sound,
+                    haptic: configuration.haptic
+                ),
+                .single
+            )
+            LiveTimerCompletionAlarmPlayer().playCue(request)
         }
     ) {
         self.sleeper = sleeper

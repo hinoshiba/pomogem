@@ -185,6 +185,7 @@
 		6C2AAC86BE56509D7570C459 /* CrystalCardPlacementUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBB208751F81B5A19E732706 /* CrystalCardPlacementUITests.swift */; };
 		6C7D00C57A8B6E7A036EFCCD /* ScreenTimeMonitoringWorker.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1454E359AC45D44E04BE9D6 /* ScreenTimeMonitoringWorker.swift */; };
 		6C8E0D1BD62ABA3EDA2636E8 /* ScreenTimeControllerConcurrencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D876A3C4D41AF3CC0FFC85D2 /* ScreenTimeControllerConcurrencyTests.swift */; };
+		6CB26C3C01D10D37D22683D2 /* AlarmSettingsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C379AE1021F6F52A5B1DA7A /* AlarmSettingsUITests.swift */; };
 		6CC59443F511CB7EBA219F5E /* RareRewardLedgerV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD7BA595ACB195819AF7A8D3 /* RareRewardLedgerV2.swift */; };
 		6D8A6D5B721ED019712521CA /* ScreenTimeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9855214B03B999942916D121 /* ScreenTimeStore.swift */; };
 		6DB27B8627152EADDF1D401B /* ShareSelectionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7CE14A73EB70521D21A0343 /* ShareSelectionModel.swift */; };
@@ -283,6 +284,7 @@
 		A0343A41B8D2F7B03FA111AB /* Storage.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A823B528947C18804D72C306 /* Storage.xcstrings */; };
 		A0838945F2A75AAD9ADCC2C7 /* AlarmChannelPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F0AE6D0C58D976E0A3E15CD /* AlarmChannelPolicyTests.swift */; };
 		A2D7A5EC3636198C5928FC19 /* ScreenTimeSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12099E8B5B1E78CFEA252490 /* ScreenTimeSettingsView.swift */; };
+		A2FE2CD77248F8E794CFF487 /* AlarmSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17D8049DFC55450D8BF9D5AB /* AlarmSettingsTests.swift */; };
 		A31EE707CD33039BDF77042D /* PomoGemWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0514C1FADC6B20E25A7D561 /* PomoGemWidgetsBundle.swift */; };
 		A374879F73D328AA043A35C4 /* JarInteractionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1844B82DC222AD01D3D479B8 /* JarInteractionUITests.swift */; };
 		A3E82C43D5DDA9CEB282918E /* PebbleRadiusPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1DC4428849BCE1969B53808 /* PebbleRadiusPolicyTests.swift */; };
@@ -358,6 +360,7 @@
 		C62051B8ED2541CD5A86B248 /* BoundedLaunchPreparation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48EB4B5DE51DBD3D3008B8B9 /* BoundedLaunchPreparation.swift */; };
 		C6D9C527071AA17F6281CD02 /* StorageTransferCloudMountControlReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC8098012B640205A9689EB9 /* StorageTransferCloudMountControlReaderTests.swift */; };
 		C6FC6B1605C454F9DE1B205B /* LocalizedFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F3882E40B98417E2C2ACE6D /* LocalizedFormat.swift */; };
+		C83BE5D86C886006EF364CFF /* AlarmSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 207675946670ACCC94A17122 /* AlarmSettings.swift */; };
 		C8D4607EBCE964A9F9826603 /* CloudLaunchResumePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEBD892EC17D11EE16C6DAB8 /* CloudLaunchResumePolicyTests.swift */; };
 		C94D41C8F2E3F291CB6BE07C /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E44B05ED15660B2277666445 /* HomeView.swift */; };
 		CA9C6731181068A241AFFECF /* RareRewardLedgerV2Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ED4A83E537DFC93B1D07F98 /* RareRewardLedgerV2Tests.swift */; };
@@ -546,6 +549,7 @@
 		15F05E4736BA406DC0D092D5 /* ScreenTimeCallbackDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeCallbackDiagnostics.swift; sourceTree = "<group>"; };
 		1718C6E2F252164D9503E8A4 /* StorageTransferManagedZoneDeletionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferManagedZoneDeletionTests.swift; sourceTree = "<group>"; };
 		17BBD8D0739FF5D3E7D95118 /* ScreenTimeMonitorExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeMonitorExtension.swift; sourceTree = "<group>"; };
+		17D8049DFC55450D8BF9D5AB /* AlarmSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmSettingsTests.swift; sourceTree = "<group>"; };
 		1844B82DC222AD01D3D479B8 /* JarInteractionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JarInteractionUITests.swift; sourceTree = "<group>"; };
 		189F9C27085367C86D86A859 /* BoundedLaunchPreparationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundedLaunchPreparationTests.swift; sourceTree = "<group>"; };
 		1A889309BC037B43F7C5906A /* FairnessPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FairnessPolicy.swift; sourceTree = "<group>"; };
@@ -555,6 +559,7 @@
 		203BABC145B85C09C2BFBA55 /* JarRenderingPerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JarRenderingPerformanceTests.swift; sourceTree = "<group>"; };
 		205B46BDFDEE8825FF82511E /* RareRewardCloudKitLedgerRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RareRewardCloudKitLedgerRepository.swift; sourceTree = "<group>"; };
 		20620DDC627F3DE782B244FB /* StorageTransferSettingsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferSettingsUITests.swift; sourceTree = "<group>"; };
+		207675946670ACCC94A17122 /* AlarmSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmSettings.swift; sourceTree = "<group>"; };
 		20B6C529D3E2AA8F2DB711F9 /* PomoGemStorageSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomoGemStorageSnapshotTests.swift; sourceTree = "<group>"; };
 		20CEC194143F69FFEAA1FBD7 /* HomeLocalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeLocalizationTests.swift; sourceTree = "<group>"; };
 		21361A11D14FBB08C51AE057 /* AccumulationTimelineRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccumulationTimelineRepositoryTests.swift; sourceTree = "<group>"; };
@@ -582,6 +587,7 @@
 		289C1F805E39D63CA9639146 /* StorageTransferCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferCoordinatorTests.swift; sourceTree = "<group>"; };
 		2BE03AD68663BB94BACCC1F3 /* ScreenTimeSettingsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeSettingsUITests.swift; sourceTree = "<group>"; };
 		2C30CF10E3988DB96AE814A1 /* StorageTransferDatasetRequestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferDatasetRequestTests.swift; sourceTree = "<group>"; };
+		2C379AE1021F6F52A5B1DA7A /* AlarmSettingsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmSettingsUITests.swift; sourceTree = "<group>"; };
 		2D1D4B6D38CB4FBD9FC29391 /* TimerForegroundResolutionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerForegroundResolutionTests.swift; sourceTree = "<group>"; };
 		2D26D449B8AEC9D324182BF9 /* StorageTransferCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferCleanupTests.swift; sourceTree = "<group>"; };
 		2DD50E345F510C6D928E8D62 /* CloudDataDeletionGuidanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudDataDeletionGuidanceView.swift; sourceTree = "<group>"; };
@@ -1191,6 +1197,7 @@
 				405164FE628C5989DD6BDCAE /* AccessibilityAdversarialUITests.swift */,
 				3957DF0895E16174A29B4580 /* AccumulationPlanUITests.swift */,
 				626D6B716E894C9A3DEE9E3E /* AggregatePersistenceFailureRecoveryUITests.swift */,
+				2C379AE1021F6F52A5B1DA7A /* AlarmSettingsUITests.swift */,
 				8D8A83970636C702AACA4AEA /* AppEntryUITests.swift */,
 				C6AB8F0B01A462084294EF1A /* CloudVerificationPresentationUITests.swift */,
 				4673165732F5EFE9FD6BEE72 /* CompletionAlertUITestSupport.swift */,
@@ -1229,6 +1236,7 @@
 			isa = PBXGroup;
 			children = (
 				40F05E7690A8D077F1397899 /* AboutAppView.swift */,
+				207675946670ACCC94A17122 /* AlarmSettings.swift */,
 				2DD50E345F510C6D928E8D62 /* CloudDataDeletionGuidanceView.swift */,
 				818E60D628BA1B8E8AACE287 /* JarEffectsSettingsSection.swift */,
 				CF23306474C1C7B694067BD8 /* PomoGemDataExporter.swift */,
@@ -1365,6 +1373,7 @@
 				6F0AE6D0C58D976E0A3E15CD /* AlarmChannelPolicyTests.swift */,
 				7603C7684E25B29D5422841B /* AlarmHapticPatternTests.swift */,
 				BB2CE3D9EE63886A1945A8AF /* AlarmPreferencesTests.swift */,
+				17D8049DFC55450D8BF9D5AB /* AlarmSettingsTests.swift */,
 				234C4A059510D0E1D3848E26 /* AlarmSoundLibraryTests.swift */,
 				7893237F298DD20D6D142A00 /* AlarmSoundSynthesisTests.swift */,
 				C7CA0949614CED6AA5F16278 /* AnimatedShareExporterTests.swift */,
@@ -1965,6 +1974,7 @@
 				9BA34D213909B87E02C409D8 /* AlarmChannelPolicy.swift in Sources */,
 				289B70A1B2AFC49EC33A49B6 /* AlarmHapticPattern.swift in Sources */,
 				B6FC505599E78B60C61F22EE /* AlarmPreferences.swift in Sources */,
+				C83BE5D86C886006EF364CFF /* AlarmSettings.swift in Sources */,
 				79B08CBDCD1ED01E5818E371 /* AlarmSoundLibrary.swift in Sources */,
 				FD9A4FF2FC72433BD88D29CA /* AlarmSoundSynthesis.swift in Sources */,
 				9C81622243F21976590DDAEE /* Analytics.swift in Sources */,
@@ -2169,6 +2179,7 @@
 				A0838945F2A75AAD9ADCC2C7 /* AlarmChannelPolicyTests.swift in Sources */,
 				5FFA25F377B11772E932B978 /* AlarmHapticPatternTests.swift in Sources */,
 				DAF9A9D09FE8ED18C5347118 /* AlarmPreferencesTests.swift in Sources */,
+				A2FE2CD77248F8E794CFF487 /* AlarmSettingsTests.swift in Sources */,
 				07191C1E3EDB9880D4096739 /* AlarmSoundLibraryTests.swift in Sources */,
 				2F95B236FBF79D871DA24C16 /* AlarmSoundSynthesisTests.swift in Sources */,
 				AB36821AD3DF9DF1078F2A18 /* AnimatedShareExporterTests.swift in Sources */,
@@ -2340,6 +2351,7 @@
 				17BEB2E41142345A44CAC93A /* AccessibilityAdversarialUITests.swift in Sources */,
 				29225B297662632DA9F0DC33 /* AccumulationPlanUITests.swift in Sources */,
 				9B0D45C064B95151B3779A74 /* AggregatePersistenceFailureRecoveryUITests.swift in Sources */,
+				6CB26C3C01D10D37D22683D2 /* AlarmSettingsUITests.swift in Sources */,
 				A81ED3AA78C1E66E31EA8D48 /* AppEntryUITests.swift in Sources */,
 				650751B450EDC008AF50C2B3 /* CloudVerificationPresentationUITests.swift in Sources */,
 				903C42EFC275C2D1CF399B56 /* CompletionAlertUITestSupport.swift in Sources */,
