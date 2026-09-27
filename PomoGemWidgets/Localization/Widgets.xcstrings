@@ -16,6 +16,9 @@
     "ポモジェムの休憩" : {
       "comment" : "VoiceOver: the Dynamic Island mark during a break"
     },
+    "ポモジェムを開く" : {
+      "comment" : "VoiceOver: the medium widget's jar and heading, which open the app (its length buttons start a focus)"
+    },
     "休憩の残り時間" : {
       "comment" : "VoiceOver: label of an unknown break countdown"
     },
