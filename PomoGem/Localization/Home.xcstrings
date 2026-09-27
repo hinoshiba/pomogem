@@ -1,6 +1,28 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "%@ %@ → +%@の一粒" : {
+      "comment" : "Completion card main line. %1$@ is the theme name (user data, never translated), %2$@ the focus time (25分), %3$@ the gem's mass (250g). en: '%1$@ %2$@ → a +%3$@ gem'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ %2$@ → +%3$@の一粒"
+          }
+        }
+      }
+    },
+    "%@、%@、%@の一粒。" : {
+      "comment" : "VoiceOver: the completion card main line. %1$@ theme name (user data), %2$@ spoken focus time, %3$@ spoken mass. en: '%1$@, %2$@, a %3$@ gem'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@、%2$@、%3$@の一粒。"
+          }
+        }
+      }
+    },
     "%@。累計%@、集中%lld粒、成果%@個" : {
       "comment" : "VoiceOver, menu metrics while iCloud is checked: status, lifetime mass, focus count, achievement count",
       "localizations" : {
@@ -23,6 +45,18 @@
         }
       }
     },
+    "%lld分休憩を利用できます。" : {
+      "comment" : "VoiceOver: the break the completion card offers. %lld is minutes"
+    },
+    "%lld粒ぶんの時間が、\nひとつの結晶に。" : {
+      "comment" : "Fusion sheet headline, two lines. %lld is the gems the new crystal holds (10). en: 'The time of %lld gems,\\nin one crystal.'"
+    },
+    "10粒がそろうと、瓶の中でひとつの結晶にまとまります。瓶を軽く保つための整理で、一粒ずつの時間も、%@の重さも、記録にそのまま残ります。" : {
+      "comment" : "Fusion sheet 「しくみ」: fusing ten gems keeps the jar light and loses nothing. %@ is the crystal's mass"
+    },
+    "10粒で、時間の核が生まれました。これからは核が、積み上げた時間の重さを表します。" : {
+      "comment" : "Fusion sheet, only when the first crystal and the first time core arrive together"
+    },
     "Proなら、この%@に「%@」と刻めます" : {
       "comment" : "Fusion sheet link for free users; arguments: the crystal's name (結晶…), the month it was made (2026年9月)",
       "localizations" : {
@@ -34,6 +68,15 @@
         }
       }
     },
+    "×10の結晶が10個そろうと、×100の結晶になります。" : {
+      "comment" : "Fusion sheet 「しくみ」: ten ×10 crystals make a ×100 crystal"
+    },
+    "しくみ" : {
+      "comment" : "Disclosure that opens how gems, crystals and the time core work. en: 'How it works'"
+    },
+    "しくみ。%@" : {
+      "comment" : "VoiceOver label of the 「しくみ」 disclosure; %@ is its full accounting, read whether it is open or not"
+    },
     "アプリの時間を積む" : {
       "comment" : "Home menu row: open the Screen Time settings"
     },
@@ -43,14 +86,154 @@
     "ポモジェムProの説明を開きます" : {
       "comment" : "VoiceOver hint on the fusion sheet's Pro month-label link"
     },
+    "リマインダーの提案を閉じる" : {
+      "comment" : "VoiceOver: dismisses the first completion card's reminder offer"
+    },
+    "リマインダーを保存できませんでした。設定からも選べます。" : {
+      "comment" : "First completion card: the reminder could not be saved"
+    },
+    "今週のタイマー完走は%lld回です。回数は時間の価値とは別です。" : {
+      "comment" : "Completion card 「しくみ」: timer completions this calendar week, a frequency cue only. %lld is the count"
+    },
+    "今週の実測 %@" : {
+      "comment" : "Completion card: this calendar week's measured focus time (timer and Screen Time). en: 'This week, measured: %@'"
+    },
+    "今週の実測 %@・自己申告 %@" : {
+      "comment" : "Completion card: this calendar week's measured focus time, then its self-reported focus time. en: 'This week, measured: %1$@ · self-reported: %2$@'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "今週の実測 %1$@・自己申告 %2$@"
+          }
+        }
+      }
+    },
+    "今週の実測は%@、自己申告は%@。" : {
+      "comment" : "VoiceOver: this week's measured, then self-reported, focus time on the completion card",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "今週の実測は%1$@、自己申告は%2$@。"
+          }
+        }
+      }
+    },
+    "今週の実測は%@。" : {
+      "comment" : "VoiceOver: this week's measured focus time on the completion card"
+    },
+    "休憩、共有、または閉じるを選べます。しくみで時間の核と結晶の進みを確認できます" : {
+      "comment" : "VoiceOver hint on the completion card heading while the share button shows"
+    },
     "休憩の選択を終えると、集中を始められます" : {
       "comment" : "Toast: a widget, link or Siri asked to start a focus while the reward card waits for the rest choice"
+    },
+    "休憩または閉じるを選べます。しくみで時間の核と結晶の進みを確認できます" : {
+      "comment" : "VoiceOver hint on the completion card heading"
+    },
+    "刻印" : {
+      "comment" : "Fusion sheet tile title for Pro: the month engraved on the crystal. en: 'Engraving'"
     },
     "勉強アプリ10分ごとに1粒" : {
       "comment" : "Home menu row detail: every 10 minutes in the chosen study apps adds one pebble"
     },
+    "新しい結晶。その下に、もとになった%lld個の結晶" : {
+      "comment" : "VoiceOver: the fusion sheet art, a larger crystal over its source crystals. %lld is 10"
+    },
+    "新しい結晶。その下に、もとになった%lld粒" : {
+      "comment" : "VoiceOver: the fusion sheet art, a new ×10 crystal over its source gems. %lld is 10"
+    },
+    "明日もこの時間に？" : {
+      "comment" : "First completion card: optional offer of a daily reminder at this time. en: 'Same time tomorrow?'"
+    },
+    "時間" : {
+      "comment" : "Fusion sheet tile title: the focus time the crystal holds. en: 'Time'"
+    },
+    "時間の核が%lld段目になりました。次の段まで あと%@" : {
+      "comment" : "Completion card 「しくみ」: this focus raised the time core. %1$lld is the new level, %2$@ the time to the next one",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "時間の核が%1$lld段目になりました。次の段まで あと%2$@"
+          }
+        }
+      }
+    },
+    "時間の核が生まれました。次の段まで あと%@" : {
+      "comment" : "Completion card 「しくみ」: this focus brought the first time core. %@ is the time to its next level"
+    },
+    "時間の核の%lld段目まで あと%@" : {
+      "comment" : "Completion card 「しくみ」: focus time left until the time core's next level. %1$lld is the level, %2$@ a duration",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "時間の核の%1$lld段目まで あと%2$@"
+          }
+        }
+      }
+    },
+    "時間の核の進みを確認しています" : {
+      "comment" : "Completion card 「しくみ」 while the lifetime total is being checked"
+    },
+    "時間の核は、粒の数ではなく積み上げた時間で進みます。次へ急ぐ必要はありません。" : {
+      "comment" : "Fusion sheet 「しくみ」: the time core counts time, not gems; no need to hurry"
+    },
+    "時間の核は、粒の数ではなく集中した時間で進みます。25分が1.0標準単位で、今回は%@標準単位です。" : {
+      "comment" : "Completion card 「しくみ」: the time core counts time, not gems; 25 minutes is one standard unit. %@ is this focus in standard units (1.0)"
+    },
+    "時間の核まで あと%@" : {
+      "comment" : "Completion card 「しくみ」: focus time left until the first time core. %@ is a duration"
+    },
+    "毎日 %@ にお知らせします" : {
+      "comment" : "First completion card, under 「明日もこの時間に？」: what a tap turns on. %@ is a time of day (7:30). en: 'Remind me daily at %@'"
+    },
+    "毎日 %@ にお知らせします。設定でいつでも変えられます。" : {
+      "comment" : "First completion card after the reminder was turned on. %@ is a time of day. en: 'I'll remind you daily at %@. You can change this in Settings.'"
+    },
+    "毎日のリマインダーをこの時刻にします。通知の許可を求めることがあります" : {
+      "comment" : "VoiceOver hint on the first completion card's reminder offer"
+    },
+    "粒" : {
+      "comment" : "Fusion sheet tile title: how many gems the crystal holds. en: 'Gems'"
+    },
+    "粒は1回の完走につき1つです。10粒そろうと、瓶の中でひとつの結晶にまとまります（記録と重さはそのまま）。次の結晶まで あと%lld粒。" : {
+      "comment" : "Completion card 「しくみ」: ten gems fuse into one crystal; %lld gems to the next crystal"
+    },
+    "粒は1回の完走につき1つです。この一粒で10粒がそろい、瓶の中でひとつの結晶になります。記録と重さはそのままです。" : {
+      "comment" : "Completion card 「しくみ」: this gem completes ten, which fuse into one crystal; nothing is lost"
+    },
+    "粒は1回の完走につき1つです。結晶までの数は、確認が済むと表示します。" : {
+      "comment" : "Completion card 「しくみ」 while the gem count is being checked"
+    },
+    "結晶" : {
+      "comment" : "Fusion sheet tile title: the crystal's size (×10). en: 'Crystal'"
+    },
+    "設定を開く" : {
+      "comment" : "Opens the iOS notification settings for PomoGem. en: 'Open Settings'"
+    },
+    "説明の表示を切り替えます" : {
+      "comment" : "VoiceOver hint: toggles the 「しくみ」 disclosure"
+    },
+    "通知がオフになっています。設定で許可すると、毎日 %@ にお知らせできます。" : {
+      "comment" : "First completion card when iOS notifications are off for PomoGem. %@ is a time of day"
+    },
     "進行中の集中があるため、新しい集中は始めませんでした" : {
       "comment" : "Toast: a widget, link or Siri asked to start a focus while another one still needs attention"
+    },
+    "重さはそのまま %@" : {
+      "comment" : "Fusion sheet subline: the crystal weighs what its gems did. %@ is a mass (2.50kg). en: 'Same weight: %@'"
+    },
+    "閉じています" : {
+      "comment" : "VoiceOver value: the 「しくみ」 disclosure is closed"
+    },
+    "開いています" : {
+      "comment" : "VoiceOver value: the 「しくみ」 disclosure is open"
+    },
+    "集中を記録しました" : {
+      "comment" : "Completion card headline, shown after every finished focus. en: 'Focus recorded'"
     }
   },
   "version" : "1.0"
