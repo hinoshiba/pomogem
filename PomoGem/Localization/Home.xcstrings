@@ -34,13 +34,13 @@
         }
       }
     },
-    "%@に%@、%@を積みます。取り消すときは「元に戻す」を押してください" : {
-      "comment" : "VoiceOver, right after a manual entry is confirmed: theme, duration, grams",
+    "%@に%@、%@を積みます。「元に戻す」で取り消せます" : {
+      "comment" : "VoiceOver, once the Undo banner of a manual entry has focus: theme, duration, grams",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "%1$@に%2$@、%3$@を積みます。取り消すときは「元に戻す」を押してください"
+            "value" : "%1$@に%2$@、%3$@を積みます。「元に戻す」で取り消せます"
           }
         }
       }

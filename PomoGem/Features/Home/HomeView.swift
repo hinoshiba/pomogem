@@ -164,6 +164,9 @@ struct HomeView: View {
     /// history-02. Confirmed but not yet written; see `PendingManualEntry`.
     @State private var pendingManualEntry: PendingManualEntry?
     @State private var pendingManualCommitTask: Task<Void, Never>?
+    /// VoiceOver focus for the banner's 「元に戻す」, moved there once the
+    /// manual-entry sheet has gone (see `manualUndoBanner`).
+    @AccessibilityFocusState private var manualUndoHasFocus: Bool
     @State private var screenTimeArrivals = ScreenTimeArrivalAnnouncer()
     @State private var showAchievementEntry = false
     @State private var showCustomDuration = false
@@ -724,6 +727,20 @@ struct HomeView: View {
                 }
                 }
             }
+            // history-02. Over the scroll area only: at accessibility sizes
+            // the start button pinned below it stays uncovered.
+            .overlay(alignment: .top) {
+                if let pendingManualEntry {
+                    manualUndoBanner(pendingManualEntry)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
+                        .transition(
+                            reduceMotion
+                                ? .opacity
+                                : .move(edge: .top).combined(with: .opacity)
+                        )
+                }
+            }
             // home-03. Below the scroll view, not over it: content never
             // slides under the button, and the jar is sized to what is left.
             if pinsFocusLauncher {
@@ -770,18 +787,6 @@ struct HomeView: View {
             reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.86),
             value: breakOffer?.id
         )
-        .overlay(alignment: .top) {
-            if let pendingManualEntry {
-                manualUndoBanner(pendingManualEntry)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
-                    .transition(
-                        reduceMotion
-                            ? .opacity
-                            : .move(edge: .top).combined(with: .opacity)
-                    )
-            }
-        }
         .animation(
             reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.88),
             value: pendingManualEntry?.id
@@ -4012,17 +4017,34 @@ struct HomeView: View {
         pendingManualEntry = pending
         showManualEntry = false
         schedulePendingManualCommit(pending)
-        if UIAccessibility.isVoiceOverRunning {
-            UIAccessibility.post(
-                notification: .announcement,
-                argument: String(
-                    localized: "\(pending.subjectName)に\(DurationText.spoken(minutes: duration.minutes))、\(MassText.spoken(grams: duration.grams))を積みます。取り消すときは「元に戻す」を押してください",
-                    table: "Home",
-                    comment: "VoiceOver, right after a manual entry is confirmed: theme, duration, grams"
-                )
-            )
-        }
+        // VoiceOver hears about the entry from the banner once the sheet has
+        // gone (`announcePendingManualEntry`): an announcement posted while
+        // the sheet is dismissing is often dropped.
         return nil
+    }
+
+    /// VoiceOver only. The banner is an overlay read after the jar, the
+    /// pickers and the start button, so focus moves to its 「元に戻す」 once
+    /// the sheet has dismissed, and a queued announcement says what waits.
+    private func announcePendingManualEntry(_ pending: PendingManualEntry) async {
+        guard UIAccessibility.isVoiceOverRunning else { return }
+        try? await Task.sleep(for: .milliseconds(700))
+        guard !Task.isCancelled, pendingManualEntry?.id == pending.id else { return }
+        manualUndoHasFocus = true
+        let message = String(
+            localized: "\(pending.subjectName)に\(DurationText.spoken(minutes: pending.duration.minutes))、\(MassText.spoken(grams: pending.duration.grams))を積みます。「元に戻す」で取り消せます",
+            table: "Home",
+            comment: "VoiceOver, once the Undo banner of a manual entry has focus: theme, duration, grams"
+        )
+        // Queued, so it follows the focused button's own label instead of
+        // cutting it off.
+        UIAccessibility.post(
+            notification: .announcement,
+            argument: NSAttributedString(
+                string: message,
+                attributes: [.accessibilitySpeechQueueAnnouncement: true]
+            )
+        )
     }
 
     private func schedulePendingManualCommit(_ pending: PendingManualEntry) {
@@ -4156,45 +4178,37 @@ struct HomeView: View {
         }
     }
 
+    /// history-02. A short strip over the top of the scroll area, never
+    /// over the start button pinned below it at accessibility sizes (home-03).
+    /// There the undo button moves under the text and the text is capped at
+    /// the first accessibility size: side by side at AX5 the text column was
+    /// ~150 pt wide, broke every three or four characters and made the banner
+    /// 456 pt tall, over the whole jar and half the start button for the
+    /// entire Undo window.
+    @ViewBuilder
     private func manualUndoBanner(_ pending: PendingManualEntry) -> some View {
-        HStack(spacing: 12) {
-            Circle()
-                .fill(Color(hex: pending.colorHex))
-                .frame(width: 12, height: 12)
-                .overlay { Circle().stroke(.white.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [2, 2])) }
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                // Time first, like every other record; the grams follow.
-                Text(
-                    "\(pending.subjectName)に\(DurationText.short(minutes: pending.duration.minutes))を積みます",
-                    tableName: "Home",
-                    comment: "Undo banner after a manual entry: theme, then the self-reported time about to be added"
-                )
-                    .font(.subheadline.weight(.bold))
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(
-                    "+\(MassText.grams(pending.duration.grams.formatted())) ・ まもなく瓶に入ります",
-                    tableName: "Home",
-                    comment: "Undo banner subtitle: the mass, and that the entry is saved shortly"
-                )
-                    .font(.caption)
-                    .foregroundStyle(PomoGemTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        manualUndoDot(pending)
+                        manualUndoText(pending, titleLineLimit: 3, subtitleLineLimit: 2)
+                    }
+                    manualUndoButton(fillsWidth: true)
+                }
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                .padding(12)
+            } else {
+                HStack(spacing: 12) {
+                    manualUndoDot(pending)
+                    manualUndoText(pending, titleLineLimit: nil, subtitleLineLimit: nil)
+                    manualUndoButton(fillsWidth: false)
+                }
+                .padding(.leading, 14)
+                .padding(.trailing, 8)
+                .padding(.vertical, 8)
             }
-            Spacer(minLength: 4)
-            Button(String(localized: "元に戻す", table: "Home", comment: "Undo button for a manual entry that is not saved yet")) {
-                undoPendingManualEntry()
-            }
-            .font(.subheadline.weight(.bold))
-            .foregroundStyle(PomoGemTheme.amber)
-            .frame(minWidth: 44, minHeight: 44)
-            .contentShape(Rectangle())
-            .buttonStyle(PomoGemRowButtonStyle())
-            .accessibilityIdentifier("manual.undo")
         }
-        .padding(.leading, 14)
-        .padding(.trailing, 8)
-        .padding(.vertical, 8)
         .background(PomoGemTheme.raised.opacity(0.97), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -4202,6 +4216,68 @@ struct HomeView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("manual.pending")
+        .task(id: pending.id) {
+            await announcePendingManualEntry(pending)
+        }
+    }
+
+    private func manualUndoDot(_ pending: PendingManualEntry) -> some View {
+        Circle()
+            .fill(Color(hex: pending.colorHex))
+            .frame(width: 12, height: 12)
+            .overlay { Circle().stroke(.white.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [2, 2])) }
+            .accessibilityHidden(true)
+    }
+
+    private func manualUndoText(
+        _ pending: PendingManualEntry,
+        titleLineLimit: Int?,
+        subtitleLineLimit: Int?
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            // Time first, like every other record; the grams follow.
+            Text(
+                "\(pending.subjectName)に\(DurationText.short(minutes: pending.duration.minutes))を積みます",
+                tableName: "Home",
+                comment: "Undo banner after a manual entry: theme, then the self-reported time about to be added"
+            )
+                .font(.subheadline.weight(.bold))
+                .lineLimit(titleLineLimit)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(
+                "+\(MassText.grams(pending.duration.grams.formatted())) ・ まもなく瓶に入ります",
+                tableName: "Home",
+                comment: "Undo banner subtitle: the mass, and that the entry is saved shortly"
+            )
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+                .lineLimit(subtitleLineLimit)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Full width under the text at accessibility sizes, so the whole row
+    /// is the target.
+    private func manualUndoButton(fillsWidth: Bool) -> some View {
+        Button {
+            undoPendingManualEntry()
+        } label: {
+            Text(String(localized: "元に戻す", table: "Home", comment: "Undo button for a manual entry that is not saved yet"))
+                .frame(minWidth: 44, maxWidth: fillsWidth ? .infinity : nil, minHeight: 44)
+                .background {
+                    if fillsWidth {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(PomoGemTheme.amber.opacity(0.14))
+                    }
+                }
+        }
+        .font(.subheadline.weight(.bold))
+        .foregroundStyle(PomoGemTheme.amber)
+        .contentShape(Rectangle())
+        .buttonStyle(PomoGemRowButtonStyle())
+        .accessibilityFocused($manualUndoHasFocus)
+        .accessibilityIdentifier("manual.undo")
     }
 
     /// Returns nil once saved, otherwise the reason for the open sheet.

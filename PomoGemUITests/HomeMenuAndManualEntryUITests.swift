@@ -448,6 +448,24 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         saveScreenshot("home-ax5-empty")
 
         addThirtyMinutesManually()
+        // history-02 at AX5: the Undo banner is a short strip over the jar,
+        // its button under the text, never over the pinned start button.
+        let banner = app.descendants(matching: .any)["manual.pending"]
+        let undo = app.buttons["manual.undo"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 5))
+        XCTAssertTrue(undo.isHittable)
+        XCTAssertTrue(launcher.isHittable, "The Undo banner must not cover the start button")
+        XCTAssertLessThanOrEqual(
+            banner.frame.maxY,
+            launcher.frame.minY,
+            "banner=\(banner.frame) launcher=\(launcher.frame)"
+        )
+        XCTAssertLessThan(
+            banner.frame.height,
+            window.height * 0.4,
+            "A short strip, not most of the screen: \(banner.frame)"
+        )
+        saveScreenshot("manual-undo-banner-ax5")
         waitForPendingManualEntryToSave()
         let card = app.descendants(matching: .any)["home.fusion-progress.large-text"]
         XCTAssertTrue(card.waitForExistence(timeout: 8), "The first gem gets the large-text progress card")
