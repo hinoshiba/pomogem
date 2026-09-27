@@ -212,6 +212,46 @@ final class FocusPersistenceTests: XCTestCase {
         ))
     }
 
+    /// notify-06. Launch reads the rest's ID to keep its Live Activity before
+    /// break recovery runs; that read must not repair anything on its own.
+    func testValidBreakIDReadsWithoutRepairingTheEnvelopeOrTheReceipt() throws {
+        let suite = "PomoGemTests.valid-break-id.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let selectedAt = Date(timeIntervalSince1970: 1_800_640_000)
+        XCTAssertNil(FocusPersistence.validBreakID(defaults: defaults, at: selectedAt))
+
+        let receipt = makeRewardReceipt(createdAt: selectedAt, phase: .awaitingAcknowledgement)
+        XCTAssertTrue(PendingRewardReceiptStore.insert(receipt, defaults: defaults))
+        let recovery = BreakRecoveryEnvelope(
+            id: UUID(), minutes: receipt.breakMinutes,
+            endDate: selectedAt.addingTimeInterval(900),
+            clockAnchor: ClockAnchor(wallDate: selectedAt, systemUptime: 50_000),
+            originatingFocusSessionID: receipt.id
+        )
+        FocusPersistence.saveBreak(recovery, defaults: defaults, at: selectedAt)
+        XCTAssertEqual(
+            FocusPersistence.validBreakID(defaults: defaults, at: selectedAt.addingTimeInterval(30)),
+            recovery.id
+        )
+        XCTAssertEqual(
+            PendingRewardReceiptStore.load(defaults: defaults).first?.dropPhase,
+            .awaitingAcknowledgement,
+            "Only loadBreak may finish the crash hand-off of the reward card"
+        )
+
+        let key = AccountScopedLocalState.defaultsKey(
+            base: "break.persisted-session",
+            defaults: defaults
+        )
+        let nextDay = selectedAt.addingTimeInterval(86_400)
+        XCTAssertNil(FocusPersistence.validBreakID(defaults: defaults, at: nextDay))
+        XCTAssertNotNil(
+            defaults.data(forKey: key),
+            "An expired envelope is left for loadBreak to retire in its usual order"
+        )
+    }
+
     func testLegacyRewardBreakUsesExistingRecoveryWithoutReplayingDrop() throws {
         let suite = "PomoGemTests.reward-rest-legacy.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

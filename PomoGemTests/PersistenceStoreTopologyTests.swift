@@ -100,6 +100,60 @@ final class PersistenceStoreTopologyTests: XCTestCase {
         }
     }
 
+    /// notify-06. A break reuses the reviewed payload: the break's own random
+    /// UUID and length as attributes, and only `phase`/`endDate` as state.
+    func testBreakLiveActivityPayloadIsTimeAndStateOnly() throws {
+        let endDate = Date(timeIntervalSince1970: 1_788_000_300)
+        let state = FocusActivityAttributes.ContentState.breakRunning(
+            until: endDate
+        )
+        XCTAssertEqual(state.phase, .breakRunning)
+        XCTAssertEqual(state.endDate, endDate)
+        XCTAssertNil(state.pausedRemainingSeconds)
+        XCTAssertTrue(state.isBreak)
+        for other in [
+            FocusActivityAttributes.ContentState.running(until: endDate),
+            .paused(remainingSeconds: 60),
+            .completed()
+        ] {
+            XCTAssertFalse(other.isBreak)
+        }
+
+        let attributes = FocusActivityAttributes(
+            sessionID: UUID(),
+            durationSeconds: 5 * 60
+        )
+        let encoder = JSONEncoder()
+        let attributesData = try encoder.encode(attributes)
+        let stateData = try encoder.encode(state)
+        XCTAssertEqual(
+            try JSONDecoder().decode(
+                FocusActivityAttributes.ContentState.self,
+                from: stateData
+            ),
+            state
+        )
+        let stateObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: stateData) as? [String: Any]
+        )
+        XCTAssertEqual(Set(stateObject.keys), ["phase", "endDate"])
+        XCTAssertEqual(stateObject["phase"] as? String, "breakRunning")
+        XCTAssertLessThan(attributesData.count + stateData.count, 4_096)
+
+        let encodedText = String(
+            decoding: attributesData + stateData,
+            as: UTF8.self
+        )
+        for forbiddenMarker in [
+            "subject", "theme", "memo", "account", "CloudKit", "grams"
+        ] {
+            XCTAssertFalse(
+                encodedText.localizedCaseInsensitiveContains(forbiddenMarker),
+                "Break Live Activity payload must not contain \(forbiddenMarker)"
+            )
+        }
+    }
+
     func testDisabledWidgetPublicationIsANoOpBeforeEncodingOrSharedStorage() async throws {
         try await WidgetSnapshotStore.shared.save(
             imageData: Data("private-account-snapshot".utf8),

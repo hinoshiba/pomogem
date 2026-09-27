@@ -17,8 +17,11 @@ enum WidgetSnapshotStoreError: LocalizedError {
 }
 
 /// Version 1 fail-closed facade for the former account-scoped Widget publisher.
-/// The shipping Widget is a static launcher and the app has no App Group, so no
-/// image or metadata is encoded, persisted, or handed to WidgetKit.
+/// The shipping Widget is an account-neutral launcher: its taps carry constant
+/// `pomogem://` routes and it has no App Group. (The host's App Group exists
+/// only for the Screen Time monitor, and the Widget must never join it:
+/// PRIVACY.md, Scripts/verify-release-archive.sh.) So no image or metadata is
+/// encoded, persisted, or handed to WidgetKit.
 @MainActor
 @Observable
 final class WidgetSnapshotStore {

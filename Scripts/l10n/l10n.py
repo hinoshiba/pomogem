@@ -123,6 +123,8 @@ class Repo:
         self.catalogs = dict(self.config["catalogs"])
         self.rules = [(glob_to_regex(rule["glob"]), rule) for rule in self.config["rules"]]
         self.info_plist_catalogs = list(self.config.get("info_plist_catalogs", []))
+        # Tables the build writes that are not feature catalogs (see table-map.json).
+        self.system_tables = dict(self.config.get("system_tables", {}))
 
     def path(self, relative):
         return self.root / relative
@@ -907,6 +909,14 @@ def collect_stringsdata(repo, derived_data, configuration=None):
             continue
         for path in candidates:
             data = json.loads(path.read_text(encoding="utf-8"))
+            tables = data.get("tables", {})
+            if tables and set(tables) <= set(repo.system_tables):
+                # The App Intents metadata processor's App Shortcut phrases
+                # (ExtractedAppShortcutsMetadata.stringsdata). Apple localizes
+                # them in AppShortcuts.xcstrings, never a feature catalog, and
+                # the file names the intent's source, so keeping it would also
+                # hide that file's own compiler output below.
+                continue
             source = os.path.realpath(data.get("source", ""))
             if source.startswith(generated + os.sep):
                 continue  # code Xcode generates into DerivedData (asset symbols), never localized
@@ -937,6 +947,8 @@ def collect_stringsdata(repo, derived_data, configuration=None):
             problems.append(f"{relative} changed after it was compiled; build again first")
         paths.append(str(path))
         for table, items in data.get("tables", {}).items():
+            if table in repo.system_tables:
+                continue
             for item in items:
                 entries.append({
                     "target": target,
