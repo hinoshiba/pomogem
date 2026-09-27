@@ -1158,9 +1158,9 @@ struct HomeView: View {
             )
                 .padding(.horizontal, 4)
 
-            jarMetricHUD
+            jarMetricHUD(jarHeight: height)
 
-            if isJarEmpty {
+            if isJarEmpty, !showsEmptyJarMessageUnderReadout {
                 emptyJarMessage
                 .multilineTextAlignment(.center)
                 .padding(20)
@@ -1291,14 +1291,23 @@ struct HomeView: View {
             && router.cloudFocusRecoveryOffer == nil
     }
 
-    private var jarMetricHUD: some View {
-        VStack(spacing: 14) {
+    private func jarMetricHUD(jarHeight: CGFloat) -> some View {
+        // At accessibility sizes the jar can be as short as 300 pt (the
+        // pinned start button takes the rest, home-03). There the one-time
+        // hint sits closer to the readout and is capped lower, so it still
+        // ends above the first gem resting on the floor.
+        let isShortJar = jarHeight < 380
+        return VStack(spacing: isShortJar ? 8 : 14) {
             jarMetricReadout
+            if isJarEmpty, showsEmptyJarMessageUnderReadout {
+                accessibilitySizeEmptyJarMessage
+            }
             // The one-time hint hangs under the readout, in the jar's empty
             // middle. On the floor it covered the first gem — the very
             // pebble it asks people to tap.
             if aggregateInspectionSummary == nil, showsTiltHint, !isJarEmpty {
                 jarInteractionHint
+                    .dynamicTypeSize(...(isShortJar ? DynamicTypeSize.xLarge : .xxxLarge))
                     // A short settle, not a slide from the edge: sliding in
                     // from above would pass over the readout.
                     .transition(
@@ -1677,26 +1686,6 @@ struct HomeView: View {
             .accessibilityLabel(
                 "\(projectionVerificationTitle)。この端末で確認できた記録だけを表示しています"
             )
-        } else if dynamicTypeSize.isAccessibilitySize {
-            // The bottle is a fixed visual canvas. At accessibility text sizes,
-            // keep its message short and move the actionable detail to the
-            // scrollable launcher immediately below it.
-            VStack(spacing: 10) {
-                Text("まだ空っぽ")
-                    .font(.title3.weight(.bold))
-                Image(systemName: "arrow.down")
-                    .font(.title3.weight(.bold))
-                    .accessibilityHidden(true)
-                Text("下のボタンへ")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(PomoGemTheme.amber)
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(
-                selectedSubject == nil
-                    ? "瓶はまだ空です。下のボタンからテーマを追加できます"
-                    : "瓶はまだ空です。下のボタンから最初の集中を始められます"
-            )
         } else {
             VStack(spacing: 7) {
                 Text(Constants.UIStrings.jarEmptyTitle)
@@ -1710,6 +1699,50 @@ struct HomeView: View {
                     .foregroundStyle(PomoGemTheme.muted)
             }
         }
+    }
+
+    /// At accessibility sizes the empty jar's message hangs under the
+    /// readout instead of being centred in the jar. The jar now shrinks to
+    /// what the pinned start button leaves (home-03, as little as 300 pt),
+    /// and centred there the message covered 「0g」 and ran off the jar's
+    /// lower edge on an iPhone SE.
+    private var showsEmptyJarMessageUnderReadout: Bool {
+        dynamicTypeSize.isAccessibilitySize
+            && !aggregateProjectionPresentation.isCloudVerificationPending
+    }
+
+    /// The bottle is a fixed visual canvas. At accessibility text sizes its
+    /// message stays short, and the start button it points to is pinned
+    /// below in full-size text. Like the readout above, the message is
+    /// capped (here at the first accessibility size) so it fits the room
+    /// left under the readout in the shortest jar; VoiceOver reads the
+    /// label below.
+    private var accessibilitySizeEmptyJarMessage: some View {
+        VStack(spacing: 6) {
+            Text("まだ空っぽ", tableName: "Home", comment: "Empty jar at accessibility text sizes: title")
+                .font(.title3.weight(.bold))
+            Label {
+                Text("下のボタンへ", tableName: "Home", comment: "Empty jar at accessibility text sizes: points to the start button below")
+            } icon: {
+                Image(systemName: "arrow.down")
+                    .accessibilityHidden(true)
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(PomoGemTheme.amber)
+        }
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+        .multilineTextAlignment(.center)
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+        .padding(.horizontal, 20)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            selectedSubject == nil
+                ? String(localized: "瓶はまだ空です。下のボタンからテーマを追加できます", table: "Home",
+                         comment: "VoiceOver, empty jar at accessibility text sizes, no theme yet")
+                : String(localized: "瓶はまだ空です。下のボタンから最初の集中を始められます", table: "Home",
+                         comment: "VoiceOver, empty jar at accessibility text sizes")
+        )
     }
 
     private func homeJarHeight(availableHeight: CGFloat) -> CGFloat {
@@ -4517,7 +4550,10 @@ struct HomeView: View {
         tiltHintTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(700))
             guard !Task.isCancelled else { return }
-            // One message at a time: the first gem's toast goes first.
+            // One message at a time: the first gem's toast goes first. A
+            // manual entry is saved when its Undo window ends and its toast
+            // comes when the gem lands, so wait for the landing too; before
+            // it, there is no toast yet to wait for (history-02).
             var waitedForToast = 0
             while router.toast != nil || newestGemIsStillFalling, waitedForToast < 40 {
                 try? await Task.sleep(for: .milliseconds(250))
