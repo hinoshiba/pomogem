@@ -1842,6 +1842,7 @@ struct JarLifetimeCoreBackdrop: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var breathing = false
 
     var body: some View {
@@ -1888,54 +1889,62 @@ struct JarLifetimeCoreBackdrop: View {
                 // lower bound (「◯kg以上」) while the projection is partial.
                 // The plate's top edge hangs a fixed gap below the prism, so
                 // it can never cover the crystal it names.
-                VStack(spacing: 2) {
-                    Text(state.title)
-                        .font(.system(size: 10, weight: .black, design: .rounded))
-                        .tracking(1.1)
-                    if state.litOrbitSlotCount == nil {
-                        Text(state.countLabel)
-                            .font(.system(size: 12, weight: .black, design: .rounded))
+                //
+                // Not at accessibility sizes. Its 9–12 pt text does not scale,
+                // and Home's jar is then as short as 300 pt (home-03), so the
+                // HUD's count pill landed on the plate. Home's large-text card
+                // (「時間の核の進み」) and the planning screen's metrics say the
+                // same in full-size text, and VoiceOver reads the jar's value.
+                if !dynamicTypeSize.isAccessibilitySize {
+                    VStack(spacing: 2) {
+                        Text(state.title)
+                            .font(.system(size: 10, weight: .black, design: .rounded))
+                            .tracking(1.1)
+                        if state.litOrbitSlotCount == nil {
+                            Text(state.countLabel)
+                                .font(.system(size: 12, weight: .black, design: .rounded))
+                                .monospacedDigit()
+                        }
+                        Text(state.progressLabel)
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
                             .monospacedDigit()
+                            .foregroundStyle(.white.opacity(0.9))
+                        if let nextFusionLabel = state.nextFusionLabel {
+                            Text(nextFusionLabel)
+                                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                                .foregroundStyle(.white.opacity(0.76))
+                        }
                     }
-                    Text(state.progressLabel)
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(.white.opacity(0.9))
-                    if let nextFusionLabel = state.nextFusionLabel {
-                        Text(nextFusionLabel)
-                            .font(.system(size: 9, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.76))
-                    }
-                }
-                .lineLimit(1)
-                .foregroundStyle(.white)
-                .padding(.horizontal, 9)
-                .padding(.vertical, 5)
-                .background(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(colorSchemeContrast == .increased ? 0.10 : 0.16),
-                            PomoGemTheme.raised.opacity(
-                                reduceTransparency || colorSchemeContrast == .increased ? 0.98 : 0.82
+                    .lineLimit(1)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(colorSchemeContrast == .increased ? 0.10 : 0.16),
+                                PomoGemTheme.raised.opacity(
+                                    reduceTransparency || colorSchemeContrast == .increased ? 0.98 : 0.82
+                                )
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(
+                                .white.opacity(colorSchemeContrast == .increased ? 0.72 : 0.24),
+                                lineWidth: colorSchemeContrast == .increased ? 1.2 : 0.7
                             )
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(
-                            .white.opacity(colorSchemeContrast == .increased ? 0.72 : 0.24),
-                            lineWidth: colorSchemeContrast == .increased ? 1.2 : 0.7
-                        )
+                    }
+                    .alignmentGuide(VerticalAlignment.center) { $0[.top] }
+                    .offset(y: JarLifetimeCorePlateLayout.plateTopOffset(
+                        dimension: dimension,
+                        prismDiameterFactor: prismFactor
+                    ))
                 }
-                .alignmentGuide(VerticalAlignment.center) { $0[.top] }
-                .offset(y: JarLifetimeCorePlateLayout.plateTopOffset(
-                    dimension: dimension,
-                    prismDiameterFactor: prismFactor
-                ))
             }
             .frame(width: dimension * 1.42, height: dimension * 1.42)
             .position(x: proxy.size.width / 2, y: proxy.size.height * 0.51)
