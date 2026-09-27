@@ -93,11 +93,17 @@
     "あと%lld%%で、下の粒がひとつの結晶に" : {
       "comment" : "Jar capsule before a fusion; the argument is the remaining capacity percent"
     },
+    "まだ空っぽ" : {
+      "comment" : "Empty jar at accessibility text sizes: title"
+    },
     "アプリの時間を積む" : {
       "comment" : "Home menu row: open the Screen Time settings"
     },
     "ポモジェムProの説明を開きます" : {
       "comment" : "VoiceOver hint on the fusion sheet's Pro month-label link"
+    },
+    "下のボタンへ" : {
+      "comment" : "Empty jar at accessibility text sizes: points to the start button below"
     },
     "今週 %@ ・ 完走%lld回" : {
       "comment" : "Completion card heading line: this week's measured mass, timers completed this week",
@@ -150,6 +156,12 @@
     },
     "瓶%lld杯ぶん満ちました" : {
       "comment" : "VoiceOver, jar value: how many times the jar has filled (2.5 kg each)"
+    },
+    "瓶はまだ空です。下のボタンからテーマを追加できます" : {
+      "comment" : "VoiceOver, empty jar at accessibility text sizes, no theme yet"
+    },
+    "瓶はまだ空です。下のボタンから最初の集中を始められます" : {
+      "comment" : "VoiceOver, empty jar at accessibility text sizes"
     },
     "積んだ直後は、ホームで数秒のあいだ取り消せます。" : {
       "comment" : "Manual entry: under the confirm button; the entry can be undone briefly on Home"

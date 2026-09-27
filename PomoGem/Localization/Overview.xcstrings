@@ -79,6 +79,9 @@
     "%lld粒以上" : {
       "comment" : "VoiceOver, time core: at least this many gems (still being checked)"
     },
+    "10粒がひとつの結晶になるのは、瓶を整理するためです。時間の価値は変わりません。" : {
+      "comment" : "Overview crystal section: why 10 gems become one crystal"
+    },
     "10粒をひとつの結晶にまとめます。価値の段階ではなく、記録と質量をそのまま残して瓶に余白をつくる仕組みです。" : {
 
     },
@@ -169,9 +172,6 @@
     "完走した回数" : {
       "comment" : "Weekly card tile: timers that ran to their end this week"
     },
-    "完走するたびに粒がひとつ増えます。10粒がひとつの結晶になるのは瓶を整理するためで、時間の価値は変わりません。結晶をタップすると内訳を確認できます。" : {
-
-    },
     "日ごとの記録" : {
       "comment" : "Heading of a month's list of days"
     },
@@ -241,6 +241,9 @@
           }
         }
       }
+    },
+    "結晶をタップすると、内訳を見られます。" : {
+      "comment" : "Overview crystal section: tapping a crystal opens its details"
     },
     "表示中の結晶" : {
       "comment" : "Lifetime stat title: crystals on this page"
