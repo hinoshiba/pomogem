@@ -205,6 +205,8 @@ require(
 require(
     "audio" not in info.get("UIBackgroundModes", []),
     "focus music drives the Music app; the app must not declare background audio",
+)
+require(
     info.get("NSAlarmKitUsageDescription")
     == "集中や休憩の終わりを、マナーモードや集中モード中でもアラームでお知らせするために使います。",
     "AlarmKit purpose string differs from the reviewed end-of-timer alarm",
