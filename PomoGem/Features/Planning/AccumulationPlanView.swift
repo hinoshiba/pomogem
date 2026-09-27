@@ -2,9 +2,15 @@ import SwiftUI
 
 /// An explicitly simulated, non-persistent time-travel view of a study plan.
 /// All state in this screen is ordinary SwiftUI `@State`; leaving the sheet
-/// discards it. No model context or cloud-backed value crosses this boundary.
+/// discards it. No model context or cloud-backed value crosses this boundary:
+/// the only input is today's jar mass, a plain value Home already shows.
 struct AccumulationPlanView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// Where the plan starts: the person's jar today (home-07), so the answer
+    /// is "where my jar will be", not "what a stranger would collect".
+    private let start: AccumulationPlanStart
 
     @State private var years = AccumulationPlanProjection.Plan.suggested.years
     @State private var sessionsPerWeek = AccumulationPlanProjection.Plan.suggested.sessionsPerWeek
@@ -13,9 +19,18 @@ struct AccumulationPlanView: View {
         AccumulationPlanProjection.Plan.suggested.years * 12
     )
     @State private var previewScene = JarScene()
+    @State private var sceneRefreshTask: Task<Void, Never>?
 
-    private let minuteChoices = [10, 25, 60]
+    /// The free timer presets the person can actually run (25/45/60/90).
+    private let minuteChoices = PomodoroDuration.freePresets.compactMap(\.minutes)
     private let productSessionsPerWeekRange = 1 ... 21
+    /// jar-05: the preview jar is rebuilt once the slider or a stepper has
+    /// rested this long, not on every one-month step of a drag.
+    private static let sceneRefreshDelay: Duration = .milliseconds(120)
+
+    init(start: AccumulationPlanStart = .empty) {
+        self.start = start
+    }
 
     var body: some View {
         NavigationStack {
@@ -59,9 +74,10 @@ struct AccumulationPlanView: View {
         .preferredColorScheme(.dark)
         .accessibilityIdentifier("planning.accumulation.view")
         .onAppear(perform: refreshScene)
-        .onChange(of: previewMonth) { _, _ in refreshScene() }
-        .onChange(of: sessionsPerWeek) { _, _ in refreshScene() }
-        .onChange(of: minutesPerSession) { _, _ in refreshScene() }
+        .onDisappear { sceneRefreshTask?.cancel() }
+        .onChange(of: previewMonth) { _, _ in scheduleSceneRefresh() }
+        .onChange(of: sessionsPerWeek) { _, _ in scheduleSceneRefresh() }
+        .onChange(of: minutesPerSession) { _, _ in scheduleSceneRefresh() }
         .onChange(of: years) { _, newValue in
             previewMonth = Double(newValue * 12)
         }
@@ -82,8 +98,18 @@ struct AccumulationPlanView: View {
         )
     }
 
-    private var accumulationPresence: JarAccumulationPresenceState {
-        JarAccumulationPresencePresentation.state(totalGrams: projection.grams)
+    /// Today's jar plus what the plan adds by the previewed month. The bottle
+    /// cycle and the long-term milestones continue from the person's real jar.
+    private var jarGrams: Int {
+        start.jarGrams(adding: projection.grams)
+    }
+
+    /// Where the jar stands in its bottle cycle and long-term milestones.
+    /// Nil while Home re-counts today's jar: a position computed from the
+    /// plan alone would read as an empty jar (「最初の2.50kgへ」, 0段階).
+    private var jarPosition: JarAccumulationPresenceState? {
+        guard start.certainty != .recounting else { return nil }
+        return JarAccumulationPresencePresentation.state(totalGrams: jarGrams)
     }
 
     private var simulationNotice: some View {
@@ -161,10 +187,6 @@ struct AccumulationPlanView: View {
                     }
                     .pickerStyle(.segmented)
                     .accessibilityIdentifier("planning.accumulation.minutes")
-                    Text("10分の自由時間を実際に使うにはProが必要です。計画の試算は無料で操作できます。")
-                        .font(.caption2)
-                        .foregroundStyle(PomoGemTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -238,7 +260,7 @@ struct AccumulationPlanView: View {
                 .accessibilityIdentifier("planning.accumulation.timeline")
 
                 HStack {
-                    Text("現在")
+                    Text("今日", tableName: "Planning", comment: "The start of the plan's timeline: today")
                     Spacer()
                     Text("\(years)年後")
                 }
@@ -261,7 +283,7 @@ struct AccumulationPlanView: View {
                         Circle()
                             .stroke(PomoGemTheme.glassEdge.opacity(0.18), lineWidth: 7)
                         Circle()
-                            .trim(from: 0, to: accumulationPresence.cycleProgressFraction)
+                            .trim(from: 0, to: jarPosition?.cycleProgressFraction ?? 0)
                             .stroke(
                                 PomoGemTheme.amber,
                                 style: StrokeStyle(lineWidth: 7, lineCap: .round)
@@ -283,23 +305,33 @@ struct AccumulationPlanView: View {
                     }
                 }
 
-                ProgressView(value: accumulationPresence.cycleProgressFraction)
-                    .tint(PomoGemTheme.amber)
-                    .accessibilityLabel("現在の瓶が満ちるまで")
-                    .accessibilityValue(
-                        "\(Int((accumulationPresence.cycleProgressFraction * 100).rounded()))パーセント"
-                    )
+                if let jarPosition {
+                    ProgressView(value: jarPosition.cycleProgressFraction)
+                        .tint(PomoGemTheme.amber)
+                        .accessibilityLabel(Text("その時点の瓶が満ちるまで", tableName: "Planning", comment: "VoiceOver: progress of the bottle cycle at the previewed month"))
+                        .accessibilityValue(
+                            "\(Int((jarPosition.cycleProgressFraction * 100).rounded()))パーセント"
+                        )
+                }
 
-                HStack(alignment: .firstTextBaseline) {
-                    Text("累計")
-                        .font(.caption)
-                        .foregroundStyle(PomoGemTheme.muted)
-                    Text(DurationPresentation.minutesLabel(projection.focusMinutes))
-                        .font(.system(.title2, design: .rounded, weight: .heavy))
-                    Spacer()
-                    Text(formattedMass(projection.grams))
-                        .font(.system(.headline, design: .rounded, weight: .heavy))
-                        .foregroundStyle(PomoGemTheme.amber)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("瓶の合計", tableName: "Planning", comment: "Label: today's jar mass plus the mass the plan adds")
+                            .font(.caption)
+                            .foregroundStyle(PomoGemTheme.muted)
+                        Spacer()
+                        Text(jarTotalValue)
+                            .font(.system(.title2, design: .rounded, weight: .heavy))
+                            .monospacedDigit()
+                            .foregroundStyle(PomoGemTheme.amber)
+                    }
+                    .accessibilityElement(children: .combine)
+                    if let startBreakdown {
+                        Text(startBreakdown)
+                            .font(.caption)
+                            .foregroundStyle(PomoGemTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
                 Divider().overlay(PomoGemTheme.glassEdge.opacity(0.12))
@@ -314,12 +346,14 @@ struct AccumulationPlanView: View {
                             .foregroundStyle(Color(hex: "#5DE0BD"))
                     }
 
-                    ProgressView(value: accumulationPresence.majorMilestoneProgressFraction)
-                        .tint(Color(hex: "#5DE0BD"))
-                        .accessibilityLabel(majorMilestoneAccessibilityLabel)
-                        .accessibilityValue(
-                            "\(Int((accumulationPresence.majorMilestoneProgressFraction * 100).rounded()))パーセント"
-                        )
+                    if let jarPosition {
+                        ProgressView(value: jarPosition.majorMilestoneProgressFraction)
+                            .tint(Color(hex: "#5DE0BD"))
+                            .accessibilityLabel(majorMilestoneAccessibilityLabel(jarPosition))
+                            .accessibilityValue(
+                                "\(Int((jarPosition.majorMilestoneProgressFraction * 100).rounded()))パーセント"
+                            )
+                    }
                 }
 
                 Text("瓶は2.50kg（集中250分相当）ごとに必ず満ち、満杯の光を見届けてから次の1杯へ進みます。累計は消えず、2.50kg → 25kg → 250kg…の長期段階として別に残ります。回数ではなく、集中1分＝\(Constants.Mass.gramsPerMinute)gで両方が進みます。", tableName: "Planning", comment: "Plan: how the jar fills; the argument is grams per minute")
@@ -351,7 +385,7 @@ struct AccumulationPlanView: View {
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 3) {
                         SectionEyebrow(text: "SIMULATED ACCUMULATION")
-                        Text("その時点の積み上がり")
+                        Text("この計画で積む分", tableName: "Planning", comment: "Title of the card that previews only what the plan adds")
                             .pomogemSectionTitle(size: 21)
                     }
                     Spacer()
@@ -365,21 +399,29 @@ struct AccumulationPlanView: View {
                     }
                 }
 
-                EffortConstellationView(
-                    nodes: projection.constellationNodes,
-                    totalGrams: projection.grams,
-                    totalPebbleCount: projection.completionCount
-                )
-                .frame(height: 245)
-                .overlay {
+                Group {
+                    // At month zero the plan has added nothing yet. The empty
+                    // constellation's own core label would sit under this
+                    // text, so the text replaces it instead of covering it.
                     if projection.completionCount == 0 {
-                        ContentUnavailableView(
-                            "現在地点",
-                            systemImage: "circle.dotted",
-                            description: Text("右へ動かすと予測が積み上がります")
+                        ContentUnavailableView {
+                            Label {
+                                Text("今日", tableName: "Planning", comment: "The start of the plan's timeline: today")
+                            } icon: {
+                                Image(systemName: "circle.dotted")
+                            }
+                        } description: {
+                            Text("スライダーを右へ動かすと、この計画で積む分が現れます", tableName: "Planning")
+                        }
+                    } else {
+                        EffortConstellationView(
+                            nodes: projection.constellationNodes,
+                            totalGrams: projection.grams,
+                            totalPebbleCount: projection.completionCount
                         )
                     }
                 }
+                .frame(height: 245)
 
                 JarSpriteView(
                     scene: previewScene,
@@ -393,7 +435,7 @@ struct AccumulationPlanView: View {
                 .frame(height: 260)
                 .accessibilityIdentifier("planning.accumulation.jar")
 
-                Text("星図と瓶は見え方の予測です。粒と結晶は予定した完走リズムを、上の時間・質量は集中時間の累計を表します。記念石・実際の休止日は含めません。", tableName: "Planning")
+                Text("星図と瓶は、今日からこの計画で積む分の見え方の予測です。今日までの瓶は含めません。粒と結晶は予定した完走リズムを、上の時間・質量は集中時間の累計を表します。記念石・実際の休止日は含めません。", tableName: "Planning")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -405,21 +447,32 @@ struct AccumulationPlanView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("\(previewPeriodTitle)の予測")
                 .pomogemSectionTitle()
-            LazyVGrid(
-                columns: [GridItem(.flexible()), GridItem(.flexible())],
-                spacing: 10
-            ) {
-                metric(title: "集中時間", value: DurationPresentation.minutesLabel(projection.focusMinutes))
-                metric(title: "質量", value: formattedMass(projection.grams))
-                metric(title: "予定リズム", value: "\(projection.completionCount.formatted())回")
-                metric(title: "表示する可動体", value: "\(projection.studyBodyCount)体")
+            // An eager Grid, not a LazyVGrid: `.combine` below does not
+            // reach into a lazy container, so VoiceOver heard only the title
+            // (and, before home-02, the test string) instead of the metrics.
+            // At accessibility sizes one metric per row, so a value such as
+            // 「3.68t以上」 or 「6,087時間30分」 wraps instead of losing its end.
+            Grid(horizontalSpacing: 10, verticalSpacing: 10) {
+                if dynamicTypeSize.isAccessibilitySize {
+                    GridRow { focusMetric }
+                    GridRow { addedMassMetric }
+                    GridRow { rhythmMetric }
+                    GridRow { jarTotalMetric }
+                } else {
+                    GridRow {
+                        focusMetric
+                        addedMassMetric
+                    }
+                    GridRow {
+                        rhythmMetric
+                        jarTotalMetric
+                    }
+                }
             }
         }
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("planning.accumulation.result")
-        .accessibilityValue(Text(verbatim:
-            "months=\(projection.elapsedMonths);sessions=\(projection.completionCount);minutes=\(projection.focusMinutes);grams=\(projection.grams);bodies=\(projection.studyBodyCount);consistent=\(projection.isInternallyConsistent)"
-        ))
+        .modifier(PlanResultUITestValue(projection: projection, start: start))
     }
 
     private var calculationNote: some View {
@@ -438,8 +491,31 @@ struct AccumulationPlanView: View {
         }
     }
 
+    private var focusMetric: some View {
+        metric(title: "集中時間", value: DurationPresentation.minutesLabel(projection.focusMinutes))
+    }
+
+    private var addedMassMetric: some View {
+        metric(
+            title: String(localized: "増える質量", table: "Planning", comment: "Mass the plan adds, in the results grid"),
+            value: formattedMass(projection.grams)
+        )
+    }
+
+    private var rhythmMetric: some View {
+        metric(title: "予定リズム", value: "\(projection.completionCount.formatted())回")
+    }
+
+    private var jarTotalMetric: some View {
+        metric(
+            title: String(localized: "瓶の合計", table: "Planning", comment: "Label: today's jar mass plus the mass the plan adds"),
+            value: jarTotalValue
+        )
+    }
+
     private func metric(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let wraps = dynamicTypeSize.isAccessibilitySize
+        return VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.caption2)
                 .foregroundStyle(PomoGemTheme.muted)
@@ -447,8 +523,10 @@ struct AccumulationPlanView: View {
                 .font(.system(.headline, design: .rounded, weight: .heavy))
                 .monospacedDigit()
                 .minimumScaleFactor(0.72)
-                .lineLimit(1)
+                .lineLimit(wraps ? nil : 1)
+                .fixedSize(horizontal: false, vertical: wraps)
         }
+        .padding(.vertical, wraps ? 10 : 0)
         .frame(maxWidth: .infinity, minHeight: 66, alignment: .leading)
         .padding(.horizontal, 13)
         .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 15))
@@ -456,7 +534,9 @@ struct AccumulationPlanView: View {
 
     private var previewPeriodTitle: String {
         let months = Int(previewMonth.rounded())
-        guard months > 0 else { return "現在" }
+        guard months > 0 else {
+            return String(localized: "今日", table: "Planning", comment: "The start of the plan's timeline: today")
+        }
         let wholeYears = months / 12
         let remainingMonths = months % 12
         if wholeYears == 0 { return "\(remainingMonths)か月後" }
@@ -465,47 +545,117 @@ struct AccumulationPlanView: View {
     }
 
     private var bottleCycleTitle: String {
-        if accumulationPresence.isCycleBoundary {
+        guard let jarPosition else {
+            return String(localized: "今日の瓶を確認中", table: "Planning", comment: "Bottle-cycle title while Home re-counts today's jar, so the jar's position is not shown")
+        }
+        if jarPosition.isCycleBoundary {
             return String(
-                localized: "瓶\(accumulationPresence.completedCycleCount)杯目が満ちた",
+                localized: "瓶\(jarPosition.completedCycleCount)杯目が満ちた",
                 table: "Planning",
                 comment: "Plan preview: the jar filled for the Nth time"
             )
         }
-        let percent = Int((accumulationPresence.cycleProgressFraction * 100).rounded())
-        return projection.grams == 0
+        let percent = Int((jarPosition.cycleProgressFraction * 100).rounded())
+        return jarGrams == 0
             ? "最初の2.50kgへ"
             : "瓶の\(percent)%まで積んだ"
     }
 
     private var bottleCycleStatus: String {
-        if accumulationPresence.isCycleBoundary {
+        guard let jarPosition else {
+            return String(localized: "確認が済むと、今日の瓶の続きから表示します", table: "Planning", comment: "Bottle-cycle caption while Home re-counts today's jar")
+        }
+        if jarPosition.isCycleBoundary {
             return String(localized: "満杯を確認 · 累計はそのまま次の1杯へ", table: "Planning")
         }
-        guard let next = accumulationPresence.nextCycleBoundaryGrams else {
+        guard let next = jarPosition.nextCycleBoundaryGrams else {
             return String(localized: "瓶1杯 2.50kg · 集中250分相当", table: "Planning")
         }
         return String(
-            localized: "あと\(formattedMass(max(0, next - projection.grams))) · 瓶1杯は集中250分相当",
+            localized: "あと\(formattedMass(max(0, next - jarGrams))) · 瓶1杯は集中250分相当",
             table: "Planning",
             comment: "Plan preview: mass left until the jar fills; the argument is a mass"
         )
     }
 
+    /// Today's jar plus the plan. While Home shows 「再集計中」, it shows no
+    /// mass, so neither does the plan.
+    private var jarTotalValue: String {
+        switch start.certainty {
+        case .exact:
+            return formattedMass(jarGrams)
+        case .atLeast:
+            return String(
+                localized: "\(formattedMass(jarGrams))以上",
+                table: "Planning",
+                comment: "Jar total when today's jar is a lower bound; the argument is a mass such as 3.68t"
+            )
+        case .recounting:
+            return Self.recountingValue
+        }
+    }
+
+    /// In place of a mass or a milestone while Home re-counts today's jar.
+    private static var recountingValue: String {
+        String(localized: "確認中", table: "Planning", comment: "Shown instead of the jar total and its long-term milestone while Home re-counts today's jar")
+    }
+
+    /// How the total splits into today's jar and the plan. Hidden for an
+    /// empty, verified jar, where the total is the plan alone. While iCloud
+    /// is checked, today's jar carries the same caveat as Home's caption.
+    private var startBreakdown: String? {
+        let plan = formattedMass(projection.grams)
+        let today = formattedMass(start.grams)
+        switch (start.certainty, start.isBeingChecked) {
+        case (.exact, false):
+            guard start.grams > 0 else { return nil }
+            return String(
+                localized: "今日の瓶 \(today) ＋ この計画 \(plan)",
+                table: "Planning",
+                comment: "Breakdown of the jar total: today's jar mass, then the mass the plan adds"
+            )
+        case (.exact, true):
+            return String(
+                localized: "今日の瓶 \(today)（集計を確認中）＋ この計画 \(plan)",
+                table: "Planning",
+                comment: "Breakdown while Home still checks today's jar (iCloud or this iPhone): today's jar mass, then the mass the plan adds"
+            )
+        case (.atLeast, false):
+            return String(
+                localized: "今日の瓶 \(today)以上 ＋ この計画 \(plan)",
+                table: "Planning",
+                comment: "Breakdown when today's jar is a lower bound: today's jar mass, then the mass the plan adds"
+            )
+        case (.atLeast, true):
+            return String(
+                localized: "今日の瓶 \(today)以上（集計を確認中）＋ この計画 \(plan)",
+                table: "Planning",
+                comment: "Breakdown when today's jar is a lower bound still being checked (iCloud or this iPhone): today's jar mass, then the mass the plan adds"
+            )
+        case (.recounting, _):
+            return String(
+                localized: "今日の瓶の合計を確認しているあいだは、この計画で積む分だけを表示します。",
+                table: "Planning",
+                comment: "Shown while Home re-counts today's jar (iCloud or this iPhone)"
+            )
+        }
+    }
+
     private var majorMilestoneStatus: String {
-        let reached = "\(accumulationPresence.completedMajorMilestoneCount.formatted())段階"
-        if accumulationPresence.isMajorMilestoneBoundary,
-           let next = accumulationPresence.nextMajorMilestoneGrams {
+        guard let jarPosition else { return Self.recountingValue }
+        let reached = "\(jarPosition.completedMajorMilestoneCount.formatted())段階"
+        if jarPosition.isMajorMilestoneBoundary,
+           let next = jarPosition.nextMajorMilestoneGrams {
             return "\(reached)到達 · 次 \(formattedMass(next))"
         }
-        guard let next = accumulationPresence.nextMajorMilestoneGrams else {
+        guard let next = jarPosition.nextMajorMilestoneGrams else {
             return "\(reached)到達"
         }
         return "\(reached) · 次 \(formattedMass(next))"
     }
 
-    private var majorMilestoneAccessibilityLabel: String {
-        accumulationPresence.isMajorMilestoneBoundary
+    private func majorMilestoneAccessibilityLabel(_ position: JarAccumulationPresenceState) -> String {
+        position.isMajorMilestoneBoundary
             ? "到達した長期の質量段階"
             : "次の長期の質量段階まで"
     }
@@ -522,10 +672,48 @@ struct AccumulationPlanView: View {
 
     @MainActor
     private func refreshScene() {
+        sceneRefreshTask?.cancel()
+        sceneRefreshTask = nil
         // `restore` is intentionally used here rather than the live drop API:
         // it triggers no landing feedback or persistence callback. Avoid
         // mutating `soundEnabled` / `hapticsEnabled` here because JarScene's
         // default dependencies are app-wide shared instances.
         previewScene.restore(pebbles: projection.descriptors)
+    }
+
+    /// jar-05: a drag across the timeline changes `previewMonth` on every
+    /// one-month step, and each restore rebuilt every preview gem (about
+    /// 11 ms on the main thread). The numbers above follow the slider live;
+    /// the jar, below the fold during a drag, catches up once it rests.
+    @MainActor
+    private func scheduleSceneRefresh() {
+        sceneRefreshTask?.cancel()
+        sceneRefreshTask = Task { @MainActor in
+            try? await Task.sleep(for: Self.sceneRefreshDelay)
+            guard !Task.isCancelled else { return }
+            refreshScene()
+        }
+    }
+}
+
+/// home-02: the machine-readable projection summary exists for the planning
+/// UI test only. It used to be the grid's accessibility value in every build,
+/// so VoiceOver read "months=…;consistent=true" after the Japanese metrics.
+private struct PlanResultUITestValue: ViewModifier {
+    let projection: AccumulationPlanProjection
+    let start: AccumulationPlanStart
+
+    func body(content: Content) -> some View {
+#if DEBUG
+        if LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess {
+            content.accessibilityValue(Text(verbatim:
+                "months=\(projection.elapsedMonths);sessions=\(projection.completionCount);minutes=\(projection.focusMinutes);grams=\(projection.grams);bodies=\(projection.studyBodyCount);consistent=\(projection.isInternallyConsistent);start=\(start.grams);jar=\(start.jarGrams(adding: projection.grams))"
+            ))
+        } else {
+            content
+        }
+#else
+        content
+#endif
     }
 }

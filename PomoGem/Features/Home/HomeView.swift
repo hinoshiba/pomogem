@@ -841,7 +841,8 @@ struct HomeView: View {
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showAccumulationPlan) {
-            AccumulationPlanView()
+            AccumulationPlanView(start: accumulationPlanStart)
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
                 .presentationDragIndicator(.visible)
         }
         .sheet(item: $completedStratum, onDismiss: {
@@ -1470,6 +1471,18 @@ struct HomeView: View {
         AggregateProjectionPresentationPolicy.menuMassValue(
             formattedMass: presentedLifetimeMassLabel,
             context: aggregateProjectionPresentation
+        )
+    }
+
+    /// home-07: the planning sheet continues from the lifetime mass this
+    /// screen presents, qualified the same way: 「以上」 for a lower bound,
+    /// still being checked while iCloud is verified, and no mass at all only
+    /// when Home itself shows 「再集計中」.
+    private var accumulationPlanStart: AccumulationPlanStart {
+        .homeHeadline(
+            presentedGrams: presentedLifetimeGrams,
+            isLowerBound: presentedLifetimeIsLowerBound,
+            isBeingChecked: aggregateProjectionPresentation.isCloudVerificationPending
         )
     }
 

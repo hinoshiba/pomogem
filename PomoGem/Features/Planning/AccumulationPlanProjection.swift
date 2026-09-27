@@ -372,3 +372,61 @@ struct AccumulationPlanProjection: Equatable, Sendable {
         return value ^ (value >> 31)
     }
 }
+
+/// Today's jar, the plan's starting point (home-07). Home passes the total it
+/// already shows; the plan only adds to it and never writes it anywhere.
+struct AccumulationPlanStart: Equatable, Sendable {
+    enum Certainty: Equatable, Sendable {
+        /// Home's total is complete.
+        case exact
+        /// Home shows the total as a lower bound, marked 「以上」: older
+        /// records are still being folded in, or the last verified total is
+        /// itself partial while iCloud is checked.
+        case atLeast
+        /// Home shows 「再集計中」 instead of a mass: iCloud is checked and
+        /// this device has no total it can stand behind. The plan shows no
+        /// mass either and starts from zero.
+        case recounting
+    }
+
+    let grams: Int
+    let certainty: Certainty
+    /// Home captions its total as still being checked (「iCloudを確認中」 or
+    /// 「このiPhoneの集計を確認中」), so it can still change once the check
+    /// finishes. Always true while re-counting.
+    let isBeingChecked: Bool
+
+    init(grams: Int, certainty: Certainty, isBeingChecked: Bool = false) {
+        self.grams = certainty == .recounting ? 0 : max(0, grams)
+        self.certainty = certainty
+        self.isBeingChecked = certainty == .recounting || isBeingChecked
+    }
+
+    static let empty = AccumulationPlanStart(grams: 0, certainty: .exact)
+
+    /// The start for the lifetime mass Home presents in its headline, menu
+    /// and jar VoiceOver value: `presentedGrams` is nil only when Home shows
+    /// 「再集計中」. While iCloud is checked Home still shows a mass this
+    /// device can stand behind (`PendingMassPresentationPolicy`), so the plan
+    /// continues from that value, not from zero. Both are display-only.
+    static func homeHeadline(
+        presentedGrams: Int?,
+        isLowerBound: Bool,
+        isBeingChecked: Bool
+    ) -> AccumulationPlanStart {
+        guard let presentedGrams else {
+            return AccumulationPlanStart(grams: 0, certainty: .recounting)
+        }
+        return AccumulationPlanStart(
+            grams: presentedGrams,
+            certainty: isLowerBound ? .atLeast : .exact,
+            isBeingChecked: isBeingChecked
+        )
+    }
+
+    /// Today's jar plus what the plan adds, saturating instead of trapping.
+    func jarGrams(adding planGrams: Int) -> Int {
+        let (sum, overflow) = grams.addingReportingOverflow(max(0, planGrams))
+        return overflow ? Int.max : sum
+    }
+}

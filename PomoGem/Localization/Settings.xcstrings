@@ -28,9 +28,6 @@
     "iOS：%@" : {
       "comment" : "Support mail line; the argument is the iOS version, e.g. 26.5"
     },
-    "「抽選しない」を選択として保存" : {
-
-    },
     "「集中に戻るお知らせ」は既定でオフです。オンにすると、集中タイマー中にホーム画面や別のアプリへ移ったとき、30秒後に一度通知し、戻ると取り消します。画面をロックしただけなら通知しません（パスコードを使っていないiPhoneなどでは届くことがあります）。一時停止中・休憩中・終了間際も通知しません。" : {
       "comment" : "Settings caption under the return-to-focus reminder switch"
     },
@@ -130,6 +127,9 @@
     "未選択" : {
       "comment" : "Settings focus music row value when no music is chosen yet (English: Not selected)"
     },
+    "朱色" : {
+      "comment" : "Theme colour swatch (vermilion)"
+    },
     "機種：%@" : {
       "comment" : "Support mail line; the argument is the model identifier, e.g. iPhone13,1"
     },
@@ -142,20 +142,44 @@
     "毎月1日に一度だけ" : {
       "comment" : "Settings switch subtitle: the monthly notification is sent on the 1st"
     },
-    "結晶" : {
-      "comment" : "Export progress: the collection being written (crystals)"
+    "珊瑚" : {
+      "comment" : "Theme colour swatch (coral)"
+    },
+    "現在の色" : {
+      "comment" : "A theme's saved colour that is not one of the palette swatches"
+    },
+    "琥珀" : {
+      "comment" : "Theme colour swatch (amber)"
+    },
+    "瑠璃" : {
+      "comment" : "Theme colour swatch (lapis blue)"
+    },
+    "空色" : {
+      "comment" : "Theme colour swatch (sky blue)"
+    },
+    "紅藤" : {
+      "comment" : "Theme colour swatch (orchid)"
+    },
+    "緑青" : {
+      "comment" : "Theme colour swatch (verdigris green)"
     },
     "自由な集中時間・結晶の月刻印・勉強アプリ数の無制限" : {
       "comment" : "Settings Pro row subtitle for free users: what Pro adds"
     },
+    "若草" : {
+      "comment" : "Theme colour swatch (fresh green)"
+    },
+    "菫" : {
+      "comment" : "Theme colour swatch (violet)"
+    },
     "著作権" : {
       "comment" : "About page row: copyright"
     },
+    "藍" : {
+      "comment" : "Theme colour swatch (indigo)"
+    },
     "見出し書体" : {
       "comment" : "About page row: the heading typeface"
-    },
-    "記念石" : {
-      "comment" : "Export progress: the collection being written (achievement stones)"
     },
     "記録の書き出しとリセット" : {
       "comment" : "Settings section header: export and reset"
@@ -178,6 +202,9 @@
     "購入・返金の案内など（Webで開く）" : {
       "comment" : "Settings row subtitle: what the support web page covers"
     },
+    "赤銅" : {
+      "comment" : "Theme colour swatch (copper)"
+    },
     "通知する時刻" : {
       "comment" : "Settings time picker label for reminders"
     },
@@ -189,6 +216,9 @@
     },
     "集中用の音楽" : {
       "comment" : "Settings row: opens the focus music (Apple Music) list; same name as the timer's music sheet"
+    },
+    "青緑" : {
+      "comment" : "Theme colour swatch (teal)"
     },
     "（お問い合わせの内容をお書きください。不具合の場合は、操作の手順と起きたことを教えてください。）" : {
       "comment" : "Support mail body: where the person writes their message"

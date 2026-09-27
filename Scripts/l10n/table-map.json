@@ -198,6 +198,12 @@
       "package": "l10n-06-settings"
     },
     {
+      "glob": "PomoGem/Core/SubjectPalette.swift",
+      "table": "Settings",
+      "package": "l10n-06-settings",
+      "note": "theme colour swatch names, shown in the theme editor"
+    },
+    {
       "glob": "PomoGem/Features/Onboarding/**",
       "table": "Onboarding",
       "package": "l10n-07-onboarding-paywall-models"
