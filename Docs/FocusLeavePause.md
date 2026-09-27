@@ -151,6 +151,14 @@ Phase Aで置いていた統合・提出の条件（止める設定がなく、�
   `testTheLiveWaitEndsAsSoonAsItsWindowIsCancelled`（本番の待ちが取り消しですぐ終わる）、
   `testBackgroundExpiryPausesAndEndsItsTaskAtOnce`、`testExpiryWhileTheLiveActivityUpdateRunsStillEndsTheTaskOnce`。
 
+## プライバシーの説明
+
+[PRIVACY.md](../PRIVACY.md)のデータフロー（通知とLocalAuthentication）と、Web版プライバシーポリシー
+（`http_dists/index.html`の`#privacy`、`privacy-leave-pause`、日本語と英語）に同じ内容を書いています。
+離れた時刻と一時停止した時刻はこのiPhoneの保存済みタイマーにだけ記録し、同期・送信・書き出しはしないこと、
+パスコードが設定されているかどうかだけを認証画面なしで読み、その結果を保存・送信しないこと、パスコードが
+ないとロックでも一時停止することです。
+
 ## iCloudと他の端末（D1.6）
 
 CloudKitのフィールドや同期する列挙値は増やしていません。一時停止の同期行は、この端末が次に前面へ戻って
