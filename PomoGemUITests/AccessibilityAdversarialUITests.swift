@@ -661,6 +661,10 @@ final class AccessibilityAdversarialUITests: XCTestCase {
                 ("text clipping", .textClipped),
                 ("traits", .trait)
             ]
+        // A swipe keeps decelerating after XCTest returns from it. Audit the
+        // resting screen, not a frame in which a row is still sliding under
+        // the navigation bar.
+        usleep(1_000_000)
         // XCTest gives one combined audit roughly the same short watchdog as
         // a single check. The long AX5 menu can exceed it even when every
         // individual audit is healthy, so keep each diagnostic independently
@@ -737,6 +741,14 @@ final class AccessibilityAdversarialUITests: XCTestCase {
                     // tile's 「0」 on a 17 Pro, 「表示中の結晶」 on an SE). Such
                     // a row counts only in audits that show it in full view.
                     if frame.minY < contentTop - 0.5, frame.maxY > contentTop + 0.5 {
+                        return true
+                    }
+                    // The same row resting flush against the bar's lower
+                    // edge: the sampled background still takes in the bar's
+                    // antialiased edge and shadow. On a freshly erased SE a
+                    // batch run flagged 「表示中の結晶」 there (its colours pass
+                    // WCAG), while a lone run passed.
+                    if frame.minY >= contentTop - 0.5, frame.minY < contentTop + 8 {
                         return true
                     }
                     let visible = frame.intersection(viewport)
