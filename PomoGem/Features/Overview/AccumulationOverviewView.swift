@@ -1179,11 +1179,20 @@ struct AccumulationOverviewView: View {
                 .accessibilityLabel(Text("時間の核は集中した時間で進みます。10分で100グラム、25分で250グラム、60分で600グラムです", tableName: "Overview"))
                 .accessibilityIdentifier("overview.fusion-legend")
 
-                Text("完走するたびに粒がひとつ増えます。10粒がひとつの結晶になるのは瓶を整理するためで、時間の価値は変わりません。結晶をタップすると内訳を確認できます。", tableName: "Overview")
+                // Two short paragraphs, not one: at AX5 a single 74-character
+                // caption grew taller than the sheet's viewport, so it could
+                // never be read in one piece (testAX5CrystalHierarchy…).
+                Text("10粒がひとつの結晶になるのは、瓶を整理するためです。時間の価値は変わりません。", tableName: "Overview",
+                     comment: "Overview crystal section: why 10 gems become one crystal")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.text)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("overview.fusion-disclosure")
+                Text("結晶をタップすると、内訳を見られます。", tableName: "Overview",
+                     comment: "Overview crystal section: tapping a crystal opens its details")
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.text)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .accessibilityElement(children: .contain)
