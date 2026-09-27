@@ -194,6 +194,124 @@ struct TimerRecoveryActivation: Equatable, Sendable {
     }
 }
 
+/// Every decision FocusView and BreakTimerView make about reaching a
+/// timer's end, in one place. Each decision point in the views (the view's
+/// first permission refresh, an activation's refresh, the ticker) asks one
+/// method here, and TimerForegroundResolutionTests drives the same methods
+/// in the orders the views see. The views keep only the wiring, the cue's
+/// other inputs (`TimerCompletionForegroundFeedbackPolicy`) and their own
+/// "resolve once" state (BreakTimerView's `didSignalCompletion`, the focus
+/// engine's phase).
+struct TimerForegroundResolution: Equatable, Sendable {
+    /// What a decision point does with its timer.
+    enum Decision: Equatable, Sendable {
+        /// Nothing yet. The end is not verifiably on screen with permission
+        /// re-read in this activation, or a Notification Center add is in
+        /// flight. A later decision point resolves it, with the recovery
+        /// answer still unasked.
+        case wait
+        /// The timer is still running.
+        case running
+        /// Resolve the end now. The recovery answer was asked here, so no
+        /// later decision point gets it again.
+        case resolve(recoveredAfterExpiration: Bool)
+    }
+
+    private(set) var gate = TimerForegroundResolutionGate()
+    private var recovery: TimerRecoveryActivation
+
+    init(isRecovery: Bool) {
+        recovery = TimerRecoveryActivation(isRecovery: isRecovery)
+    }
+
+    // MARK: Scene phase and permission
+
+    /// The view's `.task`, before its first suspension.
+    mutating func observeAppearance(sceneIsActive: Bool) {
+        gate.observeAppearance(sceneIsActive: sceneIsActive)
+    }
+
+    /// `onChange(of: scenePhase)`. Returns the generation an activation's
+    /// permission refresh starts in.
+    @discardableResult
+    mutating func observeScene(isActive: Bool) -> UInt64 {
+        gate.observeScene(isActive: isActive)
+    }
+
+    /// Read just before a permission refresh starts.
+    var generation: UInt64 { gate.generation }
+
+    @discardableResult
+    mutating func finishAuthorizationRefresh(startedIn start: UInt64) -> Bool {
+        gate.finishAuthorizationRefresh(startedIn: start)
+    }
+
+    mutating func close() {
+        gate.close()
+    }
+
+    // MARK: Decisions
+
+    /// The view read its timer and found it still running, or started it.
+    /// An end the person sees later is a live end.
+    mutating func observeRunning() {
+        recovery.observeRunning()
+    }
+
+    /// After the view's own first permission refresh (`prepareBreak`,
+    /// `FocusView.activate`), with the timer as it stands then.
+    mutating func prepared(isElapsed: Bool) -> Decision {
+        guard isElapsed else {
+            recovery.observeRunning()
+            return .running
+        }
+        // Never while inactive or in the background: resolving cancels the
+        // OS request before it can notify. The activation that follows
+        // resolves it, still as a recovered end.
+        guard gate.authorizationIsCurrent else { return .wait }
+        return resolve()
+    }
+
+    /// After an activation's own permission refresh opened the gate
+    /// (`onChange(of: scenePhase)`, its refresh, then this).
+    mutating func activated(
+        isElapsed: Bool,
+        isSchedulingNotification: Bool
+    ) -> Decision {
+        guard gate.authorizationIsCurrent else { return .wait }
+        guard isElapsed else {
+            recovery.observeRunning()
+            return .running
+        }
+        // The ticker finishes it once Notification Center has answered the
+        // add: whether the notification may have been delivered decides the
+        // cue.
+        guard !isSchedulingNotification else { return .wait }
+        return resolve()
+    }
+
+    /// The ticker, or another callback handed a fresh scene phase
+    /// (FocusView's cloud-ownership check).
+    mutating func tick(
+        isElapsed: Bool,
+        scenePhaseIsActive: Bool,
+        isSchedulingNotification: Bool
+    ) -> Decision {
+        guard gate.allowsForegroundResolution(
+            scenePhaseIsActive: scenePhaseIsActive
+        ) else { return .wait }
+        guard isElapsed else { return .running }
+        guard !isSchedulingNotification else { return .wait }
+        return resolve()
+    }
+
+    private mutating func resolve() -> Decision {
+        .resolve(
+            recoveredAfterExpiration: recovery.consumeRecoveredAfterExpiration()
+        )
+    }
+}
+
 /// The end-of-timer alert is the core cue of a focus on a locked phone, so
 /// permission is asked in context: once, at the first focus the person
 /// starts themselves, and never for a recovered or adopted timer. The flag is
@@ -344,9 +462,10 @@ struct FocusView: View {
     @State private var notificationScheduleState: FocusNotificationScheduleState = .idle
     @State private var notificationScheduleGeneration: UInt64 = 0
     @State private var didEnterBackgroundSinceLastActive = false
-    @State private var isAwaitingRecoveryActivation = false
     @State private var scheduledCompletionNotificationDeliveryDate: Date? = nil
-    @State private var foregroundResolution = TimerForegroundResolutionGate()
+    @State private var foregroundResolution = TimerForegroundResolution(
+        isRecovery: false
+    )
     @State private var viewLifecycleGeneration: UInt64 = 0
     @State private var isViewActive = false
     @AccessibilityFocusState private var completionSaveRetryFocused: Bool
@@ -419,7 +538,9 @@ struct FocusView: View {
                 )
             } ?? false
         )
-        _isAwaitingRecoveryActivation = State(initialValue: true)
+        _foregroundResolution = State(
+            initialValue: TimerForegroundResolution(isRecovery: true)
+        )
         _scheduledCompletionNotificationDeliveryDate = State(
             initialValue: request.scheduledCompletionNotificationDeliveryDate
         )
@@ -850,18 +971,26 @@ struct FocusView: View {
             // not consume completion in the brief inactive run-loop window:
             // doing so can cancel the already-scheduled OS notification before
             // it is delivered. The active transition resolves the same end date.
-            guard foregroundResolution.allowsForegroundResolution(
-                scenePhaseIsActive: scenePhase == .active
-            ) else { return }
-            let completionIsElapsed = (engine.endDate ?? .distantFuture) <= date
-            if completionIsElapsed {
-                // Resolve a foreground return only after an in-flight
-                // Notification Center add has a definite success/failure.
-                guard !notificationScheduleState.isScheduling else { return }
+            // A foreground return resolves only after an in-flight
+            // Notification Center add has a definite success/failure.
+            switch foregroundResolution.tick(
+                isElapsed: (engine.endDate ?? .distantFuture) <= date,
+                scenePhaseIsActive: scenePhase == .active,
+                isSchedulingNotification: notificationScheduleState.isScheduling
+            ) {
+            case .wait:
+                return
+            case .running:
+                advanceIfNeeded(
+                    at: date,
+                    uptime: ContinuousUptime.now()
+                )
+            case let .resolve(recoveredAfterExpiration):
                 let completionUptime = ContinuousUptime.now()
                 let cue = completionCueForElapsedTimer(
                     at: date,
                     uptime: completionUptime,
+                    recoveredAfterExpiration: recoveredAfterExpiration,
                     returnedFromBackground:
                         didEnterBackgroundSinceLastActive
                 )
@@ -871,12 +1000,7 @@ struct FocusView: View {
                     uptime: completionUptime,
                     cue: cue
                 )
-                return
             }
-            advanceIfNeeded(
-                at: date,
-                uptime: ContinuousUptime.now()
-            )
         }
         .onChange(of: scenePhase) { _, newPhase in
             let refreshGeneration = foregroundResolution.observeScene(
@@ -1374,25 +1498,25 @@ struct FocusView: View {
             }
 
             saveRecoveryState()
-            let completionIsAlreadyElapsed = engine.snapshot(at: now)
-                .remainingSeconds == 0
-            // Never consume an elapsed recovery while inactive/backgrounded:
-            // doing so cancels the OS request before it can notify the user.
-            // The activation that follows resolves it, still as a recovery.
-            guard !completionIsAlreadyElapsed
-                    || foregroundResolution.authorizationIsCurrent else {
-                return
-            }
             let cue: TimerCompletionForegroundFeedbackPolicy.Cue
-            if completionIsAlreadyElapsed {
+            switch foregroundResolution.prepared(
+                isElapsed: engine.snapshot(at: now).remainingSeconds == 0
+            ) {
+            case .wait:
+                // Never consume an elapsed recovery while inactive or in the
+                // background: doing so cancels the OS request before it can
+                // notify the user. The activation that follows resolves it,
+                // still as a recovery.
+                return
+            case .running:
+                cue = .repeating
+            case let .resolve(recoveredAfterExpiration):
                 cue = completionCueForElapsedTimer(
                     at: now,
                     uptime: completionUptime,
+                    recoveredAfterExpiration: recoveredAfterExpiration,
                     returnedFromBackground: false
                 )
-            } else {
-                isAwaitingRecoveryActivation = false
-                cue = .repeating
             }
             advanceIfNeeded(
                 at: now,
@@ -2965,6 +3089,8 @@ struct FocusView: View {
     private func startBreak() {
         do {
             try engine.startBreak(now: .now)
+            // A break this view starts is live, even after a recovered focus.
+            foregroundResolution.observeRunning()
             completion = nil
             displayNow = .now
             saveRecoveryState()
@@ -3039,10 +3165,13 @@ struct FocusView: View {
             // A query callback can arrive while Notification Center is about
             // to deliver the same end. Defer local completion until active so
             // the pending request is not cancelled from the background.
-            guard foregroundResolution.allowsForegroundResolution(
-                      scenePhaseIsActive: scenePhase == .active
-                  ),
-                  !notificationScheduleState.isScheduling else {
+            guard case let .resolve(recoveredAfterExpiration) =
+                    foregroundResolution.tick(
+                        isElapsed: true,
+                        scenePhaseIsActive: scenePhase == .active,
+                        isSchedulingNotification:
+                            notificationScheduleState.isScheduling
+                    ) else {
                 // Do not let a remote terminal row erase an already elapsed
                 // local completion while delivery state is still unresolved.
                 return false
@@ -3054,6 +3183,7 @@ struct FocusView: View {
                 cue: completionCueForElapsedTimer(
                     at: now,
                     uptime: completionUptime,
+                    recoveredAfterExpiration: recoveredAfterExpiration,
                     returnedFromBackground:
                         didEnterBackgroundSinceLastActive
                 )
@@ -3149,24 +3279,26 @@ struct FocusView: View {
 
         let returnDate = Date.now
         let returnUptime = ContinuousUptime.now()
-        let completionIsElapsed = (engine.endDate ?? .distantFuture) <= returnDate
-        if completionIsElapsed, notificationScheduleState.isScheduling {
+        let cue: TimerCompletionForegroundFeedbackPolicy.Cue
+        switch foregroundResolution.activated(
+            isElapsed: (engine.endDate ?? .distantFuture) <= returnDate,
+            isSchedulingNotification: notificationScheduleState.isScheduling
+        ) {
+        case .wait:
             // The ticker consumes this once add succeeds or fails. Keep the
             // background-return flag until delivery possibility is known.
             displayNow = returnDate
             UIApplication.shared.isIdleTimerDisabled = false
             return
-        }
-        let cue: TimerCompletionForegroundFeedbackPolicy.Cue
-        if completionIsElapsed {
+        case .running:
+            cue = .repeating
+        case let .resolve(recoveredAfterExpiration):
             cue = completionCueForElapsedTimer(
                 at: returnDate,
                 uptime: returnUptime,
+                recoveredAfterExpiration: recoveredAfterExpiration,
                 returnedFromBackground: didEnterBackgroundSinceLastActive
             )
-        } else {
-            isAwaitingRecoveryActivation = false
-            cue = .repeating
         }
         didEnterBackgroundSinceLastActive = false
         displayNow = returnDate
@@ -3181,10 +3313,9 @@ struct FocusView: View {
     private func completionCueForElapsedTimer(
         at now: Date,
         uptime: TimeInterval,
+        recoveredAfterExpiration: Bool,
         returnedFromBackground: Bool
     ) -> TimerCompletionForegroundFeedbackPolicy.Cue {
-        let recoveredAfterExpiration = isAwaitingRecoveryActivation
-        isAwaitingRecoveryActivation = false
         // Time-interval notifications run against elapsed time, while the
         // persisted witness is a wall-clock Date. If the wall clock moved,
         // never suppress the foreground cue based on that Date: the OS request

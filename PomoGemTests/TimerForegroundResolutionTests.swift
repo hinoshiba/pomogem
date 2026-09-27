@@ -3,9 +3,18 @@ import XCTest
 
 /// A focus or break that reaches its end with the app on screen rings until
 /// stopped. Only an end that had already passed when the timer was recovered
-/// is marked once or shown silently. These tests replay the order in which
-/// FocusView and BreakTimerView see scene phases and permission refreshes,
-/// including the cold-launch order that left a recovered break silent.
+/// is marked once or shown silently.
+///
+/// Both timer views ask `TimerForegroundResolution` at every decision point.
+/// The flows at the end of this file drive it in the orders FocusView and
+/// BreakTimerView see scene phases and permission refreshes, including the
+/// cold-launch order that left a recovered break silent. They cannot pin the
+/// views' wiring: which decision each call site asks, and each view's own
+/// "resolve once" guard. Only these UI tests pin that, and CI does not run
+/// them (each takes several minutes):
+/// - TimerOrientationUITests.testAX5BreakEndActionIsOnScreenWithoutScrolling
+/// - RuntimeFlowAuditUITests.testARecoveredFocusThatEndsOnScreenRingsUntilStopped
+/// - RuntimeFlowAuditUITests.testRelaunchAfterTheBreakEndDoesNotStartTheAlarm
 final class TimerForegroundResolutionTests: XCTestCase {
     private typealias Cue = TimerCompletionForegroundFeedbackPolicy.Cue
 
@@ -131,7 +140,134 @@ final class TimerForegroundResolutionTests: XCTestCase {
         XCTAssertFalse(activation.consumeRecoveredAfterExpiration())
     }
 
-    // MARK: - BreakTimerView's order, end to end
+    // MARK: - Decisions
+
+    func testAnEndThatWaitsKeepsTheRecoveryAnswerForTheDecisionThatResolvesIt() {
+        var resolution = TimerForegroundResolution(isRecovery: true)
+        resolution.observeAppearance(sceneIsActive: false)
+        resolution.finishAuthorizationRefresh(startedIn: resolution.generation)
+        XCTAssertEqual(
+            resolution.prepared(isElapsed: true),
+            .wait,
+            "Never resolved while inactive: the OS notification is still pending"
+        )
+
+        let activation = resolution.observeScene(isActive: true)
+        XCTAssertTrue(resolution.finishAuthorizationRefresh(startedIn: activation))
+        XCTAssertEqual(
+            resolution.activated(isElapsed: true, isSchedulingNotification: true),
+            .wait,
+            "Whether the notification may have been delivered is known only after the add"
+        )
+        XCTAssertEqual(
+            resolution.tick(
+                isElapsed: true,
+                scenePhaseIsActive: true,
+                isSchedulingNotification: false
+            ),
+            .resolve(recoveredAfterExpiration: true)
+        )
+        XCTAssertEqual(
+            resolution.tick(
+                isElapsed: true,
+                scenePhaseIsActive: true,
+                isSchedulingNotification: false
+            ),
+            .resolve(recoveredAfterExpiration: false),
+            "Answered once: the view's own guard drops any later resolution"
+        )
+    }
+
+    func testARecoveredTimerFoundRunningAfterItsFirstRefreshEndsLive() {
+        var resolution = TimerForegroundResolution(isRecovery: true)
+        resolution.observeAppearance(sceneIsActive: true)
+        resolution.finishAuthorizationRefresh(startedIn: resolution.generation)
+        XCTAssertEqual(resolution.prepared(isElapsed: false), .running)
+        XCTAssertEqual(
+            resolution.tick(
+                isElapsed: true,
+                scenePhaseIsActive: true,
+                isSchedulingNotification: false
+            ),
+            .resolve(recoveredAfterExpiration: false)
+        )
+    }
+
+    func testARecoveredTimerFoundRunningOnActivationEndsLive() {
+        var resolution = TimerForegroundResolution(isRecovery: true)
+        resolution.observeAppearance(sceneIsActive: false)
+        let activation = resolution.observeScene(isActive: true)
+        resolution.finishAuthorizationRefresh(startedIn: activation)
+        XCTAssertEqual(
+            resolution.activated(isElapsed: false, isSchedulingNotification: false),
+            .running
+        )
+        XCTAssertEqual(
+            resolution.tick(
+                isElapsed: true,
+                scenePhaseIsActive: true,
+                isSchedulingNotification: false
+            ),
+            .resolve(recoveredAfterExpiration: false)
+        )
+    }
+
+    func testTheTickerNeverResolvesWithoutAFreshActivePhaseAndPermission() {
+        var resolution = TimerForegroundResolution(isRecovery: false)
+        resolution.observeAppearance(sceneIsActive: true)
+        XCTAssertEqual(
+            resolution.tick(
+                isElapsed: true,
+                scenePhaseIsActive: true,
+                isSchedulingNotification: false
+            ),
+            .wait,
+            "Permission must be re-read in this activation first"
+        )
+        resolution.finishAuthorizationRefresh(startedIn: resolution.generation)
+        XCTAssertEqual(
+            resolution.tick(
+                isElapsed: true,
+                scenePhaseIsActive: false,
+                isSchedulingNotification: false
+            ),
+            .wait
+        )
+        XCTAssertEqual(
+            resolution.tick(
+                isElapsed: false,
+                scenePhaseIsActive: true,
+                isSchedulingNotification: false
+            ),
+            .running
+        )
+        XCTAssertEqual(
+            resolution.tick(
+                isElapsed: true,
+                scenePhaseIsActive: true,
+                isSchedulingNotification: true
+            ),
+            .wait
+        )
+    }
+
+    func testAnActivationDecidesNothingBeforeItsRefreshOpensTheGate() {
+        var resolution = TimerForegroundResolution(isRecovery: true)
+        resolution.observeScene(isActive: true)
+        XCTAssertEqual(
+            resolution.activated(isElapsed: false, isSchedulingNotification: false),
+            .wait
+        )
+        let activation = resolution.observeScene(isActive: true)
+        resolution.finishAuthorizationRefresh(startedIn: activation)
+        XCTAssertEqual(
+            resolution.activated(isElapsed: true, isSchedulingNotification: false),
+            .resolve(recoveredAfterExpiration: true),
+            "The earlier decision must not have used up the recovery answer"
+        )
+    }
+
+    // MARK: - BreakTimerView's order
 
     /// testAX5BreakEndActionIsOnScreenWithoutScrolling: a break recovered on
     /// a cold launch at AX5 reaches 00:00 on screen. It must ring until
@@ -140,9 +276,10 @@ final class TimerForegroundResolutionTests: XCTestCase {
         var flow = BreakFlow(isRecovery: true)
         flow.appear(sceneIsActive: false)
         let prepare = flow.beginPrepare(remainingAtPrepare: 280)
-        flow.sceneBecameActive()
-        flow.finishPrepare(prepare)
-        flow.finishNotificationScheduling(prepare)
+        XCTAssertNil(flow.sceneBecameActive())
+        XCTAssertNil(flow.finishPrepare(prepare))
+        let scheduling = flow.beginNotificationScheduling()
+        flow.finishNotificationScheduling(scheduling)
 
         XCTAssertEqual(flow.tickAtEnd(), .repeating)
     }
@@ -151,9 +288,10 @@ final class TimerForegroundResolutionTests: XCTestCase {
         var flow = BreakFlow(isRecovery: true)
         flow.appear(sceneIsActive: false)
         let prepare = flow.beginPrepare(remainingAtPrepare: 280)
-        flow.finishPrepare(prepare)
-        flow.finishNotificationScheduling(prepare)
-        flow.sceneBecameActive()
+        XCTAssertNil(flow.finishPrepare(prepare))
+        let scheduling = flow.beginNotificationScheduling()
+        XCTAssertNil(flow.sceneBecameActive())
+        flow.finishNotificationScheduling(scheduling)
 
         XCTAssertEqual(flow.tickAtEnd(), .repeating)
     }
@@ -162,8 +300,9 @@ final class TimerForegroundResolutionTests: XCTestCase {
         var flow = BreakFlow(isRecovery: true)
         flow.appear(sceneIsActive: true)
         let prepare = flow.beginPrepare(remainingAtPrepare: 120)
-        flow.finishPrepare(prepare)
-        flow.finishNotificationScheduling(prepare)
+        XCTAssertNil(flow.finishPrepare(prepare))
+        let scheduling = flow.beginNotificationScheduling()
+        flow.finishNotificationScheduling(scheduling)
 
         XCTAssertEqual(flow.tickAtEnd(), .repeating)
     }
@@ -176,10 +315,24 @@ final class TimerForegroundResolutionTests: XCTestCase {
         flow.appear(sceneIsActive: false)
         let prepare = flow.beginPrepare(remainingAtPrepare: 0)
         XCTAssertNil(flow.finishPrepare(prepare), "Never resolved while inactive")
-        let cue = flow.sceneBecameActive(secondsSinceEnd: 20)
 
-        XCTAssertEqual(cue, .single)
-        XCTAssertEqual(flow.sceneBecameActiveAfterNotification(), Cue.none)
+        XCTAssertEqual(flow.sceneBecameActive(secondsSinceEnd: 20), .single)
+        XCTAssertNil(flow.tickAtEnd(), "The break end is signalled once")
+    }
+
+    func testABreakThatEndedBeforeTheRelaunchIsSilentWhenTheNotificationMayHaveArrived() {
+        var flow = BreakFlow(isRecovery: true)
+        flow.appear(sceneIsActive: false)
+        let prepare = flow.beginPrepare(remainingAtPrepare: 0)
+        XCTAssertNil(flow.finishPrepare(prepare))
+
+        XCTAssertEqual(
+            flow.sceneBecameActive(
+                secondsSinceEnd: 5,
+                notificationMayHaveDelivered: true
+            ),
+            Cue.none
+        )
     }
 
     func testABreakThatEndedBeforeTheRelaunchIsSilentWhenItAppearsActive() {
@@ -193,111 +346,337 @@ final class TimerForegroundResolutionTests: XCTestCase {
         var flow = BreakFlow(isRecovery: false)
         flow.appear(sceneIsActive: true)
         let prepare = flow.beginPrepare(remainingAtPrepare: 300)
-        flow.finishPrepare(prepare)
-        flow.finishNotificationScheduling(prepare)
+        XCTAssertNil(flow.finishPrepare(prepare))
+        let scheduling = flow.beginNotificationScheduling()
+        flow.finishNotificationScheduling(scheduling)
         XCTAssertEqual(flow.tickAtEnd(), .repeating)
+    }
+
+    // MARK: - FocusView's order
+
+    /// testARecoveredFocusThatEndsOnScreenRingsUntilStopped: a focus
+    /// recovered on a cold launch reaches 00:00 on screen and must ring.
+    func testARecoveredFocusThatEndsOnScreenAfterAColdLaunchRings() {
+        var flow = FocusFlow(isRecovery: true, remaining: 4)
+        let activation = flow.appear(sceneIsActive: false)
+        XCTAssertNil(flow.returnToScene())
+        XCTAssertNil(flow.finishActivation(activation))
+
+        flow.reachEnd()
+        XCTAssertEqual(flow.tick(), .repeating)
+    }
+
+    func testARecoveredFocusThatEndsOnScreenRingsWhenItsActivationFinishesFirst() {
+        var flow = FocusFlow(isRecovery: true, remaining: 4)
+        let activation = flow.appear(sceneIsActive: false)
+        XCTAssertNil(flow.finishActivation(activation))
+        XCTAssertNil(flow.returnToScene())
+
+        flow.reachEnd()
+        XCTAssertEqual(flow.tick(), .repeating)
+    }
+
+    func testAFocusThatEndedWhileTheAppWasClosedIsMarkedOnceOnRelaunch() {
+        var flow = FocusFlow(isRecovery: true, remaining: 0)
+        let activation = flow.appear(sceneIsActive: false)
+        XCTAssertNil(flow.finishActivation(activation), "Never resolved while inactive")
+
+        XCTAssertEqual(flow.returnToScene(secondsSinceEnd: 20), .single)
+        XCTAssertNil(flow.tick(), "The engine completes once")
+    }
+
+    func testAFocusThatEndedWhileClosedIsSilentWhenTheNotificationMayHaveArrived() {
+        var flow = FocusFlow(isRecovery: true, remaining: 0)
+        let activation = flow.appear(sceneIsActive: false)
+        XCTAssertNil(flow.finishActivation(activation))
+
+        XCTAssertEqual(
+            flow.returnToScene(secondsSinceEnd: 5, notificationMayHaveDelivered: true),
+            Cue.none
+        )
+    }
+
+    func testAFocusRecoveredLongAfterItsEndIsSilent() {
+        var flow = FocusFlow(isRecovery: true, remaining: 0)
+        let activation = flow.appear(sceneIsActive: true)
+        XCTAssertEqual(
+            flow.finishActivation(activation, secondsSinceEnd: 600),
+            Cue.none
+        )
+    }
+
+    func testANewFocusThatEndsOnScreenRings() {
+        var flow = FocusFlow(isRecovery: false, remaining: 1_500)
+        let activation = flow.appear(sceneIsActive: true)
+        XCTAssertNil(flow.finishActivation(activation))
+
+        flow.reachEnd()
+        XCTAssertEqual(flow.tick(), .repeating)
+    }
+
+    func testAFocusThatEndsInTheBackgroundIsMarkedOnceOnReturn() {
+        var flow = FocusFlow(isRecovery: false, remaining: 1_500)
+        let activation = flow.appear(sceneIsActive: true)
+        XCTAssertNil(flow.finishActivation(activation))
+        flow.leaveScene(toBackground: true)
+
+        flow.reachEnd()
+        XCTAssertNil(flow.tick(), "Never resolved in the background")
+        XCTAssertEqual(flow.returnToScene(secondsSinceEnd: 10), .single)
+    }
+
+    func testAFocusThatEndsDuringAnInactiveInterruptionStillRings() {
+        var flow = FocusFlow(isRecovery: false, remaining: 1_500)
+        let activation = flow.appear(sceneIsActive: true)
+        XCTAssertNil(flow.finishActivation(activation))
+        flow.leaveScene(toBackground: false)
+
+        flow.reachEnd()
+        XCTAssertNil(flow.tick())
+        XCTAssertEqual(flow.returnToScene(secondsSinceEnd: 3), .repeating)
+    }
+
+    func testARecoveredEndWaitingForANotificationAddIsStillARecovery() {
+        var flow = FocusFlow(isRecovery: true, remaining: 0)
+        let activation = flow.appear(sceneIsActive: false)
+        XCTAssertNil(flow.finishActivation(activation))
+        flow.isSchedulingNotification = true
+        XCTAssertNil(flow.returnToScene(secondsSinceEnd: 2))
+
+        flow.isSchedulingNotification = false
+        XCTAssertEqual(flow.tick(secondsSinceEnd: 3), .single)
     }
 }
 
-/// Replays BreakTimerView's decision points with the real gate, recovery
-/// state and cue policy. Only the order of calls is simulated.
+/// BreakTimerView's calls into `TimerForegroundResolution`, in the view's
+/// order. As in the view, the decision answers the recovery question before
+/// `signalBreakCompletionIfNeeded` checks `didSignalCompletion`.
 private struct BreakFlow {
-    struct Prepare {
-        let token: UInt64
-        let remainingAtPrepare: Int
+    typealias Cue = TimerCompletionForegroundFeedbackPolicy.Cue
+
+    struct Refresh {
+        let generation: UInt64
     }
 
-    private var gate = TimerForegroundResolutionGate()
-    private var activation: TimerRecoveryActivation
+    private var resolution: TimerForegroundResolution
     private var remaining = 1
-    private var signalled: TimerCompletionForegroundFeedbackPolicy.Cue?
+    private var didSignalCompletion = false
     private let endedAt = Date(timeIntervalSinceReferenceDate: 90_000)
 
     init(isRecovery: Bool) {
-        activation = TimerRecoveryActivation(isRecovery: isRecovery)
+        resolution = TimerForegroundResolution(isRecovery: isRecovery)
     }
 
+    /// prepareBreak, before its first suspension.
     mutating func appear(sceneIsActive: Bool) {
-        gate.observeAppearance(sceneIsActive: sceneIsActive)
+        resolution.observeAppearance(sceneIsActive: sceneIsActive)
     }
 
-    mutating func beginPrepare(remainingAtPrepare: Int) -> Prepare {
+    /// prepareBreak reads its end date, then starts its permission refresh.
+    mutating func beginPrepare(remainingAtPrepare: Int) -> Refresh {
         remaining = remainingAtPrepare
-        if remainingAtPrepare > 0 { activation.observeRunning() }
-        return Prepare(token: gate.generation, remainingAtPrepare: remainingAtPrepare)
+        if remainingAtPrepare > 0 { resolution.observeRunning() }
+        return Refresh(generation: resolution.generation)
     }
 
-    /// The end of prepareBreak's permission refresh.
-    @discardableResult
+    /// prepareBreak's refresh finishes. A running break goes on to
+    /// refreshNotificationScheduling.
     mutating func finishPrepare(
-        _ prepare: Prepare,
+        _ refresh: Refresh,
         secondsSinceEnd: TimeInterval = 0
-    ) -> TimerCompletionForegroundFeedbackPolicy.Cue? {
-        gate.finishAuthorizationRefresh(startedIn: prepare.token)
-        guard prepare.remainingAtPrepare == 0 else { return nil }
-        guard gate.authorizationIsCurrent else { return nil }
-        return signal(returnedFromBackground: false, secondsSinceEnd: secondsSinceEnd)
+    ) -> Cue? {
+        resolution.finishAuthorizationRefresh(startedIn: refresh.generation)
+        guard case let .resolve(recoveredAfterExpiration) =
+                resolution.prepared(isElapsed: remaining == 0) else { return nil }
+        return signal(
+            recoveredAfterExpiration: recoveredAfterExpiration,
+            returnedFromBackground: false,
+            secondsSinceEnd: secondsSinceEnd
+        )
     }
 
-    /// refreshNotificationScheduling's refresh, taken in the same
-    /// generation as prepareBreak's.
-    mutating func finishNotificationScheduling(_ prepare: Prepare) {
-        gate.finishAuthorizationRefresh(startedIn: prepare.token)
+    /// refreshNotificationScheduling starts its own permission refresh.
+    func beginNotificationScheduling() -> Refresh {
+        Refresh(generation: resolution.generation)
+    }
+
+    mutating func finishNotificationScheduling(_ refresh: Refresh) {
+        guard !didSignalCompletion else { return }
+        resolution.finishAuthorizationRefresh(startedIn: refresh.generation)
     }
 
     /// onChange(.active), its refresh, then
     /// handleActiveSceneAfterAuthorizationRefresh.
-    @discardableResult
     mutating func sceneBecameActive(
         secondsSinceEnd: TimeInterval = 0,
         notificationMayHaveDelivered: Bool = false
-    ) -> TimerCompletionForegroundFeedbackPolicy.Cue? {
-        let token = gate.observeScene(isActive: true)
-        guard gate.finishAuthorizationRefresh(startedIn: token) else { return nil }
-        guard remaining == 0 else {
-            activation.observeRunning()
-            return nil
-        }
+    ) -> Cue? {
+        let generation = resolution.observeScene(isActive: true)
+        guard !didSignalCompletion,
+              resolution.finishAuthorizationRefresh(startedIn: generation)
+        else { return nil }
+        guard case let .resolve(recoveredAfterExpiration) = resolution.activated(
+            isElapsed: remaining == 0,
+            isSchedulingNotification: false
+        ) else { return nil }
         return signal(
+            recoveredAfterExpiration: recoveredAfterExpiration,
             returnedFromBackground: false,
             secondsSinceEnd: secondsSinceEnd,
             notificationMayHaveDelivered: notificationMayHaveDelivered
         )
     }
 
-    /// The same recovery as `sceneBecameActive`, when the OS notification
-    /// may already have announced the end.
-    func sceneBecameActiveAfterNotification() -> TimerCompletionForegroundFeedbackPolicy.Cue? {
-        var copy = BreakFlow(isRecovery: true)
-        copy.appear(sceneIsActive: false)
-        let prepare = copy.beginPrepare(remainingAtPrepare: 0)
-        copy.finishPrepare(prepare)
-        return copy.sceneBecameActive(secondsSinceEnd: 5, notificationMayHaveDelivered: true)
-    }
-
     /// The 0.5 s ticker once the countdown reaches 00:00 on screen.
-    mutating func tickAtEnd() -> TimerCompletionForegroundFeedbackPolicy.Cue? {
+    mutating func tickAtEnd() -> Cue? {
         remaining = 0
-        guard gate.allowsForegroundResolution(scenePhaseIsActive: true) else {
-            return nil
-        }
-        return signal(returnedFromBackground: false, secondsSinceEnd: 0)
+        guard case let .resolve(recoveredAfterExpiration) = resolution.tick(
+            isElapsed: true,
+            scenePhaseIsActive: true,
+            isSchedulingNotification: false
+        ) else { return nil }
+        return signal(
+            recoveredAfterExpiration: recoveredAfterExpiration,
+            returnedFromBackground: false,
+            secondsSinceEnd: 0
+        )
     }
 
     private mutating func signal(
+        recoveredAfterExpiration: Bool,
         returnedFromBackground: Bool,
         secondsSinceEnd: TimeInterval,
         notificationMayHaveDelivered: Bool = false
-    ) -> TimerCompletionForegroundFeedbackPolicy.Cue? {
-        guard signalled == nil else { return nil }
+    ) -> Cue? {
         let cue = TimerCompletionForegroundFeedbackPolicy.cue(
-            recoveredAfterExpiration: activation.consumeRecoveredAfterExpiration(),
+            recoveredAfterExpiration: recoveredAfterExpiration,
             returnedFromBackground: returnedFromBackground,
             notificationMayHaveDelivered: notificationMayHaveDelivered,
             endedAt: endedAt,
             now: endedAt.addingTimeInterval(secondsSinceEnd)
         )
-        signalled = cue
+        guard !didSignalCompletion else { return nil }
+        didSignalCompletion = true
+        return cue
+    }
+}
+
+/// FocusView's calls into `TimerForegroundResolution`, in the view's order.
+/// The engine completes a focus once, which stands in for the view's guard.
+private struct FocusFlow {
+    typealias Cue = TimerCompletionForegroundFeedbackPolicy.Cue
+
+    struct Activation {
+        let generation: UInt64
+    }
+
+    var isSchedulingNotification = false
+    private var resolution: TimerForegroundResolution
+    private var remaining: Int
+    private var sceneIsActive = false
+    private var didEnterBackgroundSinceLastActive = false
+    private var isCompleted = false
+    private let endedAt = Date(timeIntervalSinceReferenceDate: 90_000)
+
+    init(isRecovery: Bool, remaining: Int) {
+        resolution = TimerForegroundResolution(isRecovery: isRecovery)
+        self.remaining = remaining
+    }
+
+    /// beginActivation, before its first suspension; activate then starts
+    /// its permission refresh.
+    mutating func appear(sceneIsActive: Bool) -> Activation {
+        self.sceneIsActive = sceneIsActive
+        resolution.observeAppearance(sceneIsActive: sceneIsActive)
+        return Activation(generation: resolution.generation)
+    }
+
+    /// activate's refresh finishes, and it reads the recovered timer.
+    mutating func finishActivation(
+        _ activation: Activation,
+        secondsSinceEnd: TimeInterval = 0
+    ) -> Cue? {
+        resolution.finishAuthorizationRefresh(startedIn: activation.generation)
+        guard case let .resolve(recoveredAfterExpiration) =
+                resolution.prepared(isElapsed: remaining == 0) else { return nil }
+        return complete(
+            recoveredAfterExpiration: recoveredAfterExpiration,
+            returnedFromBackground: false,
+            secondsSinceEnd: secondsSinceEnd
+        )
+    }
+
+    /// onChange(of: scenePhase) to inactive or background.
+    mutating func leaveScene(toBackground: Bool) {
+        sceneIsActive = false
+        resolution.observeScene(isActive: false)
+        if toBackground { didEnterBackgroundSinceLastActive = true }
+    }
+
+    /// onChange(.active), its refresh, then handleScenePhase(to: .active).
+    mutating func returnToScene(
+        secondsSinceEnd: TimeInterval = 0,
+        notificationMayHaveDelivered: Bool = false
+    ) -> Cue? {
+        sceneIsActive = true
+        let generation = resolution.observeScene(isActive: true)
+        guard resolution.finishAuthorizationRefresh(startedIn: generation) else {
+            return nil
+        }
+        let decision = resolution.activated(
+            isElapsed: remaining == 0,
+            isSchedulingNotification: isSchedulingNotification
+        )
+        // The view keeps the background-return flag only while it waits.
+        guard decision != .wait else { return nil }
+        let returnedFromBackground = didEnterBackgroundSinceLastActive
+        didEnterBackgroundSinceLastActive = false
+        guard case let .resolve(recoveredAfterExpiration) = decision else {
+            return nil
+        }
+        return complete(
+            recoveredAfterExpiration: recoveredAfterExpiration,
+            returnedFromBackground: returnedFromBackground,
+            secondsSinceEnd: secondsSinceEnd,
+            notificationMayHaveDelivered: notificationMayHaveDelivered
+        )
+    }
+
+    mutating func reachEnd() {
+        remaining = 0
+    }
+
+    /// The 0.5 s ticker, with the phase it is handed.
+    mutating func tick(secondsSinceEnd: TimeInterval = 0) -> Cue? {
+        guard case let .resolve(recoveredAfterExpiration) = resolution.tick(
+            isElapsed: remaining == 0,
+            scenePhaseIsActive: sceneIsActive,
+            isSchedulingNotification: isSchedulingNotification
+        ) else { return nil }
+        let returnedFromBackground = didEnterBackgroundSinceLastActive
+        didEnterBackgroundSinceLastActive = false
+        return complete(
+            recoveredAfterExpiration: recoveredAfterExpiration,
+            returnedFromBackground: returnedFromBackground,
+            secondsSinceEnd: secondsSinceEnd
+        )
+    }
+
+    private mutating func complete(
+        recoveredAfterExpiration: Bool,
+        returnedFromBackground: Bool,
+        secondsSinceEnd: TimeInterval,
+        notificationMayHaveDelivered: Bool = false
+    ) -> Cue? {
+        let cue = TimerCompletionForegroundFeedbackPolicy.cue(
+            recoveredAfterExpiration: recoveredAfterExpiration,
+            returnedFromBackground: returnedFromBackground,
+            notificationMayHaveDelivered: notificationMayHaveDelivered,
+            endedAt: endedAt,
+            now: endedAt.addingTimeInterval(secondsSinceEnd)
+        )
+        guard !isCompleted else { return nil }
+        isCompleted = true
         return cue
     }
 }
