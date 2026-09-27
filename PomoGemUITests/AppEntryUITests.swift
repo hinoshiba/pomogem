@@ -139,6 +139,126 @@ final class AppEntryUITests: XCTestCase {
         wait(for: [enabled], timeout: 10)
     }
 
+    /// A form the person may be typing in is never closed for a request:
+    /// it waits, and starts once they close the form themselves.
+    func testStartLinkKeepsAnOpenManualEntryAndStartsAfterItCloses() throws {
+        openMenuAction(containing: "手動で積む")
+        let thirtyMinutes = app.buttons["30分、300グラム加算"]
+        XCTAssertTrue(thirtyMinutes.waitForExistence(timeout: 6))
+        waitForUISettle(600_000)
+        thirtyMinutes.tap()
+        let confirm = app.buttons["manual.confirm"]
+        if !confirm.waitForExistence(timeout: 3), thirtyMinutes.exists, thirtyMinutes.isHittable {
+            thirtyMinutes.tap()
+        }
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "30分 is chosen, not yet saved")
+
+        openLink(URL(string: "pomogem://focus/start?minutes=25")!)
+        waitForUISettle(1_500_000)
+
+        XCTAssertTrue(confirm.exists, "The person's choice in 手動で積む is kept")
+        XCTAssertFalse(focusTimerDisplay.exists, "Nothing starts over the form")
+        retain("Start link while 手動で積む is open — the form stays")
+
+        let close = app.buttons["閉じる"].firstMatch
+        XCTAssertTrue(waitForHittable(close, timeout: 4))
+        close.tap()
+
+        let timer = focusTimerDisplay
+        XCTAssertTrue(
+            timer.waitForExistence(timeout: 10),
+            "Closing the form lets the waiting 25-minute start through"
+        )
+        let remaining = try timerRemainingSeconds(timer)
+        XCTAssertLessThanOrEqual(remaining, 25 * 60)
+        XCTAssertGreaterThan(remaining, 24 * 60)
+    }
+
+    /// A start waiting behind the fusion celebration belongs to 「続ける」.
+    /// Choosing the crystal's breakdown instead drops it: the overview the
+    /// person asked for stays, and no focus opens over it.
+    func testStartLinkWaitingOnTheCelebrationYieldsToItsBreakdown() throws {
+        executionTimeAllowance = 600
+        app.terminate()
+        // Ten completions cross the review threshold; keep the App Store
+        // review prompt out of this test.
+        app.launchArguments += ["-review.requested-version", "1.0"]
+        app.launch()
+        XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 10))
+        selectDemoDuration()
+        for _ in 1 ... 9 {
+            completeDemoFocusAndDismissReward()
+        }
+        tapDemoLauncher()
+        stopCompletionAlertIfPresented()
+        let dismissReward = app.buttons["休憩の提案を閉じる"]
+        XCTAssertTrue(dismissReward.waitForExistence(timeout: 30))
+        dismissReward.tap()
+        let celebration = app.staticTexts["10粒を、ひとつに整理した"]
+        XCTAssertTrue(celebration.waitForExistence(timeout: 12))
+
+        openLink(URL(string: "pomogem://focus/start?minutes=25")!)
+        waitForUISettle(1_500_000)
+        XCTAssertTrue(celebration.exists, "The celebration is the person's to close")
+        XCTAssertFalse(focusTimerDisplay.exists)
+
+        app.buttons["この結晶の内訳を見る"].tap()
+        let overview = app.navigationBars.matching(
+            NSPredicate(format: "identifier IN %@", ["積み上がり", "まとまり粒"])
+        ).firstMatch
+        XCTAssertTrue(overview.waitForExistence(timeout: 8), "The breakdown opens")
+        waitForUISettle(2_500_000)
+        XCTAssertTrue(overview.exists, "The breakdown stays open")
+        XCTAssertFalse(
+            focusTimerDisplay.exists,
+            "The waiting start was dropped, not fired over the breakdown"
+        )
+        retain("Start link behind the celebration, then 内訳 — breakdown kept")
+    }
+
+    /// A break whose time is up keeps the request: its screen says so, and
+    /// 「瓶へ戻る」 then starts the focus that was asked for.
+    func testStartLinkOnAnEndedBreakStartsAfterReturningToTheJar() throws {
+        executionTimeAllowance = 720
+        app.terminate()
+        // Keep the suggestion at five minutes regardless of the shared
+        // simulator's previous rest cadence.
+        app.launchArguments += ["-focus.rest-cadence.v2", "break-return-ui-test-reset"]
+        app.launch()
+        XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 10))
+        selectDemoDuration()
+        tapDemoLauncher()
+        stopCompletionAlertIfPresented()
+        let startBreak = app.buttons["5分休憩する"]
+        XCTAssertTrue(waitForHittable(startBreak, timeout: 30))
+        startBreak.tap()
+        XCTAssertTrue(app.staticTexts["休憩"].waitForExistence(timeout: 12))
+
+        // Leave until the five minutes are over, then ask from outside.
+        XCUIDevice.shared.press(.home)
+        sleep(310)
+        openLink(URL(string: "pomogem://focus/start?minutes=25")!)
+
+        let breakEnd = app.buttons["break.completion-alert.stop"]
+        XCTAssertTrue(breakEnd.waitForExistence(timeout: 12))
+        let waitingLine = app.staticTexts["break.waiting-focus-start"]
+        XCTAssertTrue(waitingLine.waitForExistence(timeout: 6))
+        XCTAssertEqual(waitingLine.label, "瓶へ戻ると、集中が始まります")
+        XCTAssertFalse(focusTimerDisplay.exists)
+        retain("Start link on an ended break — waits for 瓶へ戻る")
+
+        XCTAssertTrue(waitForHittable(breakEnd, timeout: 3))
+        breakEnd.tap()
+        let timer = focusTimerDisplay
+        XCTAssertTrue(
+            timer.waitForExistence(timeout: 12),
+            "Returning to the jar lets the waiting start through"
+        )
+        let remaining = try timerRemainingSeconds(timer)
+        XCTAssertLessThanOrEqual(remaining, 25 * 60)
+        XCTAssertGreaterThan(remaining, 24 * 60)
+    }
+
     // MARK: - Helpers
 
     /// Opens a link in the running app, the way a widget tap does.
@@ -174,6 +294,36 @@ final class AppEntryUITests: XCTestCase {
             demo.tap()
         }
         XCTAssertTrue(waitForHittable(launcher, timeout: 5))
+    }
+
+    private func tapDemoLauncher() {
+        let launcher = button(containing: "12秒集中する")
+        XCTAssertTrue(waitForHittable(launcher, timeout: 8))
+        launcher.tap()
+    }
+
+    private func stopCompletionAlertIfPresented() {
+        let stop = app.buttons["focus.completion-alert.stop"]
+        if stop.waitForExistence(timeout: 30) {
+            stop.tap()
+        }
+    }
+
+    /// One 12-second demo focus, then 「閉じる」 on its reward card. Waits
+    /// for the launcher again: the receipt is retired only when the gem lands.
+    private func completeDemoFocusAndDismissReward() {
+        tapDemoLauncher()
+        stopCompletionAlertIfPresented()
+        let dismissReward = app.buttons["休憩の提案を閉じる"]
+        XCTAssertTrue(dismissReward.waitForExistence(timeout: 30))
+        dismissReward.tap()
+        let launcher = button(containing: "12秒集中する")
+        if !launcher.waitForExistence(timeout: 3) { selectDemoDuration() }
+        let enabled = expectation(
+            for: NSPredicate(format: "exists == true AND isEnabled == true"),
+            evaluatedWith: launcher
+        )
+        wait(for: [enabled], timeout: 12)
     }
 
     private func openMenuAction(containing title: String) {

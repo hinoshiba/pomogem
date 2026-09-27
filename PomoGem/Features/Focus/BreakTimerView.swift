@@ -14,6 +14,8 @@ struct BreakTimerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
+    /// Optional: previews and tests present the break without a router.
+    @Environment(AppRouter.self) private var router: AppRouter?
     @Query private var preferences: [Prefs]
     @Query private var activityResetMarkers: [ActivityResetMarker]
     @ScaledMetric(relativeTo: .largeTitle) private var timerFontSize: CGFloat = 72
@@ -294,8 +296,29 @@ struct BreakTimerView: View {
             .multilineTextAlignment(.center)
     }
 
+    /// A widget, link or Siri start asked for while this break was over.
+    /// Home keeps it until 「瓶へ戻る」 and then starts it
+    /// (FocusStartEntryPolicy), so say so here, where the person is. The
+    /// ticker re-reads it, so the line leaves when the request expires.
+    private var focusStartWaitsForReturn: Bool {
+        guard remaining == 0, let request = router?.pendingFocusStart else {
+            return false
+        }
+        return AppEntryInbox.isFresh(
+            request.receivedAtUptime,
+            at: ContinuousUptime.now()
+        )
+    }
+
     @ViewBuilder
     private var completionActions: some View {
+        if focusStartWaitsForReturn {
+            Text("瓶へ戻ると、集中が始まります", tableName: "Focus")
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(PomoGemTheme.amber)
+                .multilineTextAlignment(.center)
+                .accessibilityIdentifier("break.waiting-focus-start")
+        }
         if remaining == 0 {
             if completionAlert.isActive(sessionID: sessionID) {
                 VStack(spacing: 7) {

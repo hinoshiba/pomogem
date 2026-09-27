@@ -1039,6 +1039,7 @@ struct HomeView: View {
                     didOfferMonthLabelHint = true
                 },
                 onOpen: {
+                    dropFocusStartWaitingOnCelebration()
                     opensMonthLabelPaywallAfterCelebration = true
                     dismissCompletedStratum()
                 }
@@ -3319,6 +3320,7 @@ struct HomeView: View {
     }
 
     private func shareCompletedStratum(_ request: PendingStratumCelebration) {
+        dropFocusStartWaitingOnCelebration()
         isDeferringCelebrationsForShare = true
         completedStratum = nil
         Task { @MainActor in
@@ -3333,6 +3335,7 @@ struct HomeView: View {
     }
 
     private func exploreCompletedStratum() {
+        dropFocusStartWaitingOnCelebration()
         overviewInitialClusterID = completedStratum?.id
         completedStratum = nil
         Task { @MainActor in
@@ -3394,6 +3397,14 @@ struct HomeView: View {
 
     private var focusStartEntrySnapshot: FocusStartEntryPolicy.Snapshot? {
         guard let request = router.pendingFocusStart else { return nil }
+        let presentedBreak = breakConfiguration ?? router.recoveredBreak
+        let presentedBreakHasEnded = presentedBreak.map {
+            BreakRecoveryPolicy.remainingSeconds(
+                minutes: $0.minutes,
+                endDate: $0.endDate,
+                at: .now
+            ) == 0
+        } ?? false
         return FocusStartEntryPolicy.Snapshot(
             requestID: request.id,
             isFresh: AppEntryInbox.isFresh(
@@ -3402,27 +3413,41 @@ struct HomeView: View {
             ),
             homeIsVisible: homeIsVisible && router.selectedTab == .jar,
             timerIsPresented: focusConfiguration != nil
-                || breakConfiguration != nil
                 || router.recoveredFocus != nil
-                || router.recoveredBreak != nil
-                || router.focusPresentationIsActive,
+                || router.focusPresentationIsActive
+                || (presentedBreak != nil && !presentedBreakHasEnded),
+            endedBreakIsPresented: presentedBreak != nil && presentedBreakHasEnded,
             focusRecoveryIsPending: router.deferredFocusRecovery != nil
                 || router.cloudFocusRecoveryOffer != nil,
-            rewardChoiceIsPending: breakOffer != nil
-                || breakOfferTask != nil
-                || hasPendingRewardReceipt
+            rewardChoiceIsPending: breakOffer != nil || breakOfferTask != nil,
+            rewardDropIsInProgress: hasPendingRewardReceipt
                 || rewardDropDestination != nil
                 || rewardDropRevealIsPending,
+            otherSurfaceIsPresented: router.paywallPresented || router.sharePresented,
+            entryFormIsPresented: showManualEntry
+                || showAchievementEntry
+                || showCustomDuration,
             closableSurfaceIsPresented: showHomeMenu
                 || showAccumulationOverview
                 || selectedAggregateDetail != nil
-                || showManualEntry
-                || showAchievementEntry
-                || showCustomDuration
                 || showAccumulationPlan,
             celebrationIsPresented: completedStratum != nil,
-            hasTheme: selectedSubject != nil
+            hasTheme: selectedSubject != nil,
+            lengthIsSettled: request.preset != nil
+                || purchase.hasResolvedEntitlements
+                || !savedFocusLengthNeedsPro
         )
+    }
+
+    /// The saved length is a Pro one, so until StoreKit answers, Home's
+    /// selected length is only the free fallback `restorePreferredDuration`
+    /// put there. A start with it would also save 25 over the custom length.
+    private var savedFocusLengthNeedsPro: Bool {
+        guard let seconds = resolvedPreferences?.preferredFocusSeconds else {
+            return false
+        }
+        let saved = PomodoroDuration(totalSeconds: seconds)
+        return saved.isValid && saved.requiresPro
     }
 
     private func handlePendingFocusStart() {
@@ -3434,13 +3459,12 @@ struct HomeView: View {
         case .wait:
             cancelFocusStartEntrySettle()
         case .closeSurfaces:
+            // Read-only sheets only. The entry forms keep what the person
+            // typed; the policy waits for them instead.
             cancelFocusStartEntrySettle()
             showHomeMenu = false
             showAccumulationOverview = false
             selectedAggregateDetail = nil
-            showManualEntry = false
-            showAchievementEntry = false
-            showCustomDuration = false
             showAccumulationPlan = false
         case let .decline(reason):
             cancelFocusStartEntrySettle()
@@ -3482,6 +3506,16 @@ struct HomeView: View {
     private func cancelFocusStartEntrySettle() {
         focusStartEntryTask?.cancel()
         focusStartEntryTask = nil
+    }
+
+    /// A start waiting behind the fusion celebration belongs to 「続ける」.
+    /// The sheet's other actions (the breakdown, the card, the month-label
+    /// link) are the person choosing where to go next, so the request is
+    /// dropped rather than fired over, or after, what they chose.
+    private func dropFocusStartWaitingOnCelebration() {
+        guard router.pendingFocusStart != nil else { return }
+        cancelFocusStartEntrySettle()
+        router.pendingFocusStart = nil
     }
 
     private func persistPreferredFocusSeconds(
