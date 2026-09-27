@@ -2455,6 +2455,12 @@ struct HomeView: View {
             HStack(spacing: 13) {
                 Image(systemName: symbol)
                     .font(.body.weight(.semibold))
+                    // The symbol sits in a fixed 28 pt column so the titles
+                    // line up. At accessibility sizes it grew past that
+                    // column and the row's rounded clip cut its left side
+                    // off (the ▶ and ⚙ glyphs on an iPhone SE at AX5); the
+                    // title and detail beside it keep growing.
+                    .dynamicTypeSize(...DynamicTypeSize.xLarge)
                     .foregroundStyle(PomoGemTheme.amber)
                     .frame(width: 28)
                 VStack(alignment: .leading, spacing: 2) {
