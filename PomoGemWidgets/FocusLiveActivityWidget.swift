@@ -343,7 +343,19 @@ private struct FocusStateText: View {
         )
         .minimumScaleFactor(0.6)
         .lineLimit(1)
+        // `Text(timerInterval:)` takes the whole width it is offered, so the
+        // frame's alignment alone cannot move its digits; the text's own
+        // alignment does (「休憩中 4:41」 floated mid-card on the Lock Screen).
+        .multilineTextAlignment(textAlignment)
         .frame(maxWidth: .infinity, alignment: alignment)
+    }
+
+    private var textAlignment: TextAlignment {
+        switch alignment.horizontal {
+        case .trailing: .trailing
+        case .center: .center
+        default: .leading
+        }
     }
 
     private static func clockText(seconds: Int) -> String {
