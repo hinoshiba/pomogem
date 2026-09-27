@@ -388,6 +388,14 @@ if app_plist.get("ITSAppUsesNonExemptEncryption") is not False:
     fail("app export-compliance declaration differs from the reviewed release")
 if app_plist.get("NSSupportsLiveActivities") is not True:
     fail("app must enable its reviewed account-neutral Live Activity")
+# Focus music (Docs/FocusMusic.md): MusicKit authorization terminates an app
+# without this purpose string, and the Music app plays, never this app.
+if app_plist.get("NSAppleMusicUsageDescription") != (
+    "タイマー画面から『ミュージック』アプリで集中用の音楽を再生するために使います。"
+):
+    fail("app Apple Music purpose string differs from the reviewed Music-app playback control")
+if "audio" in app_plist.get("UIBackgroundModes", []):
+    fail("app must not declare background audio; focus music plays in the Music app")
 if (
     "NSSupportsLiveActivitiesFrequentUpdates" in app_plist
     and app_plist.get("NSSupportsLiveActivitiesFrequentUpdates") is not False
@@ -1040,7 +1048,12 @@ monitor_linked_libraries="$audit_tmp/monitor-linked-libraries.txt"
 if ! /usr/bin/otool -L "$monitor_binary" > "$monitor_linked_libraries" 2>/dev/null; then
   fail 'Screen Time monitor linked-library audit failed'
 fi
-for required_framework in '/DeviceActivity.framework/DeviceActivity' '/FamilyControls.framework/FamilyControls'; do
+# ManagedSettings: the focus shield's kill-proof removal clears its named
+# store from this extension when the failsafe interval ends (F2).
+for required_framework in \
+  '/DeviceActivity.framework/DeviceActivity' \
+  '/FamilyControls.framework/FamilyControls' \
+  '/ManagedSettings.framework/ManagedSettings'; do
   if ! LC_ALL=C /usr/bin/grep -Fq "$required_framework" "$monitor_linked_libraries"; then
     fail 'Screen Time monitor is missing a reviewed Screen Time framework'
   fi

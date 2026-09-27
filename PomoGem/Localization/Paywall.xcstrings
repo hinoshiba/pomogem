@@ -1,7 +1,105 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
-
+    "App Storeに接続できませんでした。通信状態を確認して、もう一度お試しください。" : {
+      "comment" : "Paywall error: no connection to the App Store during a purchase or restore"
+    },
+    "App Storeに接続できませんでした。通信状態を確認して、商品情報を再読み込みしてください。" : {
+      "comment" : "Paywall error under 「商品情報を読み込めませんでした」: no connection to the App Store"
+    },
+    "App Storeの購入情報を確認できませんでした。時間をおいて、もう一度お試しください。" : {
+      "comment" : "Paywall error: the signed App Store transaction did not verify"
+    },
+    "お使いのApple Accountの国や地域では、この商品を購入できません。" : {
+      "comment" : "Paywall error: the item is not sold in this App Store storefront"
+    },
+    "このApple Accountでは、ポモジェムProの購入が見つかりませんでした。購入したときと同じApple Accountでサインインしているか確認してください。" : {
+      "comment" : "Paywall alert: restore found no Pro purchase for the signed-in Apple Account"
+    },
+    "このiPhoneでは、App内での購入が制限されています。「設定」の「スクリーンタイム」から「コンテンツとプライバシーの制限」を確認してください。" : {
+      "comment" : "Paywall error: In-App Purchases are turned off in Screen Time (Content & Privacy Restrictions)"
+    },
+    "この商品は現在購入できません。時間をおいて、もう一度お試しください。" : {
+      "comment" : "Paywall error: the App Store reports the product as unavailable"
+    },
+    "もう一度リクエスト" : {
+      "comment" : "Paywall button while a purchase awaits approval: ask again"
+    },
+    "スクリーンタイムで記録する勉強アプリ。無料は5つまで" : {
+      "comment" : "Paywall feature detail: the free plan records up to five study apps"
+    },
+    "ポモジェムProが使えるようになりました" : {
+      "comment" : "Toast: an approved (Ask to Buy) Pro purchase arrived"
+    },
+    "ポモジェムProが使えるようになりました。" : {
+      "comment" : "Paywall alert after a completed purchase"
+    },
+    "ポモジェムProが使えるようになりました。勉強アプリを数の制限なく選べます。" : {
+      "comment" : "Paywall alert after buying from Screen Time's study-app limit"
+    },
+    "ポモジェムProが使えるようになりました。結晶に、作った月が表示されます。" : {
+      "comment" : "Paywall alert after buying from the crystal month-label hint"
+    },
+    "ポモジェムProが使えるようになりました。閉じると、集中時間を選ぶ画面が開きます。" : {
+      "comment" : "Paywall alert after buying from the custom duration control; the editor opens next"
+    },
+    "勉強アプリ数が無制限" : {
+      "comment" : "Paywall feature title: unlimited Screen Time study apps"
+    },
+    "復元できる購入がありません" : {
+      "comment" : "Paywall alert title: restore found no purchase"
+    },
+    "承認されると、自動でProが使えるようになります。届かないときは、もう一度リクエストできます。" : {
+      "comment" : "Paywall notice under 承認待ち: what happens next"
+    },
+    "承認を待っています" : {
+      "comment" : "Paywall alert title: the purchase awaits approval (Ask to Buy)"
+    },
+    "承認待ち" : {
+      "comment" : "Paywall notice title: a purchase request awaits approval"
+    },
+    "時間をおいて、もう一度お試しください。" : {
+      "comment" : "Paywall error body under a failure title when the cause is not known"
+    },
+    "時間をおいて、商品情報を再読み込みしてください。" : {
+      "comment" : "Paywall error under 「商品情報を読み込めませんでした」 when the cause is not known"
+    },
+    "無料の25・45・60・90分のほか、%@を秒単位で選べます" : {
+      "comment" : "Paywall feature detail; the argument is the Pro range, e.g. 1〜360分"
+    },
+    "粒が10個集まってできる結晶に、作った月を刻みます" : {
+      "comment" : "Paywall feature detail: what the month label is"
+    },
+    "結晶に、作った月を刻めます。" : {
+      "comment" : "Paywall subtitle when opened from the crystal month-label hint"
+    },
+    "結晶に月を刻む" : {
+      "comment" : "Paywall feature title: crystals show the month they were made"
+    },
+    "自由な集中時間" : {
+      "comment" : "Paywall feature title: any focus length"
+    },
+    "自由な集中時間を選べます。" : {
+      "comment" : "Paywall subtitle when opened from the custom focus duration control"
+    },
+    "表示の例：%@" : {
+      "comment" : "VoiceOver: an example month label; the argument is a month such as 2026年9月"
+    },
+    "記録・テーマ・iCloud同期・シェアなど、ほかの機能はすべて無料で使えます。" : {
+      "comment" : "Paywall note under the Pro features: everything else stays free"
+    },
+    "購入のリクエストを送りました。承認されると、自動でProが使えるようになります。この画面は閉じても大丈夫です。" : {
+      "comment" : "Paywall alert: the purchase request was sent and Pro turns on by itself once approved"
+    },
+    "購入を完了できませんでした" : {
+      "comment" : "Paywall alert title: the purchase failed"
+    },
+    "購入を復元しました。Proの機能を使えます。" : {
+      "comment" : "Paywall alert: restore found the Pro purchase"
+    },
+    "購入を復元できませんでした" : {
+      "comment" : "Paywall alert title: restoring purchases failed"
+    }
   },
   "version" : "1.0"
 }
