@@ -249,4 +249,43 @@ final class CompletionCardPresentationTests: XCTestCase {
             "毎日 7:30 にお知らせします"
         )
     }
+
+    /// product-05: the fusion sheet teaches the time core only when the
+    /// completion that made the first ×10 also made the core.
+    func testCoreBirthIsTaughtOnlyWhenTheFirstCrystalAndCoreArriveTogether() {
+        func born(total: Int, latest: Int, pebbles: Int, lowerBound: Bool = false) -> Bool {
+            CompletionCardPresentation.bornCoreWithFirstFusion(
+                effortProgress: EffortProgressPolicy.snapshot(totalGrams: total, latestContributionGrams: latest),
+                fusionState: FusionRewardBridgePresentation.state(totalPebbleCount: pebbles),
+                projectionIsLowerBound: lowerBound
+            )
+        }
+        XCTAssertTrue(born(total: 2_500, latest: 250, pebbles: 10), "Ten 25-minute gems")
+        XCTAssertFalse(born(total: 6_000, latest: 600, pebbles: 10), "The core came at the fifth hour-long gem")
+        XCTAssertFalse(born(total: 1_000, latest: 100, pebbles: 10), "Ten short gems: a crystal, no core yet")
+        XCTAssertFalse(born(total: 3_000, latest: 600, pebbles: 5), "A core without a crystal")
+        XCTAssertFalse(born(total: 5_000, latest: 250, pebbles: 20), "A later crystal")
+        XCTAssertFalse(born(total: 2_500, latest: 250, pebbles: 10, lowerBound: true))
+        XCTAssertFalse(CompletionCardPresentation.bornCoreWithFirstFusion(
+            effortProgress: nil,
+            fusionState: FusionRewardBridgePresentation.state(totalPebbleCount: 10),
+            projectionIsLowerBound: false
+        ))
+
+        func celebration(pebbles: Int, level: Int?) -> PendingStratumCelebration {
+            PendingStratumCelebration(
+                id: UUID(),
+                createdAt: .now,
+                pebbleCount: pebbles,
+                grams: pebbles * 250,
+                monthLabel: "2026年9月",
+                colorHex: nil,
+                level: level,
+                projectionCacheStamp: nil
+            )
+        }
+        XCTAssertTrue(StratumCelebrationTeaching.isFirstCrystal(celebration(pebbles: 10, level: 1)))
+        XCTAssertTrue(StratumCelebrationTeaching.isFirstCrystal(celebration(pebbles: 10, level: nil)))
+        XCTAssertFalse(StratumCelebrationTeaching.isFirstCrystal(celebration(pebbles: 100, level: 2)))
+    }
 }

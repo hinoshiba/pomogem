@@ -52,7 +52,7 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
 
         startDemoFocus()
         stopCompletionAlertIfPresented(in: app)
-        let celebrationTitle = app.staticTexts["10粒を、ひとつに整理した"]
+        let celebrationTitle = app.staticTexts["fusion.celebration.title"]
         let dismissBreak = app.buttons["休憩の提案を閉じる"]
 
         XCTAssertTrue(
@@ -75,19 +75,21 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
             celebrationTitle.waitForExistence(timeout: 10),
             "Ten landed level-zero pebbles must present the first decimal-fusion celebration"
         )
-        XCTAssertTrue(app.staticTexts["2.5kg"].waitForExistence(timeout: 3))
-        let continuityCopy = app.staticTexts.matching(
-            NSPredicate(
-                format: "label CONTAINS %@ AND label CONTAINS %@ AND label CONTAINS %@",
-                "一粒ずつの時間",
-                "2.5kg",
-                "急ぐ必要はありません"
+        XCTAssertTrue(app.staticTexts["重さはそのまま 2.50kg"].waitForExistence(timeout: 3))
+        // product-05: the first ×10 made the time core too, so this sheet
+        // (and no later one) teaches it once.
+        XCTAssertTrue(app.staticTexts["fusion.celebration.core-birth"].exists)
+        XCTAssertFalse(app.staticTexts["LOSSLESS STORAGE"].exists)
+        // The mechanics sit behind 「しくみ」, and VoiceOver reads them whether
+        // it is open or not.
+        let continuityCopy = app.buttons["fusion.celebration.mechanics"]
+        XCTAssertTrue(continuityCopy.waitForExistence(timeout: 3))
+        for phrase in ["一粒ずつの時間", "2.50kg", "急ぐ必要はありません"] {
+            XCTAssertTrue(
+                continuityCopy.label.contains(phrase),
+                "The fusion explanation must preserve each effort, exact mass, and an unhurried next step: \(continuityCopy.label)"
             )
-        ).firstMatch
-        XCTAssertTrue(
-            continuityCopy.waitForExistence(timeout: 3),
-            "The fusion explanation must preserve each effort, exact mass, and an unhurried next step"
-        )
+        }
 
         app.buttons["この結晶をカードにする"].tap()
         XCTAssertTrue(app.navigationBars["カードにする"].waitForExistence(timeout: 8))
@@ -247,7 +249,7 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         XCTAssertTrue(dismissBreak.waitForExistence(timeout: 28))
         dismissBreak.tap()
 
-        let celebrationTitle = app.staticTexts["10粒を、ひとつに整理した"]
+        let celebrationTitle = app.staticTexts["fusion.celebration.title"]
         XCTAssertTrue(celebrationTitle.waitForExistence(timeout: 10))
         let hint = app.buttons["fusion.celebration.month-label-hint"]
         XCTAssertTrue(hint.waitForExistence(timeout: 4))

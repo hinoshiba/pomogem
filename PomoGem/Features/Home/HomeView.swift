@@ -181,6 +181,9 @@ struct HomeView: View {
     @State private var postDropMechanicsExpanded = false
     /// D18: the first completion's 「明日もこの時間に？」, for that card only.
     @State private var reminderOffer: CompletionReminderOffer?
+    /// product-05: the card just acknowledged made the first ×10 and the
+    /// time core together, so the fusion sheet that follows says so, once.
+    @State private var coreBirthTeachingIsPending = false
     /// Read only to keep 月のまとめ as it is when the card's reminder
     /// offer books the daily reminder (Settings owns the switch).
     @AppStorage(AccountScopedLocalState.defaultsKey(base: "notifications.wrapped"))
@@ -1076,7 +1079,7 @@ struct HomeView: View {
     }
 
     private func stratumCelebrationSheet(_ request: PendingStratumCelebration) -> some View {
-        StratumCelebrationView(
+        let sheet = StratumCelebrationView(
             request: request,
             // The crystal's own colour mix, as the jar paints the same ×10
             // (the receipt keeps only its dominant colour).
@@ -1087,6 +1090,8 @@ struct HomeView: View {
                 )
             } ?? [],
             showsMonthLabel: purchase.isPro,
+            teachesCoreBirth: coreBirthTeachingIsPending
+                && StratumCelebrationTeaching.isFirstCrystal(request),
             onExplore: exploreCompletedStratum,
             onShare: { shareCompletedStratum(request) },
             onContinue: dismissCompletedStratum,
@@ -1113,6 +1118,13 @@ struct HomeView: View {
         // promise remain readable; study value advances separately by mass.
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+#if DEBUG && targetEnvironment(simulator)
+        // A sheet owns a separate presentation host: forward the pinned AX5
+        // UI-test value, as the Overview sheet does.
+        return sheet.forwardingUITestAccessibility5()
+#else
+        return sheet
+#endif
     }
 
     private func jarCard(height: CGFloat) -> some View {
@@ -3072,6 +3084,14 @@ struct HomeView: View {
         }
         TimerCompletionAlertAcknowledgementStore.mark(sessionID: offer.id)
         TimerCompletionAlertController.shared.stop(sessionID: offer.id)
+        let shown = presentedOffer(offer)
+        if CompletionCardPresentation.bornCoreWithFirstFusion(
+            effortProgress: shown.effortProgress,
+            fusionState: shown.fusionState,
+            projectionIsLowerBound: shown.projectionIsLowerBound
+        ) {
+            coreBirthTeachingIsPending = true
+        }
         breakOfferTask?.cancel()
         breakOfferTask = nil
         shareChipTask?.cancel()
@@ -3845,6 +3865,8 @@ struct HomeView: View {
             PendingStratumCelebrationStore.remove(id: presentedStratumID)
             self.presentedStratumID = nil
         }
+        // The teaching line belongs to the one sheet after that card.
+        coreBirthTeachingIsPending = false
         presentNextStratumCelebrationIfNeeded()
     }
 
@@ -4386,6 +4408,8 @@ struct HomeView: View {
                 breakOfferTask = nil
                 return
             }
+            // A newer completion ends a teaching moment whose sheet never came.
+            coreBirthTeachingIsPending = false
             postDropMechanicsExpanded = false
             withAnimation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.86)) {
                 breakOffer = withWeeklySelfReport(BreakOffer(receipt: receipt))
@@ -5219,6 +5243,22 @@ enum CompletionCardPresentation {
         while value.hasSuffix("0"), !value.hasSuffix(".0") { value.removeLast() }
         return value
     }
+
+    // MARK: The fusion sheet's one teaching moment (product-05)
+
+    /// The completion that made the first ×10 also brought lifetime focus to
+    /// the first time core: 「10粒で、時間の核が生まれました。…」 is said
+    /// on that fusion sheet and never again.
+    static func bornCoreWithFirstFusion(
+        effortProgress: EffortProgressSnapshot?,
+        fusionState: FusionRewardBridgeState,
+        projectionIsLowerBound: Bool
+    ) -> Bool {
+        guard !projectionIsLowerBound, let effortProgress else { return false }
+        return effortProgress.crossedMilestoneGrams == EffortProgressPolicy.firstMilestoneGrams
+            && fusionState.totalPebbleCount == FusionHierarchyPresentation.fanIn
+            && fusionState.completedFusionLevels == [1]
+    }
 }
 
 /// D18: where the first completion card's 「明日もこの時間に？」 stands.
@@ -5359,6 +5399,13 @@ private struct MechanicsDisclosure<Content: View>: View {
         .accessibilityHint(Text("説明の表示を切り替えます", tableName: "Home",
                                 comment: "VoiceOver hint: toggles the 「しくみ」 disclosure"))
         .accessibilityAddTraits(.isButton)
+    }
+}
+
+/// product-05: the fusion sheet's one teaching line is for the first ×10.
+enum StratumCelebrationTeaching {
+    static func isFirstCrystal(_ request: PendingStratumCelebration) -> Bool {
+        request.pebbleCount == FusionHierarchyPresentation.fanIn && max(1, request.level ?? 1) == 1
     }
 }
 
@@ -5530,17 +5577,33 @@ struct MonthLabelHint {
     let onOpen: () -> Void
 }
 
+/// The fusion sheet (Docs/GemExperienceDesign.md §8.3, D8): 「10粒ぶんの時間
+/// が、ひとつの結晶に。」 over the new crystal with its ten sources in a
+/// shallow bowl beneath it, 「重さはそのまま 2.50kg」, and the mechanics
+/// behind 「しくみ」. Nothing covers the art. The first ×10 that also made the
+/// time core says so, once (product-05). On a short screen the art shrinks
+/// so the actions stay in the first viewport; at accessibility sizes the
+/// actions come right after the two lines and the art follows them.
 private struct StratumCelebrationView: View {
     let request: PendingStratumCelebration
     /// The crystal's colour shares; empty uses the receipt's colour.
     let colorShares: [GemColorShare]
     let showsMonthLabel: Bool
+    /// product-05: this is the first ×10 and the same completion made the
+    /// time core.
+    var teachesCoreBirth = false
     let onExplore: () -> Void
     let onShare: () -> Void
     let onContinue: () -> Void
     var monthLabelHint: MonthLabelHint?
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var mechanicsExpanded = false
+    /// The height of what shares the first viewport with the art.
+    @State private var leadHeight: CGFloat = 0
+
+    private static let largestArt: CGFloat = 256
+    private static let smallestArt: CGFloat = 120
 
     private var colorHex: String {
         request.colorHex ?? Constants.Color.amberLamp
@@ -5564,106 +5627,39 @@ private struct StratumCelebrationView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 22) {
-                    SectionEyebrow(text: "LOSSLESS STORAGE")
-
-                    ZStack(alignment: .bottom) {
-                        RoundedRectangle(cornerRadius: 28, style: .continuous)
-                            .fill(
-                                RadialGradient(
-                                    colors: [
-                                        Color(hex: colorHex).opacity(0.19),
-                                        PomoGemTheme.auroraViolet.opacity(0.10),
-                                        PomoGemTheme.raised.opacity(0.58)
-                                    ],
-                                    center: .center,
-                                    startRadius: 4,
-                                    endRadius: 170
-                                )
-                            )
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                                    .stroke(Color(hex: colorHex).opacity(0.30), lineWidth: 1)
-                            }
-
-                        // The pill sits under the stage (round 12), never
-                        // over the lowest of the ten gems.
-                        VStack(spacing: 6) {
-                            FusionOrbitStage(
-                                state: orbitState,
-                                colorHex: colorHex,
-                                scale: .hero,
-                                destinationGrams: request.grams,
-                                colorShares: colorShares
-                            )
-                            .frame(width: 206, height: 206)
-
-                            HStack(spacing: 8) {
-                                Text("瓶の整理")
-                                    .foregroundStyle(PomoGemTheme.muted)
-                                Text("10")
-                                Image(systemName: "arrow.right")
-                                    .accessibilityHidden(true)
-                                Text("1")
-                                Text("・ 記録 100% 保持")
-                                    .foregroundStyle(PomoGemTheme.muted)
-                            }
-                            .font(.system(.caption, design: .rounded, weight: .black))
-                            .monospacedDigit()
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(PomoGemTheme.card.opacity(0.92), in: Capsule())
-                            .overlay(Capsule().stroke(.white.opacity(0.16), lineWidth: 0.7))
-                        }
-                        .padding(.bottom, 10)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 256)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(
-                        "瓶の整理として、10個の記録を1個の\(AggregatePresentation.title(level: level))へ圧縮。記録と質量は100パーセント保持。時間の価値は変わりません"
-                    )
-
-                    VStack(spacing: 8) {
-                        Text("\(request.pebbleCount)粒を、ひとつに整理した")
-                            .font(PomoGemTheme.brand(24))
-                            .multilineTextAlignment(.center)
-                        Text("これは瓶を軽く保つための二次的な整理です。保存表示だけを圧縮し、一粒ずつの時間も、\(formattedMass(request.grams))の質量も100%保持します。時間の核は回数でなく質量から進みます。次へ急ぐ必要はありません。")
-                            .font(.subheadline)
-                            .foregroundStyle(PomoGemTheme.muted)
-                            .multilineTextAlignment(.center)
-                    }
-                    Group {
+            GeometryReader { viewport in
+                ScrollView {
+                    VStack(spacing: 18) {
                         if dynamicTypeSize.isAccessibilitySize {
-                            VStack(spacing: 10) {
-                                celebrationStats
+                            VStack(spacing: 18) {
+                                celebrationLines
+                                celebrationActions
                             }
+                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { leadHeight = $0 }
+                            celebrationStage(side: artSide(viewportHeight: viewport.size.height, minimum: 96, maximum: 160))
+                            coreBirthLine
                         } else {
-                            HStack(spacing: 10) {
-                                celebrationStats
+                            celebrationStage(side: artSide(viewportHeight: viewport.size.height))
+                            VStack(spacing: 18) {
+                                celebrationLines
+                                coreBirthLine
+                                celebrationActions
                             }
+                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { leadHeight = $0 }
+                        }
+                        celebrationStats
+                        celebrationMechanics
+                        // settings-04: last, small and muted, below every
+                        // celebration action. Layout owned by the gem session;
+                        // this adds one row and restyles nothing above it.
+                        if let monthLabelHint {
+                            monthLabelHintLink(monthLabelHint)
                         }
                     }
-                    Button("この結晶の内訳を見る", action: onExplore)
-                        .buttonStyle(PomoGemPrimaryButtonStyle())
-                    Button("この結晶をカードにする", action: onShare)
-                        .buttonStyle(PomoGemSecondaryButtonStyle())
-                    Button("ここで休む", action: onContinue)
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(PomoGemTheme.muted)
-                        .frame(minHeight: 44)
-                        .buttonStyle(PomoGemBareButtonStyle())
-                    // settings-04: last, small and muted, below every
-                    // celebration action. Layout owned by the gem session;
-                    // this adds one row and restyles nothing above it.
-                    if let monthLabelHint {
-                        monthLabelHintLink(monthLabelHint)
-                    }
+                    .padding(24)
                 }
-                .padding(24)
+                .scrollBounceBehavior(.basedOnSize)
             }
-            .scrollBounceBehavior(.basedOnSize)
             .background(NightBackground())
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -5674,6 +5670,151 @@ private struct StratumCelebrationView: View {
                 }
             }
         }
+    }
+
+    /// The art takes what the first viewport has left after the lines and
+    /// the actions, within `minimum`…`maximum`.
+    private func artSide(
+        viewportHeight: CGFloat,
+        minimum: CGFloat = smallestArt,
+        maximum: CGFloat = largestArt
+    ) -> CGFloat {
+        // Top padding, the gap under the art and a little air at the bottom.
+        let room = viewportHeight - leadHeight - 24 - 18 - 12
+        return min(maximum, max(minimum, room.rounded(.down)))
+    }
+
+    /// The new crystal in the jar's art with its ten sources in a shallow
+    /// bowl beneath it (no ring, no spokes, nothing over the gems).
+    private func celebrationStage(side: CGFloat) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(hex: colorHex).opacity(0.19),
+                            PomoGemTheme.auroraViolet.opacity(0.10),
+                            PomoGemTheme.raised.opacity(0.58)
+                        ],
+                        center: .center,
+                        startRadius: 4,
+                        endRadius: side * 0.66
+                    )
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .stroke(Color(hex: colorHex).opacity(0.30), lineWidth: 1)
+                }
+
+            FusionOrbitStage(
+                state: orbitState,
+                colorHex: colorHex,
+                scale: .hero,
+                destinationGrams: request.grams,
+                colorShares: colorShares
+            )
+            .frame(width: side * 0.86, height: side * 0.86)
+            // The bowl hangs low in the stage; keep it clear of the edge.
+            .offset(y: -side * 0.02)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: side)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(level == 1
+            ? String(localized: "新しい結晶。その下に、もとになった\(FusionHierarchyPresentation.fanIn)粒", table: "Home",
+                     comment: "VoiceOver: the fusion sheet art, a new ×10 crystal over its source gems. %lld is 10")
+            : String(localized: "新しい結晶。その下に、もとになった\(FusionHierarchyPresentation.fanIn)個の結晶", table: "Home",
+                     comment: "VoiceOver: the fusion sheet art, a larger crystal over its source crystals. %lld is 10"))
+    }
+
+    private var celebrationLines: some View {
+        VStack(spacing: 6) {
+            // The line break keeps 「結晶」 whole on a phone.
+            Text("\(request.pebbleCount)粒ぶんの時間が、\nひとつの結晶に。", tableName: "Home",
+                 comment: "Fusion sheet headline, two lines. %lld is the gems the new crystal holds (10). en: 'The time of %lld gems,\\nin one crystal.'")
+                .font(PomoGemTheme.brand(24))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("fusion.celebration.title")
+            Text(String(
+                localized: "重さはそのまま \(Self.massLabel(grams: request.grams))",
+                table: "Home",
+                comment: "Fusion sheet subline: the crystal weighs what its gems did. %@ is a mass (2.50kg). en: 'Same weight: %@'"
+            ))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(PomoGemTheme.muted)
+                .monospacedDigit()
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                .accessibilityIdentifier("fusion.celebration.mass")
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// product-05. The one teaching moment: said on this sheet and no other.
+    @ViewBuilder
+    private var coreBirthLine: some View {
+        if teachesCoreBirth {
+            Text("10粒で、時間の核が生まれました。これからは核が、積み上げた時間の重さを表します。", tableName: "Home",
+                 comment: "Fusion sheet, only when the first crystal and the first time core arrive together")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(PomoGemTheme.text)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
+                .background(
+                    Color(hex: colorHex).opacity(0.10),
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color(hex: colorHex).opacity(0.26), lineWidth: 0.8)
+                }
+                .accessibilityIdentifier("fusion.celebration.core-birth")
+        }
+    }
+
+    private var celebrationActions: some View {
+        VStack(spacing: 12) {
+            Button("この結晶の内訳を見る", action: onExplore)
+                .buttonStyle(PomoGemPrimaryButtonStyle())
+            Button("この結晶をカードにする", action: onShare)
+                .buttonStyle(PomoGemSecondaryButtonStyle())
+            Button("ここで休む", action: onContinue)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(PomoGemTheme.muted)
+                .frame(minHeight: 44)
+                .buttonStyle(PomoGemBareButtonStyle())
+        }
+    }
+
+    private var celebrationMechanics: some View {
+        let lines = [
+            String(localized: "10粒がそろうと、瓶の中でひとつの結晶にまとまります。瓶を軽く保つための整理で、一粒ずつの時間も、\(Self.massLabel(grams: request.grams))の重さも、記録にそのまま残ります。", table: "Home",
+                   comment: "Fusion sheet 「しくみ」: fusing ten gems keeps the jar light and loses nothing. %@ is the crystal's mass"),
+            String(localized: "時間の核は、粒の数ではなく積み上げた時間で進みます。次へ急ぐ必要はありません。", table: "Home",
+                   comment: "Fusion sheet 「しくみ」: the time core counts time, not gems; no need to hurry"),
+            String(localized: "×10の結晶が10個そろうと、×100の結晶になります。", table: "Home",
+                   comment: "Fusion sheet 「しくみ」: ten ×10 crystals make a ×100 crystal")
+        ]
+        return MechanicsDisclosure(
+            isExpanded: $mechanicsExpanded,
+            accessibilityAccounting: SentenceText.join(lines),
+            accentHex: colorHex
+        ) {
+            ForEach(lines, id: \.self) { line in
+                Text(line)
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityIdentifier("fusion.celebration.mechanics")
     }
 
     private func monthLabelHintLink(_ hint: MonthLabelHint) -> some View {
@@ -5700,21 +5841,51 @@ private struct StratumCelebrationView: View {
         .onAppear(perform: hint.onShown)
     }
 
-    @ViewBuilder
+    /// Time first, then the gems (or Pro's engraved month), then the size:
+    /// 「時間 4時間10分」「粒 10粒」「結晶 ×10」.
     private var celebrationStats: some View {
-        StatPill(
-            title: "まとまり",
-            value: showsMonthLabel ? request.monthLabel : "\(request.pebbleCount)粒"
-        )
-        StatPill(title: "積んだ質量", value: formattedMass(request.grams))
-        // The tile names the crystal's size (×10, ×100…): its title already
-        // says 結晶 (round 12; the value repeated it).
-        StatPill(title: "結晶", value: AggregatePresentation.countLabel(request.pebbleCount))
+        let tiles: [CelebrationTile] = [
+            CelebrationTile(title: String(localized: "時間", table: "Home", comment: "Fusion sheet tile title: the focus time the crystal holds. en: 'Time'"),
+                            value: DurationText.short(minutes: DurationPresentation.focusMinutes(grams: request.grams))),
+            showsMonthLabel
+                ? CelebrationTile(title: String(localized: "刻印", table: "Home", comment: "Fusion sheet tile title for Pro: the month engraved on the crystal. en: 'Engraving'"),
+                                  value: request.monthLabel)
+                : CelebrationTile(title: String(localized: "粒", table: "Home", comment: "Fusion sheet tile title: how many gems the crystal holds. en: 'Gems'"),
+                                  value: CountText.gems(request.pebbleCount)),
+            // The size, not the noun: the tile is titled 結晶 (round 12).
+            CelebrationTile(title: String(localized: "結晶", table: "Home", comment: "Fusion sheet tile title: the crystal's size (×10). en: 'Crystal'"),
+                            value: AggregatePresentation.countLabel(request.pebbleCount))
+        ]
+        return Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 10) {
+                    ForEach(tiles) { StatPill(title: $0.title, value: $0.value) }
+                }
+            } else {
+                HStack(spacing: 10) {
+                    ForEach(tiles) { StatPill(title: $0.title, value: $0.value) }
+                }
+            }
+        }
     }
 
-    private func formattedMass(_ grams: Int) -> String {
-        grams >= 1_000 ? String(format: "%.1fkg", Double(grams) / 1_000) : "\(grams)g"
+    /// 「2.50kg」 (two decimals: the crystal weighs exactly what its gems
+    /// did), or 「100g」 under a kilogram.
+    static func massLabel(grams rawGrams: Int) -> String {
+        let grams = max(0, rawGrams)
+        guard grams >= 1_000 else { return MassText.grams(String(grams)) }
+        return MassText.kilograms(String(
+            format: "%.2f",
+            locale: Locale(identifier: "en_US_POSIX"),
+            Double(grams) / 1_000
+        ))
     }
+}
+
+private struct CelebrationTile: Identifiable {
+    let title: String
+    let value: String
+    var id: String { title }
 }
 
 private struct StatPill: View {
@@ -5723,13 +5894,34 @@ private struct StatPill: View {
     var body: some View {
         VStack(spacing: 3) {
             Text(title).font(.caption2).foregroundStyle(PomoGemTheme.muted)
-            Text(value).font(.system(.subheadline, design: .rounded, weight: .bold))
+            Text(value)
+                .font(.system(.subheadline, design: .rounded, weight: .bold))
+                .monospacedDigit()
         }
         .frame(maxWidth: .infinity)
         .padding(12)
         .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .combine)
     }
 }
+
+#if DEBUG && targetEnvironment(simulator)
+private extension View {
+    /// The pinned AX5 of an explicit Debug UI-test launch, for a sheet
+    /// (which does not inherit it from the root).
+    @ViewBuilder
+    func forwardingUITestAccessibility5() -> some View {
+        if LocalPreviewLaunchPolicy.forcesAccessibility5(
+            environment: ProcessInfo.processInfo.environment,
+            isDebugBuild: true
+        ) {
+            environment(\.dynamicTypeSize, .accessibility5)
+        } else {
+            self
+        }
+    }
+}
+#endif
 
 #if DEBUG && targetEnvironment(simulator)
 /// Fault-scenario-only raw SwiftData audit. Home deliberately canonicalizes

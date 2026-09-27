@@ -1588,7 +1588,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         retainScreenshot(named: "Tenth Reward Bridge — exact completed orbit")
 
         dismissBridge.tap()
-        let celebration = app.staticTexts["10粒を、ひとつに整理した"]
+        let celebration = app.staticTexts["fusion.celebration.title"]
         XCTAssertTrue(celebration.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["2.5kg"].waitForExistence(timeout: 4))
         waitForUISettle()
