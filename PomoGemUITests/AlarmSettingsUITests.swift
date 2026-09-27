@@ -37,7 +37,7 @@ final class AlarmSettingsUITests: XCTestCase {
         // The sound: eight choices, the alarm-grade five first.
         let soundRow = element("settings.completion-sound")
         XCTAssertTrue(reveal(soundRow))
-        XCTAssertTrue(describe(soundRow).contains("標準"), describe(soundRow))
+        XCTAssertTrue(describe(soundRow).contains("澄んだチャイム"), "The synced chime until one is chosen: \(describe(soundRow))")
         soundRow.tap()
         XCTAssertTrue(app.navigationBars["タイマー終了音"].waitForExistence(timeout: 5))
         let raws = ["bell", "digital", "marimba", "schoolChime", "alarmClock", "standard", "soft", "bright"]
@@ -56,7 +56,9 @@ final class AlarmSettingsUITests: XCTestCase {
         let softHint = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS %@", "「アラーム」の音から選んでください")
         ).firstMatch
-        XCTAssertTrue(reveal(softHint), "やわらか points people who miss the end to the alarms")
+        if !softHint.exists { app.swipeUp() }
+        XCTAssertTrue(softHint.waitForExistence(timeout: 3), "やわらかいベル points people who miss the end to the alarms")
+        XCTAssertTrue(softHint.label.contains("「やわらかいベル」は音が小さく"), softHint.label)
         retainScreenshot(named: "Timer end sound list")
         goBack(from: "タイマー終了音")
         XCTAssertTrue(reveal(soundRow))

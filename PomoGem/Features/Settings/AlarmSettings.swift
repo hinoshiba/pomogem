@@ -146,10 +146,14 @@ enum AlarmSoundPreview {
 }
 
 /// The eight sounds, the five alarm-grade ones first. Choosing one plays it.
+/// The checkmark moves at once; `onSelect` writes the choice (device-local,
+/// or the synced chime for one of the original three).
 struct AlarmSoundPickerView: View {
     let selection: AlarmSoundChoice
     let strength: AlarmStrength
     let onSelect: (AlarmSoundChoice) -> Void
+
+    @State private var current: AlarmSoundChoice?
 
     private static let alarms: [AlarmSoundChoice] = AlarmSoundChoice.allCases.filter { $0.synthesizedSound != nil }
     private static let chimes: [AlarmSoundChoice] = AlarmSoundChoice.allCases.filter { $0.legacySound != nil }
@@ -173,9 +177,9 @@ struct AlarmSoundPickerView: View {
                 Text("チャイム", tableName: "Settings", comment: "Header of the three original, softer timer end chimes. Suggested English: Chimes")
             } footer: {
                 Text(
-                    "「やわらか」は音が小さく、iPhoneのスピーカーでは聞こえにくいことがあります。終わりに気付かないときは、「アラーム」の音から選んでください。",
+                    "「やわらかいベル」は音が小さく、iPhoneのスピーカーでは聞こえにくいことがあります。終わりに気付かないときは、「アラーム」の音から選んでください。",
                     tableName: "Settings",
-                    comment: "Footer under the chimes in the timer end sound list. Suggested English: Soft is quiet and can be hard to hear on the iPhone speaker. If you miss the end, choose one of the Alarms."
+                    comment: "Footer under the chimes in the timer end sound list; names the Soft Bell chime. Suggested English: Soft Bell is quiet and can be hard to hear on the iPhone speaker. If you miss the end, choose one of the Alarms."
                 )
             }
         }
@@ -187,13 +191,19 @@ struct AlarmSoundPickerView: View {
             // Rendered off the main thread, so the first tap plays at once.
             for choice in Self.alarms { SoundSynth.shared.prepareAlarmSound(choice) }
         }
+        .onChange(of: selection) { _, newValue in current = newValue }
+    }
+
+    private func choose(_ choice: AlarmSoundChoice) {
+        current = choice
+        onSelect(choice)
+        AlarmSoundPreview.play(choice, strength: strength)
     }
 
     private func row(_ choice: AlarmSoundChoice) -> some View {
-        let isSelected = choice == selection
+        let isSelected = choice == (current ?? selection)
         return Button {
-            onSelect(choice)
-            AlarmSoundPreview.play(choice, strength: strength)
+            choose(choice)
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: choice.systemImage)
@@ -226,10 +236,7 @@ struct AlarmSoundPickerView: View {
         .accessibilityHint(Text(verbatim: choice.detail))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("settings.completion-sound.\(choice.rawValue)")
-        .accessibilityAction {
-            onSelect(choice)
-            AlarmSoundPreview.play(choice, strength: strength)
-        }
+        .accessibilityAction { choose(choice) }
     }
 }
 
@@ -237,6 +244,8 @@ struct AlarmSoundPickerView: View {
 struct AlarmStrengthPickerView: View {
     let selection: AlarmStrength
     let onSelect: (AlarmStrength) -> Void
+
+    @State private var current: AlarmStrength?
 
     var body: some View {
         List {
@@ -256,12 +265,18 @@ struct AlarmStrengthPickerView: View {
         .background(NightBackground())
         .navigationTitle(Text(verbatim: AlarmSettingsCopy.strengthRowTitle))
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: selection) { _, newValue in current = newValue }
+    }
+
+    private func choose(_ strength: AlarmStrength) {
+        current = strength
+        onSelect(strength)
     }
 
     private func row(_ strength: AlarmStrength) -> some View {
-        let isSelected = strength == selection
+        let isSelected = strength == (current ?? selection)
         return Button {
-            onSelect(strength)
+            choose(strength)
         } label: {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -290,6 +305,6 @@ struct AlarmStrengthPickerView: View {
         .accessibilityHint(Text(verbatim: strength.detail))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("settings.alarm-strength.\(strength.rawValue)")
-        .accessibilityAction { onSelect(strength) }
+        .accessibilityAction { choose(strength) }
     }
 }

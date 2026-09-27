@@ -862,11 +862,11 @@ struct SettingsView: View {
                     Text(verbatim: alarmSound.title)
                         .foregroundStyle(PomoGemTheme.muted)
                 }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(Text(verbatim: AlarmSettingsCopy.soundRowTitle))
-                .accessibilityValue(Text(verbatim: alarmSound.title))
             }
             .disabled(!sensoryPreferences.soundOn)
+            .accessibilityLabel(Text(verbatim: AlarmSettingsCopy.soundRowTitle))
+            .accessibilityValue(Text(verbatim: alarmSound.title))
+            .accessibilityHint(Text(verbatim: alarmSound.detail))
             .accessibilityIdentifier("settings.completion-sound")
 
             Toggle(isOn: settingBinding(
@@ -923,11 +923,10 @@ struct SettingsView: View {
                     Text(verbatim: alarmStrength.title)
                         .foregroundStyle(PomoGemTheme.muted)
                 }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(Text(verbatim: AlarmSettingsCopy.strengthRowTitle))
-                .accessibilityValue(Text(verbatim: alarmStrength.title))
-                .accessibilityHint(Text(verbatim: alarmStrength.detail))
             }
+            .accessibilityLabel(Text(verbatim: AlarmSettingsCopy.strengthRowTitle))
+            .accessibilityValue(Text(verbatim: alarmStrength.title))
+            .accessibilityHint(Text(verbatim: alarmStrength.detail))
             .accessibilityIdentifier("settings.alarm-strength")
 
             alarmMaximumStatusRow
