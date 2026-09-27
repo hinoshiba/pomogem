@@ -472,6 +472,34 @@ class StringsdataTests(unittest.TestCase):
         finally:
             fixture.close()
 
+    def test_app_shortcut_phrases_are_skipped_without_hiding_their_file(self):
+        fixture = FixtureRepo()
+        try:
+            intent = "PomoGem/App/Intents/StartFocusIntent.swift"
+            fixture.catalog("PomoGem/Localization/Focus.xcstrings", {"集中を始める": {}})
+            derived = self.build(fixture, {
+                "PomoGem": {intent: {"Focus": ["集中を始める"]}},
+                "PomoGemWidgets": {"PomoGemWidgets/A.swift": {}},
+                "PomoGemScreenTimeMonitor": {"PomoGemScreenTimeMonitor/A.swift": {}},
+            })
+            # The App Intents metadata processor writes the phrases after the
+            # compile, naming the same source file.
+            objects = Path(derived) / "Build/Intermediates.noindex/PomoGem.build/Debug-iphonesimulator/PomoGem.build/Objects-normal/arm64"
+            phrases = objects / "ExtractedAppShortcutsMetadata.stringsdata"
+            phrases.write_text(json.dumps({
+                "source": str(fixture.root / intent),
+                "tables": {"AppShortcuts": [{"key": "${applicationName}で集中を始める", "values": ["${applicationName}で集中を始める"]}]},
+                "version": 2,
+            }, ensure_ascii=False), encoding="utf-8")
+            later = (fixture.root / intent).stat().st_mtime + 60
+            os.utime(phrases, (later, later))
+            code, output = fixture.run("check", "--derived-data", derived, "--verbose")
+            self.assertNotIn("unknown table 'AppShortcuts'", output)
+            self.assertNotIn("is no longer in code", output, "the intent file's own strings must still count")
+            self.assertEqual(code, 0, output)
+        finally:
+            fixture.close()
+
     def test_output_from_another_checkout_is_rejected(self):
         fixture = FixtureRepo()
         try:
