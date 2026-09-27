@@ -26,9 +26,16 @@ App Store Connectでは1.0.2 (9)がReady for Distributionです。1.1.0のdraft�
   2026-09-21の修正後の開発署名Releaseでは到達4件／4件が記録され、両レーンの付与を確認済み。
   20分の一括到達、日付／時刻変更、端末再起動などの未確認条件と最終配布候補の試験は引き続き残す
 - [x] 新しいPro特典を含む実StoreKit価格のIAP審査画像と掲載画像5枚を1.1.0 (10)から再撮影し、目視確認・hash記録
+  （集中用の音楽を入れる前のbuildでの撮影。1.1.0に音楽を含める場合は下の再撮影が残る）
 - [x] 統合コードから署名なしRelease archiveを生成し、3 bundleの構成・privacy・Debugコード不在・dSYM一致を確認（sourceと限界はrelease record参照）
 - [ ] 統合CIと最終配布署名・entitlement検証を完了。署名なしarchiveは配布用の合格ではない
 - [x] Connectのja-JP／en-US掲載文・Review Notes・掲載画像・IAP説明のdraftと審査メモ・画像を保存し、再読込で一致を確認
+  （集中用の音楽を入れる前の原稿での確認。`review-notes-connect.txt`にはその後APPLE MUSICの節を加えた）
+- [ ] 集中用の音楽（`claude/focus-music`、[FocusMusic.md](../Docs/FocusMusic.md)）を1.1.0に含める場合: App ID
+  `com.hinoshiba.pomogem`でMusicKit App Serviceを有効にし、署名した実機で同文書の実機確認を登録あり・登録なしの
+  両方のアカウントで行う。Simulatorの単体テストの合格だけでは閉じない
+- [ ] 同じく含める場合: タイマー見出しに音符buttonが増えるため`ja-JP/02-25-minute-focus.png`を再撮影して目視確認・hash記録し、
+  APPLE MUSICの節を加えたReview NotesをConnectへ再保存して再読込で一致を確認
 - [ ] 改訂した日本語／英語の公開PrivacyをPagesへ反映し、実配信との一致を確認
 - [ ] build 10のupload・処理・versionへの割当・審査提出を確認。自動公開設定の過去の値だけで提出済みとしない
 

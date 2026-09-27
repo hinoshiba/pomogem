@@ -11,8 +11,12 @@ enum AppTab: Hashable {
     case screenTime
 }
 
+/// What the user was doing when a Pro feature sent them to the paywall. A
+/// purchase resumes it once the sheet has closed; a cancel discards it.
 enum PaywallPendingIntent: Equatable {
     case homeCustomDuration
+    /// settings-08. The 「カスタム」 tile of Settings' default focus duration.
+    case settingsCustomDuration
 }
 
 enum ShareScope: Equatable {
@@ -58,6 +62,9 @@ final class AppRouter {
     var selectedTab: AppTab = .jar {
         didSet {
 #if DEBUG
+            if oldValue != .log, selectedTab == .log {
+                logLoadAudit.begin(.open)
+            }
             guard oldValue != .settings, selectedTab == .settings else { return }
             beginSettingsRenderAuditIfNeeded()
 #endif
@@ -68,6 +75,7 @@ final class AppRouter {
     var paywallContext: PaywallContext = .settings
     private(set) var pendingPaywallIntent: PaywallPendingIntent?
     private(set) var homeCustomDurationResumeRequested = false
+    private(set) var settingsCustomDurationResumeRequested = false
     /// Latches once for this process. Home can be recomputed many times while
     /// maintenance saves projections; only the first incomplete rootless page
     /// may ask Root to advance the durable sessions generation.
@@ -100,6 +108,9 @@ final class AppRouter {
 
     @ObservationIgnored
     private var settingsRenderAuditStartedAt: TimeInterval?
+
+    /// 記録's loads, timed from the tap that opens it (see LogLoadAudit).
+    let logLoadAudit = LogLoadAudit()
 
     private func beginSettingsRenderAuditIfNeeded() {
         guard LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess else { return }
@@ -168,13 +179,24 @@ final class AppRouter {
         let intent = pendingPaywallIntent
         pendingPaywallIntent = nil
 
-        guard isPro, intent == .homeCustomDuration else { return }
-        homeCustomDurationResumeRequested = true
+        guard isPro, let intent else { return }
+        switch intent {
+        case .homeCustomDuration:
+            homeCustomDurationResumeRequested = true
+        case .settingsCustomDuration:
+            settingsCustomDurationResumeRequested = true
+        }
     }
 
     func consumeHomeCustomDurationResumeRequest() -> Bool {
         guard homeCustomDurationResumeRequested else { return false }
         homeCustomDurationResumeRequested = false
+        return true
+    }
+
+    func consumeSettingsCustomDurationResumeRequest() -> Bool {
+        guard settingsCustomDurationResumeRequested else { return false }
+        settingsCustomDurationResumeRequested = false
         return true
     }
 

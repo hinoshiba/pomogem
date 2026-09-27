@@ -12,6 +12,11 @@ final class ScreenTimeStore {
         self.directory = directory?.appendingPathComponent("ScreenTime", isDirectory: true)
     }
 
+    /// The ScreenTime folder itself. The focus shield keeps its own record
+    /// there (`FocusShieldRecordStore`), so a store built on a temporary
+    /// directory — every unit test — never reaches the real App Group.
+    var directoryURL: URL? { directory }
+
     func snapshot() throws -> ScreenTimeState { try withState(write: false) { $0 } }
 
     @discardableResult
@@ -94,7 +99,8 @@ final class ScreenTimeStore {
 
     private static let monitoringLockPollInterval: TimeInterval = 0.05
 
-    private static func lockExclusively(_ descriptor: Int32, timeout: TimeInterval?) throws {
+    /// Shared with `FocusShieldRecordStore`, whose lock follows the same rule.
+    static func lockExclusively(_ descriptor: Int32, timeout: TimeInterval?) throws {
         guard let timeout else {
             guard flock(descriptor, LOCK_EX) == 0 else { throw ScreenTimeError.unavailable }
             return

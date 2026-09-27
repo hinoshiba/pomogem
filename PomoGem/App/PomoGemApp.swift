@@ -340,6 +340,14 @@ struct PomoGemApp: App {
         case .inMemoryPreview, .persistentSimulator, .localOnly:
             AccountScopedLocalState.useUnscopedLocalMode()
         }
+#if DEBUG && targetEnvironment(simulator)
+        // The first launch of a UI test forgets the timer, its notification
+        // requests and the queues the previous test left behind; the test's
+        // own relaunches keep them. Simulator only: on a real iPhone the
+        // device tests run against the owner's own store, timer and
+        // notifications, which must never be cleared.
+        UITestLocalStateIsolation.beginScenarioIfNeeded()
+#endif
 
         // StoreKit delivery must begin before persistence preparation or the
         // first view asks for Pro state. The singleton installs its updates
@@ -786,6 +794,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                     PomoGemDataExportShareSheet(fileURL: deviceDataExportURL) { _ in
                         discardDeviceDataExport()
                     }
+                    .systemShareSheetPresentation()
                 }
             }
             .alert("書き出せませんでした", isPresented: Binding(
@@ -1124,6 +1133,12 @@ private struct PomoGemPersistenceLaunchHost: View {
                 environment: ProcessInfo.processInfo.environment
             ) {
                 let schema = PersistenceStoreTopology.shippingSchema
+                // A store this launch creates or wipes starts empty, so any
+                // receipt in UserDefaults still names another store's rows.
+                if fixtureRequest.action != .normal
+                    || !FileManager.default.fileExists(atPath: fixtureRequest.storeURL.path) {
+                    UITestLocalStateIsolation.forgetStateDerivedFromPreviousStores()
+                }
                 let configuration = try FortyYearPersistentUITestFixture.makeConfiguration(
                     schema: schema,
                     request: fixtureRequest
@@ -1144,6 +1159,14 @@ private struct PomoGemPersistenceLaunchHost: View {
             let mode = LocalPreviewLaunchPolicy.persistenceModeForCurrentProcess
             guard mode == .cloudKit else {
                 AccountScopedLocalState.useUnscopedLocalMode()
+#if DEBUG && targetEnvironment(simulator)
+                // Every preview launch (UI test or not) opens a new, empty
+                // in-memory store. Simulator only, like the other two calls:
+                // a Debug build on a real iPhone keeps its queues untouched.
+                if mode == .inMemoryPreview {
+                    UITestLocalStateIsolation.forgetStateDerivedFromPreviousStores()
+                }
+#endif
                 session = try makeLocalSession(mode: mode)
                 return
             }
@@ -3667,6 +3690,11 @@ private struct PomoGemPersistenceLaunchHost: View {
         // the same timer remounts and restores it; otherwise its session never
         // comes back in the new account's namespace.
         TimerCompletionAlertController.shared.suspendForContainerRetirement()
+        // The focus shield goes with the timer's other surfaces: its record is
+        // not owner-bound, and at a cold launch that never admitted
+        // persistence no Screen Time lease exists to retire it. If the account
+        // turns out unchanged, the remounted timer shields again.
+        ScreenTimeController.shared.focusShield.retire(reason: .ownerRetired)
         if let namespace = suspendedAccountBinding?.namespace {
             FocusPersistence.clearScheduledCompletionNotificationWitness(
                 namespace: namespace

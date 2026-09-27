@@ -340,7 +340,10 @@ final class TimerOrientationUITests: XCTestCase {
             XCTAssertTrue(reward.waitForExistence(timeout: 20))
             assertWindowOrientation(isLandscape: false)
             XCTAssertTrue(reveal(reward, towardStart: false))
-            reward.tap()
+            // The card arrives while the scene turns back to portrait; a tap
+            // sent before it settles was lost once, leaving the card (and a
+            // disabled start button) behind.
+            tapUntilGone(reward, "閉じる must close the completion card")
             XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 8))
             // The receipt is retired after the gem lands; the next start
             // (and the next test) needs the launcher enabled again.

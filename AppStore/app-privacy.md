@@ -43,6 +43,10 @@ Apple teamの実際のaccess、mail運用を照合して最終回答します。
 - `AggregatePebble`、`Stratum`、`Bedrock`、`GachaState`の4種類は端末内だけの表示用projectionで、
   同期元記録から再構築しCloudKitへuploadしない
 - 瓶用のCore Motionはその場で処理し、保存・送信しない
+- 1.1.0候補の集中用の音楽は、MusicKit／MediaPlayerで「ミュージック」アプリの再生を操作するだけで、
+  カタログ取得・登録状況の確認・登録の案内はAppleが処理する。選んだ音楽のIDと自動再生の設定だけを
+  このiPhoneのUserDefaultsに保存し、曲名・再生状態・ライブラリ・履歴をdeveloperへ送らないため、
+  この機能自体によるdeveloperのdata collectionはない（[FocusMusic.md](../Docs/FocusMusic.md)）
 - 集中・休憩タイマーはUIKitのdevice orientation通知で上下左右の表示を切り替える。追加の権限要求や
   Core Motion managerの追加はない。端末から届く向きとタイマー中の一時的な手動選択は実行中のメモリだけに
   保持する。設定で選ぶ既定の向き（自動／上／右／下／左）だけをこのiPhoneのUserDefaultsに保存し、
@@ -71,6 +75,12 @@ Apple teamの実際のaccess、mail運用を照合して最終回答します。
 処理される場合があります。これはapp binaryへ組み込んだ
 SDKやappからの自動送信ではありませんが、公開プライバシーポリシーとsupport mailのoptional
 disclosure判断には含めます。
+
+1.1.0の設定「メールで問い合わせる」は、利用者のメールアプリにsupport宛ての下書きを開くだけで、
+app自身は何も送信しません。下書きにはapp version／build、iOS version、機種識別子、保存先、Proの
+利用状況だけを記入し、theme名・memo・集中記録・account識別子・Screen Time診断は入れません。利用者が
+内容を確認・編集して自分で送るため、上記の任意のサポートメールと同じ扱いで判断します
+（Diagnosticsのうち送られるのは利用者が送信を選んだメール本文の範囲だけです）。
 
 サポートメールがoptional disclosureの条件を満たさないと判断される場合は、少なくとも
 Email AddressをApp Functionality（customer support）目的、linked to user、trackingなしとして申告します。

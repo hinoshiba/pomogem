@@ -1026,6 +1026,22 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
                 start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: distance)))
                 continue
             }
+            // An element already laid out off screen says which way to go.
+            // Guessing wrong on a sheet scrolls it back to its top, where the
+            // next swipe down drags the sheet itself and can dismiss it.
+            let frame = element.exists ? element.frame : .zero
+            if !frame.isEmpty {
+                let window = app.windows.firstMatch.frame
+                if frame.minY >= window.maxY - 40 {
+                    app.swipeUp()
+                    continue
+                }
+                let top = app.navigationBars.allElementsBoundByIndex.filter(\.isHittable).map(\.frame.maxY).max() ?? window.minY
+                if frame.maxY <= top {
+                    app.swipeDown()
+                    continue
+                }
+            }
             if upwards { app.swipeUp() } else { app.swipeDown() }
         }
         return element.exists && element.isHittable
