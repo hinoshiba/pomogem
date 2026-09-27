@@ -1171,7 +1171,16 @@ private struct PomoGemPersistenceLaunchHost: View {
                     UITestLocalStateIsolation.forgetStateDerivedFromPreviousStores()
                 }
 #endif
-                session = try makeLocalSession(mode: mode)
+                let localSession = try makeLocalSession(mode: mode)
+#if DEBUG && targetEnvironment(simulator)
+                if mode == .inMemoryPreview {
+                    // Into the cleared queues, before Home reads them.
+                    RewardReceiptUITestFixture.seedIfRequested(
+                        in: localSession.container
+                    )
+                }
+#endif
+                session = localSession
                 return
             }
             // Even an empty transfer-cleanup queue validates foreground
