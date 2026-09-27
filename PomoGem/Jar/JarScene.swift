@@ -447,6 +447,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private(set) var tapPresentationMovedSecondaryCount = 0
     private var aboveEntryPebbleIDs = Set<UUID>()
     private var completionDropTracking: CompletionDropTracking?
+    /// Onboarding's trial gem while it glides down its arc (walk-std-12),
+    /// and how long the arc takes.
+    private var trialDrop: (id: UUID, duration: TimeInterval)?
     /// Retain the last presented completion's evidence after a history refresh.
     /// Ordinary additions and restored bodies never advance this sequence.
     private(set) var completionDropSequence: UInt64 = 0
@@ -1268,6 +1271,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         tapPresentationMovedSecondaryCount = 0
         aboveEntryPebbleIDs.removeAll()
         completionDropTracking = nil
+        trialDrop = nil
         cancelActiveBakeForRestore()
         dropQueue.removeAll()
         mutedLandingIDs.removeAll()
@@ -1602,6 +1606,87 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// then falls through the center of the neck without resizing the bottle.
     func dropFromAbove(_ descriptor: PebbleDescriptor) {
         enqueue(descriptor, delay: .zero, origin: .sceneTop)
+    }
+
+    /// Onboarding's trial gem (walk-std-12): it enters through the neck
+    /// like Home's completion drop, then glides down a slow arc (about
+    /// `fallDuration`, eased like a fall, with a little sideways drift and a
+    /// turn) so a new person sees it arrive. Just above the floor physics
+    /// takes it back, and the ordinary contact gives the landing thud, haptic,
+    /// light and `onLanding`. The arc is timed in the scene's own clock, so
+    /// it takes the same time whatever the frame rate. Recorded gems never
+    /// use this.
+    func dropTrialGem(_ descriptor: PebbleDescriptor, fallDuration: TimeInterval) {
+        trialDrop = (descriptor.id, max(0.2, fallDuration))
+        guard enqueue(descriptor, delay: .zero, origin: .sceneTop) else {
+            trialDrop = nil
+            return
+        }
+    }
+
+    private func startTrialArc(for node: PebbleNode) {
+        guard let trial = trialDrop, trial.id == node.descriptor.id,
+              let body = node.physicsBody
+        else { return }
+        trialDrop = nil
+        let start = node.position
+        let end = CGPoint(
+            x: start.x + interiorRect.width * 0.07,
+            y: currentFloorY + node.radius + 1.5
+        )
+        let startRotation = node.zRotation
+        let duration = trial.duration
+        body.isDynamic = false
+        let glide = SKAction.customAction(withDuration: duration) { node, elapsed in
+            MainActor.assumeIsolated {
+                let t = min(1, max(0, CGFloat(elapsed) / CGFloat(duration)))
+                node.position = CGPoint(
+                    x: start.x + (end.x - start.x) * sin(t * .pi / 2),
+                    y: start.y + (end.y - start.y) * t * t
+                )
+                node.zRotation = startRotation - 0.55 * t
+            }
+        }
+        node.run(.sequence([
+            glide,
+            .run { [weak node] in
+                MainActor.assumeIsolated {
+                    guard let body = node?.physicsBody else { return }
+                    // A fall's speed in the scene's own units: the
+                    // landing thud and haptic are the ordinary ones.
+                    body.isDynamic = true
+                    body.velocity = CGVector(dx: 0, dy: Constants.Jar.dropVerticalSpeed * 2.5)
+                }
+            }
+        ]), withKey: Self.trialArcActionKey)
+    }
+
+    private static let trialArcActionKey = "trial.arc"
+
+    /// Reduce Motion's trial gem: it appears at rest with a short fade
+    /// instead of falling, and the landing still sounds and taps.
+    func placeTrialGem(
+        _ descriptor: PebbleDescriptor,
+        fadeDuration: TimeInterval,
+        completion: @escaping @MainActor () -> Void
+    ) {
+        restore(pebbles: [descriptor])
+        guard let node = livePebbles.first(where: { $0.descriptor.id == descriptor.id }) else {
+            completion()
+            return
+        }
+        node.alpha = 0
+        node.run(.sequence([
+            .fadeIn(withDuration: max(0, fadeDuration)),
+            .run { [weak self] in
+                MainActor.assumeIsolated {
+                    self?.soundSynth.playThud(impactSpeed: Constants.Jar.minimumLandingSpeed)
+                    self?.haptics.playLanding(impactSpeed: Constants.Jar.minimumLandingSpeed)
+                    completion()
+                }
+            }
+        ]))
+        resumeSimulation()
     }
 
     /// Removes items that rotate from the live jar into the permanent record
@@ -3690,6 +3775,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             in: -Constants.Jar.dropHorizontalSpeed ... Constants.Jar.dropHorizontalSpeed
         )
         insertPebble(node)
+        startTrialArc(for: node)
         if origin == .sceneTop {
             completionDropSequence &+= 1
             completionDropMaximumFall = 0
