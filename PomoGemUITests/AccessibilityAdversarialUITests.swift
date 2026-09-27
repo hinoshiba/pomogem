@@ -675,8 +675,7 @@ final class AccessibilityAdversarialUITests: XCTestCase {
             if auditName == "text clipping", !includesTextClipping { continue }
             try XCTContext.runActivity(named: "\(name) — \(auditName)") { _ in
                 let windowFrame = app.windows.firstMatch.frame
-                let scrollView = frontScrollView()
-                let navigationBar = app.navigationBars.firstMatch
+                let (scrollView, navigationBar) = frontScreen()
                 let navigationLabels = navigationBar.exists
                     ? Set(navigationBar.descendants(
                         matching: .any
@@ -727,6 +726,17 @@ final class AccessibilityAdversarialUITests: XCTestCase {
                     if previouslyAuditedIdentifiers.contains(element.identifier),
                        frame.minY < contentTop,
                        frame.maxY > contentTop {
+                        return true
+                    }
+                    // A row that has scrolled partly under the opaque
+                    // navigation bar: the bar is painted over its top, and
+                    // XCTest samples the bar's own colour inside the row's
+                    // frame as if it were the text's. Which row sits there
+                    // depends only on where the last swipe stopped, so the
+                    // same screen passed or failed from run to run (a stat
+                    // tile's 「0」 on a 17 Pro, 「表示中の結晶」 on an SE). Such
+                    // a row counts only in audits that show it in full view.
+                    if frame.minY < contentTop - 0.5, frame.maxY > contentTop + 0.5 {
                         return true
                     }
                     let visible = frame.intersection(viewport)
@@ -836,24 +846,34 @@ final class AccessibilityAdversarialUITests: XCTestCase {
             && frame.maxY <= viewport.maxY
     }
 
-    /// The vertical scroll view of the screen in front. Home stays in the
-    /// hierarchy under a sheet, and at accessibility sizes its scroll view
-    /// now ends above the pinned start button (home-03), so a bare
-    /// `firstMatch` measured Home's shorter frame for 積み上がり and the menu
-    /// and reported their text as outside a viewport it was not in. The
-    /// navigation bar is still the first match, as before.
-    private func frontScrollView() -> XCUIElement {
-        for marker in ["overview.introduction", "planning.accumulation.open"] {
+    /// The vertical scroll view and navigation bar of the screen in front.
+    /// Home stays in the hierarchy under a sheet, and at accessibility sizes
+    /// its scroll view now ends above the pinned start button (home-03), so a
+    /// bare `firstMatch` measured Home's shorter frame and Home's bar for
+    /// 積み上がり and the menu, and reported their text as outside a viewport
+    /// it was not in.
+    private func frontScreen() -> (scrollView: XCUIElement, navigationBar: XCUIElement) {
+        let sheets = [
+            ("overview.introduction", "積み上がり"),
+            ("planning.accumulation.open", "メニュー")
+        ]
+        for (marker, title) in sheets {
             let sheet = app.scrollViews.containing(.any, identifier: marker).firstMatch
-            if sheet.exists { return sheet }
+            if sheet.exists {
+                let bar = app.navigationBars[title]
+                return (sheet, bar.exists ? bar : app.navigationBars.firstMatch)
+            }
         }
-        return app.scrollViews.firstMatch
+        return (app.scrollViews.firstMatch, app.navigationBars.firstMatch)
+    }
+
+    private func frontScrollView() -> XCUIElement {
+        frontScreen().scrollView
     }
 
     private func visibleContentViewport() -> CGRect {
         let windowFrame = app.windows.firstMatch.frame
-        let scrollView = frontScrollView()
-        let navigationBar = app.navigationBars.firstMatch
+        let (scrollView, navigationBar) = frontScreen()
         let scrollFrame = scrollView.exists
             ? windowFrame.intersection(scrollView.frame)
             : windowFrame
