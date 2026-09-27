@@ -208,4 +208,59 @@ final class RewardVocabularyAndHUDTests: XCTestCase {
             .seconds(15)
         )
     }
+
+    /// Home also commits from `onDisappear`, which an account change runs
+    /// after closing the account boundary. A pending entry is written only
+    /// into the account it was confirmed under.
+    func testPendingManualEntryIsNeverWrittenAcrossTheAccountBoundary() throws {
+        let suiteName = "RewardVocabularyAndHUDTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let fingerprint = String(repeating: "a", count: 64)
+        let binding = try XCTUnwrap(ActiveAccountLocalBinding(
+            namespace: AccountDataNamespace(), accountFingerprint: fingerprint
+        ))
+        let other = try XCTUnwrap(ActiveAccountLocalBinding(
+            namespace: AccountDataNamespace(), accountFingerprint: fingerprint
+        ))
+
+        // Local mode without a cloud boundary: nothing to cross.
+        AccountScopedLocalState.useUnscopedLocalMode(standardDefaults: defaults)
+        let local = ManualEntryAccountScope.current(defaults: defaults)
+        XCTAssertFalse(local.boundaryIsClosed)
+        XCTAssertTrue(ManualEntryUndoPolicy.mayCommit(confirmedUnder: local, now: local))
+
+        try AccountScopedLocalState.activate(binding, standardDefaults: defaults)
+        let confirmed = ManualEntryAccountScope.current(defaults: defaults)
+        XCTAssertEqual(confirmed.binding, binding)
+        XCTAssertTrue(ManualEntryUndoPolicy.mayCommit(
+            confirmedUnder: confirmed,
+            now: .current(defaults: defaults)
+        ), "Same account, boundary open: saved as before")
+        XCTAssertFalse(ManualEntryUndoPolicy.mayCommit(confirmedUnder: local, now: confirmed),
+                       "Confirmed in local mode, the store is now an account's")
+
+        // CKAccountChanged: the boundary closes before Home is torn down.
+        AccountScopedLocalState.beginCloudBoundary(standardDefaults: defaults)
+        let closed = ManualEntryAccountScope.current(defaults: defaults)
+        XCTAssertTrue(closed.boundaryIsClosed)
+        XCTAssertFalse(ManualEntryUndoPolicy.mayCommit(confirmedUnder: confirmed, now: closed))
+        XCTAssertFalse(ManualEntryUndoPolicy.mayCommit(confirmedUnder: closed, now: closed),
+                       "Nothing is written while no account is mounted")
+
+        // Another account mounted in between.
+        try AccountScopedLocalState.activate(other, standardDefaults: defaults)
+        XCTAssertFalse(ManualEntryUndoPolicy.mayCommit(
+            confirmedUnder: confirmed,
+            now: .current(defaults: defaults)
+        ))
+
+        // A local-only namespace is an account scope too.
+        let namespace = AccountDataNamespace()
+        AccountScopedLocalState.activateLocalOnly(namespace: namespace, standardDefaults: defaults)
+        let localOnly = ManualEntryAccountScope.current(defaults: defaults)
+        XCTAssertEqual(localOnly.namespace, namespace)
+        XCTAssertFalse(localOnly.boundaryIsClosed)
+        XCTAssertTrue(ManualEntryUndoPolicy.mayCommit(confirmedUnder: localOnly, now: localOnly))
+    }
 }

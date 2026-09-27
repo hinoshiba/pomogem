@@ -342,6 +342,33 @@ struct PendingManualEntry: Identifiable, Equatable {
     let confirmedAt: Date
     /// The reset epoch the entry was confirmed in; a reset in between drops it.
     let dataEpochID: UUID?
+    /// The account the entry was confirmed under; a change in between drops
+    /// it (`ManualEntryUndoPolicy.mayCommit`).
+    let accountScope: ManualEntryAccountScope
+}
+
+/// Which account's store local writes currently belong to, as
+/// `AccountScopedLocalState` records it.
+///
+/// Home also commits a pending entry from `onDisappear`. That teardown runs
+/// when `PomoGemApp.quiesceForPossibleAccountChange` (CKAccountChanged)
+/// closes the account boundary and retires the container, after which every
+/// late write from the old view hierarchy must be refused
+/// (Docs/OfflineCloudMode.md). Comparing this value at confirm and at commit
+/// time catches that closed boundary, as well as a different account or
+/// local namespace in between.
+struct ManualEntryAccountScope: Equatable {
+    let binding: ActiveAccountLocalBinding?
+    let namespace: AccountDataNamespace?
+    let boundaryIsClosed: Bool
+
+    static func current(defaults: UserDefaults = .standard) -> Self {
+        Self(
+            binding: AccountScopedLocalState.activeBinding(defaults: defaults),
+            namespace: AccountScopedLocalState.activeNamespace(defaults: defaults),
+            boundaryIsClosed: AccountScopedLocalState.isBoundaryClosed(defaults: defaults)
+        )
+    }
 }
 
 /// When a pending self-reported entry is written (history-02). The window is
@@ -355,6 +382,16 @@ enum ManualEntryUndoPolicy {
 
     static func window(assistiveTechnologyIsRunning: Bool) -> Duration {
         assistiveTechnologyIsRunning ? assistiveWindow : window
+    }
+
+    /// Only into the account it was confirmed for, and never once that
+    /// account's boundary has closed. A dropped entry spent nothing: the
+    /// allowance is counted in the same write.
+    static func mayCommit(
+        confirmedUnder confirmed: ManualEntryAccountScope,
+        now current: ManualEntryAccountScope
+    ) -> Bool {
+        !current.boundaryIsClosed && current == confirmed
     }
 }
 

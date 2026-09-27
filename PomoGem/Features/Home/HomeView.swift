@@ -1,4 +1,5 @@
 import Accessibility
+import OSLog
 import SpriteKit
 import StoreKit
 import SwiftData
@@ -208,6 +209,11 @@ struct HomeView: View {
         _activityResetMarkers = Query(ActivityResetPolicy.currentMarkerDescriptor())
         _preferences = Query(PrefsConsumerPolicy.descriptor())
     }
+
+    private static let manualEntryLogger = Logger(
+        subsystem: "com.hinoshiba.pomogem",
+        category: "ManualEntry"
+    )
 
     /// Delivered on the main queue: the store may be written off-main, and a
     /// write made during a view update must not mutate state inside it. Not
@@ -4000,7 +4006,8 @@ struct HomeView: View {
             colorHex: subject.colorHex,
             duration: duration,
             confirmedAt: now,
-            dataEpochID: currentActivityEpochID
+            dataEpochID: currentActivityEpochID,
+            accountScope: .current()
         )
         pendingManualEntry = pending
         showManualEntry = false
@@ -4063,6 +4070,19 @@ struct HomeView: View {
             table: "Home",
             comment: "Toast when a confirmed manual entry could not be saved; the argument is the theme"
         )
+        // The account boundary may have closed since confirming: Home's
+        // teardown commits too (`onDisappear`), and an account change tears
+        // Home down after closing it. Nothing may reach a retiring store.
+        guard ManualEntryUndoPolicy.mayCommit(
+            confirmedUnder: pending.accountScope,
+            now: .current()
+        ) else {
+            Self.manualEntryLogger.notice(
+                "Dropped a pending manual entry: the account boundary changed before it was saved"
+            )
+            router.showToast(failure, symbol: "exclamationmark.triangle")
+            return
+        }
         // A reset or a removed theme in the few seconds since confirming
         // leaves nothing to attach the entry to.
         guard pending.dataEpochID == currentActivityEpochID,
