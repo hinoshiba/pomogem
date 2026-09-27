@@ -220,22 +220,34 @@ final class CompletionCardPresentationTests: XCTestCase {
         XCTAssertEqual(CompletionCardPresentation.mass(grams: 1_250), "1.25kg")
     }
 
-    /// D18: only the jar's very first completion offers 「明日もこの時間に？」.
+    /// D18: only the jar's very first completion offers 「明日もこの時間に？」,
+    /// and only while no reminder time has been chosen.
     func testReminderIsOfferedOnlyOnTheCertainFirstCompletion() {
         XCTAssertTrue(CompletionCardPresentation.offersReminder(
             fusionState: FusionRewardBridgePresentation.state(totalPebbleCount: 1),
-            projectionIsLowerBound: false
+            projectionIsLowerBound: false,
+            reminderTimeIsChosen: false
         ))
         XCTAssertFalse(CompletionCardPresentation.offersReminder(
             fusionState: FusionRewardBridgePresentation.state(totalPebbleCount: 2),
-            projectionIsLowerBound: false
+            projectionIsLowerBound: false,
+            reminderTimeIsChosen: false
         ))
         XCTAssertFalse(
             CompletionCardPresentation.offersReminder(
                 fusionState: FusionRewardBridgePresentation.state(totalPebbleCount: 1),
-                projectionIsLowerBound: true
+                projectionIsLowerBound: true,
+                reminderTimeIsChosen: false
             ),
             "A lower bound may hide earlier gems"
+        )
+        XCTAssertFalse(
+            CompletionCardPresentation.offersReminder(
+                fusionState: FusionRewardBridgePresentation.state(totalPebbleCount: 1),
+                projectionIsLowerBound: false,
+                reminderTimeIsChosen: true
+            ),
+            "An existing reminder (or 先月の瓶のお知らせ, which shares its time) is never moved by the card"
         )
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = .current
@@ -244,33 +256,64 @@ final class CompletionCardPresentationTests: XCTestCase {
             CompletionCardPresentation.reminderTimeLabel(date, locale: Locale(identifier: "ja_JP")),
             "7:30"
         )
+        // The offer names a thing that is off, not a promise.
         XCTAssertEqual(
             CompletionCardPresentation.reminderOfferDetail(time: "7:30"),
-            "毎日 7:30 にお知らせします"
+            "毎日 7:30 のリマインダー"
+        )
+        XCTAssertEqual(
+            CompletionCardPresentation.spokenReminderOfferDetail(time: "7:30"),
+            "毎日 7:30 のリマインダー。今はオフです"
+        )
+        // With notifications off nothing is promised for a time.
+        XCTAssertFalse(CompletionCardPresentation.reminderNeedsPermission.contains("毎日"))
+        XCTAssertTrue(CompletionCardPresentation.reminderNeedsPermission.contains("もう一度"))
+        XCTAssertNotEqual(
+            CompletionCardPresentation.reminderOutcome(.scheduleFailed),
+            CompletionCardPresentation.reminderOutcome(.failed)
         )
     }
 
-    /// product-05: the fusion sheet teaches the time core only when the
-    /// completion that made the first ×10 also made the core.
-    func testCoreBirthIsTaughtOnlyWhenTheFirstCrystalAndCoreArriveTogether() {
-        func born(total: Int, latest: Int, pebbles: Int, lowerBound: Bool = false) -> Bool {
-            CompletionCardPresentation.bornCoreWithFirstFusion(
+    /// product-05: the birth of the first time core is taught once, where
+    /// it happened: on the fusion sheet when the completion also made the
+    /// first ×10 (ten 25-minute gems), otherwise on the card itself.
+    func testCoreBirthIsTaughtOnceWhereItHappened() {
+        func moment(total: Int, latest: Int, pebbles: Int, lowerBound: Bool = false)
+            -> CompletionCardPresentation.CoreBirthMoment {
+            CompletionCardPresentation.coreBirthMoment(
                 effortProgress: EffortProgressPolicy.snapshot(totalGrams: total, latestContributionGrams: latest),
                 fusionState: FusionRewardBridgePresentation.state(totalPebbleCount: pebbles),
                 projectionIsLowerBound: lowerBound
             )
         }
-        XCTAssertTrue(born(total: 2_500, latest: 250, pebbles: 10), "Ten 25-minute gems")
-        XCTAssertFalse(born(total: 6_000, latest: 600, pebbles: 10), "The core came at the fifth hour-long gem")
-        XCTAssertFalse(born(total: 1_000, latest: 100, pebbles: 10), "Ten short gems: a crystal, no core yet")
-        XCTAssertFalse(born(total: 3_000, latest: 600, pebbles: 5), "A core without a crystal")
-        XCTAssertFalse(born(total: 5_000, latest: 250, pebbles: 20), "A later crystal")
-        XCTAssertFalse(born(total: 2_500, latest: 250, pebbles: 10, lowerBound: true))
-        XCTAssertFalse(CompletionCardPresentation.bornCoreWithFirstFusion(
+        // Ten 25-minute gems: the tenth makes the first ×10 and the core.
+        XCTAssertEqual(moment(total: 2_250, latest: 250, pebbles: 9), .none)
+        XCTAssertEqual(moment(total: 2_500, latest: 250, pebbles: 10), .fusionSheet)
+        XCTAssertEqual(moment(total: 2_750, latest: 250, pebbles: 11), .none)
+
+        // 50-minute gems: the core comes with the fifth gem, no fusion.
+        XCTAssertEqual(moment(total: 2_000, latest: 500, pebbles: 4), .none)
+        XCTAssertEqual(moment(total: 2_500, latest: 500, pebbles: 5), .card)
+        XCTAssertEqual(moment(total: 5_000, latest: 500, pebbles: 10), .none,
+                       "The first ×10 of a 50-minute jar teaches nothing again")
+
+        // 15-minute gems: the first ×10 at 1.5kg, the core at the 17th gem.
+        XCTAssertEqual(moment(total: 1_500, latest: 150, pebbles: 10), .none)
+        XCTAssertEqual(moment(total: 2_400, latest: 150, pebbles: 16), .none)
+        XCTAssertEqual(moment(total: 2_550, latest: 150, pebbles: 17), .card)
+
+        // A core that arrives with a later fusion is the card's to say.
+        XCTAssertEqual(moment(total: 2_600, latest: 130, pebbles: 20), .card)
+        XCTAssertEqual(moment(total: 2_500, latest: 250, pebbles: 10, lowerBound: true), .none)
+        XCTAssertEqual(CompletionCardPresentation.coreBirthMoment(
             effortProgress: nil,
             fusionState: FusionRewardBridgePresentation.state(totalPebbleCount: 10),
             projectionIsLowerBound: false
-        ))
+        ), .none)
+        XCTAssertEqual(
+            CompletionCardPresentation.coreBirthOnCard,
+            "時間の核が生まれました。これからは核が、積み上げた時間の重さを表します。"
+        )
 
         func celebration(pebbles: Int, level: Int?) -> PendingStratumCelebration {
             PendingStratumCelebration(
@@ -284,8 +327,50 @@ final class CompletionCardPresentationTests: XCTestCase {
                 projectionCacheStamp: nil
             )
         }
-        XCTAssertTrue(StratumCelebrationTeaching.isFirstCrystal(celebration(pebbles: 10, level: 1)))
-        XCTAssertTrue(StratumCelebrationTeaching.isFirstCrystal(celebration(pebbles: 10, level: nil)))
-        XCTAssertFalse(StratumCelebrationTeaching.isFirstCrystal(celebration(pebbles: 100, level: 2)))
+        XCTAssertTrue(StratumCelebrationTeaching.isTenGemCrystal(celebration(pebbles: 10, level: 1)))
+        XCTAssertTrue(StratumCelebrationTeaching.isTenGemCrystal(celebration(pebbles: 10, level: nil)))
+        XCTAssertFalse(StratumCelebrationTeaching.isTenGemCrystal(celebration(pebbles: 100, level: 2)))
+    }
+
+    /// A gold or rainbow gem and a focus with several 250 g draws are said
+    /// in words on the card (quiet mode paints the theme colour).
+    func testRareAndMultiDrawOutcomesAreSaidInWords() {
+        XCTAssertNil(CompletionCardPresentation.rareLine(
+            kind: .normal, counts: RareRewardCounts(drawCount: 1, goldCount: 0, prismCount: 0)))
+        XCTAssertNil(CompletionCardPresentation.spokenRareLine(
+            kind: .normal, counts: RareRewardCounts(drawCount: 0, goldCount: 0, prismCount: 0)))
+        XCTAssertEqual(
+            CompletionCardPresentation.rareLine(kind: .gold, counts: RareRewardCounts(drawCount: 1, goldCount: 1, prismCount: 0)),
+            "この一粒は金の粒"
+        )
+        XCTAssertEqual(
+            CompletionCardPresentation.spokenRareLine(kind: .prism, counts: RareRewardCounts(drawCount: 1, goldCount: 0, prismCount: 1)),
+            "この一粒は虹の粒です。"
+        )
+        let twoDraws = RareRewardCounts(drawCount: 2, goldCount: 1, prismCount: 0)
+        XCTAssertEqual(
+            CompletionCardPresentation.rareLine(kind: .gold, counts: twoDraws),
+            "250gごとの抽選2回（通常1・金1）"
+        )
+        XCTAssertEqual(
+            CompletionCardPresentation.spokenRareLine(kind: .gold, counts: twoDraws),
+            "250グラムごとの抽選が2回あり、内訳は通常1、金1です。"
+        )
+        XCTAssertEqual(
+            CompletionCardPresentation.rareLine(kind: .normal, counts: RareRewardCounts(drawCount: 3, goldCount: 0, prismCount: 0)),
+            "250gごとの抽選3回（通常3）"
+        )
+        XCTAssertEqual(CompletionCardPresentation.sentence("時間の核まで あと3時間45分"), "時間の核まで あと3時間45分。")
+    }
+}
+
+/// walk-std-12: the onboarding trial gem's words.
+final class TrialDropPresentationTests: XCTestCase {
+    func testTrialGemSaysWhatOneGemStandsForWithoutACompetingWeight() {
+        XCTAssertEqual(TrialDropPresentation.meaning, "25分の集中 = この一粒（+250g）")
+        XCTAssertEqual(TrialDropPresentation.spokenMeaning, "25分の集中が、この一粒（250グラム）になります")
+        XCTAssertFalse(TrialDropPresentation.trialNote.contains("0g"),
+                       "「0g」 right under 「+250g」 read as a contradiction")
+        XCTAssertTrue(TrialDropPresentation.trialNote.contains("記録には入りません"))
     }
 }
