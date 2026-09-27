@@ -435,6 +435,14 @@ struct RootView: View {
     @State private var acceptedResetCleanupTask: Task<Void, Error>?
     @State private var acceptedResetCleanupReceipt: ActivityResetCleanupJournal.Receipt?
     @State private var hasLeftActiveStateAfterFirstFrame = false
+    /// A pass of `offerCloudFocusIfNeeded()` has finished since this Root
+    /// was mounted or last came back from the background. An outside focus
+    /// start waits for it (`routeAppEntryIfPossible`): on a cold launch the
+    /// launch path does not look for another iPhone's timer until later, and
+    /// a widget or Siri start that beat that look would start a second timer
+    /// and hide the adoption offer.
+    @State private var cloudFocusOfferCheckIsCurrent = false
+    @State private var isCheckingCloudFocusForAppEntry = false
     @State private var pendingLaunchMaintenanceReasons = Set<
         BoundedLaunchPreparation.DeferredMaintenanceReason
     >()
@@ -1001,6 +1009,8 @@ struct RootView: View {
                     after: newPhase
                 ) {
                     hasLeftActiveStateAfterFirstFrame = true
+                    // Another iPhone may start a timer while this one is away.
+                    cloudFocusOfferCheckIsCurrent = false
                     // Every genuine foreground return receives the same
                     // interaction grace as launch. A temporary inactive phase
                     // (Control Center/system sheet) does not reset it.
@@ -1884,6 +1894,7 @@ struct RootView: View {
         deferredResetCleanupPending = false
         pendingLaunchMaintenanceReasons.removeAll()
         hasLeftActiveStateAfterFirstFrame = false
+        cloudFocusOfferCheckIsCurrent = false
         bootstrapAttempt += 1
     }
 
@@ -2744,6 +2755,13 @@ struct RootView: View {
 
     @MainActor
     private func offerCloudFocusIfNeeded() async {
+        await evaluateCloudFocusOffer()
+        guard !Task.isCancelled else { return }
+        cloudFocusOfferCheckIsCurrent = true
+    }
+
+    @MainActor
+    private func evaluateCloudFocusOffer() async {
         guard !Task.isCancelled, didCompleteOnboarding,
               router.recoveredFocus == nil,
               router.recoveredBreak == nil,
@@ -2900,38 +2918,58 @@ struct RootView: View {
             isBootstrapped: isBootstrapped,
             showsMain: shouldShowMain,
             isBlocked: blockingError != nil || completeDeletion.hasStarted,
-            isSwitchingStorage: storageTransfer.isStarting
+            isSwitchingStorage: storageTransfer.isStarting,
+            cloudFocusOfferCheckIsCurrent: cloudFocusOfferCheckIsCurrent
         )
     }
 
     /// notify-03 / product-04. Navigation only: this reads and writes no
-    /// record. Root takes a request only when it shows the jar; a startup
-    /// error, a data deletion or first-run setup drops it instead, because
-    /// the person is busy with something the request knew nothing about.
+    /// record (AppEntryRoutingPolicy).
     @MainActor
     private func routeAppEntryIfPossible() {
         let inbox = AppEntryInbox.shared
-        guard inbox.pending != nil else { return }
-        if blockingError != nil || completeDeletion.hasStarted {
+        guard let pending = inbox.pending else { return }
+        switch AppEntryRoutingPolicy.decide(AppEntryRoutingPolicy.State(
+            route: pending.route,
+            isBlocked: blockingError != nil || completeDeletion.hasStarted,
+            isBootstrapped: isBootstrapped,
+            isSwitchingStorage: storageTransfer.isStarting,
+            showsMain: shouldShowMain,
+            cloudFocusOfferCheckIsCurrent: cloudFocusOfferCheckIsCurrent
+        )) {
+        case .discard:
             inbox.discard()
+        case .wait:
             return
+        case .checkCloudFocus:
+            checkCloudFocusForAppEntry()
+        case .take:
+            guard let request = inbox.take() else { return }
+            router.paywallPresented = false
+            router.sharePresented = false
+            router.selectedTab = .jar
+            if case let .startFocus(preset) = request.route {
+                router.pendingFocusStart = PendingFocusStart(
+                    id: request.id,
+                    preset: preset,
+                    receivedAtUptime: request.receivedAtUptime
+                )
+            }
         }
-        guard isBootstrapped, !storageTransfer.isStarting else { return }
-        guard shouldShowMain else {
-            inbox.discard()
-            return
+    }
+
+    /// Runs the check an outside start waits for, once. Returning from the
+    /// background runs it too (after the deletion fence and entitlements),
+    /// and whichever pass finishes first lets the request through.
+    @MainActor
+    private func checkCloudFocusForAppEntry() {
+        guard !isCheckingCloudFocusForAppEntry else { return }
+        isCheckingCloudFocusForAppEntry = true
+        let task = viewTasks.start {
+            await offerCloudFocusIfNeeded()
+            isCheckingCloudFocusForAppEntry = false
         }
-        guard let request = inbox.take() else { return }
-        router.paywallPresented = false
-        router.sharePresented = false
-        router.selectedTab = .jar
-        if case let .startFocus(preset) = request.route {
-            router.pendingFocusStart = PendingFocusStart(
-                id: request.id,
-                preset: preset,
-                receivedAtUptime: request.receivedAtUptime
-            )
-        }
+        if task == nil { isCheckingCloudFocusForAppEntry = false }
     }
 
     @MainActor
@@ -3179,6 +3217,7 @@ private struct AppEntryRoutingState: Equatable {
     let showsMain: Bool
     let isBlocked: Bool
     let isSwitchingStorage: Bool
+    let cloudFocusOfferCheckIsCurrent: Bool
 }
 
 struct MainNavigationView: View {

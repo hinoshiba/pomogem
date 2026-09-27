@@ -151,4 +151,64 @@ final class AppEntryLinkTests: XCTestCase {
         XCTAssertNil(inbox.pending)
         XCTAssertNil(inbox.take(uptime: 6))
     }
+
+    // MARK: Root's routing
+
+    private func routing(
+        _ route: AppEntryRoute = .startFocus(nil),
+        isBlocked: Bool = false,
+        isBootstrapped: Bool = true,
+        isSwitchingStorage: Bool = false,
+        showsMain: Bool = true,
+        cloudFocusOfferCheckIsCurrent: Bool = true
+    ) -> AppEntryRoutingPolicy.Decision {
+        AppEntryRoutingPolicy.decide(AppEntryRoutingPolicy.State(
+            route: route,
+            isBlocked: isBlocked,
+            isBootstrapped: isBootstrapped,
+            isSwitchingStorage: isSwitchingStorage,
+            showsMain: showsMain,
+            cloudFocusOfferCheckIsCurrent: cloudFocusOfferCheckIsCurrent
+        ))
+    }
+
+    func testRootTakesARequestOnlyOnceItShowsTheJar() {
+        XCTAssertEqual(routing(), .take)
+        XCTAssertEqual(routing(.home), .take)
+        XCTAssertEqual(routing(isBootstrapped: false), .wait)
+        XCTAssertEqual(routing(isSwitchingStorage: true), .wait)
+        // A stop screen, a deletion or first-run setup: never carried over.
+        XCTAssertEqual(routing(isBlocked: true), .discard)
+        XCTAssertEqual(routing(isBlocked: true, isBootstrapped: false), .discard)
+        XCTAssertEqual(routing(showsMain: false), .discard)
+    }
+
+    func testAStartWaitsForTheLookForAnotherIPhonesTimer() {
+        // Cold launch or a return from the background: until Root has looked
+        // for another iPhone's running timer, a widget or Siri start could
+        // beat 「iCloudに進行中のタイマーがあります」 and run a second timer.
+        XCTAssertEqual(
+            routing(cloudFocusOfferCheckIsCurrent: false),
+            .checkCloudFocus
+        )
+        XCTAssertEqual(
+            routing(.startFocus(.twentyFive), cloudFocusOfferCheckIsCurrent: false),
+            .checkCloudFocus
+        )
+        // Opening the jar starts nothing, so it need not wait.
+        XCTAssertEqual(routing(.home, cloudFocusOfferCheckIsCurrent: false), .take)
+        // The look never overrides a reason to drop or wait.
+        XCTAssertEqual(
+            routing(isBlocked: true, cloudFocusOfferCheckIsCurrent: false),
+            .discard
+        )
+        XCTAssertEqual(
+            routing(isBootstrapped: false, cloudFocusOfferCheckIsCurrent: false),
+            .wait
+        )
+        XCTAssertEqual(
+            routing(showsMain: false, cloudFocusOfferCheckIsCurrent: false),
+            .discard
+        )
+    }
 }

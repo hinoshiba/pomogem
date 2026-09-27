@@ -78,3 +78,42 @@ final class AppEntryInbox {
         return age.isFinite && age >= 0 && age <= lifetime
     }
 }
+
+/// What Root does with the inbox's request (notify-03 / product-04). Root
+/// takes a request only when it shows the jar. A startup error, a data
+/// deletion or first-run setup drops it instead, because the person is busy
+/// with something the request knew nothing about.
+enum AppEntryRoutingPolicy {
+    struct State: Equatable {
+        let route: AppEntryRoute
+        let isBlocked: Bool
+        let isBootstrapped: Bool
+        let isSwitchingStorage: Bool
+        let showsMain: Bool
+        /// Root has looked for another iPhone's running timer since it was
+        /// mounted or last came back from the background.
+        let cloudFocusOfferCheckIsCurrent: Bool
+    }
+
+    enum Decision: Equatable {
+        case discard
+        /// Keep it in the inbox until the state changes.
+        case wait
+        /// Keep it, and look for another iPhone's running timer first.
+        case checkCloudFocus
+        case take
+    }
+
+    static func decide(_ state: State) -> Decision {
+        if state.isBlocked { return .discard }
+        guard state.isBootstrapped, !state.isSwitchingStorage else { return .wait }
+        guard state.showsMain else { return .discard }
+        // A start must see 「iCloudに進行中のタイマーがあります」 first: Home
+        // declines while that offer is open. Starting before the look would
+        // create a second timer and keep the offer from ever appearing.
+        if case .startFocus = state.route, !state.cloudFocusOfferCheckIsCurrent {
+            return .checkCloudFocus
+        }
+        return .take
+    }
+}
