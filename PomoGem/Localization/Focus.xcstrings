@@ -46,9 +46,6 @@
         }
       }
     },
-    "「ミュージック」アプリでApple Musicにサインインすると再生できます。" : {
-
-    },
     "「設定」アプリを開く" : {
 
     },
@@ -107,6 +104,9 @@
       "comment" : "Paused line; the argument is the Music app's current track title"
     },
     "下から音楽を選ぶと再生が始まります。" : {
+
+    },
+    "休憩のときなどに「ミュージック」アプリでApple Musicにサインインすると、再生できるようになります。" : {
 
     },
     "作業用BGM：クラシック" : {

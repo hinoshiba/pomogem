@@ -318,6 +318,8 @@ enum FocusMusicHint: Equatable, Sendable {
     /// copy suggests a break.
     case openMusicOnce
     case noSourceAvailable
+    /// Signing in happens in the Music app, so, as with `openMusicOnce`, the
+    /// copy suggests a break rather than leaving a running focus (F1).
     case signIn
 
     var message: String {
@@ -334,7 +336,7 @@ enum FocusMusicHint: Equatable, Sendable {
             )
         case .signIn:
             String(
-                localized: "「ミュージック」アプリでApple Musicにサインインすると再生できます。",
+                localized: "休憩のときなどに「ミュージック」アプリでApple Musicにサインインすると、再生できるようになります。",
                 table: "Focus"
             )
         }
