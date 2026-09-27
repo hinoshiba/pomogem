@@ -410,6 +410,44 @@ final class FocusEndAlarmSchedulerTests: XCTestCase {
         XCTAssertTrue(store.pendingCancelIDs.isEmpty)
     }
 
+    func testCancelAllPreservingKeepsOnlyTheNamedSessionsAlarm() async throws {
+        let kept = UUID()
+        guard case let .booked(booking) = await scheduler.schedule(
+            sessionID: kept, phase: .focus, endDate: clock.addingTimeInterval(600), soundFileName: nil
+        ) else { return XCTFail() }
+        let orphan = UUID()
+        client.insert(orphan, state: .scheduled)
+        scheduler.cancelAll(preserving: [kept, UUID()])
+        XCTAssertEqual(store.load(), booking)
+        XCTAssertEqual(client.cancelled, [orphan])
+
+        scheduler.cancelAll(preserving: [UUID()])
+        XCTAssertNil(store.load(), "Without the booked session it is cancelAll")
+        XCTAssertTrue(client.cancelled.contains(booking.alarmID))
+    }
+
+    func testAnAppNeverAllowedAlarmsNeverAsksAlarmKitForItsList() {
+        for authorization in [AlarmKitAuthorization.unsupported, .notDetermined] {
+            client.authorization = authorization
+            let before = client.alarmsReads
+            scheduler.cancelAll()
+            scheduler.cancelAll(preserving: [UUID()])
+            XCTAssertEqual(client.alarmsReads, before, "\(authorization)")
+        }
+        client.authorization = .notDetermined
+        let before = client.alarmsReads
+        let decision = scheduler.reconcile(owner: FocusEndAlarmOwner(
+            sessionID: UUID(), phase: .focus, endDate: clock.addingTimeInterval(600)
+        ))
+        XCTAssertEqual(client.alarmsReads, before, "Every activation reconciles; most people never allow alarms")
+        XCTAssertTrue(decision.cancelIDs.isEmpty)
+        XCTAssertTrue(decision.ownerNeedsBooking)
+
+        client.authorization = .denied
+        scheduler.cancelAll()
+        XCTAssertGreaterThan(client.alarmsReads, before, "A revoked permission may leave alarms")
+    }
+
     func testPermissionIsRequestedOnlyWhileUndecided() async {
         client.authorization = .notDetermined
         client.authorizationAfterRequest = .authorized
@@ -675,7 +713,11 @@ final class FakeFocusEndAlarmClient: FocusEndAlarmClient {
         scheduled.removeValue(forKey: id)
     }
 
+    /// How often the system list was read.
+    private(set) var alarmsReads = 0
+
     func alarms() throws -> [FocusEndAlarmSnapshot] {
+        alarmsReads += 1
         if let alarmsError { throw alarmsError }
         return states.map { FocusEndAlarmSnapshot(id: $0.key, state: $0.value) }
     }

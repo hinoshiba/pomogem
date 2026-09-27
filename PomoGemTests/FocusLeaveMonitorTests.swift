@@ -702,6 +702,52 @@ final class FocusLeaveMonitorTests: XCTestCase {
         XCTAssertTrue(notifications.pending.isEmpty)
     }
 
+    /// F5 part 1: the host's auto-pause (`cancelCompletionKeepingNudges`)
+    /// also cancels the session's system alarm, after FocusView is gone,
+    /// and keeps the series; an alarm of another session is left alone.
+    func testTheLeavePauseCancelsTheSessionsSystemAlarmAndKeepsTheSeries() async throws {
+        let alarmSuite = "leave-alarm-\(UUID().uuidString)"
+        let alarmDefaults = try XCTUnwrap(UserDefaults(suiteName: alarmSuite))
+        defer { alarmDefaults.removePersistentDomain(forName: alarmSuite) }
+        let alarmClient = FakeFocusEndAlarmClient()
+        let scheduler = FocusEndAlarmScheduler(
+            client: alarmClient,
+            store: FocusEndAlarmBookingStore(defaults: alarmDefaults),
+            now: { [unowned self] in self.harness.now }
+        )
+        let notifications = try FocusLeaveNudgeFixture(systemAlarms: scheduler)
+        defer { notifications.tearDown() }
+        let manager = notifications.manager!
+        let endDate = harness.start.addingTimeInterval(1_500)
+        _ = try await manager.scheduleFocusCompletion(sessionID: harness.sessionID, endDate: endDate)
+        manager.registerFocusReturnReminder(
+            sessionID: harness.sessionID, endDate: endDate, playsSound: true
+        )
+        guard case let .booked(booking) = await scheduler.schedule(
+            sessionID: harness.sessionID, phase: .focus, endDate: endDate, soundFileName: nil
+        ) else { return XCTFail("the alarm was not booked") }
+        monitor = FocusLeaveMonitor(
+            dependencies: harness.dependencies(notificationsFrom: .live(notifications: manager))
+        )
+
+        let leftAt = harness.now
+        monitor.handle(.background)
+        await harness.waitForSleep()
+        XCTAssertEqual(scheduler.booking, booking, "Nothing changes inside the window")
+
+        harness.now = leftAt.addingTimeInterval(20)
+        await harness.finishSleep()
+        XCTAssertEqual(harness.saved?.leavePause?.pausedAt, leftAt)
+        XCTAssertNil(scheduler.booking, "A paused focus has no end to ring")
+        XCTAssertEqual(alarmClient.cancelled, [booking.alarmID])
+        XCTAssertTrue(alarmClient.scheduled.isEmpty)
+        XCTAssertEqual(
+            Set(notifications.pending.keys),
+            Set(FocusLeavePolicy.nudgeIdentifiers),
+            "The series stays; only the end alert and its alarm go"
+        )
+    }
+
     private func otherSessionEnvelope() throws -> FocusRecoveryEnvelope {
         var engine = PomodoroEngine(selectedDuration: .twentyFiveMinutes)
         try engine.startFocus(isPro: false, now: harness.start, sessionID: UUID())

@@ -455,7 +455,7 @@ final class FocusEndAlarmScheduler {
     /// ring afterwards.
     func cancelAll() {
         generation &+= 1
-        var ids = Set((try? client.alarms())?.map(\.id) ?? [])
+        var ids = Set(listedAlarmIDs())
         ids.formUnion(store.pendingCancelIDs)
         store.setPendingCancelIDs([])
         if let booking = store.load() {
@@ -467,16 +467,40 @@ final class FocusEndAlarmScheduler {
         store.clear()
     }
 
+    /// iCloud retirement and reset recovery
+    /// (`NotificationManager.prepareTimerNotificationCleanup`): cancels every
+    /// alarm except the booked one of a session in `sessionIDs`, which the
+    /// caller keeps running. With no such booking this is `cancelAll`.
+    func cancelAll(preserving sessionIDs: Set<UUID>) {
+        guard let kept = store.load(), sessionIDs.contains(kept.sessionID) else {
+            cancelAll()
+            return
+        }
+        retryPendingCancels()
+        for id in listedAlarmIDs()
+        where id != kept.alarmID && !inFlightAlarmIDs.contains(id) {
+            silence(id, alerting: false)
+        }
+    }
+
     /// Reconciles the booking with the system at launch and whenever the app
     /// becomes active. Returns the decision so the caller can book a
     /// replacement when the owner needs one. When the system's list cannot
     /// be read nothing is decided (and nothing is booked); the next call
     /// tries again.
+    /// An app that was never allowed alarms has none, so AlarmKit is not
+    /// asked (this runs at every activation, for everyone).
     @discardableResult
     func reconcile(owner: FocusEndAlarmOwner?) -> FocusEndAlarmReconciliation {
         retryPendingCancels()
-        guard let alarms = try? client.alarms() else {
-            return FocusEndAlarmReconciliation()
+        let alarms: [FocusEndAlarmSnapshot]
+        if systemMayListAlarms {
+            guard let listed = try? client.alarms() else {
+                return FocusEndAlarmReconciliation()
+            }
+            alarms = listed
+        } else {
+            alarms = []
         }
         let decision = FocusEndAlarmReconcilePolicy.reconcile(
             booking: store.load(),
@@ -509,6 +533,21 @@ final class FocusEndAlarmScheduler {
     }
 
     // MARK: Private
+
+    /// The system's list of this app's alarms. An app that was never allowed
+    /// alarms (or runs on iOS 17–25) cannot have any, so AlarmKit is not
+    /// asked at all: most people never choose the maximum preset.
+    private func listedAlarmIDs() -> [UUID] {
+        guard systemMayListAlarms else { return [] }
+        return (try? client.alarms())?.map(\.id) ?? []
+    }
+
+    private var systemMayListAlarms: Bool {
+        switch client.authorization {
+        case .unsupported, .notDetermined: false
+        case .authorized, .denied: true
+        }
+    }
 
     /// Silences the booked alarm and forgets it, except that an alarm of
     /// `witnessSessionID` that has rung stays recorded as that session's
