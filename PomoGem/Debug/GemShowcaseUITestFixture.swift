@@ -15,6 +15,11 @@ import SwiftUI
 ///   3.75kg time core — the same state as the owner's reference image.
 /// - `tiers`: 117 completions stored as ×100 + ×10 + seven loose gems plus
 ///   one achievement stone (29.25kg core).
+/// - `nine` / `nineteen`: one focus before a fusion. Nine loose 25-minute
+///   gems (2.25kg: the next completion makes the first ×10 and the time
+///   core together), or one ×10 and nine loose gems (4.75kg: the next
+///   completion makes a second ×10). For reviewing the completion card and
+///   the fusion sheet without ten live focuses.
 /// - `gallery`: no persistence at all. A standalone jar restores one
 ///   descriptor per visual tier (loose, self-reported, ×10 … ×1万,
 ///   achievement) plus Screen Time obstacles, for side-by-side inspection.
@@ -28,6 +33,8 @@ enum GemShowcaseUITestFixture {
         /// §7.5): 39 completions, three ×10 roots and nine loose gems.
         case midload
         case tiers
+        case nine
+        case nineteen
         case gallery
         /// Worst case for rendering: the study body ceiling plus the maximum
         /// visible achievements and Screen Time obstacles, all at once.
@@ -84,6 +91,8 @@ enum GemShowcaseUITestFixture {
         case .home: 15
         case .midload: 39
         case .tiers: 117
+        case .nine: 9
+        case .nineteen: 19
         case .heavy: 1_004
         case .veteran: 10_006
         case .gallery, .stress, .worstcase, .fusionfx, .palette, nil: nil
