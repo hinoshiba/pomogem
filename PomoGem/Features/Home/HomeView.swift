@@ -5629,14 +5629,21 @@ private struct StratumCelebrationView: View {
         NavigationStack {
             GeometryReader { viewport in
                 ScrollView {
-                    VStack(spacing: 18) {
+                    VStack(spacing: sectionSpacing) {
                         if dynamicTypeSize.isAccessibilitySize {
-                            VStack(spacing: 18) {
+                            // A small crystal leads, whole, in the room the
+                            // lines and the actions leave on the first screen
+                            // (the 4.7-inch SE at AX5 included); the teaching
+                            // line follows the actions directly.
+                            celebrationStage(
+                                side: artSide(viewportHeight: viewport.size.height, minimum: 52, maximum: 120),
+                                framed: false
+                            )
+                            VStack(spacing: sectionSpacing) {
                                 celebrationLines
                                 celebrationActions
                             }
                             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { leadHeight = $0 }
-                            celebrationStage(side: artSide(viewportHeight: viewport.size.height, minimum: 96, maximum: 160))
                             coreBirthLine
                         } else {
                             celebrationStage(side: artSide(viewportHeight: viewport.size.height))
@@ -5656,11 +5663,15 @@ private struct StratumCelebrationView: View {
                             monthLabelHintLink(monthLabelHint)
                         }
                     }
-                    .padding(24)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 24)
+                    .padding(.top, topPadding)
                 }
                 .scrollBounceBehavior(.basedOnSize)
             }
             .background(NightBackground())
+            // Scrolled content passes under a bar, not under the bare 閉じる.
+            .toolbarBackground(PomoGemTheme.background.opacity(0.94), for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     PomoGemSheetCloseButton(
@@ -5672,6 +5683,11 @@ private struct StratumCelebrationView: View {
         }
     }
 
+    /// Accessibility sizes keep the gaps tight: on the 4.7-inch SE at AX5
+    /// the art, both lines and all three actions share one screen.
+    private var sectionSpacing: CGFloat { dynamicTypeSize.isAccessibilitySize ? 12 : 18 }
+    private var topPadding: CGFloat { dynamicTypeSize.isAccessibilitySize ? 8 : 24 }
+
     /// The art takes what the first viewport has left after the lines and
     /// the actions, within `minimum`…`maximum`.
     private func artSide(
@@ -5680,31 +5696,46 @@ private struct StratumCelebrationView: View {
         maximum: CGFloat = largestArt
     ) -> CGFloat {
         // Top padding, the gap under the art and a little air at the bottom.
-        let room = viewportHeight - leadHeight - 24 - 18 - 12
+        let room = viewportHeight - leadHeight - topPadding - sectionSpacing - 10
         return min(maximum, max(minimum, room.rounded(.down)))
     }
 
     /// The new crystal in the jar's art with its ten sources in a shallow
-    /// bowl beneath it (no ring, no spokes, nothing over the gems).
-    private func celebrationStage(side: CGFloat) -> some View {
+    /// bowl beneath it (no ring, no spokes, nothing over the gems). Small
+    /// (accessibility sizes) it drops the framed stage for a soft glow, so
+    /// a short frame never reads as a cut-off panel.
+    private func celebrationStage(side: CGFloat, framed: Bool = true) -> some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            Color(hex: colorHex).opacity(0.19),
-                            PomoGemTheme.auroraViolet.opacity(0.10),
-                            PomoGemTheme.raised.opacity(0.58)
-                        ],
-                        center: .center,
-                        startRadius: 4,
-                        endRadius: side * 0.66
+            if framed {
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color(hex: colorHex).opacity(0.19),
+                                PomoGemTheme.auroraViolet.opacity(0.10),
+                                PomoGemTheme.raised.opacity(0.58)
+                            ],
+                            center: .center,
+                            startRadius: 4,
+                            endRadius: side * 0.66
+                        )
                     )
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .stroke(Color(hex: colorHex).opacity(0.30), lineWidth: 1)
-                }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 28, style: .continuous)
+                            .stroke(Color(hex: colorHex).opacity(0.30), lineWidth: 1)
+                    }
+            } else {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [Color(hex: colorHex).opacity(0.24), .clear],
+                            center: .center,
+                            startRadius: 2,
+                            endRadius: side * 0.62
+                        )
+                    )
+                    .frame(width: side * 1.3, height: side * 1.3)
+            }
 
             FusionOrbitStage(
                 state: orbitState,
@@ -5713,9 +5744,9 @@ private struct StratumCelebrationView: View {
                 destinationGrams: request.grams,
                 colorShares: colorShares
             )
-            .frame(width: side * 0.86, height: side * 0.86)
+            .frame(width: side * (framed ? 0.86 : 1), height: side * (framed ? 0.86 : 1))
             // The bowl hangs low in the stage; keep it clear of the edge.
-            .offset(y: -side * 0.02)
+            .offset(y: framed ? -side * 0.02 : 0)
         }
         .frame(maxWidth: .infinity)
         .frame(height: side)
@@ -5764,6 +5795,8 @@ private struct StratumCelebrationView: View {
                 .foregroundStyle(PomoGemTheme.text)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+                // The headline's ceiling: never larger than what it explains.
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 11)
@@ -5781,16 +5814,30 @@ private struct StratumCelebrationView: View {
 
     private var celebrationActions: some View {
         VStack(spacing: 12) {
-            Button("この結晶の内訳を見る", action: onExplore)
-                .buttonStyle(PomoGemPrimaryButtonStyle())
-            Button("この結晶をカードにする", action: onShare)
-                .buttonStyle(PomoGemSecondaryButtonStyle())
+            Button(action: onExplore) {
+                celebrationActionLabel(Text("この結晶の内訳を見る", tableName: "Home",
+                                            comment: "Fusion sheet primary action: opens the new crystal's breakdown"))
+            }
+            .buttonStyle(PomoGemPrimaryButtonStyle())
+            Button(action: onShare) {
+                celebrationActionLabel(Text("この結晶をカードにする", tableName: "Home",
+                                            comment: "Fusion sheet action: makes a share card of the new crystal"))
+            }
+            .buttonStyle(PomoGemSecondaryButtonStyle())
             Button("ここで休む", action: onContinue)
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(PomoGemTheme.muted)
                 .frame(minHeight: 44)
                 .buttonStyle(PomoGemBareButtonStyle())
         }
+    }
+
+    /// Wrapped lines stay centred and clear of the button's edges at
+    /// accessibility sizes, in both styles alike.
+    private func celebrationActionLabel(_ text: Text) -> some View {
+        text
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 16)
     }
 
     private var celebrationMechanics: some View {
