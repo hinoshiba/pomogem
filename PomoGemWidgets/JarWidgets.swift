@@ -51,23 +51,27 @@ struct JarHomeWidget: Widget {
     }
 }
 
-/// Every tap starts a focus in the app exactly as Home's start button does,
-/// with the theme and length chosen there (notify-03, product-04). The URLs
-/// are constants: the widget still reads and shows no user data.
+/// Taps start a focus in the app exactly as Home's start button does, with
+/// the theme chosen there (notify-03, product-04). The small widget says
+/// 「集中を始める」 and uses the length chosen in the app; the medium one
+/// starts only from its four length buttons, whose length is on the button,
+/// and the rest of it opens the jar. The URLs are constants: the widget still
+/// reads and shows no user data.
 private struct JarHomeWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let entry: JarWidgetEntry
 
     var body: some View {
-        Group {
-            switch family {
-            case .systemMedium:
-                mediumLayout
-            default:
-                smallLayout
-            }
+        switch family {
+        case .systemMedium:
+            // The jar and heading cannot show the length a start would use,
+            // so they open the app; the buttons below are the starts.
+            mediumLayout
+                .widgetURL(AppEntryLink.homeURL)
+        default:
+            smallLayout
+                .widgetURL(AppEntryLink.focusStartURL())
         }
-        .widgetURL(AppEntryLink.focusStartURL())
     }
 
     private var smallLayout: some View {
@@ -89,7 +93,7 @@ private struct JarHomeWidgetView: View {
     /// the whole width, so all four free lengths fit even the narrowest
     /// medium widget with a comfortable tap target each.
     private var mediumLayout: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
                 NeutralJarArtwork()
                     .frame(width: 88)
@@ -104,7 +108,11 @@ private struct JarHomeWidgetView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("ポモジェムで今日の集中を始める")
+                .accessibilityLabel(Text(
+                    "ポモジェムを開く",
+                    tableName: "Widgets",
+                    comment: "VoiceOver: the medium widget's jar and heading, which open the app (its length buttons start a focus)"
+                ))
             }
             .frame(maxHeight: .infinity)
 
@@ -131,9 +139,10 @@ private struct JarHomeWidgetView: View {
 
 }
 
-/// One tap to a focus of a free length. The widget cannot know the length
-/// last used in the app, so the rest of the widget starts with that one and
-/// these offer the fixed lengths the Home picker offers everyone.
+/// One tap to a focus of a free length: the fixed lengths the Home picker
+/// offers everyone. The widget cannot know the length last used in the app.
+/// Each button is 44 pt tall, the minimum comfortable tap target, which still
+/// leaves the jar and heading room on the narrowest medium widget.
 private struct FocusPresetLinks: View {
     var body: some View {
         HStack(spacing: 6) {
@@ -146,7 +155,7 @@ private struct FocusPresetLinks: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                         .foregroundStyle(WidgetPalette.night)
-                        .frame(maxWidth: .infinity, minHeight: 32)
+                        .frame(maxWidth: .infinity, minHeight: 44)
                         .background(WidgetPalette.amber, in: Capsule())
                 }
                 .accessibilityLabel(String(
