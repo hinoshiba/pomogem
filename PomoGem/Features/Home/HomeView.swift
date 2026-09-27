@@ -913,7 +913,11 @@ struct HomeView: View {
         }
     }
 
-    private var observedContent: some View {
+    /// The store and projection observers. `observedContent` used to chain
+    /// these with every other observer below and came close to the type
+    /// checker's "unable to type-check in reasonable time" limit under load;
+    /// three shorter chains are each checked on their own.
+    private var storeObservedContent: some View {
         verificationContent
         // Subscribe to the one value the jar needs instead of observing the
         // whole controller: its foreground loop re-reads authorization and
@@ -964,6 +968,11 @@ struct HomeView: View {
             syncScene()
             reconcileAggregateInspection()
         }
+    }
+
+    /// Purchase, preference and motion observers.
+    private var preferenceObservedContent: some View {
+        storeObservedContent
         .onChange(of: purchase.isPro) { _, isPro in
             if isPro {
                 restorePreferredDuration()
@@ -984,6 +993,11 @@ struct HomeView: View {
             cancelTiltHintPresentation()
             scheduleTiltHintIfNeeded()
         }
+    }
+
+    /// Announcement and celebration observers.
+    private var observedContent: some View {
+        preferenceObservedContent
         .onChange(of: voiceOverEnabled) { _, enabled in
             cancelTiltHintPresentation()
             scheduleTiltHintIfNeeded()
