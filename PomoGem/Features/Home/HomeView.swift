@@ -177,6 +177,8 @@ struct HomeView: View {
     @State private var breakConfiguration: BreakRecoveryEnvelope?
     @State private var purchase = PurchaseManager.shared
     @State private var announcedPostDropOfferID: UUID?
+    /// The completion card's 「しくみ」 is closed for every new card.
+    @State private var postDropMechanicsExpanded = false
     @State private var announcedPostDropShareOfferID: UUID?
     /// The short settle before an outside focus start (FocusStartEntryPolicy).
     @State private var focusStartEntryTask: Task<Void, Never>?
@@ -2424,29 +2426,62 @@ struct HomeView: View {
         .buttonStyle(PomoGemRowButtonStyle(cornerRadius: 16))
     }
 
+    /// The completion card (Docs/GemExperienceDesign.md §8.3): this focus's
+    /// own gem, 「集中を記録しました」, one line with the time first and the
+    /// grams second, this week's honest figure, and the mechanics behind
+    /// 「しくみ」. [5分休憩] is primary and [閉じる] secondary. At
+    /// accessibility sizes the actions come right after the two lines, before
+    /// the gem and 「しくみ」, so every safe exit is in the first viewport.
     private func postDropCard(_ offer: BreakOffer) -> some View {
-        PomoGemCard {
-            VStack(alignment: .leading, spacing: 12) {
-                postDropHeading(presentedOffer(offer))
-                if offer.isAwaitingDrop {
-                    Text("閉じると、一粒が瓶に落ちます。")
-                        .font(.caption)
-                        .foregroundStyle(PomoGemTheme.muted)
-                }
-                if dynamicTypeSize.isAccessibilitySize {
-                    // Keep every safe exit in the initial viewport at the
-                    // largest text sizes. The detailed crystal evidence stays
-                    // available immediately below the action group.
+        let shown = presentedOffer(offer)
+        return PomoGemCard {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 12) {
+                    postDropHeading(shown)
                     postDropActions(offer)
-                    postDropFusionProgress(offer)
-                } else {
-                    postDropFusionProgress(offer)
+                    postDropAwaitingDropNote(offer)
+                    HStack(alignment: .center, spacing: 12) {
+                        CompletionCardHero(
+                            sessionID: offer.id,
+                            colorHex: offer.heroColorHex(for: rareRewardMode)
+                        )
+                        .frame(width: 56, height: 56)
+                        postDropWeekLine(shown)
+                    }
+                    postDropMechanics(offer)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .center, spacing: 14) {
+                        CompletionCardHero(
+                            sessionID: offer.id,
+                            colorHex: offer.heroColorHex(for: rareRewardMode)
+                        )
+                        .frame(width: 96, height: 96)
+                        VStack(alignment: .leading, spacing: 5) {
+                            postDropHeading(shown)
+                            postDropWeekLine(shown)
+                        }
+                        .layoutPriority(1)
+                    }
+                    postDropAwaitingDropNote(offer)
+                    postDropMechanics(offer)
                     postDropActions(offer)
                 }
             }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("reward.bridge")
+    }
+
+    @ViewBuilder
+    private func postDropAwaitingDropNote(_ offer: BreakOffer) -> some View {
+        if offer.isAwaitingDrop {
+            Text("閉じると、一粒が瓶に落ちます。")
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private var completionInsetContents: some View {
@@ -2517,62 +2552,57 @@ struct HomeView: View {
         .accessibilityElement(children: .contain)
     }
 
+    /// 「集中を記録しました」 and the one main line, time first and grams
+    /// second (「英語 25分 → +250gの一粒」). VoiceOver reads the same two
+    /// lines, this week's figure and the break that is available.
     private func postDropHeading(_ offer: BreakOffer) -> some View {
-        // sync-03. The weekly figures were frozen from this device's records
-        // at completion; while iCloud is checked the progress block below
-        // carries the 「iCloudを確認中」 caption for the whole card, and once
-        // verification completes they are re-derived with the progress
-        // (`presentedOffer`).
-        let historyTitle = offer.weeklyTitle
-        let historySpokenTitle = offer.weeklySpokenTitle
-        return HStack(spacing: 11) {
-            // The earned gem itself (round 12), in the jar's own art and
-            // with its light, rather than a check mark: the reward's card
-            // shows the reward.
-            GemArtworkStone(
-                spec: GemArtworkStone.looseSpec(hex: offer.heroColorHex(for: rareRewardMode)),
-                glowHex: offer.heroColorHex(for: rareRewardMode),
-                glowOpacity: 0.5
-            )
-            .frame(width: 44, height: 44)
-            .frame(width: 48, height: 48)
-            .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(offer.dropTitle(for: rareRewardMode))
-                    .font(.system(.headline, design: .rounded, weight: .black))
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(
-                    "\(offer.subjectName) +\(offer.grams)g（\(EffortProgressPresentation.formattedStandardUnits(grams: offer.grams))） ・ \(historyTitle)\(offer.rareRewardCounts.multiDrawSummary.map { " ・ \($0)" } ?? "")"
-                )
-                    .font(.caption)
-                    .foregroundStyle(PomoGemTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .fixedSize(horizontal: false, vertical: true)
-            .layoutPriority(1)
-            Spacer(minLength: 4)
-            if offer.kind != .normal, rareRewardMode.usesEnhancedPresentation {
-                Image(systemName: "sparkles")
-                    .font(.title3.weight(.black))
-                    .foregroundStyle(
-                        offer.kind == .gold
-                            ? Color(hex: Constants.Color.pebbleGold)
-                            : Color(hex: Constants.Color.auroraViolet)
-                    )
-                    .accessibilityHidden(true)
-            }
+        VStack(alignment: .leading, spacing: 3) {
+            Text("集中を記録しました", tableName: "Home",
+                 comment: "Completion card headline, shown after every finished focus. en: 'Focus recorded'")
+                .font(.system(.subheadline, design: .rounded, weight: .bold))
+                .foregroundStyle(PomoGemTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(CompletionCardPresentation.mainLine(subjectName: offer.subjectName, grams: offer.grams))
+                .font(.system(.title3, design: .rounded, weight: .black))
+                .foregroundStyle(PomoGemTheme.text)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)
         .accessibilityIdentifier("reward.heading")
-        .accessibilityLabel(offer.dropTitle(for: rareRewardMode))
-        .accessibilityValue(
-            "テーマは\(offer.subjectName)です。今回は\(offer.grams)グラム、標準換算は\(EffortProgressPresentation.formattedStandardUnits(grams: offer.grams))です。\(historySpokenTitle)。\(offer.rareRewardCounts.multiDrawSummary.map { "\($0)。" } ?? "")\(offer.minutes)分休憩を利用できます"
-        )
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityLabel(Text("集中を記録しました", tableName: "Home",
+                                 comment: "Completion card headline, shown after every finished focus. en: 'Focus recorded'"))
+        .accessibilityValue(SentenceText.join([
+            CompletionCardPresentation.spokenMainLine(subjectName: offer.subjectName, grams: offer.grams),
+            offer.weeklySpokenTitle,
+            CompletionCardPresentation.spokenBreakAvailability(minutes: offer.minutes)
+        ].compactMap { $0 }))
         .accessibilityHint(
             showShareChip
-                ? "結晶の進みを確認し、休憩、共有、または閉じるを選べます"
-                : "結晶の進みを確認し、休憩または閉じるを選べます"
+                ? String(localized: "休憩、共有、または閉じるを選べます。しくみで時間の核と結晶の進みを確認できます", table: "Home",
+                         comment: "VoiceOver hint on the completion card heading while the share button shows")
+                : String(localized: "休憩または閉じるを選べます。しくみで時間の核と結晶の進みを確認できます", table: "Home",
+                         comment: "VoiceOver hint on the completion card heading")
         )
+    }
+
+    /// walk-std-07. 「今週の実測 1時間15分」, with 「・自己申告 30分」 in the same
+    /// sentence when the week has self-reported focus: the calendar week and
+    /// query that Overview and 記録 use (`WeeklyProgressPolicy.week`).
+    @ViewBuilder
+    private func postDropWeekLine(_ offer: BreakOffer) -> some View {
+        if let line = offer.weeklyTitle {
+            Text(line)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(PomoGemTheme.muted)
+                .monospacedDigit()
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("reward.week")
+                // The heading already reads it.
+                .accessibilityHidden(true)
+        }
     }
 
     /// sync-03. Which projection this card shows (`PostDropProjectionPolicy`).
@@ -2627,7 +2657,8 @@ struct HomeView: View {
             // A failed bounded read keeps the frozen week; the progress still
             // re-stamps rather than waiting forever.
             restampedWeekly = .init(request: request, completionCount: offer.weeklyCompletionCount,
-                                    studyGrams: offer.weeklyStudyGrams)
+                                    studyGrams: offer.weeklyStudyGrams,
+                                    selfReportedGrams: offer.weeklySelfReportedGrams)
             return
         }
         var dates = metrics.weeklyTimerCompletionDates
@@ -2635,13 +2666,15 @@ struct HomeView: View {
             dates.append(offer.createdAt)
         }
         var grams = metrics.weeklyMeasuredGrams
-        if !metrics.weeklyMeasuredSessionIDs.contains(offer.id) {
+        if !metrics.weeklyMeasuredSessionIDs.contains(offer.id),
+           !metrics.weeklySelfReportedSessionIDs.contains(offer.id) {
             grams = HomeProjectionPolicy.saturatingNonnegativeSum([grams, offer.grams])
         }
         restampedWeekly = .init(
             request: request,
             completionCount: max(1, WeeklyProgressPolicy.completionCount(dates: dates, at: offer.createdAt)),
-            studyGrams: grams
+            studyGrams: grams,
+            selfReportedGrams: metrics.weeklySelfReportedGrams
         )
     }
 
@@ -2658,30 +2691,75 @@ struct HomeView: View {
         )
     }
 
+    /// The card's mechanics, collapsed behind 「しくみ」 (walk-std-08,
+    /// product-05): how far the time core is, what a standard unit is, the
+    /// jar's 10→1 and this week's timer count. VoiceOver keeps the card's
+    /// full accounting on this one element whether it is open or not. While
+    /// iCloud is checked the caption (or the pending note) stays visible.
     @ViewBuilder
-    private func postDropFusionProgress(_ offer: BreakOffer) -> some View {
+    private func postDropMechanics(_ offer: BreakOffer) -> some View {
         switch postDropSource(offer) {
         case .receipt, .verifiedProjection:
-            let shown = presentedOffer(offer)
-            if let effortProgress = shown.effortProgress {
-                postDropEffortProgress(effortProgress, offer: shown)
-            } else {
-                postDropLegacyFusionProgress(shown)
-            }
+            postDropMechanicsDisclosure(presentedOffer(offer))
         case .receiptWhileVerifying:
             // Only a receipt that froze a total this device can stand behind
             // (`PendingMassPresentationPolicy`) shows a position. A lower
-            // bound would only draw 「時間の核を整理中」 with a spinner next to
-            // the cloud caption — two waiting indicators and no progress.
-            if let effortProgress = offer.effortProgress, !offer.projectionIsLowerBound {
+            // bound would only say 「時間の核を整理中」 next to the cloud
+            // caption — two waiting indicators and no progress.
+            if offer.effortProgress != nil, !offer.projectionIsLowerBound {
                 VStack(alignment: .leading, spacing: 8) {
-                    postDropEffortProgress(effortProgress, offer: offer)
                     postDropVerificationCaption
+                    postDropMechanicsDisclosure(offer)
                 }
             } else {
                 postDropCloudVerificationPending(offer)
             }
         }
+    }
+
+    private func postDropMechanicsDisclosure(_ offer: BreakOffer) -> some View {
+        let mechanics = CompletionCardPresentation.mechanics(
+            effortProgress: offer.effortProgress,
+            fusionState: offer.fusionState,
+            projectionIsLowerBound: offer.projectionIsLowerBound,
+            grams: offer.grams,
+            weeklyTimerCompletionCount: offer.weeklyCompletionCount
+        )
+        return MechanicsDisclosure(
+            isExpanded: $postDropMechanicsExpanded,
+            accessibilityAccounting: SentenceText.join([
+                PostDropProgressAccessibilityPresentation.description(
+                    effortProgress: offer.effortProgress,
+                    fusionState: offer.fusionState,
+                    projectionIsLowerBound: offer.projectionIsLowerBound
+                ) + "。",
+                mechanics.unitLine,
+                mechanics.weekCountLine
+            ].compactMap { $0 }),
+            accentHex: offer.colorHex
+        ) {
+            if let coreLine = mechanics.coreLine {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(coreLine)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(PomoGemTheme.text)
+                        .monospacedDigit()
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let fraction = mechanics.coreFraction {
+                        ProgressView(value: fraction)
+                            .tint(Color(hex: offer.colorHex))
+                    }
+                }
+            }
+            ForEach([mechanics.unitLine, mechanics.jarLine, mechanics.weekCountLine].compactMap { $0 }, id: \.self) { line in
+                Text(line)
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .monospacedDigit()
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityIdentifier("reward.fusion-progress")
     }
 
     /// One line under the frozen, device-confirmed progress while iCloud is
@@ -2723,213 +2801,6 @@ struct HomeView: View {
         .accessibilityLabel(
             "\(projectionVerificationTitle)。今回の\(offer.grams)グラムは保存済みです。これまでの合計は確認が済むと表示します"
         )
-    }
-
-    private func postDropEffortProgress(
-        _ state: EffortProgressSnapshot,
-        offer: BreakOffer
-    ) -> some View {
-        let display = EffortProgressPresentation.display(
-            snapshot: state,
-            projectionIsLowerBound: offer.projectionIsLowerBound
-        )
-        // Keep the exact physical-compaction statement in accessibility. It is
-        // explicitly secondary to time value, but preserves the meaning of a
-        // recovered flow and existing UI automation while count aggregation
-        // continues to protect jar capacity.
-        let physicalDisplay = FusionRewardBridgePresentation.display(
-            state: offer.fusionState,
-            projectionIsLowerBound: offer.projectionIsLowerBound
-        )
-
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: "hourglass.bottomhalf.filled")
-                    .font(.headline.weight(.black))
-                    .foregroundStyle(Color(hex: offer.colorHex))
-                    .frame(width: 32, height: 32)
-                    .background(Color(hex: offer.colorHex).opacity(0.13), in: Circle())
-                    .accessibilityHidden(true)
-                Text(display.eyebrow)
-                    .font(.caption2.weight(.black))
-                    .tracking(1.05)
-                    .foregroundStyle(PomoGemTheme.amber)
-            }
-
-            if let progressFraction = display.progressFraction {
-                ProgressView(value: progressFraction)
-                    .tint(Color(hex: offer.colorHex))
-                    .accessibilityHidden(true)
-            } else {
-                ProgressView()
-                    .controlSize(.small)
-                    .tint(PomoGemTheme.amber)
-                    .accessibilityHidden(true)
-            }
-
-            Text(display.progressLabel)
-                .font(.system(.headline, design: .rounded, weight: .black))
-                .monospacedDigit()
-                .foregroundStyle(PomoGemTheme.text)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Text(display.nextStepLabel)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(PomoGemTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if let context = display.longTermContextLabel {
-                Text(context)
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(PomoGemTheme.amber.opacity(0.9))
-                    .monospacedDigit()
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Text("25分 = 1.0標準単位 ・ 粒の10→1は瓶の整理")
-                .font(.system(size: 10, weight: .black, design: .rounded))
-                .tracking(0.15)
-                .foregroundStyle(PomoGemTheme.text.opacity(0.82))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .background(PomoGemTheme.card.opacity(0.72), in: Capsule())
-        }
-        // sync-03: the frozen lower-bound receipt (shown on every card while
-        // iCloud is checked) has no bar to stretch the box; keep its width.
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 11)
-        .padding(.vertical, 10)
-        .background(
-            LinearGradient(
-                colors: [
-                    Color(hex: offer.colorHex).opacity(0.12),
-                    PomoGemTheme.raised.opacity(0.78)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color(hex: offer.colorHex).opacity(0.24), lineWidth: 0.8)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityIdentifier("reward.fusion-progress")
-        .accessibilityLabel(
-            "\(display.accessibilityLabel)。瓶の物理整理：\(physicalDisplay.accessibilityLabel)"
-        )
-    }
-
-    private func postDropLegacyFusionProgress(_ offer: BreakOffer) -> some View {
-        let state = offer.fusionState
-        let display = FusionRewardBridgePresentation.display(
-            state: state,
-            projectionIsLowerBound: offer.projectionIsLowerBound
-        )
-        let orbitState = FusionOrbitStagePresentation.bridge(
-            state: state,
-            projectionIsLowerBound: offer.projectionIsLowerBound
-        )
-
-        return Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 12) {
-                    FusionOrbitStage(
-                        state: orbitState,
-                        colorHex: offer.colorHex,
-                        scale: .compact
-                    )
-                    .frame(width: 88, height: 88)
-                    .frame(maxWidth: .infinity)
-                    postDropFusionCopy(display, isSyncing: display.litSlotCount == nil)
-                }
-            } else {
-                HStack(spacing: 13) {
-                    FusionOrbitStage(
-                        state: orbitState,
-                        colorHex: offer.colorHex,
-                        scale: .compact
-                    )
-                    .frame(width: 108, height: 108)
-                    postDropFusionCopy(display, isSyncing: display.litSlotCount == nil)
-                }
-            }
-        }
-        .padding(.horizontal, 11)
-        .padding(.vertical, 10)
-        .background(
-            LinearGradient(
-                colors: [
-                    Color(hex: offer.colorHex).opacity(0.12),
-                    PomoGemTheme.raised.opacity(0.78)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color(hex: offer.colorHex).opacity(0.24), lineWidth: 0.8)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityIdentifier("reward.fusion-progress")
-        .accessibilityLabel(display.accessibilityLabel)
-    }
-
-    private func postDropFusionCopy(
-        _ display: FusionRewardBridgeDisplayState,
-        isSyncing: Bool
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text(display.eyebrow)
-                .font(.caption2.weight(.black))
-                .tracking(1.05)
-                .foregroundStyle(PomoGemTheme.amber)
-
-            Text(display.progressLabel)
-                .font(.system(.headline, design: .rounded, weight: .black))
-                .monospacedDigit()
-                .foregroundStyle(PomoGemTheme.text)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if isSyncing {
-                HStack(spacing: 7) {
-                    ProgressView()
-                        .controlSize(.small)
-                        .tint(PomoGemTheme.amber)
-                    Text(display.nextStepLabel)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(PomoGemTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .layoutPriority(1)
-                }
-            } else {
-                Text(display.nextStepLabel)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(PomoGemTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if let context = display.longTermContextLabel {
-                Text(context)
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(PomoGemTheme.amber.opacity(0.9))
-                    .monospacedDigit()
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Text("10 → 1 ・記録と質量は保持")
-                .font(.system(size: 10, weight: .black, design: .rounded))
-                .tracking(0.25)
-                .foregroundStyle(PomoGemTheme.text.opacity(0.82))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .background(PomoGemTheme.card.opacity(0.72), in: Capsule())
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .fixedSize(horizontal: false, vertical: true)
     }
 
     private func startBreakButton(_ offer: BreakOffer) -> some View {
@@ -4335,11 +4206,32 @@ struct HomeView: View {
                 breakOfferTask = nil
                 return
             }
+            postDropMechanicsExpanded = false
             withAnimation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.86)) {
-                breakOffer = BreakOffer(receipt: receipt)
+                breakOffer = withWeeklySelfReport(BreakOffer(receipt: receipt))
             }
             breakOfferTask = nil
         }
+    }
+
+    /// walk-std-07. The receipt froze the week's measured figure; the card
+    /// adds the same week's self-reported focus, read from the same query
+    /// (`HomeProjectionPolicy.completionMetrics`). A failed read shows the
+    /// measured figure alone.
+    private func withWeeklySelfReport(_ offer: BreakOffer) -> BreakOffer {
+        guard let metrics = try? HomeProjectionPolicy.completionMetrics(
+            context: modelContext,
+            resetMarkers: resetSnapshots,
+            roots: acceptedAggregateRoots,
+            looseSessions: looseSessions,
+            at: offer.createdAt
+        ) else { return offer }
+        var copy = offer
+        copy.applyWeeklySelfReport(
+            grams: metrics.weeklySelfReportedGrams,
+            includesThisCompletion: metrics.weeklySelfReportedSessionIDs.contains(offer.id)
+        )
+        return copy
     }
 
     private func hasLocalCompletionMarker(_ sessionID: UUID) -> Bool {
@@ -4841,8 +4733,14 @@ struct HomeView: View {
                 ? "\(progress)。\(projectionVerificationTitle)"
                 : progress
         }
-        let historyMessage = shown.weeklySpokenTitle
-        var message = "\(offer.dropTitle(for: rareRewardMode))\(offer.subjectName)、\(offer.grams)グラム、\(EffortProgressPresentation.formattedStandardUnits(grams: offer.grams))。\(historyMessage)。\(offer.rareRewardCounts.multiDrawSummary.map { "\($0)。" } ?? "")\(progressMessage)。\(offer.minutes)分休憩できます"
+        // The card's own order: the headline, time then grams, the week,
+        // then the full accounting that 「しくみ」 holds.
+        let mainMessage = CompletionCardPresentation.spokenMainLine(
+            subjectName: offer.subjectName,
+            grams: offer.grams
+        )
+        let historyMessage = shown.weeklySpokenTitle ?? ""
+        var message = "集中を記録しました。\(mainMessage)\(historyMessage)\(offer.rareRewardCounts.multiDrawSummary.map { "\($0)。" } ?? "")\(progressMessage)。\(offer.minutes)分休憩できます"
         if showShareChip {
             message += "。今の瓶をカードにして共有できます"
             announcedPostDropShareOfferID = offer.id
@@ -4930,6 +4828,305 @@ enum PostDropProgressAccessibilityPresentation {
     }
 }
 
+/// Copy for the completion card (Docs/GemExperienceDesign.md §8.3,
+/// walk-std-07/08, product-05): time first and grams second, one localized
+/// sentence per line, and the mechanics kept for 「しくみ」.
+enum CompletionCardPresentation {
+    /// 「英語 25分 → +250gの一粒」. The theme name is the person's own text.
+    static func mainLine(subjectName: String, grams: Int) -> String {
+        String(
+            localized: "\(subjectName) \(focusDuration(grams: grams)) → +\(mass(grams: grams))の一粒",
+            table: "Home",
+            comment: "Completion card main line. %1$@ is the theme name (user data, never translated), %2$@ the focus time (25分), %3$@ the gem's mass (250g). en: '%1$@ %2$@ → a +%3$@ gem'"
+        )
+    }
+
+    /// VoiceOver: 「英語、25分、250グラムの一粒。」 (one sentence).
+    static func spokenMainLine(subjectName: String, grams: Int) -> String {
+        String(
+            localized: "\(subjectName)、\(DurationText.spoken(minutes: DurationPresentation.focusMinutes(grams: grams)))、\(MassText.spoken(grams: max(0, grams)))の一粒。",
+            table: "Home",
+            comment: "VoiceOver: the completion card main line. %1$@ theme name (user data), %2$@ spoken focus time, %3$@ spoken mass. en: '%1$@, %2$@, a %3$@ gem'"
+        )
+    }
+
+    /// 「今週の実測 1時間15分」, or 「今週の実測 1時間15分・自己申告 30分」
+    /// when the week holds self-reported focus.
+    static func weekLine(measuredGrams: Int, selfReportedGrams: Int) -> String {
+        let measured = focusDuration(grams: measuredGrams)
+        guard selfReportedGrams > 0 else {
+            return String(
+                localized: "今週の実測 \(measured)",
+                table: "Home",
+                comment: "Completion card: this calendar week's measured focus time (timer and Screen Time). en: 'This week, measured: %@'"
+            )
+        }
+        return String(
+            localized: "今週の実測 \(measured)・自己申告 \(focusDuration(grams: selfReportedGrams))",
+            table: "Home",
+            comment: "Completion card: this calendar week's measured focus time, then its self-reported focus time. en: 'This week, measured: %1$@ · self-reported: %2$@'"
+        )
+    }
+
+    /// VoiceOver form of `weekLine`, one sentence.
+    static func spokenWeekLine(measuredGrams: Int, selfReportedGrams: Int) -> String {
+        let measured = DurationText.spoken(minutes: DurationPresentation.focusMinutes(grams: measuredGrams))
+        guard selfReportedGrams > 0 else {
+            return String(
+                localized: "今週の実測は\(measured)。",
+                table: "Home",
+                comment: "VoiceOver: this week's measured focus time on the completion card"
+            )
+        }
+        return String(
+            localized: "今週の実測は\(measured)、自己申告は\(DurationText.spoken(minutes: DurationPresentation.focusMinutes(grams: selfReportedGrams)))。",
+            table: "Home",
+            comment: "VoiceOver: this week's measured, then self-reported, focus time on the completion card"
+        )
+    }
+
+    static func spokenBreakAvailability(minutes: Int) -> String {
+        String(
+            localized: "\(minutes)分休憩を利用できます。",
+            table: "Home",
+            comment: "VoiceOver: the break the completion card offers. %lld is minutes"
+        )
+    }
+
+    /// The focus time a mass stands for (「25分」, 「1時間15分」).
+    static func focusDuration(grams: Int) -> String {
+        DurationText.short(minutes: DurationPresentation.focusMinutes(grams: grams))
+    }
+
+    /// 「250g」, 「1.8kg」, 「2.5kg」: grams below a kilogram, otherwise up to
+    /// two decimals without trailing zeros.
+    static func mass(grams rawGrams: Int) -> String {
+        let grams = max(0, rawGrams)
+        guard grams >= 1_000 else { return MassText.grams(String(grams)) }
+        var kilograms = String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), Double(grams) / 1_000)
+        while kilograms.hasSuffix("0") { kilograms.removeLast() }
+        if kilograms.hasSuffix(".") { kilograms.removeLast() }
+        return MassText.kilograms(kilograms)
+    }
+
+    // MARK: 「しくみ」
+
+    struct Mechanics: Equatable {
+        /// 「時間の核まで あと3時間45分」, or nil for a receipt without mass.
+        let coreLine: String?
+        let coreFraction: Double?
+        let unitLine: String?
+        let jarLine: String
+        let weekCountLine: String?
+    }
+
+    static func mechanics(
+        effortProgress: EffortProgressSnapshot?,
+        fusionState: FusionRewardBridgeState,
+        projectionIsLowerBound: Bool,
+        grams: Int,
+        weeklyTimerCompletionCount: Int
+    ) -> Mechanics {
+        Mechanics(
+            coreLine: effortProgress.map { coreLine($0, projectionIsLowerBound: projectionIsLowerBound) },
+            coreFraction: projectionIsLowerBound ? nil : effortProgress.map {
+                $0.crossedMilestoneGrams == nil ? $0.progressFraction : 1
+            },
+            unitLine: effortProgress == nil ? nil : String(
+                localized: "時間の核は、粒の数ではなく集中した時間で進みます。25分が1.0標準単位で、今回は\(standardUnits(grams: grams))標準単位です。",
+                table: "Home",
+                comment: "Completion card 「しくみ」: the time core counts time, not gems; 25 minutes is one standard unit. %@ is this focus in standard units (1.0)"
+            ),
+            jarLine: jarLine(fusionState, projectionIsLowerBound: projectionIsLowerBound),
+            weekCountLine: weeklyTimerCompletionCount > 0 ? String(
+                localized: "今週のタイマー完走は\(weeklyTimerCompletionCount)回です。回数は時間の価値とは別です。",
+                table: "Home",
+                comment: "Completion card 「しくみ」: timer completions this calendar week, a frequency cue only. %lld is the count"
+            ) : nil
+        )
+    }
+
+    private static func coreLine(_ snapshot: EffortProgressSnapshot, projectionIsLowerBound: Bool) -> String {
+        guard !projectionIsLowerBound else {
+            return String(localized: "時間の核の進みを確認しています", table: "Home",
+                          comment: "Completion card 「しくみ」 while the lifetime total is being checked")
+        }
+        if snapshot.crossedMilestoneGrams != nil {
+            let next = remainingDuration(grams: snapshot.nextTargetGrams - snapshot.totalGrams)
+            if snapshot.displayedTargetLevel <= 1 {
+                return String(localized: "時間の核が生まれました。次の段まで あと\(next)", table: "Home",
+                              comment: "Completion card 「しくみ」: this focus brought the first time core. %@ is the time to its next level")
+            }
+            return String(localized: "時間の核が\(snapshot.displayedTargetLevel)段目になりました。次の段まで あと\(next)", table: "Home",
+                          comment: "Completion card 「しくみ」: this focus raised the time core. %1$lld is the new level, %2$@ the time to the next one")
+        }
+        let remaining = remainingDuration(grams: snapshot.remainingGrams)
+        if snapshot.displayedTargetLevel <= 1 {
+            return String(localized: "時間の核まで あと\(remaining)", table: "Home",
+                          comment: "Completion card 「しくみ」: focus time left until the first time core. %@ is a duration")
+        }
+        return String(localized: "時間の核の\(snapshot.displayedTargetLevel)段目まで あと\(remaining)", table: "Home",
+                      comment: "Completion card 「しくみ」: focus time left until the time core's next level. %1$lld is the level, %2$@ a duration")
+    }
+
+    private static func jarLine(_ state: FusionRewardBridgeState, projectionIsLowerBound: Bool) -> String {
+        guard !projectionIsLowerBound else {
+            return String(localized: "粒は1回の完走につき1つです。結晶までの数は、確認が済むと表示します。", table: "Home",
+                          comment: "Completion card 「しくみ」 while the gem count is being checked")
+        }
+        if state.isFusionComplete {
+            return String(localized: "粒は1回の完走につき1つです。この一粒で10粒がそろい、瓶の中でひとつの結晶になります。記録と重さはそのままです。", table: "Home",
+                          comment: "Completion card 「しくみ」: this gem completes ten, which fuse into one crystal; nothing is lost")
+        }
+        let remaining = max(1, state.immediateHorizon.remainingPebbleCount)
+        return String(localized: "粒は1回の完走につき1つです。10粒そろうと、瓶の中でひとつの結晶にまとまります（記録と重さはそのまま）。次の結晶まで あと\(remaining)粒。", table: "Home",
+                      comment: "Completion card 「しくみ」: ten gems fuse into one crystal; %lld gems to the next crystal")
+    }
+
+    /// Minutes rounded up, so 「あと」 never claims less than is left.
+    private static func remainingDuration(grams: Int) -> String {
+        let minutes = (max(0, grams) + Constants.Mass.gramsPerMinute - 1) / Constants.Mass.gramsPerMinute
+        return DurationText.short(minutes: minutes)
+    }
+
+    /// 「1.0」, 「0.4」, 「2.4」 (at least one decimal, at most two).
+    static func standardUnits(grams: Int) -> String {
+        var value = String(
+            format: "%.2f",
+            locale: Locale(identifier: "en_US_POSIX"),
+            EffortProgressPolicy.standardUnitEquivalent(totalGrams: grams)
+        )
+        while value.hasSuffix("0"), !value.hasSuffix(".0") { value.removeLast() }
+        return value
+    }
+}
+
+/// The completion card's hero (§8.3): this focus's own gem in the jar's art,
+/// the same theme tone, loose cut and UUID variant as the gem that drops,
+/// with its halo. 標準 adds one glint as the card arrives (never a loop);
+/// Reduce Motion and 演出の強さ＝控えめ keep it still.
+private struct CompletionCardHero: View {
+    let sessionID: UUID
+    let colorHex: String
+
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
+    @AppStorage(JarEffectsIntensity.defaultsKey) private var effectsIntensity: JarEffectsIntensity = .standard
+    @State private var glintIsLit = false
+
+    private var effects: JarEffectsIntensity {
+        .resolved(preference: effectsIntensity, reduceMotion: reduceMotionOverride ?? systemReduceMotion)
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let side = min(proxy.size.width, proxy.size.height)
+            ZStack {
+                // The halo reaches 1.4× the stone: stone and halo fill the frame.
+                GemArtworkStone(
+                    spec: GemArtworkStone.looseSpec(hex: colorHex, variant: GemArtworkSpec.variant(for: sessionID)),
+                    glowHex: colorHex,
+                    glowOpacity: 0.5 * Double(effects.haloScale)
+                )
+                .frame(width: side * 0.7, height: side * 0.7)
+                if !effects.isSubtle {
+                    Image(uiImage: GemArtwork.glintImage)
+                        .resizable()
+                        .frame(width: side * 0.46, height: side * 0.46)
+                        .blendMode(.plusLighter)
+                        .scaleEffect(glintIsLit ? 1 : 0.2)
+                        .rotationEffect(.degrees(glintIsLit ? 18 : -12))
+                        .opacity(glintIsLit ? 0.95 : 0)
+                        .offset(x: -side * 0.13, y: -side * 0.14)
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+        .accessibilityHidden(true)
+        .allowsHitTesting(false)
+        .task(id: sessionID) { await playGlint() }
+    }
+
+    /// One glint, once: it catches the light and goes.
+    @MainActor
+    private func playGlint() async {
+        glintIsLit = false
+        guard !effects.isSubtle else { return }
+        try? await Task.sleep(for: .milliseconds(520))
+        guard !Task.isCancelled, !effects.isSubtle else { return }
+        withAnimation(.easeOut(duration: 0.32)) { glintIsLit = true }
+        try? await Task.sleep(for: .milliseconds(360))
+        guard !Task.isCancelled else { return }
+        withAnimation(.easeIn(duration: 0.62)) { glintIsLit = false }
+    }
+}
+
+/// 「しくみ」 (walk-std-08, product-05): the mechanics of gems, crystals and
+/// the time core, collapsed under one quiet row on the completion card and
+/// the fusion sheet. It is one accessibility element that always carries
+/// the full accounting, open or not.
+private struct MechanicsDisclosure<Content: View>: View {
+    @Binding var isExpanded: Bool
+    let accessibilityAccounting: String
+    var accentHex: String?
+    @ViewBuilder let content: () -> Content
+
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
+
+    var body: some View {
+        Button {
+            withAnimation((reduceMotionOverride ?? systemReduceMotion) ? nil : .easeInOut(duration: 0.22)) {
+                isExpanded.toggle()
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 7) {
+                    Image(systemName: "info.circle")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(accentHex.map { Color(hex: $0) } ?? PomoGemTheme.amber)
+                    Text("しくみ", tableName: "Home",
+                         comment: "Disclosure that opens how gems, crystals and the time core work. en: 'How it works'")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(PomoGemTheme.text)
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(PomoGemTheme.muted)
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                }
+                .frame(minHeight: 44)
+                if isExpanded {
+                    VStack(alignment: .leading, spacing: 8) {
+                        content()
+                    }
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, 10)
+                    .transition(.opacity)
+                }
+            }
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(PomoGemTheme.raised.opacity(0.62), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(PomoGemBareButtonStyle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String(
+            localized: "しくみ。\(accessibilityAccounting)",
+            table: "Home",
+            comment: "VoiceOver label of the 「しくみ」 disclosure; %@ is its full accounting, read whether it is open or not"
+        ))
+        .accessibilityValue(isExpanded
+            ? String(localized: "開いています", table: "Home", comment: "VoiceOver value: the 「しくみ」 disclosure is open")
+            : String(localized: "閉じています", table: "Home", comment: "VoiceOver value: the 「しくみ」 disclosure is closed"))
+        .accessibilityHint(Text("説明の表示を切り替えます", tableName: "Home",
+                                comment: "VoiceOver hint: toggles the 「しくみ」 disclosure"))
+        .accessibilityAddTraits(.isButton)
+    }
+}
+
 /// One presentation of the focus cover. `id` doubles as the focus session ID,
 /// and the reset epoch is captured with it, so every re-render of Home rebuilds
 /// FocusView against the same session-scoped queries.
@@ -4963,6 +5160,7 @@ private struct RestampedWeeklyMetrics: Equatable {
     let request: Request
     let completionCount: Int
     let studyGrams: Int?
+    let selfReportedGrams: Int
 
     func matches(offer id: UUID, stamp: AggregateProjectionCacheStamp?) -> Bool {
         request.offerID == id && request.stamp == stamp
@@ -4978,6 +5176,9 @@ private struct BreakOffer: Identifiable {
     let colorHex: String
     private(set) var weeklyCompletionCount: Int
     private(set) var weeklyStudyGrams: Int?
+    /// walk-std-07. Read live from the completion's calendar week when the
+    /// card opens (the receipt predates it); never persisted.
+    private(set) var weeklySelfReportedGrams = 0
     let kind: PebbleKind
     let rareRewardCounts: RareRewardCounts
     private(set) var fusionState: FusionRewardBridgeState
@@ -5000,6 +5201,7 @@ private struct BreakOffer: Identifiable {
         if let weekly, weekly.request.offerID == id {
             copy.weeklyCompletionCount = weekly.completionCount
             copy.weeklyStudyGrams = weekly.studyGrams
+            copy.weeklySelfReportedGrams = weekly.selfReportedGrams
         }
         copy.fusionState = FusionRewardBridgePresentation.state(totalPebbleCount: max(1, totalPebbles))
         copy.effortProgress = EffortProgressPolicy.snapshot(
@@ -5060,43 +5262,29 @@ private struct BreakOffer: Identifiable {
         }
     }
 
-    func dropTitle(for mode: RareRewardMode) -> String {
-        if isAwaitingDrop { return "集中を記録しました。" }
-        if !mode.usesEnhancedPresentation {
-            return switch kind {
-            case .normal: "一粒、着地。"
-            case .gold: "金の粒を積みました。"
-            case .prism: "虹の粒を積みました。"
-            }
-        }
-        return switch kind {
-        case .normal: "一粒、着地。"
-        case .gold: "金の粒、着地。"
-        case .prism: "虹の粒、着地。"
+    /// walk-std-07. The week's self-reported focus from the same calendar
+    /// week and query as the frozen measured figure. A timer completion that
+    /// was demoted to self-reported leaves the measured figure, which the
+    /// receipt counted it in, and is named as self-reported instead.
+    mutating func applyWeeklySelfReport(grams: Int, includesThisCompletion: Bool) {
+        weeklySelfReportedGrams = max(0, grams)
+        if includesThisCompletion, let measured = weeklyStudyGrams {
+            weeklyStudyGrams = max(0, measured - self.grams)
         }
     }
 
-    var weeklyTitle: String {
-        if let weeklyStudyGrams {
-            return "今週 \(formattedWeeklyMass(weeklyStudyGrams)) ・ 戻った\(weeklyCompletionCount)回"
+    /// 「今週の実測 1時間15分・自己申告 30分」. A receipt from a build
+    /// before the weekly mass was saved has no line.
+    var weeklyTitle: String? {
+        weeklyStudyGrams.map {
+            CompletionCardPresentation.weekLine(measuredGrams: $0, selfReportedGrams: weeklySelfReportedGrams)
         }
-        return "今週戻った\(weeklyCompletionCount)回（時間価値とは別）"
     }
 
-    var weeklySpokenTitle: String {
-        if let weeklyStudyGrams {
-            return "今週記録した集中時間の質量\(formattedWeeklyMass(weeklyStudyGrams))。戻った回数\(weeklyCompletionCount)回。回数は時間価値とは別です"
+    var weeklySpokenTitle: String? {
+        weeklyStudyGrams.map {
+            CompletionCardPresentation.spokenWeekLine(measuredGrams: $0, selfReportedGrams: weeklySelfReportedGrams)
         }
-        return "今週戻った回数\(weeklyCompletionCount)回。回数は時間価値とは別です"
-    }
-
-    private func formattedWeeklyMass(_ grams: Int) -> String {
-        let value = max(0, grams)
-        guard value >= 1_000 else { return "\(value)g" }
-        let kilograms = Double(value) / 1_000
-        return kilograms.rounded() == kilograms
-            ? "\(Int(kilograms))kg"
-            : String(format: "%.2fkg", kilograms)
     }
 }
 

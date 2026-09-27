@@ -40,9 +40,10 @@ final class EngagementOverviewUITests: XCTestCase {
             weeklyCompletion.waitForExistence(timeout: 20),
             "The guaranteed completion reward must explain real weekly progress"
         )
+        XCTAssertEqual(weeklyCompletion.label, "集中を記録しました")
         XCTAssertTrue(
-            String(describing: weeklyCompletion.value).contains("戻った回数1回"),
-            "The reward heading must retain weekly recurrence context without presenting count as time value"
+            String(describing: weeklyCompletion.value).contains("今週の実測は"),
+            "The reward heading must read this week's measured time: \(String(describing: weeklyCompletion.value))"
         )
         let rewardBridge = app.descendants(matching: .any)["reward.bridge"]
         XCTAssertTrue(
@@ -53,6 +54,13 @@ final class EngagementOverviewUITests: XCTestCase {
         XCTAssertTrue(fusionProgress.waitForExistence(timeout: 3))
         XCTAssertTrue(fusionProgress.label.contains("×10へ 1/10"), fusionProgress.label)
         XCTAssertTrue(fusionProgress.label.contains("あと9粒"), fusionProgress.label)
+        // The weekly timer count stays, but only inside 「しくみ」, as a
+        // frequency cue apart from time value (walk-std-08, product-05).
+        XCTAssertTrue(fusionProgress.label.contains("今週のタイマー完走は1回"), fusionProgress.label)
+        XCTAssertEqual(fusionProgress.value as? String, "閉じています")
+        for jargon in ["TIME CORE", "25分 = 1.0標準単位 ・ 粒の10→1は瓶の整理"] {
+            XCTAssertFalse(app.staticTexts[jargon].exists, "「\(jargon)」 left the card")
+        }
 
         let rewardBridgeAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         rewardBridgeAttachment.name = "Reward Bridge — weekly and fusion progress"
