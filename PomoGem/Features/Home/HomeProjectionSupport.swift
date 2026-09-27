@@ -490,6 +490,65 @@ enum HomeProjectionPolicy {
         }
     }
 
+    /// Receipts whose StudySession no longer exists at all, so their gem can
+    /// never land. Home keeps its start button disabled while any receipt
+    /// waits, and a receipt that waits for a drop only finishes when its gem
+    /// lands; one whose session is gone would block focus for good. That
+    /// happens when the dataset under the receipt was replaced (a fresh UI
+    /// test store today; a synced deletion or a reset purge later).
+    ///
+    /// A receipt is only presentation: its session is the reward, and
+    /// retiring the receipt changes no mass. The rule still never gives up on
+    /// a reward that may yet appear:
+    /// - only a read Home can stand behind counts: the store is admitted
+    ///   (Home only runs inside it) and verified (never while iCloud is
+    ///   checked, `storeReadIsVerified`), and a failed lookup throws, so the
+    ///   caller keeps every receipt;
+    /// - only a receipt waiting for a drop is considered: a legacy card has
+    ///   already landed and its 「閉じる」 always retires it;
+    /// - a receipt that resolved, or whose card is on screen or about to be
+    ///   (`presentedCardIsPending`), is kept;
+    /// - "absent" means no physical row with its ID in any epoch. A row that
+    ///   exists but does not resolve (another epoch, unsupported, quarantined)
+    ///   is left to the reset and maintenance paths that own it.
+    @MainActor
+    static func orphanedPendingRewardReceiptIDs(
+        in receipts: [PendingRewardReceipt],
+        resolvedSessionIDs: Set<UUID>,
+        storeReadIsVerified: Bool,
+        presentedCardIsPending: Bool,
+        sessionExists: (UUID) throws -> Bool
+    ) rethrows -> [UUID] {
+        guard storeReadIsVerified else { return [] }
+        var orphaned: [UUID] = []
+        for receipt in receipts where receipt.requiresDrop {
+            guard !resolvedSessionIDs.contains(receipt.id) else { continue }
+            if receipt.isAwaitingAcknowledgement, presentedCardIsPending {
+                // Removing the receipt under its own card would leave
+                // 「閉じる」 with nothing to acknowledge. Once acknowledged it
+                // waits for a landing, and the next pass retires it.
+                continue
+            }
+            guard try !sessionExists(receipt.id) else { continue }
+            orphaned.append(receipt.id)
+        }
+        return orphaned
+    }
+
+    /// Whether any physical StudySession row carries this ID, in any epoch
+    /// and whatever its integrity. One row is enough.
+    @MainActor
+    static func physicalSessionExists(
+        id: UUID,
+        context: ModelContext
+    ) throws -> Bool {
+        var descriptor = FetchDescriptor<StudySession>(
+            predicate: #Predicate { $0.id == id }
+        )
+        descriptor.fetchLimit = 1
+        return try context.fetchCount(descriptor) > 0
+    }
+
     struct LocalMembershipProjection: Equatable {
         let representedSessionIDs: Set<UUID>
         let isCompleteForCandidates: Bool

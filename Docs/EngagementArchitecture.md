@@ -330,6 +330,7 @@ achievement stones = 0g
 - StudySession保存をsource of truthとし、別storeを単一transactionと偽らず、Reward Receiptで表示へのdurable hand-offを作る
 - 完走結果のfull payloadを最大4件のReward Receiptとして着地marker消費前に永続化し、復旧時にもセッション再保存・再抽選をしない
 - receiptは表示しただけでは消さず、閉じる／休憩／共有という明示ackで一度だけ削除し、activity resetでも残さない
+- 着地を待つreceiptのStudySessionがどのepochにも1行も残っていなければ、二度と着地できず集中開始を塞ぎ続けるため、着地したものとして退役させてログに残す。判断は確認済みの読み取りだけで行い、iCloudの確認中、読み取りの失敗、行はあるが解決できない（別epoch・未対応）場合、カードの表示中は退役させない。receiptは表示用なので、退役しても質量は変わらない
 - 途中遷移でも要求を失わない
 - 保存失敗時は元粒へ完全復帰
 - 同じ失敗を毎フレーム再試行しない
