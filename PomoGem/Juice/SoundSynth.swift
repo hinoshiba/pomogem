@@ -485,6 +485,20 @@ final class SoundSynth {
     /// play.
     static let staleIncidentalSoundLimit: TimeInterval = 0.15
 
+    /// Runs `work` on the main actor after `delay` seconds. The idle-shutdown
+    /// check goes through it so tests can fire that check in a set order
+    /// instead of racing wall-clock sleeps.
+    typealias IdleCheckScheduler = @MainActor (
+        _ delay: TimeInterval,
+        _ work: @escaping @MainActor () -> Void
+    ) -> Void
+
+    static let mainQueueIdleCheckScheduler: IdleCheckScheduler = { delay, work in
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(delay, 0)) {
+            MainActor.assumeIsolated { work() }
+        }
+    }
+
     var isEnabled = true {
         didSet {
             guard isEnabled != oldValue, !isEnabled else { return }
@@ -503,6 +517,7 @@ final class SoundSynth {
     private let output: SoundSynthOutput
     private let audioQueue: DispatchQueue
     private let idleLinger: TimeInterval
+    private let scheduleIdleCheck: IdleCheckScheduler
     private let observesApplicationLifecycle: Bool
     private var voiceBusyUntilUptime: [TimeInterval]
     private var nextImportantVoice = 0
@@ -550,18 +565,21 @@ final class SoundSynth {
         )
     }
 
-    /// Tests pass a recording output, their own queue and a short linger, and
-    /// drive the app lifecycle through `applicationWillResignActive()` and
-    /// `applicationDidBecomeActive()` instead of UIKit notifications.
+    /// Tests pass a recording output, their own queue, a short linger (or
+    /// their own idle-check scheduler), and drive the app lifecycle through
+    /// `applicationWillResignActive()` and `applicationDidBecomeActive()`
+    /// instead of UIKit notifications.
     init(
         output: SoundSynthOutput,
         audioQueue: DispatchQueue,
         idleLinger: TimeInterval,
+        scheduleIdleCheck: @escaping IdleCheckScheduler = SoundSynth.mainQueueIdleCheckScheduler,
         observesApplicationLifecycle: Bool
     ) {
         self.output = output
         self.audioQueue = audioQueue
         self.idleLinger = max(idleLinger, 0)
+        self.scheduleIdleCheck = scheduleIdleCheck
         self.observesApplicationLifecycle = observesApplicationLifecycle
         voiceBusyUntilUptime = Array(
             repeating: -Double.greatestFiniteMagnitude,
@@ -925,7 +943,7 @@ final class SoundSynth {
         generation: UInt64,
         after delay: TimeInterval
     ) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + max(delay, 0)) { [weak self] in
+        scheduleIdleCheck(max(delay, 0)) { [weak self] in
             guard let self,
                   self.idleShutdownGeneration == generation,
                   self.engineRunRequested
@@ -1138,6 +1156,14 @@ protocol SoundSynthOutput: AnyObject, Sendable {
 /// The AVFoundation output. Only `SoundSynth`'s serial audio queue uses it,
 /// so its state needs no lock (hence `@unchecked Sendable`).
 final class AVSoundSynthOutput: SoundSynthOutput, @unchecked Sendable {
+    /// `.ambient` with no options: our sounds mix with the person's music or
+    /// podcast instead of interrupting it, obey the Ring/Silent switch and
+    /// screen lock, and never ask for background audio. The review notes
+    /// promise this; SoundSynthOutputTests pin it.
+    static let sessionCategory: AVAudioSession.Category = .ambient
+    static let sessionMode: AVAudioSession.Mode = .default
+    static let sessionCategoryOptions: AVAudioSession.CategoryOptions = []
+
     private final class Voice {
         let player = AVAudioPlayerNode()
         let pitch = AVAudioUnitVarispeed()
@@ -1177,13 +1203,15 @@ final class AVSoundSynthOutput: SoundSynthOutput, @unchecked Sendable {
         var sessionWasActivated = false
         do {
             if !isCategoryConfigured {
-                // `.ambient`: our sounds mix with the person's music or podcast
-                // instead of interrupting it, obey the Ring/Silent switch and
-                // screen lock, and never ask for background audio. The hardware
-                // sample rate is left alone: the mixer converts these 44.1 kHz
-                // buffers, so turning the session on never reconfigures the
-                // route under someone else's audio.
-                try session.setCategory(.ambient, mode: .default, options: [])
+                // See `sessionCategory`. The hardware sample rate is left
+                // alone: the mixer converts these 44.1 kHz buffers, so turning
+                // the session on never reconfigures the route under someone
+                // else's audio.
+                try session.setCategory(
+                    Self.sessionCategory,
+                    mode: Self.sessionMode,
+                    options: Self.sessionCategoryOptions
+                )
                 isCategoryConfigured = true
             }
             if !isSessionActive {

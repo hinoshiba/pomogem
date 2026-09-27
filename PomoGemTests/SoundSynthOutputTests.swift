@@ -59,17 +59,28 @@ final class SoundSynthOutputTests: XCTestCase {
         XCTAssertEqual(fixture.output.calls.map(\.name), ["ensureRunning"])
     }
 
-    func testTheEngineOutlivesTheSoundByTheLingerThenReleasesTheSession() {
-        let fixture = Fixture(idleLinger: 0.4)
+    func testTheEngineOutlivesTheSoundByTheLingerThenReleasesTheSession() throws {
+        let checks = ManualIdleChecks()
+        let fixture = Fixture(idleLinger: 0.4, idleChecks: checks)
 
         fixture.synth.playThud(impactSpeed: 4)
-        fixture.wait(seconds: 0.3)
-        XCTAssertFalse(
-            fixture.output.calls.contains { $0.name.hasPrefix("stop(") },
+        fixture.drain()
+        let check = try XCTUnwrap(checks.pending.first)
+        XCTAssertGreaterThanOrEqual(
+            check.delay,
+            0.4,
             "The old 0.12 s grace stopped the engine between every tap"
         )
+        XCTAssertFalse(fixture.output.calls.contains { $0.name.hasPrefix("stop(") })
 
-        fixture.wait(seconds: 0.6)
+        // The check stops the engine once the thud has finished playing. A
+        // check that comes due while it still plays waits for it, so firing
+        // late never fails this test; only a check that never stops does.
+        for _ in 0 ..< 40 where fixture.output.calls.last?.name.hasPrefix("stop(") != true {
+            fixture.wait(seconds: 0.05)
+            checks.fireAll()
+            fixture.drain()
+        }
         XCTAssertEqual(
             fixture.output.calls.last?.name,
             "stop(deactivatingSession: true)"
@@ -82,14 +93,74 @@ final class SoundSynthOutputTests: XCTestCase {
     }
 
     func testANewSoundKeepsTheEngineAlive() {
-        let fixture = Fixture(idleLinger: 0.4)
+        let checks = ManualIdleChecks()
+        let fixture = Fixture(idleLinger: 0.4, idleChecks: checks)
 
         fixture.synth.prewarm()
-        fixture.wait(seconds: 0.3)
         fixture.synth.playThud(impactSpeed: 4)
-        fixture.wait(seconds: 0.3)
+        XCTAssertEqual(checks.pending.count, 2)
 
+        // The prewarm's check comes due first. The thud superseded it, so it
+        // neither stops the engine nor schedules another check.
+        checks.fire(at: 0)
+        fixture.drain()
         XCTAssertFalse(fixture.output.calls.contains { $0.name.hasPrefix("stop(") })
+        XCTAssertEqual(checks.pending.count, 1, "Only the thud's own check is left")
+    }
+
+    // MARK: - JarScene hook and session contract
+
+    /// The hook itself (jar-03): queuing a gem warms the audio before the gem
+    /// can land, and restoring the jar, which lands silently, warms nothing.
+    func testQueuingAGemWarmsTheAudioAndRestoringTheJarDoesNot() {
+        let fixture = Fixture()
+        let scene = JarScene(soundSynth: fixture.synth)
+
+        scene.restore(pebbles: gems(count: Constants.Jar.maxPhysicsBodies + 5))
+        fixture.drain()
+        XCTAssertEqual(
+            fixture.output.calls.map(\.name),
+            [],
+            "Restoring, including its overflow queue, plays nothing and warms nothing"
+        )
+
+        scene.dropFromAbove(gems(count: 1)[0])
+        fixture.drain()
+        XCTAssertEqual(
+            fixture.output.calls.map(\.name),
+            ["ensureRunning"],
+            "The engine starts while the gem is queued, before any landing"
+        )
+    }
+
+    func testTheCompletionDropWarmsTheAudioBeforeItsChime() {
+        let fixture = Fixture()
+        let scene = JarScene(soundSynth: fixture.synth)
+
+        scene.performCompletionDrop(gems(count: 1)[0])
+        fixture.drain()
+
+        let names = fixture.output.calls.map(\.name)
+        XCTAssertEqual(names.first, "ensureRunning")
+        XCTAssertTrue(names.contains { $0.hasPrefix("play(") }, "\(names)")
+    }
+
+    /// Our sounds mix with the person's music, obey the Ring/Silent switch
+    /// and never ask for background audio (AppStore review notes).
+    func testTheAudioSessionIsAmbientWithNoOptions() {
+        XCTAssertEqual(AVSoundSynthOutput.sessionCategory, .ambient)
+        XCTAssertEqual(AVSoundSynthOutput.sessionMode, .default)
+        XCTAssertEqual(AVSoundSynthOutput.sessionCategoryOptions, [])
+    }
+
+    private func gems(count: Int) -> [PebbleDescriptor] {
+        (0 ..< count).map { index in
+            PebbleDescriptor(
+                subjectName: "勉強", colorHex: "58A9E4", source: .timer,
+                kind: .normal, grams: 250,
+                createdAt: Date(timeIntervalSinceReferenceDate: Double(index))
+            )
+        }
     }
 
     func testLeavingTheAppStopsAtOnceAndNothingStartsWhileInactive() {
@@ -233,11 +304,12 @@ private struct Fixture {
     let queue = DispatchQueue(label: "SoundSynthOutputTests.audio")
     let synth: SoundSynth
 
-    init(idleLinger: TimeInterval = 60) {
+    init(idleLinger: TimeInterval = 60, idleChecks: ManualIdleChecks? = nil) {
         synth = SoundSynth(
             output: output,
             audioQueue: queue,
             idleLinger: idleLinger,
+            scheduleIdleCheck: idleChecks?.scheduler ?? SoundSynth.mainQueueIdleCheckScheduler,
             observesApplicationLifecycle: false
         )
     }
@@ -257,6 +329,35 @@ private struct Fixture {
     func wait(seconds: TimeInterval) {
         RunLoop.main.run(until: Date().addingTimeInterval(seconds))
         drain()
+    }
+}
+
+/// Holds SoundSynth's idle-shutdown checks until the test fires them, so no
+/// assertion depends on how late the main run loop wakes up.
+@MainActor
+private final class ManualIdleChecks {
+    struct Check {
+        let delay: TimeInterval
+        let work: @MainActor () -> Void
+    }
+
+    private(set) var pending: [Check] = []
+
+    var scheduler: SoundSynth.IdleCheckScheduler {
+        { [weak self] delay, work in
+            self?.pending.append(Check(delay: delay, work: work))
+        }
+    }
+
+    func fire(at index: Int) {
+        pending.remove(at: index).work()
+    }
+
+    /// Fires the checks pending now; any they schedule stay pending.
+    func fireAll() {
+        let due = pending
+        pending.removeAll()
+        due.forEach { $0.work() }
     }
 }
 
