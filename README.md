@@ -56,8 +56,8 @@ open PomoGem.xcodeproj
 CloudKitへ接続せず、専用のローカル永続ストアを使います。iCloud、通知、
 モーション、StoreKit、Live Activityの最終確認は実機で行ってください。Version 1.0のWidgetは
 account-neutralな集中開始の導線だけを表示し、タップすると固定の`pomogem://focus/start`
-（medium widgetの時間ボタンは`?minutes=25|45|60|90`）でアプリを開きます。アプリはホームの開始ボタンと
-同じ条件でだけ集中を始めます（`FocusStartEntryPolicy`）。App Shortcut「集中を始める」
+（medium widgetは時間ボタンだけが`?minutes=25|45|60|90`で始め、瓶と見出しは`pomogem://home`）で
+アプリを開きます。アプリはホームの開始ボタンと同じ条件でだけ集中を始めます（`FocusStartEntryPolicy`）。App Shortcut「集中を始める」
 （`StartFocusIntent`）も同じ要求を渡すだけです。Live Activityもaccount-neutralとし、明示的に集中を
 始めたとき、または完走後に休憩を選んだときだけ、アプリ名、選択時間、残り時間、実行状態を表示します。
 テーマ名、メモ、質量、Apple Account、CloudKit由来の内容は渡しません。設定から端末ごとに無効化でき、
