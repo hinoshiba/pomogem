@@ -621,7 +621,7 @@ private struct TrialDropPage: View {
                             .transition(.opacity)
                     }
 
-                    Text("任意の体験です。0g・記録には入りません。「次へ」で省略できます。")
+                    Text(TrialDropPresentation.trialNote)
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
                         .multilineTextAlignment(.center)
@@ -728,23 +728,8 @@ private struct TrialDropPage: View {
         )
     }
 
-    /// 「25分の集中 = この一粒（+250g）」, one sentence.
-    private static var meaning: String {
-        String(
-            localized: "\(DurationText.short(minutes: DurationPresentation.focusMinutes(grams: Constants.Mass.measuredPebbleGrams)))の集中 = この一粒（+\(MassText.grams(String(Constants.Mass.measuredPebbleGrams)))）",
-            table: "Onboarding",
-            comment: "Onboarding trial drop, shown after the trial gem lands: what one gem stands for. %1$@ is a focus time (25分), %2$@ its mass (250g). en: '%1$@ of focus = this gem (+%2$@)'"
-        )
-    }
-
-    /// VoiceOver form of `meaning`: 「25分の集中が、この一粒（250グラム）になります」.
-    private static var spokenMeaning: String {
-        String(
-            localized: "\(DurationText.spoken(minutes: DurationPresentation.focusMinutes(grams: Constants.Mass.measuredPebbleGrams)))の集中が、この一粒（\(MassText.spoken(grams: Constants.Mass.measuredPebbleGrams))）になります",
-            table: "Onboarding",
-            comment: "VoiceOver: what the onboarding trial gem stands for. %1$@ is a spoken focus time, %2$@ a spoken mass"
-        )
-    }
+    private static var meaning: String { TrialDropPresentation.meaning }
+    private static var spokenMeaning: String { TrialDropPresentation.spokenMeaning }
 
     private var dropButtonTitle: String {
         if dropped { return "一粒、積もった" }
@@ -1254,6 +1239,38 @@ extension Color {
             green: Double((value >> 8) & 0xFF) / 255,
             blue: Double(value & 0xFF) / 255,
             opacity: 1
+        )
+    }
+}
+
+/// walk-std-12. The onboarding trial gem's words, kept apart from the view
+/// so the visible and spoken forms are pinned by unit tests.
+enum TrialDropPresentation {
+    /// 「25分の集中 = この一粒（+250g）」, one sentence.
+    static var meaning: String {
+        String(
+            localized: "\(DurationText.short(minutes: DurationPresentation.focusMinutes(grams: Constants.Mass.measuredPebbleGrams)))の集中 = この一粒（+\(MassText.grams(String(Constants.Mass.measuredPebbleGrams)))）",
+            table: "Onboarding",
+            comment: "Onboarding trial drop, shown after the trial gem lands: what one gem stands for. %1$@ is a focus time (25分), %2$@ its mass (250g). en: '%1$@ of focus = this gem (+%2$@)'"
+        )
+    }
+
+    /// VoiceOver form of `meaning`: 「25分の集中が、この一粒（250グラム）になります」.
+    static var spokenMeaning: String {
+        String(
+            localized: "\(DurationText.spoken(minutes: DurationPresentation.focusMinutes(grams: Constants.Mass.measuredPebbleGrams)))の集中が、この一粒（\(MassText.spoken(grams: Constants.Mass.measuredPebbleGrams))）になります",
+            table: "Onboarding",
+            comment: "VoiceOver: what the onboarding trial gem stands for. %1$@ is a spoken focus time, %2$@ a spoken mass"
+        )
+    }
+
+    /// The page's standing note. It names no weight of its own: 「0g」 right
+    /// under 「+250g」 read as a contradiction.
+    static var trialNote: String {
+        String(
+            localized: "これはお試しなので、記録には入りません。「次へ」で省略できます。",
+            table: "Onboarding",
+            comment: "Onboarding trial drop page: the trial gem is never recorded, and the page can be skipped"
         )
     }
 }
