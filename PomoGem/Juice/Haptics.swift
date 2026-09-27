@@ -28,6 +28,9 @@ final class Haptics {
     /// `engineStartGeneration`, which every stop advances.
     private var isStartingEngine = false
     private var engineStartGeneration: UInt64 = 0
+    /// Cues that arrived while the engine was stopped. They play when the
+    /// asynchronous start completes (jar-03).
+    private var deferredCues = DeferredHapticCues<Cue>()
     private var timerCompletionPlayer: CHHapticPatternPlayer?
     private var didBecomeActiveObserver: NSObjectProtocol?
     private let lightFallback = UIImpactFeedbackGenerator(style: .light)
@@ -67,9 +70,11 @@ final class Haptics {
 
     /// Starts the haptic engine without blocking the main thread, ahead of a
     /// cue that is about to happen (a gem entering the jar, the app becoming
-    /// active). The synchronous `start()` in `play` stays as the fallback for
-    /// a cue that arrives first; it measured 46 ms for the first start in a
-    /// process on an iPhone 12 mini (jar-03).
+    /// active). A cue that finds the engine stopped (idle auto-shutdown after
+    /// a few seconds, a return from the background) calls this too and plays
+    /// when the start completes. The synchronous `start()` it replaces
+    /// measured 46 ms for the first start in a process on an iPhone 12 mini,
+    /// paid inside a tap handler or a landing's contact callback (jar-03).
     func prewarm() {
         guard isEnabled,
               supportsCoreHaptics,
@@ -86,6 +91,7 @@ final class Haptics {
                 if error == nil {
                     self.engineIsRunning = true
                 }
+                self.playDeferredCues()
             }
         }
     }
@@ -193,6 +199,7 @@ final class Haptics {
     /// Stops only the retained completion pattern. Jar/drop haptics use their
     /// own short players and must not be interrupted by acknowledging a timer.
     func stopTimerCompletion() {
+        deferredCues.cancelTimerCompletion()
         try? timerCompletionPlayer?.stop(atTime: CHHapticTimeImmediate)
         timerCompletionPlayer = nil
     }
@@ -277,36 +284,15 @@ final class Haptics {
         fallbackSharpness: CGFloat = 0.5
     ) {
         guard isEnabled, !events.isEmpty else { return }
-        let duration = playbackDuration(for: events)
-        guard supportsCoreHaptics else {
-            postWillPlay(duration: duration)
-            playFallback(intensity: fallbackIntensity, sharpness: fallbackSharpness)
-            return
-        }
-
-        if startEngine(), let engine {
-            do {
-                let pattern = try CHHapticPattern(events: events, parameters: [])
-                let player = try engine.makePlayer(with: pattern)
-                postWillPlay(duration: duration)
-                do {
-                    try player.start(atTime: CHHapticTimeImmediate)
-                } catch {
-                    // The notification was already emitted for this physical
-                    // attempt, so the fallback must not emit a duplicate.
-                    engineIsRunning = false
-                    playFallback(intensity: fallbackIntensity, sharpness: fallbackSharpness)
-                }
-                return
-            } catch {
-                // Pattern/player construction did not reach hardware. Fall
-                // through to one announced UIKit impact.
-                engineIsRunning = false
-            }
-        }
-
-        postWillPlay(duration: duration)
-        playFallback(intensity: fallbackIntensity, sharpness: fallbackSharpness)
+        deliver(
+            Cue(
+                events: events,
+                duration: playbackDuration(for: events),
+                fallbackIntensity: fallbackIntensity,
+                fallbackSharpness: fallbackSharpness
+            ),
+            kind: .feedback
+        )
     }
 
     private func playTimerCompletion(
@@ -315,39 +301,77 @@ final class Haptics {
         fallbackSharpness: CGFloat = 0.5
     ) {
         guard isEnabled, !events.isEmpty else { return }
-        let duration = playbackDuration(for: events)
-        guard supportsCoreHaptics else {
-            postWillPlay(duration: duration)
-            playFallback(intensity: fallbackIntensity, sharpness: fallbackSharpness)
+        deliver(
+            Cue(
+                events: events,
+                duration: playbackDuration(for: events),
+                fallbackIntensity: fallbackIntensity,
+                fallbackSharpness: fallbackSharpness
+            ),
+            kind: .timerCompletion
+        )
+    }
+
+    private func deliver(_ cue: Cue, kind: DeferredHapticCues<Cue>.Kind) {
+        guard supportsCoreHaptics, engine != nil else {
+            playFallback(cue)
             return
         }
+        guard engineIsRunning else {
+            // jar-03, after review of PR #41: never start the engine
+            // synchronously here. A tap after the engine's idle
+            // auto-shutdown used to block the main thread inside the tap
+            // handler; the cue now waits a few milliseconds for the
+            // asynchronous start instead.
+            deferredCues.enqueue(cue, kind: kind, at: ProcessInfo.processInfo.systemUptime)
+            prewarm()
+            return
+        }
+        playOnRunningEngine(cue, kind: kind)
+    }
 
-        if startEngine(), let engine {
-            do {
-                let pattern = try CHHapticPattern(events: events, parameters: [])
-                let player = try engine.makePlayer(with: pattern)
-                try? timerCompletionPlayer?.stop(atTime: CHHapticTimeImmediate)
-                timerCompletionPlayer = player
-                postWillPlay(duration: duration)
-                do {
-                    try player.start(atTime: CHHapticTimeImmediate)
-                } catch {
-                    timerCompletionPlayer = nil
-                    engineIsRunning = false
-                    playFallback(
-                        intensity: fallbackIntensity,
-                        sharpness: fallbackSharpness
-                    )
-                }
-                return
-            } catch {
-                timerCompletionPlayer = nil
-                engineIsRunning = false
+    private func playDeferredCues() {
+        for entry in deferredCues.drain(at: ProcessInfo.processInfo.systemUptime) {
+            guard isEnabled else { return }
+            if engineIsRunning {
+                playOnRunningEngine(entry.cue, kind: entry.kind)
+            } else {
+                // The start failed: a UIKit impact remains available when
+                // the haptic server is interrupted or reset.
+                playFallback(entry.cue)
             }
         }
+    }
 
-        postWillPlay(duration: duration)
-        playFallback(intensity: fallbackIntensity, sharpness: fallbackSharpness)
+    private func playOnRunningEngine(_ cue: Cue, kind: DeferredHapticCues<Cue>.Kind) {
+        guard let engine else {
+            playFallback(cue)
+            return
+        }
+        do {
+            let pattern = try CHHapticPattern(events: cue.events, parameters: [])
+            let player = try engine.makePlayer(with: pattern)
+            if kind == .timerCompletion {
+                try? timerCompletionPlayer?.stop(atTime: CHHapticTimeImmediate)
+                timerCompletionPlayer = player
+            }
+            postWillPlay(duration: cue.duration)
+            do {
+                try player.start(atTime: CHHapticTimeImmediate)
+            } catch {
+                // The notification was already emitted for this physical
+                // attempt, so the fallback must not emit a duplicate.
+                if kind == .timerCompletion { timerCompletionPlayer = nil }
+                engineIsRunning = false
+                playFallbackImpact(cue)
+            }
+        } catch {
+            // Pattern/player construction did not reach hardware. Fall
+            // through to one announced UIKit impact.
+            if kind == .timerCompletion { timerCompletionPlayer = nil }
+            engineIsRunning = false
+            playFallback(cue)
+        }
     }
 
     private func configureEngineIfSupported() {
@@ -365,6 +389,7 @@ final class Haptics {
                     self?.isStartingEngine = false
                     self?.engineIsRunning = false
                     self?.timerCompletionPlayer = nil
+                    self?.deferredCues.removeAll()
                 }
             }
             hapticEngine.stoppedHandler = { [weak self] _ in
@@ -376,6 +401,7 @@ final class Haptics {
                     self?.isStartingEngine = false
                     self?.engineIsRunning = false
                     self?.timerCompletionPlayer = nil
+                    self?.deferredCues.removeAll()
                 }
             }
             engine = hapticEngine
@@ -384,28 +410,11 @@ final class Haptics {
         }
     }
 
-    @discardableResult
-    private func startEngine() -> Bool {
-        guard isEnabled, supportsCoreHaptics, let engine else { return false }
-        if engineIsRunning { return true }
-        do {
-            // Normally `prewarm` has already started the engine without
-            // blocking. A cue that arrives before that start has finished
-            // starts it here synchronously, as every cue used to.
-            try engine.start()
-            engineIsRunning = true
-            return true
-        } catch {
-            // A UIKit impact remains available when the server is interrupted or reset.
-            engineIsRunning = false
-            return false
-        }
-    }
-
     private func stopEngine() {
         engineStartGeneration &+= 1
         isStartingEngine = false
         engineIsRunning = false
+        deferredCues.removeAll()
         timerCompletionPlayer = nil
         engine?.stop(completionHandler: nil)
     }
@@ -429,6 +438,16 @@ final class Haptics {
         )
     }
 
+    /// One announced UIKit impact in place of a Core Haptics pattern.
+    private func playFallback(_ cue: Cue) {
+        postWillPlay(duration: cue.duration)
+        playFallbackImpact(cue)
+    }
+
+    private func playFallbackImpact(_ cue: Cue) {
+        playFallback(intensity: cue.fallbackIntensity, sharpness: cue.fallbackSharpness)
+    }
+
     private func playFallback(intensity: CGFloat, sharpness: CGFloat) {
         let generator: UIImpactFeedbackGenerator
         if intensity >= 0.68 {
@@ -440,5 +459,77 @@ final class Haptics {
         }
         generator.prepare()
         generator.impactOccurred(intensity: min(max(intensity, 0), 1))
+    }
+}
+
+extension Haptics {
+    /// One pattern and the UIKit impact that stands in for it.
+    fileprivate struct Cue {
+        let events: [CHHapticEvent]
+        let duration: TimeInterval
+        let fallbackIntensity: CGFloat
+        let fallbackSharpness: CGFloat
+    }
+}
+
+/// jar-03, after review of PR #41. Cues that arrive while the haptic engine is
+/// stopped wait for its asynchronous start instead of starting it
+/// synchronously on the main thread. Plain bookkeeping, so its rules are
+/// tested without haptic hardware (the simulator has none).
+struct DeferredHapticCues<Cue> {
+    enum Kind: Equatable {
+        /// A jar, drop or reward cue tied to what the person just did or saw.
+        case feedback
+        /// The timer-complete cue, which is acknowledged separately.
+        case timerCompletion
+    }
+
+    struct Entry {
+        let cue: Cue
+        let kind: Kind
+        let requestedUptime: TimeInterval
+    }
+
+    /// A feedback cue that could not play within this long of its cause is
+    /// dropped rather than felt detached from it. A normal start takes tens of
+    /// milliseconds. The timer cue always plays.
+    static var staleFeedbackLimit: TimeInterval { 0.25 }
+
+    private var feedback: Entry?
+    private var timerCompletion: Entry?
+
+    var isEmpty: Bool { feedback == nil && timerCompletion == nil }
+
+    /// Only the newest feedback cue waits, so cues that pile up during one
+    /// start do not all fire together when it completes.
+    mutating func enqueue(_ cue: Cue, kind: Kind, at uptime: TimeInterval) {
+        let entry = Entry(cue: cue, kind: kind, requestedUptime: uptime)
+        switch kind {
+        case .feedback: feedback = entry
+        case .timerCompletion: timerCompletion = entry
+        }
+    }
+
+    /// The timer was acknowledged before its cue could play.
+    mutating func cancelTimerCompletion() {
+        timerCompletion = nil
+    }
+
+    mutating func removeAll() {
+        feedback = nil
+        timerCompletion = nil
+    }
+
+    /// Empties the queue and returns what should still play, timer cue first.
+    mutating func drain(at uptime: TimeInterval) -> [Entry] {
+        defer { removeAll() }
+        var due: [Entry] = []
+        if let timerCompletion {
+            due.append(timerCompletion)
+        }
+        if let feedback, uptime - feedback.requestedUptime <= Self.staleFeedbackLimit {
+            due.append(feedback)
+        }
+        return due
     }
 }

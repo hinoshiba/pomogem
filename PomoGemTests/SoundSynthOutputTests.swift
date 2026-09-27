@@ -171,6 +171,62 @@ final class SoundSynthOutputTests: XCTestCase {
     }
 }
 
+/// jar-03, after review of PR #41: a haptic cue that finds the engine
+/// stopped waits for the asynchronous start instead of starting it on the
+/// main thread. The simulator has no haptic hardware, so the waiting rules
+/// are tested on their own.
+final class DeferredHapticCuesTests: XCTestCase {
+    func testAWaitingCuePlaysWhenTheStartCompletes() {
+        var cues = DeferredHapticCues<String>()
+        XCTAssertTrue(cues.isEmpty)
+
+        cues.enqueue("tap", kind: .feedback, at: 10)
+        XCTAssertFalse(cues.isEmpty)
+        XCTAssertEqual(cues.drain(at: 10.04).map(\.cue), ["tap"])
+        XCTAssertTrue(cues.isEmpty, "Draining empties the queue")
+        XCTAssertEqual(cues.drain(at: 10.05).map(\.cue), [])
+    }
+
+    func testOnlyTheNewestFeedbackWaitsAndTheTimerCuePlaysFirst() {
+        var cues = DeferredHapticCues<String>()
+        cues.enqueue("landing", kind: .feedback, at: 10)
+        cues.enqueue("timer", kind: .timerCompletion, at: 10.01)
+        cues.enqueue("tap", kind: .feedback, at: 10.02)
+
+        let due = cues.drain(at: 10.05)
+        XCTAssertEqual(due.map(\.cue), ["timer", "tap"])
+        XCTAssertEqual(due.map(\.kind), [.timerCompletion, .feedback])
+    }
+
+    func testALateFeedbackCueIsDroppedButTheTimerCueStillPlays() {
+        let limit = DeferredHapticCues<String>.staleFeedbackLimit
+        XCTAssertGreaterThan(limit, 0.046, "A first engine start measured 46 ms on an iPhone 12 mini")
+        XCTAssertLessThanOrEqual(limit, 0.3)
+
+        var cues = DeferredHapticCues<String>()
+        cues.enqueue("tap", kind: .feedback, at: 10)
+        cues.enqueue("timer", kind: .timerCompletion, at: 10)
+        XCTAssertEqual(cues.drain(at: 10 + limit + 0.01).map(\.cue), ["timer"])
+
+        cues.enqueue("tap", kind: .feedback, at: 20)
+        XCTAssertEqual(cues.drain(at: 20 + limit).map(\.cue), ["tap"])
+    }
+
+    func testAcknowledgingTheTimerOrStoppingCancelsWaitingCues() {
+        var cues = DeferredHapticCues<String>()
+        cues.enqueue("timer", kind: .timerCompletion, at: 10)
+        cues.enqueue("tap", kind: .feedback, at: 10)
+        cues.cancelTimerCompletion()
+        XCTAssertEqual(cues.drain(at: 10.01).map(\.cue), ["tap"])
+
+        cues.enqueue("timer", kind: .timerCompletion, at: 11)
+        cues.enqueue("tap", kind: .feedback, at: 11)
+        cues.removeAll()
+        XCTAssertTrue(cues.isEmpty)
+        XCTAssertEqual(cues.drain(at: 11.01).map(\.cue), [])
+    }
+}
+
 @MainActor
 private struct Fixture {
     let output = RecordingSoundSynthOutput()
