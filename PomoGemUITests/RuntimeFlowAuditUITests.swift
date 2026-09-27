@@ -131,7 +131,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertFalse(liveActivity.label.contains("Dynamic Island"))
         let returnCaption = app.staticTexts.containing(NSPredicate(
             format: "label CONTAINS %@",
-            "集中タイマー中にホーム画面や別のアプリへ移ると、30秒後に一度通知し"
+            "集中タイマー中にホーム画面や別のアプリへ移ったとき、30秒後に一度通知し"
         )).firstMatch
         XCTAssertTrue(scrollUntilHittable(returnCaption, attempts: 4),
                       "Going to the Home Screen also rings; the caption must say so")
@@ -374,7 +374,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
     func testSettingsTimerDisplayChoicesPersistAndFocusKeepsPauseAndCancel() throws {
         let presentation = app.descendants(matching: .any)["jar.presentation.probe"]
         XCTAssertTrue(presentation.waitForExistence(timeout: 5))
-        let initialPresentation = presentationValue(from: presentation)
+        let initialPresentation = jarPresentation(from: presentation)
         openTimerDisplaySettings()
         for rawValue in ["ringAndTime", "filledDial", "timeOnly", "ringOnly"] {
             let option = app.buttons["timer-display.option.\(rawValue)"]
@@ -414,7 +414,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(scrollUntilHittable(app.buttons["今日はここまで"]))
         cancelPresentedFocusIfNeeded()
         XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 6))
-        XCTAssertEqual(presentationValue(from: presentation), initialPresentation)
+        XCTAssertEqual(jarPresentation(from: presentation), initialPresentation)
 
         openTimerDisplaySettings()
         XCTAssertTrue(scrollUntilHittable(dial))
@@ -912,7 +912,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
     func testFreeTimersStartPauseResumeAndCancelWithoutCreatingEffort() throws {
         let presentationProbe = app.descendants(matching: .any)["jar.presentation.probe"]
         XCTAssertTrue(presentationProbe.waitForExistence(timeout: 5))
-        let initialPresentation = presentationValue(from: presentationProbe)
+        let initialPresentation = jarPresentation(from: presentationProbe)
 
         try exerciseInterruptibleFocus(
             durationButtonPrefix: "25分",
@@ -921,7 +921,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             attachmentName: "25-minute focus — paused and reversible"
         )
         XCTAssertEqual(
-            presentationValue(from: presentationProbe),
+            jarPresentation(from: presentationProbe),
             initialPresentation,
             "Cancelling 25 minutes must not invent a study pebble"
         )
@@ -933,7 +933,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             attachmentName: "45-minute focus — paused and reversible"
         )
         XCTAssertEqual(
-            presentationValue(from: presentationProbe),
+            jarPresentation(from: presentationProbe),
             initialPresentation,
             "Cancelling 45 minutes must not invent a study pebble"
         )
@@ -945,7 +945,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             attachmentName: "60-minute focus — paused and reversible"
         )
         XCTAssertEqual(
-            presentationValue(from: presentationProbe),
+            jarPresentation(from: presentationProbe),
             initialPresentation,
             "Cancelling 60 minutes must not invent a study pebble"
         )
@@ -957,7 +957,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             attachmentName: "90-minute focus — paused and reversible"
         )
         XCTAssertEqual(
-            presentationValue(from: presentationProbe),
+            jarPresentation(from: presentationProbe),
             initialPresentation,
             "Cancelling 90 minutes must not invent a study pebble"
         )
@@ -1119,6 +1119,10 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(nameField.waitForExistence(timeout: 4))
         nameField.tap()
         nameField.typeText(originalName)
+        // Close the keyboard with 完了 first, as the edit step below does. On
+        // a 4.7-inch iPhone the color choices sit behind the keyboard and the
+        // form does not scroll them above it.
+        dismissKeyboard(from: nameField)
         let color = app.buttons["色候補2、瑠璃"]
         XCTAssertTrue(scrollUntilHittable(color))
         color.tap()
@@ -1310,7 +1314,15 @@ final class RuntimeFlowAuditUITests: XCTestCase {
     /// reproducible, then verify against signed Release on a physical device.
     /// Naturally scroll the storage screen to its privacy explanation so
     /// Simulator-only diagnostics are outside the captured viewport.
-    func testAppStoreScreenshotSetJapaneseReleaseCandidate() {
+    func testAppStoreScreenshotSetJapaneseReleaseCandidate() throws {
+        // The product page uses screenshots from large iPhones. On a 4.7-inch
+        // screen the completion card covers the duration picker this fixture
+        // has to reach, and nothing captured there would be used.
+        let windowHeight = app.windows.firstMatch.frame.height
+        try XCTSkipIf(
+            windowHeight < 700,
+            "App Store screenshots come from a large iPhone; this window is \(Int(windowHeight)) pt tall"
+        )
         // Relaunch the disposable store. Release 1.0 has no rare-reward draw or
         // opt-in surface, keeping this product-page set deterministic.
         app.terminate()
@@ -1783,22 +1795,16 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             "Closing Reward Bridge \(expectedPresentationCount) must add exactly one live particle"
         )
         XCTAssertTrue(
-            waitForHittable(demoLauncherForVisualAudit, timeout: 6),
+            waitForHittable(app.buttons["home.focus-launcher"], timeout: 6),
             "The launcher must become operable after Reward Bridge \(expectedPresentationCount) closes"
         )
-    }
-
-    @discardableResult
-    private func stopCompletionAlertIfPresented(
-        in app: XCUIApplication,
-        timeout: TimeInterval = 25
-    ) -> Bool {
-        let stop = app.buttons["focus.completion-alert.stop"]
-        guard stop.waitForExistence(timeout: timeout) else { return false }
-        XCTAssertEqual(stop.label, "終了アラートを止める")
-        XCTAssertTrue(stop.isHittable)
-        stop.tap()
-        return true
+        waitForLauncherEnabled()
+        // 12秒、DEMO is Debug-only and never saved as the preferred duration.
+        // Home restores the saved duration when it reappears or its
+        // preferences change, which a completion can do; pick the demo again.
+        if !waitForHittable(demoLauncherForVisualAudit, timeout: 2) {
+            selectDemoDurationForVisualAudit()
+        }
     }
 
     private func retainScreenshot(named name: String) {
@@ -1826,6 +1832,17 @@ final class RuntimeFlowAuditUITests: XCTestCase {
 
     private func presentationValue(from probe: XCUIElement) -> String {
         (probe.value as? String) ?? probe.label
+    }
+
+    /// The probe without `homeBodyEvaluations`. That field counts Home's
+    /// re-renders for HomeIdleRenderUITests, and closing a focus re-renders
+    /// Home, so comparing it made "the jar did not change" fail every time.
+    /// Every field about what the jar holds and shows is still compared.
+    private func jarPresentation(from probe: XCUIElement) -> String {
+        presentationValue(from: probe)
+            .split(separator: ";")
+            .filter { !$0.hasPrefix("homeBodyEvaluations=") }
+            .joined(separator: ";")
     }
 
     private func waitForPresentationCount(

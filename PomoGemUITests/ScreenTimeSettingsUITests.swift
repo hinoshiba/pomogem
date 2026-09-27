@@ -737,7 +737,7 @@ final class ScreenTimeSettingsUITests: XCTestCase {
 
     @discardableResult
     private func reveal(_ element: XCUIElement, upwards: Bool = true) -> Bool {
-        for _ in 0..<16 {
+        for attempt in 0..<32 {
             if element.exists {
                 let top = app.navigationBars.allElementsBoundByIndex
                     .filter(\.isHittable).map(\.frame.maxY).max() ?? 0
@@ -768,10 +768,21 @@ final class ScreenTimeSettingsUITests: XCTestCase {
                 let distance = min(160, max(60, abs(correction))) * (correction < 0 ? -1 : 1)
                 let start = app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
                 start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: distance)))
-            } else if upwards {
-                app.swipeUp(velocity: .fast)
             } else {
-                app.swipeDown(velocity: .fast)
+                // A row the lazy list has not laid out is not in the tree.
+                // On a 4.7-inch iPhone a .fast fling carried it past the
+                // viewport between two reads and on to the end of the list, so
+                // drag about half a screen at a time (a row cannot
+                // slip past unseen), far enough for the long AX5 Settings
+                // list, and turn back after twenty drags in case the row is
+                // on the other side.
+                let goesUp = attempt < 20 ? upwards : !upwards
+                let start = app.windows.firstMatch.coordinate(
+                    withNormalizedOffset: CGVector(dx: 0.5, dy: goesUp ? 0.8 : 0.2)
+                )
+                start.press(forDuration: 0.05, thenDragTo: start.withOffset(
+                    CGVector(dx: 0, dy: goesUp ? -360 : 360)
+                ))
             }
         }
         return element.exists && element.isHittable

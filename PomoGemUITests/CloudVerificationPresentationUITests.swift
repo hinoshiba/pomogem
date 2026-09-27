@@ -150,18 +150,22 @@ final class CloudVerificationPresentationUITests: XCTestCase {
     }
 
     private func completeDemoFocus() {
-        // The menu can still be animating in when the first tap lands.
+        // The menu can still be animating in when the first tap lands. The
+        // menu then stays open over the picker, so pick the item again
+        // instead of tapping the covered picker (which failed the test).
+        let demo = app.buttons["12秒、DEMO"]
         for _ in 0..<3 where !demoLauncher.exists {
-            app.buttons["home.duration-picker"].tap()
-            let demo = app.buttons["12秒、DEMO"]
-            XCTAssertTrue(demo.waitForExistence(timeout: 4))
+            if !demo.exists {
+                app.buttons["home.duration-picker"].tap()
+                XCTAssertTrue(demo.waitForExistence(timeout: 4))
+            }
+            _ = waitUntilFrameSettles(demo, timeout: 3)
             demo.tap()
             _ = demoLauncher.waitForExistence(timeout: 3)
         }
         XCTAssertTrue(demoLauncher.waitForExistence(timeout: 5))
         demoLauncher.tap()
-        let stop = app.buttons["focus.completion-alert.stop"]
-        if stop.waitForExistence(timeout: 25) { stop.tap() }
+        stopCompletionAlertIfPresented(in: app)
         XCTAssertTrue(app.buttons["休憩の提案を閉じる"].waitForExistence(timeout: 25),
                       "The demo focus commits, lands and offers its reward")
     }

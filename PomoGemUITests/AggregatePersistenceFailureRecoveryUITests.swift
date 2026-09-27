@@ -28,7 +28,7 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
         activeApp = app
         app.launch()
         XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 12))
-        dismissStaleRewardReceiptsIfNeeded(in: app)
+        assertNoRewardCardFromAnEarlierTest(in: app)
         selectDemoDuration(in: app)
 
         for expectedCount in 1 ... 9 {
@@ -227,15 +227,29 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
         app.buttons["home.duration-picker"].tap()
         let demoDuration = app.buttons["12秒、DEMO"]
         XCTAssertTrue(demoDuration.waitForExistence(timeout: 4))
+        // A tap while the menu is still animating in can be dropped.
+        XCTAssertTrue(waitForHittable(demoDuration, timeout: 3))
         demoDuration.tap()
     }
 
-    private func startDemoFocus(in app: XCUIApplication) {
-        let launcher = app.buttons.matching(
+    private func demoLauncher(in app: XCUIApplication) -> XCUIElement {
+        app.buttons.matching(
             NSPredicate(format: "label CONTAINS %@", "12秒集中する")
         ).firstMatch
+    }
+
+    private func startDemoFocus(in app: XCUIApplication) {
+        let launcher = demoLauncher(in: app)
+        if !launcher.waitForExistence(timeout: 2) {
+            // 12秒、DEMO is Debug-only and never saved as the preferred
+            // duration. Home restores the saved duration when it reappears or
+            // its preferences change, which the first completion can do, so
+            // pick the demo again (as DecimalFusionEndToEndUITests does). The
+            // test is about aggregate persistence, not the demo choice.
+            selectDemoDuration(in: app)
+        }
         XCTAssertTrue(launcher.waitForExistence(timeout: 6))
-        XCTAssertTrue(launcher.isHittable)
+        XCTAssertTrue(waitForHittable(launcher, timeout: 3))
         launcher.tap()
     }
 
@@ -251,32 +265,15 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
         XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 6))
     }
 
-    @discardableResult
-    private func stopCompletionAlertIfPresented(
-        in app: XCUIApplication,
-        timeout: TimeInterval = 25
-    ) -> Bool {
-        let stop = app.buttons["focus.completion-alert.stop"]
-        guard stop.waitForExistence(timeout: timeout) else { return false }
-        XCTAssertEqual(stop.label, "終了アラートを止める")
-        XCTAssertTrue(stop.isHittable)
-        stop.tap()
-        return true
-    }
-
-    private func dismissStaleRewardReceiptsIfNeeded(in app: XCUIApplication) {
-        for _ in 0 ..< 4 {
-            let bridge = app.descendants(matching: .any)["reward.bridge"]
-            guard bridge.waitForExistence(timeout: 1) else { return }
-            let dismiss = app.buttons["休憩の提案を閉じる"]
-            XCTAssertTrue(dismiss.waitForExistence(timeout: 2))
-            dismiss.tap()
-            XCTAssertTrue(waitForNonExistence(bridge, timeout: 2))
-            app.terminate()
-            app.launch()
-            XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 12))
-        }
-        XCTAssertFalse(app.descendants(matching: .any)["reward.bridge"].exists)
+    /// The app drops the reward receipts an earlier test's store left in
+    /// UserDefaults whenever it opens a new or cleaned store
+    /// (`UITestLocalStateIsolation`). Draining them here used to acknowledge
+    /// a gem that could never land, which left the start button disabled.
+    private func assertNoRewardCardFromAnEarlierTest(in app: XCUIApplication) {
+        XCTAssertFalse(
+            app.descendants(matching: .any)["reward.bridge"].waitForExistence(timeout: 1),
+            "A new store must not show another test's completion card"
+        )
     }
 
     private func waitForJarProbe(
