@@ -153,6 +153,49 @@ final class RewardVocabularyAndHUDTests: XCTestCase {
         )
     }
 
+    /// Not only timer completions: a queued Screen Time gem and a manual gem
+    /// that is still falling join the readout when they land too.
+    func testEveryGemThatHasNotLandedIsLeftOutOfTheReadout() {
+        func receipt(_ id: UUID, phase: PendingRewardDropPhase?) -> PendingRewardReceipt {
+            PendingRewardReceipt(
+                id: id, createdAt: Date(timeIntervalSince1970: 1_800_000_000),
+                breakMinutes: 5, grams: 250, subjectName: "英語", colorHex: "#3FA57C",
+                weeklyCompletionCount: 1, kind: .normal, totalPebbleCount: 1,
+                projectionIsLowerBound: false, dropPhase: phase
+            )
+        }
+        let behindCard = UUID()
+        let falling = UUID()
+        let cardOnly = UUID()
+        let marker = UUID()
+        let screenTime = UUID()
+        let manual = UUID()
+
+        XCTAssertEqual(
+            HomeProjectionPolicy.unlandedSessionIDs(
+                rewardReceipts: [
+                    receipt(behindCard, phase: .awaitingAcknowledgement),
+                    receipt(falling, phase: .awaitingLanding),
+                    receipt(cardOnly, phase: nil)
+                ],
+                completionMarker: marker.uuidString,
+                screenTimeDrops: [screenTime],
+                fallingManualEntries: [manual]
+            ),
+            [behindCard, falling, marker, screenTime, manual],
+            "A receipt kept only for its card has already landed"
+        )
+        XCTAssertEqual(
+            HomeProjectionPolicy.unlandedSessionIDs(
+                rewardReceipts: [],
+                completionMarker: "not-a-uuid",
+                screenTimeDrops: [],
+                fallingManualEntries: []
+            ),
+            []
+        )
+    }
+
     // MARK: history-02
 
     func testManualEntryWaitsLongerForAssistiveTechnology() {

@@ -1030,7 +1030,8 @@ enum HomeProjectionPolicy {
     /// completion card and only then falls into the jar. Counting it at once
     /// showed +250 g and one more gem over a jar that had not received it,
     /// while the card said 「閉じると、一粒が瓶に落ちます」. Sessions whose gem
-    /// has not landed yet join the readout when it lands. Every other total
+    /// has not landed yet (`unlandedSessionIDs`: timer, Screen Time and
+    /// manual gems alike) join the readout when it lands. Every other total
     /// (menu, widget, share, export, sync) keeps `totals` and counts the
     /// saved session immediately.
     static func landedTotals(
@@ -1047,6 +1048,33 @@ enum HomeProjectionPolicy {
             roots: roots,
             looseSessions: looseSessions.filter { !unlandedSessionIDs.contains($0.id) }
         )
+    }
+
+    /// Saved sessions whose gem is not in the jar yet, for `landedTotals`
+    /// (dev-D7). Every way a gem reaches the jar is covered, not only a
+    /// completed timer:
+    /// - a timer completion behind its card or still falling (its reward
+    ///   receipt, or the one-shot completion marker before the receipt
+    ///   exists);
+    /// - a Screen Time gem queued to fall from above
+    ///   (`ScreenTimeGemDropStore`);
+    /// - a manual entry written a moment ago whose gem is still falling.
+    ///
+    /// A receipt kept only to show its card again (no drop phase) has already
+    /// landed.
+    static func unlandedSessionIDs(
+        rewardReceipts: [PendingRewardReceipt],
+        completionMarker: String?,
+        screenTimeDrops: [UUID],
+        fallingManualEntries: Set<UUID>
+    ) -> Set<UUID> {
+        var ids = Set(rewardReceipts.filter(\.requiresDrop).map(\.id))
+        if let completionMarker, let id = UUID(uuidString: completionMarker) {
+            ids.insert(id)
+        }
+        ids.formUnion(screenTimeDrops)
+        ids.formUnion(fallingManualEntries)
+        return ids
     }
 
     /// Corrupt or future-scale rows must not turn a bounded Home projection

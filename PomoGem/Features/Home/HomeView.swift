@@ -104,6 +104,15 @@ struct HomeView: View {
     /// disabled and a queued fusion celebration waits until some unrelated
     /// state change (formerly the three-second Screen Time pass) re-renders.
     @State private var pendingRewardReceiptRevision = 0
+    /// Bumped when a Screen Time gem's drop is retired from
+    /// `ScreenTimeGemDropStore`. Like the receipts, that queue lives in
+    /// UserDefaults; the jar's readout counts the gem once it has landed
+    /// (dev-D7), so the landing must re-evaluate Home.
+    @State private var screenTimeDropRevision = 0
+    /// Manual entries written a moment ago whose gem is still falling. The
+    /// readout counts them when they land (dev-D7), or after
+    /// `manualLandingGrace` if the landing is never reported.
+    @State private var fallingManualSessionIDs = Set<UUID>()
     @State private var sceneInitialized = false
     @State private var homeIsVisible = false
     @State private var rewardDropRevealIsPending = false
@@ -375,26 +384,34 @@ struct HomeView: View {
     private var totalPebbles: Int {
         projectionTotals.pebbleCount
     }
-    /// Saved timer completions whose gem has not landed in the jar yet: it
-    /// waits behind the completion card (`awaitingAcknowledgement`) or is
-    /// still falling (`awaitingLanding`).
-    private var unlandedRewardSessionIDs: Set<UUID> {
+    /// Saved sessions whose gem has not landed in the jar yet: a timer
+    /// completion behind its card or falling, a queued Screen Time gem, or a
+    /// manual entry that is still falling
+    /// (`HomeProjectionPolicy.unlandedSessionIDs`).
+    private var unlandedSessionIDs: Set<UUID> {
         _ = pendingRewardReceiptRevision
-        var ids = Set(PendingRewardReceiptStore.load().filter(\.requiresDrop).map(\.id))
-        if let marker = UserDefaults.standard.string(forKey: FocusPersistence.localCompletionIDKey),
-           let id = UUID(uuidString: marker) {
-            ids.insert(id)
-        }
-        return ids
+        _ = screenTimeDropRevision
+        return HomeProjectionPolicy.unlandedSessionIDs(
+            rewardReceipts: PendingRewardReceiptStore.load(),
+            completionMarker: UserDefaults.standard.string(
+                forKey: FocusPersistence.localCompletionIDKey
+            ),
+            screenTimeDrops: ScreenTimeGemDropStore.load(),
+            fallingManualEntries: fallingManualSessionIDs
+        )
     }
-    /// The jar's readout, core and large-text card count a completed focus
-    /// when its gem lands, not when the alarm stops (dev-D7,
+    /// The jar's readout, core and large-text card count a gem when it
+    /// lands, not when its session is saved (dev-D7,
     /// `HomeProjectionPolicy.landedTotals`).
+    ///
+    /// Each read decodes the receipts and re-runs the projection, so a body
+    /// pass reads it once and hands the value down (`jarCard`,
+    /// `largeTextFusionProgressState`) instead of from every caption.
     private var hudTotals: HomeProjectionPolicy.Totals {
         HomeProjectionPolicy.landedTotals(
             roots: acceptedAggregateRoots,
             looseSessions: looseSessions,
-            unlandedSessionIDs: unlandedRewardSessionIDs
+            unlandedSessionIDs: unlandedSessionIDs
         )
     }
     private var pendingMassSessions: [PendingMassPresentationPolicy.Session] {
@@ -465,15 +482,15 @@ struct HomeView: View {
     /// (sync-03); otherwise the landed totals (dev-D7), so a completed focus
     /// joins when its gem lands. The menu keeps `presentedLifetime*`, which
     /// counts saved sessions at once like widgets and share.
-    private var jarLifetimeGrams: Int? {
+    private func jarLifetimeGrams(_ hud: HomeProjectionPolicy.Totals) -> Int? {
         aggregateProjectionPresentation.isCloudVerificationPending
             ? pendingMassHeadline.grams
-            : hudTotals.grams
+            : hud.grams
     }
-    private var jarLifetimePebbles: Int {
+    private func jarLifetimePebbles(_ hud: HomeProjectionPolicy.Totals) -> Int {
         aggregateProjectionPresentation.isCloudVerificationPending
             ? (pendingMassHeadline.pebbleCount ?? totalPebbles)
-            : hudTotals.pebbleCount
+            : hud.pebbleCount
     }
     private var activeAggregateRoots: [AggregatePebble] {
         acceptedAggregateRoots
@@ -1140,7 +1157,10 @@ struct HomeView: View {
     }
 
     private func jarCard(height: CGFloat) -> some View {
-        ZStack {
+        // One landed-totals read for the whole jar (`hudTotals`).
+        let hud = hudTotals
+        let lifetimeGrams = jarLifetimeGrams(hud)
+        return ZStack {
             // sync-03 (review of PR #40). While iCloud is checked the jar's
             // lifetime core describes the same total as the headline above,
             // not the newest sessions Home happens to hold. dev-D7: otherwise
@@ -1148,23 +1168,23 @@ struct HomeView: View {
             // the readout above (`jarLifetimeGrams`).
             JarSpriteView(
                 scene: scene,
-                totalGrams: jarLifetimeGrams ?? totalGrams,
-                pebbleCount: max(0, looseSessions.count - (totalPebbles - hudTotals.pebbleCount)),
+                totalGrams: lifetimeGrams ?? totalGrams,
+                pebbleCount: max(0, looseSessions.count - (totalPebbles - hud.pebbleCount)),
                 achievementCount: uniqueAchievementCount,
                 aggregateCount: activeAggregateRoots.count,
                 legacyAggregateCount: activeLegacyStratumVisuals.count,
-                representedPebbleCount: jarLifetimePebbles,
+                representedPebbleCount: jarLifetimePebbles(hud),
                 goldPebbleCount: visibleGoldPebbleCount,
                 prismPebbleCount: visiblePrismPebbleCount,
                 accentHex: selectedSubject?.colorHex ?? Constants.Color.amberLamp,
                 lifetimeCoreColorHex: lifetimeCoreColorHex,
-                projectionIsLowerBound: jarLifetimeGrams == nil || presentedLifetimeIsLowerBound,
+                projectionIsLowerBound: lifetimeGrams == nil || presentedLifetimeIsLowerBound,
                 projectionIsUnverified:
                     aggregateProjectionPresentation.isCloudVerificationPending,
-                pendingMass: jarLifetimeGrams.map {
+                pendingMass: lifetimeGrams.map {
                     .init(grams: $0, isLowerBound: presentedLifetimeIsLowerBound)
                 },
-                fusionProgressDescription: fusionAccessibilityDescription,
+                fusionProgressDescription: fusionAccessibilityDescription(hud),
                 isMotionEnabled: homeJarMotionIsEnabled,
                 inspectableAggregateID: latestInspectableAggregateID,
                 onJarTapAccepted: invalidateAggregateInspectionCard,
@@ -1173,7 +1193,7 @@ struct HomeView: View {
             )
                 .padding(.horizontal, 4)
 
-            jarMetricHUD(jarHeight: height)
+            jarMetricHUD(jarHeight: height, hud: hud)
 
             if isJarEmpty, !showsEmptyJarMessageUnderReadout {
                 emptyJarMessage
@@ -1306,14 +1326,17 @@ struct HomeView: View {
             && router.cloudFocusRecoveryOffer == nil
     }
 
-    private func jarMetricHUD(jarHeight: CGFloat) -> some View {
+    private func jarMetricHUD(
+        jarHeight: CGFloat,
+        hud: HomeProjectionPolicy.Totals
+    ) -> some View {
         // At accessibility sizes the jar can be as short as 300 pt (the
         // pinned start button takes the rest, home-03). There the one-time
         // hint sits closer to the readout and is capped lower, so it still
         // ends above the first gem resting on the floor.
         let isShortJar = jarHeight < 380
         return VStack(spacing: isShortJar ? 8 : 14) {
-            jarMetricReadout
+            jarMetricReadout(hud)
             if isJarEmpty, showsEmptyJarMessageUnderReadout {
                 accessibilitySizeEmptyJarMessage
             }
@@ -1371,8 +1394,9 @@ struct HomeView: View {
 #endif
     }
 
-    private var jarMetricReadout: some View {
-        VStack(spacing: 3) {
+    private func jarMetricReadout(_ hud: HomeProjectionPolicy.Totals) -> some View {
+        let lifetimeGrams = jarLifetimeGrams(hud)
+        return VStack(spacing: 3) {
             Text("積み上げた集中")
                 // This HUD is excluded from VoiceOver; the jar's accessibility
                 // value carries the same information. Its captions follow
@@ -1386,19 +1410,19 @@ struct HomeView: View {
                 .foregroundStyle(Color.white.opacity(0.74))
 
             HStack(alignment: .lastTextBaseline, spacing: 4) {
-                Text(homeMassValue)
+                Text(homeMassValue(lifetimeGrams))
                     // Never smaller for a larger text size: the 28 pt value
                     // only makes room for the empty jar's message.
                     .font(.system(size: dynamicTypeSize.isAccessibilitySize && isJarEmpty ? 28 : 39, weight: .black, design: .rounded))
                     .monospacedDigit()
                     .contentTransition(.numericText())
-                Text(homeMassUnit)
+                Text(homeMassUnit(lifetimeGrams))
                     .font(.system(.subheadline, design: .rounded, weight: .bold))
                     .foregroundStyle(Color.white.opacity(0.76))
             }
 
             VStack(spacing: 4) {
-                jarMetricPill(jarMetricSummary)
+                jarMetricPill(jarMetricSummary(pebbleCount: jarLifetimePebbles(hud)))
                 // sync-03. While iCloud is checked the mass above is one this
                 // device can stand behind (`PendingMassPresentationPolicy`);
                 // the caption says so. Hidden while the in-jar pending message
@@ -1415,8 +1439,8 @@ struct HomeView: View {
                         .foregroundStyle(Color.white.opacity(0.78))
                         .accessibilityIdentifier("home.mass.verification-caption")
                 }
-                if showsPreFusionRail {
-                    preFusionRail
+                if showsPreFusionRail(hud) {
+                    preFusionRail(hud)
                 }
             }
         }
@@ -1435,8 +1459,8 @@ struct HomeView: View {
         return 11 * scale
     }
 
-    private var homeMassValue: String {
-        guard let grams = jarLifetimeGrams else {
+    private func homeMassValue(_ lifetimeGrams: Int?) -> String {
+        guard let grams = lifetimeGrams else {
             return AggregateProjectionPresentationPolicy.homeMassValue(
                 deviceValue: nil,
                 context: aggregateProjectionPresentation
@@ -1456,8 +1480,8 @@ struct HomeView: View {
         )
     }
 
-    private var homeMassUnit: String {
-        guard let grams = jarLifetimeGrams else { return "" }
+    private func homeMassUnit(_ lifetimeGrams: Int?) -> String {
+        guard let grams = lifetimeGrams else { return "" }
         return AggregateProjectionPresentationPolicy.homeMassUnit(
             verifiedUnit: grams < 1_000 ? "g" : "kg",
             hasLocalLowerBound: presentedLifetimeIsLowerBound,
@@ -1465,10 +1489,10 @@ struct HomeView: View {
         )
     }
 
-    private var jarMetricSummary: String {
+    private func jarMetricSummary(pebbleCount: Int) -> String {
         let milestones = uniqueAchievementCount > 0 ? " ・ 記念石 \(achievementCountLabel)" : ""
         return AggregateProjectionPresentationPolicy.homeCountSummary(
-            count: jarLifetimePebbles,
+            count: pebbleCount,
             milestoneSuffix: milestones,
             hasLocalLowerBound: localProjectionNeedsMaintenance,
             context: aggregateProjectionPresentation
@@ -1534,21 +1558,21 @@ struct HomeView: View {
 
     /// The small rail inside the jar. At accessibility sizes the card under
     /// the jar shows the same progress in full-size text instead.
-    private var showsPreFusionRail: Bool {
+    private func showsPreFusionRail(_ hud: HomeProjectionPolicy.Totals) -> Bool {
         !projectionNeedsMaintenance
             && !dynamicTypeSize.isAccessibilitySize
-            && hudTotals.pebbleCount > 0
+            && hud.pebbleCount > 0
             && !JarLifetimeCorePresentation.shouldShowCore(
-                totalPebbleCount: hudTotals.pebbleCount,
-                totalGrams: hudTotals.grams
+                totalPebbleCount: hud.pebbleCount,
+                totalGrams: hud.grams
             )
     }
 
     /// Names what 「4時間10分」 leads to (walk-std-10): without a name the
     /// target read like a daily quota. The explanation of 標準単位 and 10→1
     /// lives in 積み上がり, not in the jar.
-    private var preFusionRail: some View {
-        let state = EffortProgressPolicy.snapshot(totalGrams: hudTotals.grams)
+    private func preFusionRail(_ hud: HomeProjectionPolicy.Totals) -> some View {
+        let state = EffortProgressPolicy.snapshot(totalGrams: hud.grams)
         return VStack(spacing: 4) {
             ProgressView(value: state.progressFraction)
                 .tint(Color(hex: lifetimeCoreColorHex))
@@ -1580,8 +1604,7 @@ struct HomeView: View {
         .accessibilityHidden(true)
     }
 
-    private var fusionAccessibilityDescription: String? {
-        let totals = hudTotals
+    private func fusionAccessibilityDescription(_ totals: HomeProjectionPolicy.Totals) -> String? {
         guard !aggregateProjectionPresentation.isCloudVerificationPending,
               totals.pebbleCount > 0 || localProjectionNeedsMaintenance
         else { return nil }
@@ -1620,12 +1643,13 @@ struct HomeView: View {
     /// progress on Home, had no readable version at accessibility sizes.
     private var largeTextFusionProgressState: JarLifetimeCoreState? {
         guard dynamicTypeSize.isAccessibilitySize,
-              !aggregateProjectionPresentation.isCloudVerificationPending,
-              hudTotals.pebbleCount > 0
+              !aggregateProjectionPresentation.isCloudVerificationPending
         else { return nil }
+        let hud = hudTotals
+        guard hud.pebbleCount > 0 else { return nil }
         return JarLifetimeCorePresentation.state(
-            totalPebbleCount: hudTotals.pebbleCount,
-            totalGrams: hudTotals.grams,
+            totalPebbleCount: hud.pebbleCount,
+            totalGrams: hud.grams,
             projectionIsLowerBound: localProjectionNeedsMaintenance
         )
     }
@@ -3256,6 +3280,7 @@ struct HomeView: View {
         for id in ScreenTimeGemDropStore.load()
         where scene.hasLandedPebble(withID: id) || representedSessionIDs.contains(id) {
             ScreenTimeGemDropStore.remove(id)
+            screenTimeDropRevision &+= 1
         }
         let awaitingDropIDs = Set(pendingReceipts.filter {
             $0.dropPhase == .awaitingLanding
@@ -3345,6 +3370,7 @@ struct HomeView: View {
                     resolved.append(session)
                 } else {
                     ScreenTimeGemDropStore.remove(id)
+                    screenTimeDropRevision &+= 1
                 }
             }
             let resolvedIDs = Set(resolved.map(\.id))
@@ -4080,11 +4106,33 @@ struct HomeView: View {
             dataEpochID: currentActivityEpochID
         )
         modelContext.insert(session)
+        // Counted by the jar's readout when its gem lands (dev-D7). Only
+        // while Home is on screen: otherwise the gem falls whenever Home
+        // returns, and nothing reports its landing to this view.
+        if homeIsVisible {
+            noteFallingManualEntry(session.id)
+        }
         do {
             try modelContext.save()
         } catch {
             modelContext.rollback()
+            fallingManualSessionIDs.remove(session.id)
             router.showToast(failure, symbol: "exclamationmark.triangle")
+        }
+    }
+
+    /// How long a just-written manual gem may stay out of the readout if its
+    /// landing is never reported (for example when the jar is restored
+    /// instead of dropping it). A fall takes about a second.
+    private static let manualLandingGrace: Duration = .seconds(4)
+
+    private func noteFallingManualEntry(_ sessionID: UUID) {
+        fallingManualSessionIDs.insert(sessionID)
+        Task { @MainActor in
+            try? await Task.sleep(for: Self.manualLandingGrace)
+            if fallingManualSessionIDs.contains(sessionID) {
+                fallingManualSessionIDs.remove(sessionID)
+            }
         }
     }
 
@@ -4303,6 +4351,10 @@ struct HomeView: View {
 
     private func handleLanding(_ event: JarLandingEvent) {
         let descriptor = event.pebble
+        if fallingManualSessionIDs.contains(descriptor.id) {
+            // Now in the jar: the readout counts it (dev-D7).
+            fallingManualSessionIDs.remove(descriptor.id)
+        }
         if let achievementKind = descriptor.achievementKind {
             let suffix = uniqueAchievementCount > Constants.Jar.maximumVisibleAchievementStones
                 ? "。前の記念石も成果の記録に残っています"
@@ -4324,6 +4376,7 @@ struct HomeView: View {
                 router.showToast(text, symbol: symbol)
             }
             ScreenTimeGemDropStore.remove(descriptor.id)
+            screenTimeDropRevision &+= 1
             syncScene()
             return
         }
