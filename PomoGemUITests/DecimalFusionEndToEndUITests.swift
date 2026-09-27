@@ -293,6 +293,158 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
     }
 
+    /// home-11 at AX5 (review of PR #50). Once a crystal's detail has been
+    /// opened, the next tap shows its card in the row under the jar, whole
+    /// and above the pinned start button. Over the short AX5 jar the card
+    /// covered the readout, lost its title and spilled onto the start button.
+    /// The time core's in-jar plate is not drawn at this size either.
+    func testCrystalCardStaysUnderTheJarAtAccessibilitySizeAfterItsDetail() throws {
+        executionTimeAllowance = 900
+        app.terminate()
+        app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1"
+        app.launch()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
+        selectDemoDurationAtAccessibilitySize()
+        let probe = app.descendants(matching: .any)["jar.presentation.probe"]
+        XCTAssertTrue(probe.waitForExistence(timeout: 4))
+
+        let dismissReward = app.buttons["reward.dismiss"]
+        for index in 1 ... 10 {
+            startDemoFocus()
+            stopCompletionAlertIfPresented(in: app)
+            XCTAssertTrue(dismissReward.waitForExistence(timeout: 28), "Completion \(index) must show its card")
+            tapRevealing(dismissReward)
+            if index < 10 {
+                // Like `completeDemoFocusAndDismissBreak`: the debug-only
+                // demo length is not a saved preference and can be reset
+                // when Home reappears; choose it again then.
+                if !demoLauncher.waitForExistence(timeout: 3) {
+                    selectDemoDurationAtAccessibilitySize()
+                }
+                let launcher = app.buttons["home.focus-launcher"]
+                XCTAssertTrue(
+                    waitForCondition(timeout: 15) { self.demoLauncher.exists && self.demoLauncher.isEnabled },
+                    "Completion \(index): the demo start button must come back once the gem lands; "
+                        + "launcher=\(launcher.exists ? launcher.label : "none") enabled=\(launcher.exists && launcher.isEnabled)"
+                )
+            }
+        }
+        let close = app.buttons["fusion.celebration.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 12), "Ten gems fuse into the first crystal")
+        close.tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
+        _ = try waitForPresentationCount(1, from: probe, timeout: 10)
+        scrollHomeToTop()
+        let jar = app.buttons["瓶"]
+        XCTAssertTrue(
+            waitForCondition(timeout: 6) { (jar.value as? String)?.contains("結晶1個") == true },
+            (jar.value as? String) ?? ""
+        )
+        saveScreenshot("ax5-core-home")
+
+        // The first detail, from the card that sits in the tip's row.
+        tapCrystal(from: probe)
+        let inspect = app.buttons["jar.aggregate.inspect"]
+        XCTAssertTrue(inspect.waitForExistence(timeout: 3))
+        tapRevealing(inspect)
+        XCTAssertTrue(app.navigationBars["結晶の内訳"].waitForExistence(timeout: 6))
+        app.buttons["overview.cluster.close"].tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 6))
+        XCTAssertTrue(waitForCondition(timeout: 6) { !inspect.exists })
+        scrollHomeToTop()
+
+        // Afterwards: the card comes back under the jar, only while it is up.
+        tapCrystal(from: probe)
+        XCTAssertTrue(inspect.waitForExistence(timeout: 3), "The tap must show the crystal's card")
+        let launcher = app.buttons["home.focus-launcher"]
+        XCTAssertTrue(
+            waitForCondition(timeout: 3) {
+                inspect.isHittable && inspect.frame.maxY <= launcher.frame.minY + 0.5
+            },
+            "The whole card is brought into view above the start button: card=\(inspect.frame) launcher=\(launcher.frame)"
+        )
+        XCTAssertGreaterThanOrEqual(
+            inspect.frame.minY,
+            jar.frame.maxY - 1,
+            "Under the jar, not over its readout: card=\(inspect.frame) jar=\(jar.frame)"
+        )
+        XCTAssertTrue(launcher.isHittable, "The start button stays uncovered")
+        saveScreenshot("ax5-crystal-card-after-detail")
+        XCTAssertTrue(
+            waitForCondition(timeout: 9) { !inspect.exists },
+            "The card still closes by itself"
+        )
+        // Showing the whole card moved the jar up; Home comes back to it.
+        let window = app.windows.firstMatch.frame
+        XCTAssertTrue(
+            waitForCondition(timeout: 3) {
+                jar.frame.minY >= window.minY && jar.frame.maxY <= launcher.frame.minY + 0.5
+            },
+            "The jar is back in view once the card closes: jar=\(jar.frame) launcher=\(launcher.frame)"
+        )
+        saveScreenshot("ax5-crystal-card-closed")
+    }
+
+    private func selectDemoDurationAtAccessibilitySize() {
+        let picker = app.buttons["home.duration-picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        for _ in 0 ..< 6 where !picker.isHittable {
+            app.scrollViews.firstMatch.swipeUp()
+        }
+        picker.tap()
+        let demoDuration = app.buttons["12秒、DEMO"]
+        XCTAssertTrue(demoDuration.waitForExistence(timeout: 4))
+        for _ in 0 ..< 4 where !demoDuration.isHittable {
+            app.swipeUp()
+        }
+        demoDuration.tap()
+        XCTAssertTrue(demoLauncher.waitForExistence(timeout: 4))
+    }
+
+    /// Taps where the crystal rests on screen (see `waitForRestingTarget`).
+    private func tapCrystal(from probe: XCUIElement) {
+        guard let resting = try? waitForRestingTarget(from: probe) else { return }
+        XCTAssertGreaterThanOrEqual(resting.targetWindowX, 0)
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+            dx: resting.targetWindowX,
+            dy: resting.targetWindowY
+        )).tap()
+    }
+
+    /// At AX5 the reward card and Home scroll; swipe inside the scroll view
+    /// that holds the element until it can be tapped.
+    private func tapRevealing(_ element: XCUIElement) {
+        for _ in 0 ..< 6 where !(element.exists && element.isHittable) {
+            let container = app.scrollViews.containing(
+                NSPredicate(format: "identifier == %@", element.identifier)
+            ).firstMatch
+            (container.exists ? container : app).swipeUp()
+        }
+        element.tap()
+    }
+
+    private func scrollHomeToTop() {
+        let home = app.scrollViews.firstMatch
+        for _ in 0 ..< 3 where home.exists {
+            home.swipeDown()
+        }
+        usleep(500_000)
+    }
+
+    /// Keeps a screenshot with the result bundle and, when the runner is
+    /// given POMOGEM_SHOTS_DIR, also as a PNG for review.
+    private func saveScreenshot(_ name: String) {
+        let screenshot = XCUIScreen.main.screenshot()
+        let attachment = XCTAttachment(screenshot: screenshot)
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        guard let directory = ProcessInfo.processInfo.environment["POMOGEM_SHOTS_DIR"] else { return }
+        let device = app.windows.firstMatch.frame.height < 700 ? "se" : "17pro"
+        let url = URL(fileURLWithPath: directory).appendingPathComponent("\(name)-\(device).png")
+        try? screenshot.pngRepresentation.write(to: url)
+    }
+
     private func selectDemoDuration() {
         app.buttons["home.duration-picker"].tap()
         let demoDuration = app.buttons["12秒、DEMO"]

@@ -686,6 +686,7 @@ struct HomeView: View {
                         if showsAggregateInspectionSlot {
                             aggregateInspectionSlot
                                 .padding(.top, 8)
+                                .id(Self.aggregateInspectionSlotID)
                         }
                         if let state = largeTextFusionProgressState {
                             Spacer(minLength: 12)
@@ -724,6 +725,9 @@ struct HomeView: View {
                         rewardDropRevealIsPending = false
                         syncScene()
                     }
+                }
+                .onChange(of: aggregateInspectionID) { oldID, id in
+                    followAggregateInspectionCard(from: oldID, to: id, with: scrollProxy)
                 }
                 }
             }
@@ -1274,7 +1278,10 @@ struct HomeView: View {
             // home-11. Once the tip under the jar has done its job, a tapped
             // crystal's card appears over the upper jar, where the pile
             // rarely reaches, instead of in a row that kept 72 pt of the jar
-            // for good. It still closes after six seconds.
+            // for good. It still closes after six seconds. Never at
+            // accessibility sizes, where it does not fit between the readout
+            // and the floor: the row under the jar holds it there
+            // (`showsAggregateInspectionSlot` is true whenever a card is up).
             if !showsAggregateInspectionSlot, let summary = aggregateInspectionSummary {
                 VStack {
                     aggregateInspectionButton(summary)
@@ -1822,11 +1829,47 @@ struct HomeView: View {
         return min(520, max(320, availableHeight - 216 - inspectionHeight))
     }
 
-    /// home-11. The row under the jar exists only while its tip is useful:
-    /// until the first crystal detail has been opened. After that the card
-    /// appears over the jar when a crystal is tapped (`jarCard`).
+    /// home-11. The row under the jar is kept only while its tip is useful:
+    /// until the first crystal detail has been opened. After that a tapped
+    /// crystal's card appears over the upper jar (`jarCard`), except at
+    /// accessibility sizes: there the jar can be as short as 300 pt and the
+    /// large-text card about 264 pt tall, so over the jar it covered the
+    /// readout, lost its title and spilled onto the start button. It comes
+    /// back to this row, only while it is up (`followAggregateInspectionCard`).
     private var showsAggregateInspectionSlot: Bool {
-        latestInspectableAggregateID != nil && !didSeeAggregateDetail
+        guard latestInspectableAggregateID != nil else { return false }
+        return !didSeeAggregateDetail
+            || (dynamicTypeSize.isAccessibilitySize && aggregateInspectionSummary != nil)
+    }
+
+    private static let aggregateInspectionSlotID = "home.aggregate-inspection"
+
+    /// At accessibility sizes the card's row is under the jar, mostly below
+    /// the first screen, so a tap brings the whole card into view. On a
+    /// 4.7-inch phone that moves the jar up out of sight, so once the card
+    /// closes (after six seconds, on another jar tap or for its detail) Home
+    /// scrolls back to the jar.
+    private func followAggregateInspectionCard(
+        from oldID: UUID?,
+        to id: UUID?,
+        with scrollProxy: ScrollViewProxy
+    ) {
+        guard dynamicTypeSize.isAccessibilitySize else { return }
+        let animation: Animation? = reduceMotion ? nil : .easeOut(duration: 0.3)
+        if id != nil {
+            // The row is inserted in this same update; scroll once it is
+            // laid out.
+            DispatchQueue.main.async {
+                guard aggregateInspectionID != nil else { return }
+                withAnimation(animation) {
+                    scrollProxy.scrollTo(Self.aggregateInspectionSlotID, anchor: .bottom)
+                }
+            }
+        } else if oldID != nil {
+            withAnimation(animation) {
+                scrollProxy.scrollTo("home.jar", anchor: .top)
+            }
+        }
     }
 
     /// home-03. At accessibility sizes the start button stays in the first
@@ -5049,16 +5092,20 @@ struct HomeView: View {
                     .allowsHitTesting(isPresented)
                     .accessibilityHidden(!isPresented)
 
-                Label(
-                    String(localized: "結晶をタップすると、内訳を見られます", table: "Home", comment: "Hint under the jar until a crystal's detail has been opened once"),
-                    systemImage: "hand.tap"
-                )
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(PomoGemTheme.muted)
-                .multilineTextAlignment(.center)
-                .opacity(isPresented ? 0 : 1)
-                .accessibilityHidden(true)
-                .allowsHitTesting(false)
+                // Once a detail has been opened the row holds only the card
+                // (accessibility sizes, `showsAggregateInspectionSlot`).
+                if !didSeeAggregateDetail {
+                    Label(
+                        String(localized: "結晶をタップすると、内訳を見られます", table: "Home", comment: "Hint under the jar until a crystal's detail has been opened once"),
+                        systemImage: "hand.tap"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .multilineTextAlignment(.center)
+                    .opacity(isPresented ? 0 : 1)
+                    .accessibilityHidden(true)
+                    .allowsHitTesting(false)
+                }
             }
             .frame(maxWidth: .infinity)
         }
@@ -5115,6 +5162,9 @@ struct HomeView: View {
     private var aggregateInspectionIcon: some View {
         Image(systemName: "circle.grid.3x3.fill")
             .font(.title3.weight(.bold))
+            // Decorative, in a fixed 32 pt circle: past xxxLarge the glyph
+            // outgrew it and ran into the card's title.
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             .foregroundStyle(PomoGemTheme.amber)
             .frame(width: 32, height: 32)
             .background(
