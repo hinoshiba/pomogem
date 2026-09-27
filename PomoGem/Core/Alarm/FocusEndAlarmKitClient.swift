@@ -11,6 +11,12 @@ enum FocusEndAlarmClientFactory {
     /// reports `.unsupported` and never schedules anything.
     @MainActor
     static func live() -> FocusEndAlarmClient {
+        #if DEBUG
+        let environment = ProcessInfo.processInfo.environment
+        if LocalPreviewLaunchPolicy.isUITestMode(environment: environment, isDebugBuild: true) {
+            return UITestFocusEndAlarmClient(environment: environment)
+        }
+        #endif
         #if canImport(AlarmKit)
         if #available(iOS 26.0, *) {
             return AlarmKitFocusEndAlarmClient()
