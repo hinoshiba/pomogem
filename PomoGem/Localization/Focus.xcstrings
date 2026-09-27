@@ -1,6 +1,18 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "25分" : {
+      "comment" : "Shortcuts and Siri: a 25-minute focus"
+    },
+    "45分" : {
+      "comment" : "Shortcuts and Siri: a 45-minute focus"
+    },
+    "60分" : {
+      "comment" : "Shortcuts and Siri: a 60-minute focus"
+    },
+    "90分" : {
+      "comment" : "Shortcuts and Siri: a 90-minute focus"
+    },
     "Apple Musicについて見る" : {
 
     },
@@ -73,6 +85,9 @@
     "ポモジェムから「ミュージック」アプリの再生を操作するには、Apple Musicへのアクセスを許可してください。" : {
 
     },
+    "ポモジェムを開き、ホームで選んでいるテーマで集中を始めます。" : {
+      "comment" : "Shortcuts: what the start-focus action does"
+    },
     "ミュージックアプリで再生します。Apple Musicの登録が必要です。" : {
 
     },
@@ -118,8 +133,14 @@
     "次の曲" : {
       "comment" : "Skip to the next track in the Music app"
     },
+    "瓶へ戻ると、集中が始まります" : {
+
+    },
     "穏やかに集中するとき" : {
       "comment" : "Apple Music Focus playlist title (US storefront: Peaceful Focus)"
+    },
+    "空欄なら、ホームで選んでいる時間で始めます。" : {
+      "comment" : "Shortcuts: what an empty focus length means"
     },
     "選んで再生します" : {
       "comment" : "VoiceOver hint of a music row"
@@ -132,6 +153,12 @@
     },
     "集中を始めたら再生する" : {
 
+    },
+    "集中を始める" : {
+      "comment" : "Siri, Spotlight and Shortcuts: the start-focus action"
+    },
+    "集中時間" : {
+      "comment" : "Shortcuts: the focus length parameter"
     },
     "集中用の音楽" : {
 
