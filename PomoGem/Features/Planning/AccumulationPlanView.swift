@@ -6,6 +6,7 @@ import SwiftUI
 /// the only input is today's jar mass, a plain value Home already shows.
 struct AccumulationPlanView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// Where the plan starts: the person's jar today (home-07), so the answer
     /// is "where my jar will be", not "what a stranger would collect".
@@ -449,20 +450,23 @@ struct AccumulationPlanView: View {
             // An eager Grid, not a LazyVGrid: `.combine` below does not
             // reach into a lazy container, so VoiceOver heard only the title
             // (and, before home-02, the test string) instead of the metrics.
+            // At accessibility sizes one metric per row, so a value such as
+            // 「3.68t以上」 or 「6,087時間30分」 wraps instead of losing its end.
             Grid(horizontalSpacing: 10, verticalSpacing: 10) {
-                GridRow {
-                    metric(title: "集中時間", value: DurationPresentation.minutesLabel(projection.focusMinutes))
-                    metric(
-                        title: String(localized: "増える質量", table: "Planning", comment: "Mass the plan adds, in the results grid"),
-                        value: formattedMass(projection.grams)
-                    )
-                }
-                GridRow {
-                    metric(title: "予定リズム", value: "\(projection.completionCount.formatted())回")
-                    metric(
-                        title: String(localized: "瓶の合計", table: "Planning", comment: "Label: today's jar mass plus the mass the plan adds"),
-                        value: jarTotalValue
-                    )
+                if dynamicTypeSize.isAccessibilitySize {
+                    GridRow { focusMetric }
+                    GridRow { addedMassMetric }
+                    GridRow { rhythmMetric }
+                    GridRow { jarTotalMetric }
+                } else {
+                    GridRow {
+                        focusMetric
+                        addedMassMetric
+                    }
+                    GridRow {
+                        rhythmMetric
+                        jarTotalMetric
+                    }
                 }
             }
         }
@@ -487,8 +491,31 @@ struct AccumulationPlanView: View {
         }
     }
 
+    private var focusMetric: some View {
+        metric(title: "集中時間", value: DurationPresentation.minutesLabel(projection.focusMinutes))
+    }
+
+    private var addedMassMetric: some View {
+        metric(
+            title: String(localized: "増える質量", table: "Planning", comment: "Mass the plan adds, in the results grid"),
+            value: formattedMass(projection.grams)
+        )
+    }
+
+    private var rhythmMetric: some View {
+        metric(title: "予定リズム", value: "\(projection.completionCount.formatted())回")
+    }
+
+    private var jarTotalMetric: some View {
+        metric(
+            title: String(localized: "瓶の合計", table: "Planning", comment: "Label: today's jar mass plus the mass the plan adds"),
+            value: jarTotalValue
+        )
+    }
+
     private func metric(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let wraps = dynamicTypeSize.isAccessibilitySize
+        return VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.caption2)
                 .foregroundStyle(PomoGemTheme.muted)
@@ -496,8 +523,10 @@ struct AccumulationPlanView: View {
                 .font(.system(.headline, design: .rounded, weight: .heavy))
                 .monospacedDigit()
                 .minimumScaleFactor(0.72)
-                .lineLimit(1)
+                .lineLimit(wraps ? nil : 1)
+                .fixedSize(horizontal: false, vertical: wraps)
         }
+        .padding(.vertical, wraps ? 10 : 0)
         .frame(maxWidth: .infinity, minHeight: 66, alignment: .leading)
         .padding(.horizontal, 13)
         .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 15))

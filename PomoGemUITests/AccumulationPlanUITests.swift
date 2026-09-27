@@ -121,6 +121,14 @@ final class AccumulationPlanUITests: XCTestCase {
         XCTAssertLessThanOrEqual(breakdown.frame.maxX, window.maxX)
         XCTAssertGreaterThanOrEqual(breakdown.frame.minX, window.minX)
         saveScreenshot("plan-jar-total-ax5")
+
+        // The results grid puts one metric per row, so no value is cut off.
+        let result = app.descendants(matching: .any)["planning.accumulation.result"]
+        XCTAssertTrue(scrollUntilExists(result))
+        XCTAssertTrue(scrollUntilHittable(result))
+        XCTAssertLessThanOrEqual(result.frame.maxX, window.maxX)
+        XCTAssertTrue(result.label.contains("瓶の合計"), result.label)
+        saveScreenshot("plan-results-ax5")
     }
 
     /// Review of PR #41: every iCloud launch starts with iCloud being
