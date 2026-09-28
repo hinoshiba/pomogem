@@ -166,15 +166,20 @@ enum RareRewardLedgerLocalStateError: Error, LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .corruptPendingCommit:
-            "保留中のレア粒台帳を検証できませんでした。記録は保持されています。"
+            String(localized: "保留中のレア粒台帳を検証できませんでした。記録は保持されています。", table: "Models",
+                   comment: "Rare-reward ledger error (feature disabled in shipping builds)")
         case .corruptCursor:
-            "同期済みのレア粒台帳を検証できませんでした。記録は保持されています。"
+            String(localized: "同期済みのレア粒台帳を検証できませんでした。記録は保持されています。", table: "Models",
+                   comment: "Rare-reward ledger error (feature disabled in shipping builds)")
         case .missingPendingCommit:
-            "完走記録よりレア粒の再送情報が遅れているため、iCloud同期後に再試行してください。"
+            String(localized: "完走記録よりレア粒の再送情報が遅れているため、iCloud同期後に再試行してください。", table: "Models",
+                   comment: "Rare-reward ledger error (feature disabled in shipping builds)")
         case .missingSynchronizedCursor:
-            "レア粒の完走結果より台帳情報が遅れているため、iCloud同期後に再試行してください。"
+            String(localized: "レア粒の完走結果より台帳情報が遅れているため、iCloud同期後に再試行してください。", table: "Models",
+                   comment: "Rare-reward ledger error (feature disabled in shipping builds)")
         case .conflictingCursors:
-            "同期されたレア粒台帳の移行情報が一致しないため、抽選を停止しました。"
+            String(localized: "同期されたレア粒台帳の移行情報が一致しないため、抽選を停止しました。", table: "Models",
+                   comment: "Rare-reward ledger error (feature disabled in shipping builds)")
         }
     }
 }

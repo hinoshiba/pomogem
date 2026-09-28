@@ -209,20 +209,62 @@ enum GachaHistoryReconciliationPolicy {
 enum SeedData {
     struct Preset: Identifiable, Hashable {
         let id: UUID
+        /// Persisted and synced through CloudKit: the canonical Japanese name
+        /// on every device and in every language (L10N D6). Never localize it.
         let name: String
         let colorHex: String
+        fileprivate let builtIn: BuiltInPreset
+
+        /// Display only, in the app's language. Shown only while the row is
+        /// untouched (this ID and still `name`), see
+        /// `SubjectNamePolicy.localizedDisplayName(_:subjectID:bundle:)`.
+        var displayName: String { displayName(bundle: .main) }
+
+        func displayName(bundle: Bundle) -> String {
+            builtIn.displayName(bundle: bundle)
+        }
+    }
+
+    fileprivate enum BuiltInPreset {
+        case english
+        case mathematics
+        case languageArts
+        case science
+        case socialStudies
+
+        func displayName(bundle: Bundle) -> String {
+            switch self {
+            case .english:
+                String(localized: "英語", table: "Onboarding", bundle: bundle,
+                       comment: "Built-in theme preset: the school subject English (display only)")
+            case .mathematics:
+                String(localized: "数学", table: "Onboarding", bundle: bundle,
+                       comment: "Built-in theme preset: mathematics (display only)")
+            case .languageArts:
+                String(localized: "国語", table: "Onboarding", bundle: bundle,
+                       comment: "Built-in theme preset: the national-language school subject, Language Arts (display only)")
+            case .science:
+                String(localized: "理科", table: "Onboarding", bundle: bundle,
+                       comment: "Built-in theme preset: science (display only)")
+            case .socialStudies:
+                String(localized: "社会", table: "Onboarding", bundle: bundle,
+                       comment: "Built-in theme preset: social studies (display only)")
+            }
+        }
     }
 
     private static let prefsID = UUID(uuidString: "7473756D-6962-456E-8000-000000000001")!
     private static let gachaID = UUID(uuidString: "7473756D-6962-456E-8000-000000000002")!
 
+    // l10n-ignore-begin: the stored preset names are synced data; displayName carries the localized text
     static let subjects: [Preset] = [
-        Preset(id: UUID(uuidString: "7473756D-6962-456E-8000-000000000101")!, name: "英語", colorHex: Constants.Color.english),
-        Preset(id: UUID(uuidString: "7473756D-6962-456E-8000-000000000102")!, name: "数学", colorHex: Constants.Color.mathematics),
-        Preset(id: UUID(uuidString: "7473756D-6962-456E-8000-000000000103")!, name: "国語", colorHex: Constants.Color.japanese),
-        Preset(id: UUID(uuidString: "7473756D-6962-456E-8000-000000000104")!, name: "理科", colorHex: Constants.Color.science),
-        Preset(id: UUID(uuidString: "7473756D-6962-456E-8000-000000000105")!, name: "社会", colorHex: Constants.Color.socialStudies)
+        Preset(id: UUID(uuidString: "7473756D-6962-456E-8000-000000000101")!, name: "英語", colorHex: Constants.Color.english, builtIn: .english),
+        Preset(id: UUID(uuidString: "7473756D-6962-456E-8000-000000000102")!, name: "数学", colorHex: Constants.Color.mathematics, builtIn: .mathematics),
+        Preset(id: UUID(uuidString: "7473756D-6962-456E-8000-000000000103")!, name: "国語", colorHex: Constants.Color.japanese, builtIn: .languageArts),
+        Preset(id: UUID(uuidString: "7473756D-6962-456E-8000-000000000104")!, name: "理科", colorHex: Constants.Color.science, builtIn: .science),
+        Preset(id: UUID(uuidString: "7473756D-6962-456E-8000-000000000105")!, name: "社会", colorHex: Constants.Color.socialStudies, builtIn: .socialStudies)
     ]
+    // l10n-ignore-end
 
     @MainActor
     static func bootstrap(context: ModelContext) throws {
@@ -719,7 +761,7 @@ enum SeedData {
             if members.isEmpty {
                 subjectMix = colorMix.enumerated().map { index, item in
                     AggregateSubjectFraction(
-                        name: index == 0 ? "過去の集中" : "過去の集中 \(index + 1)",
+                        name: AggregateSubjectFraction.legacySubjectName(at: index),
                         colorHex: item.hex,
                         pebbleCount: NonnegativeIntPolicy.clamped(
                             (item.fraction * Double(max(stratum.pebbleCount, 1))).rounded()

@@ -56,8 +56,11 @@ enum ActivityEpochState: Equatable, Sendable {
 }
 
 enum ActivityResetAdmissionPolicy {
-    static let cloudResetUnavailableMessage =
-        "記録を保護するため、iCloudのリセットは一時的に利用できません。"
+    static let cloudResetUnavailableMessage = String(
+        localized: "記録を保護するため、iCloudのリセットは一時的に利用できません。",
+        table: "Models",
+        comment: "Settings: resetting records is unavailable in iCloud mode, to protect them"
+    )
 
     static func permitsUserReset(in mode: PersistenceLaunchMode) -> Bool {
         switch mode {
@@ -274,7 +277,8 @@ enum ActivityResetStoreError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .sequenceExhausted:
-            "記録のリセット履歴が上限に達しました。サポートへお問い合わせください。"
+            String(localized: "記録のリセット履歴が上限に達しました。サポートへお問い合わせください。", table: "Models",
+                   comment: "Reset error: the record reset history reached its limit")
         case .cloudResetUnavailable:
             ActivityResetAdmissionPolicy.cloudResetUnavailableMessage
         }

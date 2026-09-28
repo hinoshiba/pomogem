@@ -15,20 +15,23 @@ enum RareRewardMode: String, CaseIterable, Codable, Identifiable, Sendable {
 
     var title: String {
         switch self {
-        case .standard: "標準"
-        case .quiet: "控えめ"
-        case .off: "抽選しない"
+        case .standard: String(localized: "標準", table: "Models", comment: "Rare-reward mode: standard (draws with full effects)")
+        case .quiet: String(localized: "控えめ", table: "Models", comment: "Rare-reward mode: quiet (draws without extra effects)")
+        case .off: String(localized: "抽選しない", table: "Models", comment: "Rare-reward mode: no draws")
         }
     }
 
     var settingsDescription: String {
         switch self {
         case .standard:
-            "種類の色・光と専用の音・触覚を使います"
+            String(localized: "種類の色・光と専用の音・触覚を使います", table: "Models",
+                   comment: "Rare-reward mode description: standard")
         case .quiet:
-            "種類は残し、追加の発光・専用音・専用触覚を使いません"
+            String(localized: "種類は残し、追加の発光・専用音・専用触覚を使いません", table: "Models",
+                   comment: "Rare-reward mode description: quiet")
         case .off:
-            "今後は通常の粒だけを積み、抽選の端数と金の保証は現在の位置で停止します"
+            String(localized: "今後は通常の粒だけを積み、抽選の端数と金の保証は現在の位置で停止します", table: "Models",
+                   comment: "Rare-reward mode description: off; the draw remainder and gold guarantee pause where they are")
         }
     }
 
@@ -370,7 +373,11 @@ enum GachaEngine {
     /// Settings can explain the complete rule without exposing a live
     /// countdown that would encourage someone to chase the next draw.
     static var goldGuaranteeDisclosure: String {
-        "250gごとの抽選で金が\(Constants.Gacha.pityMissCount)回続けて出なかった場合、次の抽選は金の粒になります。虹はこの回数をリセットしません。"
+        String(
+            localized: "250gごとの抽選で金が\(Constants.Gacha.pityMissCount)回続けて出なかった場合、次の抽選は金の粒になります。虹はこの回数をリセットしません。",
+            table: "Models",
+            comment: "Gold guarantee rule; %lld is how many draws in a row without gold"
+        )
     }
 
     /// The number of additional earned credits before gold is certain.

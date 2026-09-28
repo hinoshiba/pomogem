@@ -71,7 +71,9 @@ enum SessionSource: String, Codable, CaseIterable, Sendable {
     var displayName: String {
         self == .screenTime
             ? String(localized: "スクリーンタイム", table: "Models", comment: "Record source label: Screen Time")
-            : (isMeasured ? "実測" : "自己申告")
+            : (isMeasured
+                ? String(localized: "実測", table: "Models", comment: "Record source label: measured by the timer (glossary: timed)")
+                : String(localized: "自己申告", table: "Models", comment: "Record source label: entered by hand (glossary: self-reported)"))
     }
 }
 
@@ -210,9 +212,9 @@ enum AchievementKind: String, Codable, CaseIterable, Identifiable, Sendable {
 
     var title: String {
         switch self {
-        case .perfectScore: "100点"
-        case .examPass: "試験合格"
-        case .workMilestone: "仕事の節目"
+        case .perfectScore: String(localized: "100点", table: "Models", comment: "Achievement kind: a perfect score on a test")
+        case .examPass: String(localized: "試験合格", table: "Models", comment: "Achievement kind: passed an exam or certification")
+        case .workMilestone: String(localized: "仕事の節目", table: "Models", comment: "Achievement kind: a work milestone")
         }
     }
 
@@ -261,17 +263,17 @@ enum AchievementKind: String, Codable, CaseIterable, Identifiable, Sendable {
 
     var detail: String {
         switch self {
-        case .perfectScore: "満点だったテスト"
-        case .examPass: "試験・検定・資格の合格"
-        case .workMilestone: "納品・公開・案件完了など、自分で決めた節目"
+        case .perfectScore: String(localized: "満点だったテスト", table: "Models", comment: "Achievement kind detail: perfect score")
+        case .examPass: String(localized: "試験・検定・資格の合格", table: "Models", comment: "Achievement kind detail: passing an exam, test or certification")
+        case .workMilestone: String(localized: "納品・公開・案件完了など、自分で決めた節目", table: "Models", comment: "Achievement kind detail: a milestone the user defines, such as a delivery, launch or finished project")
         }
     }
 
     var notePlaceholder: String {
         switch self {
-        case .perfectScore: "例：2学期 期末テスト"
-        case .examPass: "例：簿記2級"
-        case .workMilestone: "例：初回リリース"
+        case .perfectScore: String(localized: "例：2学期 期末テスト", table: "Models", comment: "Achievement note placeholder for a perfect score. en: a culturally neutral example, not a literal translation")
+        case .examPass: String(localized: "例：簿記2級", table: "Models", comment: "Achievement note placeholder for an exam pass. en: a culturally neutral example, not a literal translation")
+        case .workMilestone: String(localized: "例：初回リリース", table: "Models", comment: "Achievement note placeholder for a work milestone")
         }
     }
 }
@@ -383,9 +385,11 @@ enum SubjectSyncPolicy {
         var errorDescription: String? {
             switch self {
             case .revisionLimitReached:
-                "このテーマは変更の回数が上限に達したため、これ以上変更できません。"
+                String(localized: "このテーマは変更の回数が上限に達したため、これ以上変更できません。", table: "Models",
+                       comment: "Theme edit error: the theme reached its edit limit")
             case .tooManyPhysicalRows:
-                "テーマの保存データが多すぎるため、安全に変更できませんでした。"
+                String(localized: "テーマの保存データが多すぎるため、安全に変更できませんでした。", table: "Models",
+                       comment: "Theme edit error: too many stored copies of the theme to change it safely")
             }
         }
     }
@@ -740,10 +744,21 @@ final class StudySession {
         return true
     }
 
+    /// The theme's stored name, bounded. Also written into aggregates, so it
+    /// stays Japanese data; screens use `localizedDisplaySubjectName`.
     var displaySubjectName: String {
         SubjectNamePolicy.displayName(
             subject?.name ?? subjectNameSnapshot,
-            fallback: "アーカイブ済みのテーマ"
+            fallback: "アーカイブ済みのテーマ" // l10n-ignore: stored fallback (aggregates), mapped at display
+        )
+    }
+
+    /// Display only, in the app's language (an untouched built-in preset,
+    /// the no-name fallback). Never persist or compare it.
+    var localizedDisplaySubjectName: String {
+        SubjectNamePolicy.localizedDisplayName(
+            displaySubjectName,
+            subjectID: subject?.id ?? subjectIDSnapshot
         )
     }
 
@@ -923,12 +938,25 @@ struct RareRewardCounts: Equatable, Sendable {
     var multiDrawSummary: String? {
         guard drawCount > 1 else { return nil }
         let parts = [
-            normalCount > 0 ? "通常\(normalCount)" : nil,
-            goldCount > 0 ? "金\(goldCount)" : nil,
-            prismCount > 0 ? "虹\(prismCount)" : nil
+            normalCount > 0
+                ? String(localized: "通常\(normalCount)", table: "Models", comment: "Compact count of standard gems from rare-reward draws, e.g. 通常3")
+                : nil,
+            goldCount > 0
+                ? String(localized: "金\(goldCount)", table: "Models", comment: "Compact count of gold gems from rare-reward draws, e.g. 金1")
+                : nil,
+            prismCount > 0
+                ? String(localized: "虹\(prismCount)", table: "Models", comment: "Compact count of rainbow gems from rare-reward draws, e.g. 虹1")
+                : nil
         ].compactMap { $0 }
-        guard !parts.isEmpty else { return "250gごとの抽選\(drawCount)回" }
-        return "250gごとの抽選\(drawCount)回（\(parts.joined(separator: "・"))）"
+        guard !parts.isEmpty else {
+            return String(localized: "250gごとの抽選\(drawCount)回", table: "Models",
+                          comment: "How many rare-reward draws (one per 250 g) one completion made")
+        }
+        return String(
+            localized: "250gごとの抽選\(drawCount)回（\(ListText.compact(parts))）",
+            table: "Models",
+            comment: "%1$lld draws (one per 250 g; always 2 or more here) and %2$@ their results, e.g. 通常3・金1"
+        )
     }
 
     static func total<S: Sequence>(_ values: S) -> RareRewardCounts
@@ -1307,11 +1335,19 @@ final class AchievementStone {
         self.updatedAt = updatedAt ?? createdAt
     }
 
+    /// The theme's stored name, bounded. Also written into aggregates, so it
+    /// stays Japanese data; screens use `localizedDisplaySubjectName`.
     var displaySubjectName: String {
         SubjectNamePolicy.displayName(
             subject?.name ?? subjectNameSnapshot,
-            fallback: "アーカイブ済みのテーマ"
+            fallback: "アーカイブ済みのテーマ" // l10n-ignore: stored fallback (aggregates), mapped at display
         )
+    }
+
+    /// Display only, in the app's language (an untouched built-in preset,
+    /// the no-name fallback). Never persist or compare it.
+    var localizedDisplaySubjectName: String {
+        SubjectNamePolicy.localizedDisplayName(displaySubjectName, subjectID: subject?.id)
     }
 
     var displaySubjectColorHex: String {
@@ -1763,9 +1799,26 @@ struct AggregateSubjectFraction: Codable, Equatable, Sendable {
     let pebbleCount: Int
 
     init(name: String, colorHex: String, pebbleCount: Int) {
-        self.name = name.isEmpty ? "過去の集中" : name
+        self.name = name.isEmpty ? Self.legacySubjectName(at: 0) : name
         self.colorHex = colorHex
         self.pebbleCount = max(0, pebbleCount)
+    }
+
+    /// The stored name of one colour of an old jar layer whose themes are
+    /// unknown: 「過去の集中」, then 「過去の集中 2」, … Japanese data in every
+    /// language (older devices read the same aggregates); shown through
+    /// `displayName`.
+    static func legacySubjectName(at index: Int) -> String {
+        // l10n-ignore: stored aggregate name, mapped by SubjectNamePolicy.localizedDisplayName
+        index == 0 ? "過去の集中" : "過去の集中 \(index + 1)"
+    }
+
+    /// Display only, in the app's language: the legacy names above and an
+    /// untouched built-in preset's name are translated, a theme's own name is
+    /// not. Aggregates carry no theme ID, so a built-in is recognised by its
+    /// canonical name.
+    var displayName: String {
+        SubjectNamePolicy.localizedDisplayName(name)
     }
 }
 
@@ -2619,17 +2672,17 @@ enum TimerCompletionSound: String, CaseIterable, Identifiable, Sendable {
 
     var title: String {
         switch self {
-        case .standard: "澄んだチャイム"
-        case .soft: "やわらかいベル"
-        case .bright: "明るいチャイム"
+        case .standard: String(localized: "澄んだチャイム", table: "Models", comment: "Timer completion sound name")
+        case .soft: String(localized: "やわらかいベル", table: "Models", comment: "Timer completion sound name")
+        case .bright: String(localized: "明るいチャイム", table: "Models", comment: "Timer completion sound name")
         }
     }
 
     var detail: String {
         switch self {
-        case .standard: "区切りが分かる、落ち着いた2音"
-        case .soft: "低めで穏やかな2音"
-        case .bright: "軽やかに上がる3音"
+        case .standard: String(localized: "区切りが分かる、落ち着いた2音", table: "Models", comment: "Timer completion sound description: two calm notes")
+        case .soft: String(localized: "低めで穏やかな2音", table: "Models", comment: "Timer completion sound description: two low, gentle notes")
+        case .bright: String(localized: "軽やかに上がる3音", table: "Models", comment: "Timer completion sound description: three light rising notes")
         }
     }
 
@@ -2655,17 +2708,17 @@ enum TimerCompletionHaptic: String, CaseIterable, Identifiable, Sendable {
 
     var title: String {
         switch self {
-        case .standard: "標準・2回"
-        case .gentle: "やさしい・1回"
-        case .strong: "しっかり・3回"
+        case .standard: String(localized: "標準・2回", table: "Models", comment: "Timer completion haptic name: standard, two taps")
+        case .gentle: String(localized: "やさしい・1回", table: "Models", comment: "Timer completion haptic name: gentle, one tap")
+        case .strong: String(localized: "しっかり・3回", table: "Models", comment: "Timer completion haptic name: strong, three taps")
         }
     }
 
     var detail: String {
         switch self {
-        case .standard: "短い2回で終了を知らせます"
-        case .gentle: "控えめな1回で知らせます"
-        case .strong: "はっきりした3回で知らせます"
+        case .standard: String(localized: "短い2回で終了を知らせます", table: "Models", comment: "Timer completion haptic description")
+        case .gentle: String(localized: "控えめな1回で知らせます", table: "Models", comment: "Timer completion haptic description")
+        case .strong: String(localized: "はっきりした3回で知らせます", table: "Models", comment: "Timer completion haptic description")
         }
     }
 
@@ -2694,23 +2747,27 @@ enum TimerDisplayMode: String, CaseIterable, Identifiable, Sendable {
 
     var title: String {
         switch self {
-        case .ringAndTime: "リング＋時間"
-        case .filledDial: "円盤（数字なし）"
-        case .timeOnly: "時間のみ"
-        case .ringOnly: "リングのみ"
+        case .ringAndTime: String(localized: "リング＋時間", table: "Models", comment: "Timer display style: ring and remaining time")
+        case .filledDial: String(localized: "円盤（数字なし）", table: "Models", comment: "Timer display style: a shrinking coloured disc without numbers")
+        case .timeOnly: String(localized: "時間のみ", table: "Models", comment: "Timer display style: remaining time only")
+        case .ringOnly: String(localized: "リングのみ", table: "Models", comment: "Timer display style: ring only")
         }
     }
 
     var detail: String {
         switch self {
         case .ringAndTime:
-            "残り時間と、時計回りに減るリングを表示します"
+            String(localized: "残り時間と、時計回りに減るリングを表示します", table: "Models",
+                   comment: "Timer display style description")
         case .filledDial:
-            "物理タイマーのように、色の円盤が時計回りに減ります。数字は表示しません"
+            String(localized: "物理タイマーのように、色の円盤が時計回りに減ります。数字は表示しません", table: "Models",
+                   comment: "Timer display style description")
         case .timeOnly:
-            "残り時間の数字だけを大きく表示します"
+            String(localized: "残り時間の数字だけを大きく表示します", table: "Models",
+                   comment: "Timer display style description")
         case .ringOnly:
-            "時計回りに減るリングと残りの割合を表示します。残り時間の数字は表示しません"
+            String(localized: "時計回りに減るリングと残りの割合を表示します。残り時間の数字は表示しません", table: "Models",
+                   comment: "Timer display style description")
         }
     }
 
@@ -2878,13 +2935,17 @@ enum PrefsSyncError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .revisionLimitReached:
-            "設定の同期履歴が上限に達したため、変更を保存できません。サポートへお問い合わせください。"
+            String(localized: "設定の同期履歴が上限に達したため、変更を保存できません。サポートへお問い合わせください。", table: "Models",
+                   comment: "Settings sync error: the settings reached their sync history limit")
         case .conflictingStampedValues:
-            "同じ同期履歴を持つ設定内容が一致しないため、変更せず保持しました。サポートへお問い合わせください。"
+            String(localized: "同じ同期履歴を持つ設定内容が一致しないため、変更せず保持しました。サポートへお問い合わせください。", table: "Models",
+                   comment: "Settings sync error: two synced copies disagree, so nothing was changed")
         case .tooManyPhysicalRows:
-            "設定の同期コピーが安全に確認できる上限を超えたため、変更せず保持しました。サポートへお問い合わせください。"
+            String(localized: "設定の同期コピーが安全に確認できる上限を超えたため、変更せず保持しました。サポートへお問い合わせください。", table: "Models",
+                   comment: "Settings sync error: too many synced copies to check safely, so nothing was changed")
         case .invalidFocusDuration:
-            "集中時間は1分から360分の範囲で指定してください。"
+            String(localized: "集中時間は1分から360分の範囲で指定してください。", table: "Models",
+                   comment: "Settings error: the focus length must be 1 to 360 minutes")
         }
     }
 }

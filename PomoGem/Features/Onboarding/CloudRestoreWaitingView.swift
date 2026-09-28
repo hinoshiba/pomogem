@@ -197,7 +197,7 @@ struct CloudRestoreWaitingView: View {
                             confirmsFreshStart = true
                         } label: {
                             Text("新しく始める", tableName: "Onboarding",
-                                 comment: "Restore waiting screen: start onboarding without waiting for iCloud")
+                                 comment: "Restore waiting screen: start onboarding without waiting for iCloud (button and its confirmation)")
                         }
                         .buttonStyle(PomoGemSecondaryButtonStyle())
                         .accessibilityHint(Text("記録の到着を待たずに、最初のテーマ選びへ進みます", tableName: "Onboarding",
@@ -244,7 +244,7 @@ struct CloudRestoreWaitingView: View {
                           comment: "Restore waiting screen: keep waiting for iCloud (cancel)"),
                    role: .cancel) {}
             Button(String(localized: "新しく始める", table: "Onboarding",
-                          comment: "Restore waiting screen: confirm starting without waiting")) {
+                          comment: "Restore waiting screen: start onboarding without waiting for iCloud (button and its confirmation)")) {
                 onStartFresh()
             }
         } message: {
@@ -273,9 +273,7 @@ struct CloudRestoreWaitingView: View {
         .frame(maxWidth: .infinity)
         .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("届いた記録：テーマ\(themeCount)件。経過時間\(elapsedSeconds / 60)分\(elapsedSeconds % 60)秒",
-                                 tableName: "Onboarding",
-                                 comment: "VoiceOver summary of the restore progress: theme count, elapsed minutes and seconds"))
+        .accessibilityLabel(receivedSummaryLabel)
         .accessibilityAddTraits(.updatesFrequently)
         .accessibilityIdentifier("cloud-restore.counts")
     }
@@ -297,6 +295,27 @@ struct CloudRestoreWaitingView: View {
 
     private var elapsedText: String {
         String(format: "%d:%02d", elapsedSeconds / 60, elapsedSeconds % 60)
+    }
+
+    /// VoiceOver: two sentences, so each count carries its own plural form.
+    /// Japanese reads exactly as before, 「届いた記録：テーマ1件。経過時間0分5秒」.
+    private var receivedSummaryLabel: String {
+        SentenceText.join([
+            String(localized: "届いた記録：テーマ\(themeCount)件。", table: "Onboarding",
+                   comment: "VoiceOver summary of the restore progress; %lld is the number of themes received"),
+            String(localized: "経過時間\(elapsedSpoken)", table: "Onboarding",
+                   comment: "VoiceOver: time spent waiting; %@ is a spoken duration such as 1 minute, 5 seconds")
+        ])
+    }
+
+    /// Japanese keeps its 「0分5秒」 form (minutes always said); other
+    /// languages spell the units out ("5 seconds").
+    private var elapsedSpoken: String {
+        let locale = PomoGemLocale.current
+        guard PomoGemLocale.composesJapanese(locale) else {
+            return DurationText.spoken(seconds: elapsedSeconds, units: .minutesSeconds, locale: locale)
+        }
+        return "\(elapsedSeconds / 60)分\(elapsedSeconds % 60)秒" // l10n-ignore: the Japanese duration composed as before, like DurationText does
     }
 
     private func refresh() {

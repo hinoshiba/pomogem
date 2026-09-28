@@ -1,9 +1,49 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "%@に、集中を思い出す通知を受け取る" : {
+      "comment" : "Onboarding reminder toggle detail; %@ is the reminder time, e.g. 20:00 / 8:00 PM",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Get a reminder to focus at %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@に、集中を思い出す通知を受け取る"
+          }
+        }
+      }
+    },
+    "%@を選択から外す" : {
+      "comment" : "VoiceOver: remove the typed theme %@ from the selection",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove %@ from your selection"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@を選択から外す"
+          }
+        }
+      }
+    },
     "%lld件" : {
       "comment" : "Restore waiting screen: a received count",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -12,9 +52,78 @@
         }
       }
     },
+    "%lld粒、0グラム" : {
+      "comment" : "VoiceOver value of the trial jar; %lld is its gem count (0 or 1), which always weighs 0 grams",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld gem, 0 grams"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld gems, 0 grams"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld粒、0グラム"
+          }
+        }
+      }
+    },
+    "25・45・60・90分のタイマーは無料" : {
+      "comment" : "Onboarding page 1: the 25, 45, 60 and 90 minute timers are free",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "25, 45, 60 and 90 min timers are free"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "25・45・60・90分のタイマーは無料"
+          }
+        }
+      }
+    },
+    "YOUR BOTTLE" : {
+      "comment" : "Decorative uppercase eyebrow above 最初のテーマを選ぶ. en: YOUR JAR (glossary: jar, never bottle)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "YOUR JAR"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "YOUR BOTTLE"
+          }
+        }
+      }
+    },
     "iCloudから記録を復元しています" : {
       "comment" : "Restore waiting screen: title while an earlier jar arrives from iCloud",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restoring from iCloud"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -26,6 +135,12 @@
     "iCloudの記録は、届きしだいこのiPhoneにも表示されます。" : {
       "comment" : "Onboarding page 1 after choosing to start fresh over an iCloud restore",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your iCloud records will appear on this iPhone as soon as they arrive."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -34,9 +149,112 @@
         }
       }
     },
+    "subject.untitled-name" : {
+      "comment" : "Name shown for a theme that has no name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Theme"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマ"
+          }
+        }
+      }
+    },
+    "「%@」を選択しています。" : {
+      "comment" : "Onboarding: the typed theme %@ is already selected",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” is already selected."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」を選択しています。"
+          }
+        }
+      }
+    },
+    "あと%lld文字入力できます" : {
+      "comment" : "Theme name field: %lld characters left",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld character left"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld characters left"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "あと%lld文字入力できます"
+          }
+        }
+      }
+    },
+    "あとから設定で変更できます。抽選しない間は乱数を使わず、その間の質量も抽選用には貯めません。既存の端数と保証カウントは停止します" : {
+      "comment" : "Rare gem disclosure: changeable later in Settings; with no draws, nothing random is used",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can change this later in Settings. While draws are off, nothing random is used and no mass is saved up for draws. The existing remainder and guarantee count pause"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "あとから設定で変更できます。抽選しない間は乱数を使わず、その間の質量も抽選用には貯めません。既存の端数と保証カウントは停止します"
+          }
+        }
+      }
+    },
+    "あとで設定から追加・編集できます。" : {
+      "comment" : "Onboarding theme page: themes can be added and edited later in Settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can add and edit themes later in Settings."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "あとで設定から追加・編集できます。"
+          }
+        }
+      }
+    },
     "このApple Accountの以前の瓶を、iCloudから受け取っています。記録が届きはじめると自動で瓶がひらき、残りの記録もそのあと順に届きます。" : {
       "comment" : "Restore waiting screen: what is happening and what happens next",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your earlier jar from this Apple Account is arriving from iCloud. The jar opens by itself as soon as records start to arrive, and the rest keep arriving after that."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -45,9 +263,32 @@
         }
       }
     },
+    "このあとはホームで時間を選び、開始ボタンをタップ。テーマはいつでも変更できます。" : {
+      "comment" : "Onboarding theme page: what happens next on Home",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next, choose a length on Home and tap Start. You can change the theme anytime."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このあとはホームで時間を選び、開始ボタンをタップ。テーマはいつでも変更できます。"
+          }
+        }
+      }
+    },
     "この画面を開いたままお待ちください。" : {
       "comment" : "Restore waiting screen: keep the app open while records arrive",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Please keep this screen open while you wait."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -59,6 +300,12 @@
     "しばらく新しい記録が届いていません。通信状態を確認するか、待たずに「新しく始める」を選べます。" : {
       "comment" : "Restore waiting screen: shown when nothing new has arrived for a while",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No new records have arrived for a while. Check your connection, or choose “Start Fresh” instead of waiting."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -67,9 +314,219 @@
         }
       }
     },
+    "ためしに一粒、落としてみる" : {
+      "comment" : "Trial page button: drop a trial gem",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add a Trial Gem"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ためしに一粒、落としてみる"
+          }
+        }
+      }
+    },
+    "ためしの一粒が瓶に積もりました" : {
+      "comment" : "VoiceOver label of the trial jar after the gem landed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The trial gem landed in the jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ためしの一粒が瓶に積もりました"
+          }
+        }
+      }
+    },
+    "ためしの一粒が瓶の中を落下しています" : {
+      "comment" : "VoiceOver label of the trial jar while the gem falls",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The trial gem is falling into the jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ためしの一粒が瓶の中を落下しています"
+          }
+        }
+      }
+    },
+    "ためしの一粒は任意です。記録を作らず、「次へ」でそのまま進めます。" : {
+      "comment" : "Trial page with VoiceOver: the trial gem is optional; 次へ is the Next button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The trial gem is optional. It creates no record, and you can simply tap “Next” to continue."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ためしの一粒は任意です。記録を作らず、「次へ」でそのまま進めます。"
+          }
+        }
+      }
+    },
+    "ためし積み" : {
+      "comment" : "Theme name of the onboarding trial gem (never saved)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trial"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ためし積み"
+          }
+        }
+      }
+    },
+    "できない日があっても、警告や罰はない" : {
+      "comment" : "Onboarding promise detail: no warnings or penalties on days you can't focus",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No warnings or penalties, even on days you can’t focus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "できない日があっても、警告や罰はない"
+          }
+        }
+      }
+    },
+    "どれを選んでも、質量・粒の融合・結晶・成果・使える機能は同じです。ランダムな結果を使わない「抽選しない」が安全な基準です。" : {
+      "comment" : "Rare gem choice: every option keeps mass, fusion, crystals, achievements and features the same; 抽選しない is the no-draw option",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Whatever you choose, mass, gem fusion, crystals, achievements and every feature stay the same. “No Draws”, which uses no random results, is the safe default."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "どれを選んでも、質量・粒の融合・結晶・成果・使える機能は同じです。ランダムな結果を使わない「抽選しない」が安全な基準です。"
+          }
+        }
+      }
+    },
+    "まず1つ選んでください。仕事の種類は、瓶をひらいた後も自由に追加・編集できます。" : {
+      "comment" : "Legacy usage purpose: setup note for work themes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose one to start. You can add and edit kinds of work freely after the jar opens."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "まず1つ選んでください。仕事の種類は、瓶をひらいた後も自由に追加・編集できます。"
+          }
+        }
+      }
+    },
+    "まず1つ選んでください。資格名や科目は、瓶をひらいた後も自由に追加・編集できます。" : {
+      "comment" : "Legacy usage purpose: setup note for study themes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose one to start. You can add and edit subjects and certifications freely after the jar opens."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "まず1つ選んでください。資格名や科目は、瓶をひらいた後も自由に追加・編集できます。"
+          }
+        }
+      }
+    },
+    "もう一度" : {
+      "comment" : "Trial page button: try the drop again",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try Again"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "もう一度"
+          }
+        }
+      }
+    },
+    "アーカイブ済みのテーマ" : {
+      "comment" : "Name shown for a record whose theme was deleted and left no name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Archived theme"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アーカイブ済みのテーマ"
+          }
+        }
+      }
+    },
+    "シェアカードにテーマ名は載せません。成果メモも載せません。終了通知にもテーマ名は表示しません。案件名・顧客名・個人名などの守秘情報は入れず、「企画」「顧客対応」のような大分類がおすすめです。" : {
+      "comment" : "Legacy usage purpose: privacy note for work themes (theme names never appear on share cards or notifications)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Share cards never show theme names or achievement notes, and timer-end notifications never show theme names. Leave out confidential details such as project, client or personal names; broad categories like “Planning” or “Customer Support” work best."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "シェアカードにテーマ名は載せません。成果メモも載せません。終了通知にもテーマ名は表示しません。案件名・顧客名・個人名などの守秘情報は入れず、「企画」「顧客対応」のような大分類がおすすめです。"
+          }
+        }
+      }
+    },
     "テーマ" : {
       "comment" : "Restore waiting screen: count label for themes",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Themes"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -81,6 +538,12 @@
     "テーマと時間を選んで、集中をはじめる。\n完走すると、その時間が一粒になって瓶に残ります。" : {
       "comment" : "Onboarding page 1: how a focus becomes a gem in the jar",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a theme and a length, then start a focus.\nFinish it, and that time stays in your jar as a gem."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -89,9 +552,163 @@
         }
       }
     },
+    "テーマは合計最大%lld件です。不要なテーマは設定から削除できます。" : {
+      "comment" : "Onboarding: theme limit reached; %lld is the maximum number of themes (12)",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "You can have up to %lld theme in all. You can delete themes you don’t need in Settings."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "You can have up to %lld themes in all. You can delete themes you don’t need in Settings."
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマは合計最大%lld件です。不要なテーマは設定から削除できます。"
+          }
+        }
+      }
+    },
+    "テーマを1つ選ぶと、瓶をひらけます" : {
+      "comment" : "Onboarding theme summary before a theme is chosen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a theme to open the jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマを1つ選ぶと、瓶をひらけます"
+          }
+        }
+      }
+    },
+    "テーマを1つ選ぶと瓶をひらけます" : {
+      "comment" : "VoiceOver hint: the button is disabled until a theme is chosen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a theme to open the jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマを1つ選ぶと瓶をひらけます"
+          }
+        }
+      }
+    },
+    "テーマ名は%lld文字以内で入力してください（%lld文字超過）。" : {
+      "comment" : "Theme name validation: %1$lld is the character limit (always 40), %2$lld how many characters too many",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Theme names can be up to %1$lld characters (%2$lld over)."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマ名は%lld文字以内で入力してください（%lld文字超過）。"
+          }
+        }
+      }
+    },
+    "テーマ名を入力してください。" : {
+      "comment" : "Theme name validation: the name is empty",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a theme name."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマ名を入力してください。"
+          }
+        }
+      }
+    },
+    "ホームへ進みます。テーマと時間を確認してから集中を始められます" : {
+      "comment" : "VoiceOver hint for the finishing button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Goes to Home. You can check your theme and length before you start a focus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ホームへ進みます。テーマと時間を確認してから集中を始められます"
+          }
+        }
+      }
+    },
+    "レア粒の扱いを1つ選ぶと瓶をひらけます" : {
+      "comment" : "VoiceOver hint: the button is disabled until a rare gem option is chosen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose an option for rare gems to open the jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "レア粒の扱いを1つ選ぶと瓶をひらけます"
+          }
+        }
+      }
+    },
+    "レア粒は、自分で選ぶ。" : {
+      "comment" : "Rare gem choice heading: you decide about rare gems",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rare gems are your choice."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "レア粒は、自分で選ぶ。"
+          }
+        }
+      }
+    },
     "一粒、着地しました。本番では、25分の集中でこの大きさの一粒（250グラム）が瓶に残ります。次へ進めます" : {
       "comment" : "VoiceOver announcement when the onboarding trial gem lands",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The gem has landed. In a real focus, 25 minutes leaves a gem this size, 250 grams, in your jar. You can go on to the next page."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -100,9 +717,474 @@
         }
       }
     },
+    "一粒、積もった" : {
+      "comment" : "Trial page button after the gem landed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gem Added"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一粒、積もった"
+          }
+        }
+      }
+    },
+    "一粒が落下中" : {
+      "comment" : "Trial page button while the gem falls",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dropping a Gem…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一粒が落下中"
+          }
+        }
+      }
+    },
+    "一粒を体験（任意）" : {
+      "comment" : "Onboarding step 2 title: try dropping one gem (optional)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try a Gem (Optional)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一粒を体験（任意）"
+          }
+        }
+      }
+    },
+    "一粒目の着地が完了しました" : {
+      "comment" : "VoiceOver hint on the trial jar: the gem has landed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The first gem has landed"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一粒目の着地が完了しました"
+          }
+        }
+      }
+    },
+    "下のボタンで、ためしの一粒を落とせます" : {
+      "comment" : "VoiceOver hint on the trial jar: the button below drops a trial gem",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use the button below to let a trial gem fall into the jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下のボタンで、ためしの一粒を落とせます"
+          }
+        }
+      }
+    },
+    "仕事" : {
+      "comment" : "Legacy usage purpose: work",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Work"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仕事"
+          }
+        }
+      }
+    },
+    "仕事に使う場合は、案件名・顧客名・個人名などの守秘情報を避け、「企画」「開発」のような大分類がおすすめです。" : {
+      "comment" : "Privacy note for work themes: avoid confidential names; the quoted examples are the work suggestions",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "For work, leave out confidential details such as project, client or personal names; broad categories like “Planning” or “Development” work best."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仕事に使う場合は、案件名・顧客名・個人名などの守秘情報を避け、「企画」「開発」のような大分類がおすすめです。"
+          }
+        }
+      }
+    },
+    "仕事カテゴリ" : {
+      "comment" : "Legacy usage purpose: kind of work theme",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Work Category"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仕事カテゴリ"
+          }
+        }
+      }
+    },
+    "仕事カテゴリを入力" : {
+      "comment" : "Legacy usage purpose: title of the custom work theme field",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a Work Category"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仕事カテゴリを入力"
+          }
+        }
+      }
+    },
+    "任意の体験です。0g・記録には入りません。「次へ」で省略できます。" : {
+      "comment" : "Trial page: optional, adds 0 g and no record; Next skips it",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This is optional. It adds 0 g and no record. Tap “Next” to skip it."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任意の体験です。0g・記録には入りません。「次へ」で省略できます。"
+          }
+        }
+      }
+    },
+    "企画" : {
+      "comment" : "Work theme suggestion; saved as shown",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Planning"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "企画"
+          }
+        }
+      }
+    },
+    "体験を省略して、最初のテーマを選べます" : {
+      "comment" : "VoiceOver hint for Next on the trial page: skip the trial",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skips the trial so you can choose your first theme"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "体験を省略して、最初のテーマを選べます"
+          }
+        }
+      }
+    },
+    "例：企画、開発、資料作成、顧客対応" : {
+      "comment" : "Legacy usage purpose: example work themes (the built-in work suggestions)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "e.g. Planning, Development, Docs & Slides, Customer Support"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "例：企画、開発、資料作成、顧客対応"
+          }
+        }
+      }
+    },
+    "例：簿記2級、TOEIC" : {
+      "comment" : "Legacy usage purpose: study theme field placeholder. en: culturally neutral examples, not a literal translation",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "e.g. SAT prep, Spanish B1"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "例：簿記2級、TOEIC"
+          }
+        }
+      }
+    },
+    "例：英語、TOEIC、企画、開発" : {
+      "comment" : "Theme name field placeholder. en: culturally neutral examples mixing study and work, e.g. SAT prep",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "e.g. English, SAT prep, Planning, Development"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "例：英語、TOEIC、企画、開発"
+          }
+        }
+      }
+    },
+    "例：英語、数学、TOEIC、企画、開発、資料作成" : {
+      "comment" : "Example theme names under the theme name field (Settings). en: culturally neutral examples",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "e.g. English, Math, SAT prep, Planning, Development, Docs & Slides"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "例：英語、数学、TOEIC、企画、開発、資料作成"
+          }
+        }
+      }
+    },
+    "例：設計、レビュー" : {
+      "comment" : "Legacy usage purpose: work theme field placeholder",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "e.g. Design, Reviews"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "例：設計、レビュー"
+          }
+        }
+      }
+    },
+    "個人の集中を振り返るための記録です。勤怠・請求・正式な工数管理の代わりには使わないでください。" : {
+      "comment" : "Not for attendance, billing or official time tracking",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "These records are for looking back on your own focus. Please don’t use them in place of attendance, billing or official time tracking."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "個人の集中を振り返るための記録です。勤怠・請求・正式な工数管理の代わりには使わないでください。"
+          }
+        }
+      }
+    },
+    "候補から選ぶ" : {
+      "comment" : "Onboarding theme page section: pick from suggestions",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pick a Suggestion"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "候補から選ぶ"
+          }
+        }
+      }
+    },
+    "全%lldページ中、%lldページ。%@" : {
+      "comment" : "VoiceOver: onboarding progress; %1$lld pages in all, %2$lld the current page, %3$@ its title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page %2$lld of %1$lld. %3$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全%lldページ中、%lldページ。%@"
+          }
+        }
+      }
+    },
+    "全モードで、1回の完走が積む質量と、粒の融合・結晶の進み方は同じ" : {
+      "comment" : "Rare gem disclosure: every mode adds the same mass and fuses gems into crystals the same way",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In every mode, each completed session adds the same mass, and gems fuse into crystals the same way"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全モードで、1回の完走が積む質量と、粒の融合・結晶の進み方は同じ"
+          }
+        }
+      }
+    },
+    "勉強" : {
+      "comment" : "Legacy usage purpose: study",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Study"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "勉強"
+          }
+        }
+      }
+    },
+    "勉強も仕事も同じテーマ一覧で管理できます。候補を1つ選ぶか、自由に入力してください。" : {
+      "comment" : "Onboarding theme step: study and work themes share one list",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Study and work themes live in the same list. Pick a suggestion or type your own."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "勉強も仕事も同じテーマ一覧で管理できます。候補を1つ選ぶか、自由に入力してください。"
+          }
+        }
+      }
+    },
+    "動きを使わず一粒を試す" : {
+      "comment" : "Trial page button: add the trial gem without the animation",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try a Gem Without Motion"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "動きを使わず一粒を試す"
+          }
+        }
+      }
+    },
+    "同じ名前の候補「%@」を選択しました。" : {
+      "comment" : "Onboarding: the typed name matches suggestion %@, which is now selected",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selected the suggestion with the same name, “%@”."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同じ名前の候補「%@」を選択しました。"
+          }
+        }
+      }
+    },
+    "国語" : {
+      "comment" : "Built-in theme preset: the national-language school subject, Language Arts (display only)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Language Arts"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "国語"
+          }
+        }
+      }
+    },
+    "実測タイマーで250g積むごとに1抽選。端数は次回へ繰り越します。%@" : {
+      "comment" : "Rare gem disclosure: one draw per 250 g of timed focus, the remainder carries over; %@ is the gold guarantee sentence",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "One draw for every 250 g of timed focus. Any remainder carries over to next time. %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "実測タイマーで250g積むごとに1抽選。端数は次回へ繰り越します。%@"
+          }
+        }
+      }
+    },
     "届いた記録" : {
       "comment" : "Restore waiting screen: heading above the received counts",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Received So Far"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -111,13 +1193,31 @@
         }
       }
     },
-    "届いた記録：テーマ%lld件。経過時間%lld分%lld秒" : {
-      "comment" : "VoiceOver summary of the restore progress: theme count, elapsed minutes and seconds",
+    "届いた記録：テーマ%lld件。" : {
+      "comment" : "VoiceOver summary of the restore progress; %lld is the number of themes received",
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Received so far: %lld theme."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Received so far: %lld themes."
+                }
+              }
+            }
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "届いた記録：テーマ%lld件。経過時間%lld分%lld秒"
+            "value" : "届いた記録：テーマ%lld件。"
           }
         }
       }
@@ -125,6 +1225,12 @@
     "待つ" : {
       "comment" : "Restore waiting screen: keep waiting for iCloud (cancel)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wait"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -133,9 +1239,117 @@
         }
       }
     },
+    "戻る" : {
+      "comment" : "Onboarding: back to the previous page",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "戻る"
+          }
+        }
+      }
+    },
+    "抽選する場合の自然確率：いつもの粒 %@、金 %@、虹 %@" : {
+      "comment" : "Rare gem disclosure: natural odds; %1$@ usual gem, %2$@ gold, %3$@ rainbow (percentages)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Natural odds when drawing: usual gem %1$@, gold %2$@, rainbow %3$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "抽選する場合の自然確率：いつもの粒 %@、金 %@、虹 %@"
+          }
+        }
+      }
+    },
+    "教科・資格" : {
+      "comment" : "Legacy usage purpose: kind of study theme",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Subjects & Certifications"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "教科・資格"
+          }
+        }
+      }
+    },
+    "教科・資格の集中を積む" : {
+      "comment" : "Legacy usage purpose summary: study",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Build up focus for school subjects and certifications"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "教科・資格の集中を積む"
+          }
+        }
+      }
+    },
+    "数学" : {
+      "comment" : "Built-in theme preset: mathematics (display only)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Math"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "数学"
+          }
+        }
+      }
+    },
+    "新しいテーマの枠がありません。既存のテーマを選ぶか、瓶をひらいた後に整理してください。" : {
+      "comment" : "Onboarding theme page: the theme limit leaves no room for a new theme",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "There’s no room for a new theme. Choose an existing theme, or tidy up your themes after the jar opens."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新しいテーマの枠がありません。既存のテーマを選ぶか、瓶をひらいた後に整理してください。"
+          }
+        }
+      }
+    },
     "新しく始めますか？" : {
       "comment" : "Restore waiting screen: confirmation title for starting without waiting",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start Fresh?"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -145,8 +1359,14 @@
       }
     },
     "新しく始める" : {
-      "comment" : "Restore waiting screen: confirm starting without waiting\nRestore waiting screen: start onboarding without waiting for iCloud",
+      "comment" : "Restore waiting screen: start onboarding without waiting for iCloud (button and its confirmation)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start Fresh"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -155,9 +1375,146 @@
         }
       }
     },
+    "最初のテーマ" : {
+      "comment" : "Onboarding step 3 title: your first theme",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your First Theme"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最初のテーマ"
+          }
+        }
+      }
+    },
+    "最初のテーマを選ぶ" : {
+      "comment" : "Onboarding theme page heading: choose your first theme",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose Your First Theme"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最初のテーマを選ぶ"
+          }
+        }
+      }
+    },
+    "最初のテーマ：%@" : {
+      "comment" : "Onboarding theme summary; %@ is the chosen theme's name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "First theme: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最初のテーマ：%@"
+          }
+        }
+      }
+    },
+    "最初の仕事カテゴリ" : {
+      "comment" : "Legacy usage purpose: heading for the first work theme",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your First Work Category"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最初の仕事カテゴリ"
+          }
+        }
+      }
+    },
+    "最初の教科・資格" : {
+      "comment" : "Legacy usage purpose: heading for the first study theme",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your First Subject or Certification"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最初の教科・資格"
+          }
+        }
+      }
+    },
+    "最大%lld文字" : {
+      "comment" : "Theme name field: the character limit; %lld is 40",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Up to %lld character"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Up to %lld characters"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最大%lld文字"
+          }
+        }
+      }
+    },
+    "未選択" : {
+      "comment" : "VoiceOver value: this option is not selected",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not selected"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未選択"
+          }
+        }
+      }
+    },
     "本番では、25分の集中でこの大きさの一粒（250g）が瓶に残ります。" : {
       "comment" : "Onboarding trial drop: shown after the trial gem lands",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In a real focus, 25 minutes leaves a gem this size (250 g) in your jar."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -166,9 +1523,100 @@
         }
       }
     },
+    "次のページへ進みます" : {
+      "comment" : "VoiceOver hint for Next",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Goes to the next page"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "次のページへ進みます"
+          }
+        }
+      }
+    },
+    "次は、記録を作らず一粒を試せるページです" : {
+      "comment" : "VoiceOver hint for Next on page 1",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next, you can try a gem without creating a record"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "次は、記録を作らず一粒を試せるページです"
+          }
+        }
+      }
+    },
+    "次へ" : {
+      "comment" : "Onboarding: next page",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "次へ"
+          }
+        }
+      }
+    },
+    "毎日のリマインダー" : {
+      "comment" : "Onboarding toggle: Daily Reminder",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Daily Reminder"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "毎日のリマインダー"
+          }
+        }
+      }
+    },
+    "減らない" : {
+      "comment" : "Onboarding promise title: nothing you added shrinks (from 減らない。消えない。責めない。)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing shrinks"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "減らない"
+          }
+        }
+      }
+    },
     "演出を省略して一粒を積みました。本番では、25分の集中でこの大きさの一粒（250グラム）が瓶に残ります。次へ進めます" : {
       "comment" : "VoiceOver announcement when the onboarding trial gem is placed without animation",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Added a gem without the animation. In a real focus, 25 minutes leaves a gem this size, 250 grams, in your jar. You can go on to the next page."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -177,9 +1625,219 @@
         }
       }
     },
+    "現在は端末に保存済みのデータを使っています。まだ届いていないiCloudのデータは、接続回復後に確認します。" : {
+      "comment" : "Onboarding page 1 while iCloud is offline: using data already on this device",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "For now, you’re using the data already saved on this device. iCloud data that hasn’t arrived yet will be checked once you’re back online."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "現在は端末に保存済みのデータを使っています。まだ届いていないiCloudのデータは、接続回復後に確認します。"
+          }
+        }
+      }
+    },
+    "理科" : {
+      "comment" : "Built-in theme preset: science (display only)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Science"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "理科"
+          }
+        }
+      }
+    },
+    "瓶をひらく" : {
+      "comment" : "Onboarding: the last page's button, which finishes setup and opens the jar",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open the Jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶をひらく"
+          }
+        }
+      }
+    },
+    "着地を確認できませんでした。もう一度試すか、演出を省略して進めます" : {
+      "comment" : "VoiceOver announcement: the trial landing could not be confirmed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The landing couldn’t be confirmed. Try again, or continue without the animation."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "着地を確認できませんでした。もう一度試すか、演出を省略して進めます"
+          }
+        }
+      }
+    },
+    "着地を確認できませんでした。記録には影響しません。" : {
+      "comment" : "Trial page: the landing could not be confirmed; records are not affected",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The landing couldn’t be confirmed. Your records aren’t affected."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "着地を確認できませんでした。記録には影響しません。"
+          }
+        }
+      }
+    },
+    "着地済み" : {
+      "comment" : "VoiceOver value: the trial gem has landed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Landed"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "着地済み"
+          }
+        }
+      }
+    },
+    "着地演出を試す" : {
+      "comment" : "Trial page button: try the landing animation",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try the Landing Animation"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "着地演出を試す"
+          }
+        }
+      }
+    },
+    "確率と質量は控えめと同じ。金・虹に追加の発光・専用音・専用触覚を使います。" : {
+      "comment" : "Rare gem choice detail: standard (控えめ is the quiet option)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Same odds and mass as Quiet. Gold and rainbow gems get extra glow, special sounds and special haptics."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "確率と質量は控えめと同じ。金・虹に追加の発光・専用音・専用触覚を使います。"
+          }
+        }
+      }
+    },
+    "社会" : {
+      "comment" : "Built-in theme preset: social studies (display only)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Social Studies"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "社会"
+          }
+        }
+      }
+    },
+    "積んだ粒と記録は、そのまま残る" : {
+      "comment" : "Onboarding promise detail: your gems and records stay",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The gems and records you add stay just as they are"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "積んだ粒と記録は、そのまま残る"
+          }
+        }
+      }
+    },
+    "空の瓶" : {
+      "comment" : "VoiceOver label: the empty trial jar",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Empty jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "空の瓶"
+          }
+        }
+      }
+    },
+    "粒の好み" : {
+      "comment" : "Onboarding step 4 title: rare gem preference",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gem Preference"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粒の好み"
+          }
+        }
+      }
+    },
     "経過 %@" : {
       "comment" : "Restore waiting screen: elapsed time, e.g. 経過 1:05",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elapsed %@"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -188,9 +1846,117 @@
         }
       }
     },
+    "経過時間%@" : {
+      "comment" : "VoiceOver: time spent waiting; %@ is a spoken duration such as 1 minute, 5 seconds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Time elapsed: %@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "経過時間%@"
+          }
+        }
+      }
+    },
+    "自分の仕事の集中を積む" : {
+      "comment" : "Legacy usage purpose summary: work",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Build up focus for your own work"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自分の仕事の集中を積む"
+          }
+        }
+      }
+    },
+    "自由に入力" : {
+      "comment" : "Onboarding theme page section: type your own theme",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Type Your Own"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自由に入力"
+          }
+        }
+      }
+    },
+    "英語" : {
+      "comment" : "Built-in theme preset: the school subject English (display only)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "English"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "英語"
+          }
+        }
+      }
+    },
+    "落下中" : {
+      "comment" : "VoiceOver value: the trial gem is falling",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Falling"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "落下中"
+          }
+        }
+      }
+    },
+    "落下前" : {
+      "comment" : "VoiceOver value: the trial gem has not been dropped yet",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not dropped yet"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "落下前"
+          }
+        }
+      }
+    },
     "記録の到着を待たずに、最初のテーマ選びへ進みます" : {
       "comment" : "VoiceOver hint for 新しく始める on the restore waiting screen",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Goes on to choosing your first theme without waiting for your records"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -202,10 +1968,300 @@
     "記録の到着を待たずに、最初のテーマ選びへ進みます。iCloudの記録は、届きしだいこのiPhoneにも表示されます。" : {
       "comment" : "Restore waiting screen: what starting without waiting means",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You’ll go on to choosing your first theme without waiting for your records. Your iCloud records will appear on this iPhone as soon as they arrive."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "記録の到着を待たずに、最初のテーマ選びへ進みます。iCloudの記録は、届きしだいこのiPhoneにも表示されます。"
+          }
+        }
+      }
+    },
+    "責めない" : {
+      "comment" : "Onboarding promise title: no guilt (from 減らない。消えない。責めない。)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No guilt"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "責めない"
+          }
+        }
+      }
+    },
+    "資料作成" : {
+      "comment" : "Work theme suggestion: making documents and slides; saved as shown",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Docs & Slides"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "資料作成"
+          }
+        }
+      }
+    },
+    "資格・科目名を入力" : {
+      "comment" : "Legacy usage purpose: title of the custom study theme field",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a Subject or Certification"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "資格・科目名を入力"
+          }
+        }
+      }
+    },
+    "追加できるテーマは合計最大%lld件です。" : {
+      "comment" : "Onboarding: theme limit reached; %lld is the maximum number of themes (12)",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "You can have up to %lld theme in all."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "You can have up to %lld themes in all."
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "追加できるテーマは合計最大%lld件です。"
+          }
+        }
+      }
+    },
+    "通常の粒だけを積みます。抽選せず、抽選用の端数と金の保証カウントも動かしません。" : {
+      "comment" : "Rare gem choice detail: no draws",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adds only standard gems. There are no draws, and the draw remainder and gold guarantee count stay where they are."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通常の粒だけを積みます。抽選せず、抽選用の端数と金の保証カウントも動かしません。"
+          }
+        }
+      }
+    },
+    "通知は任意です。時刻やオン・オフは設定で変更できます。タイマーの終了通知は、このリマインダーとは別に、最初に集中を始めるときに一度だけ許可をおたずねします。" : {
+      "comment" : "Onboarding: notifications are optional; timer-end notifications are asked for once, at the first focus",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Notifications are optional. You can change the time or turn them off in Settings. Separately from this reminder, you’ll be asked once, when you first start a focus, whether to allow timer-end notifications."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通知は任意です。時刻やオン・オフは設定で変更できます。タイマーの終了通知は、このリマインダーとは別に、最初に集中を始めるときに一度だけ許可をおたずねします。"
+          }
+        }
+      }
+    },
+    "過去の集中" : {
+      "comment" : "Name for focus from an old jar layer whose themes are unknown",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Earlier focus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "過去の集中"
+          }
+        }
+      }
+    },
+    "過去の集中 %lld" : {
+      "comment" : "Name for one colour of an old jar layer whose themes are unknown; %lld is its number (2, 3, …)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Earlier focus %lld"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "過去の集中 %lld"
+          }
+        }
+      }
+    },
+    "選んだ内容を保ったまま、前のページへ戻ります" : {
+      "comment" : "VoiceOver hint for the onboarding back button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Goes back to the previous page and keeps your choices"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選んだ内容を保ったまま、前のページへ戻ります"
+          }
+        }
+      }
+    },
+    "選択" : {
+      "comment" : "Onboarding theme page: choose the typed theme name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択"
+          }
+        }
+      }
+    },
+    "選択中" : {
+      "comment" : "VoiceOver value: this option is selected",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selected"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択中"
+          }
+        }
+      }
+    },
+    "金・虹の種類は履歴に残しますが、追加の発光・専用音・専用触覚は使いません。" : {
+      "comment" : "Rare gem choice detail: quiet",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gold and rainbow gems are still kept in your history, without extra glow, special sounds or special haptics."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "金・虹の種類は履歴に残しますが、追加の発光・専用音・専用触覚は使いません。"
+          }
+        }
+      }
+    },
+    "開発" : {
+      "comment" : "Work theme suggestion; saved as shown",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Development"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開発"
+          }
+        }
+      }
+    },
+    "集中が残るしくみ" : {
+      "comment" : "Onboarding step 1 title: how your focus is kept",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "How Your Focus Is Kept"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中が残るしくみ"
+          }
+        }
+      }
+    },
+    "集中を終えると、一粒。" : {
+      "comment" : "Onboarding page 1 headline: finish a focus, get a gem",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finish a focus, get a gem."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中を終えると、一粒。"
+          }
+        }
+      }
+    },
+    "顧客対応" : {
+      "comment" : "Work theme suggestion: customer support; saved as shown",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Customer Support"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "顧客対応"
           }
         }
       }
