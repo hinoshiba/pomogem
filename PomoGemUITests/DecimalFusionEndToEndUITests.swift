@@ -48,7 +48,13 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         let sourceIDs = try parsedSourceIDs(from: seeded)
         XCTAssertEqual(sourceIDs.count, 9)
         XCTAssertEqual(Set(sourceIDs).count, 9, "The nine source records must be unique")
-        XCTAssertTrue((app.buttons["瓶"].value as? String)?.contains("9粒") == true)
+        // The jar counts a completed focus when its gem lands (dev-D7), a
+        // moment after the probe, whose count includes a gem still falling.
+        let nineGemJar = app.buttons["瓶"]
+        XCTAssertTrue(
+            waitForCondition(timeout: 6) { (nineGemJar.value as? String)?.contains("9粒") == true },
+            (nineGemJar.value as? String) ?? ""
+        )
 
         startDemoFocus()
         stopCompletionAlertIfPresented(in: app)
