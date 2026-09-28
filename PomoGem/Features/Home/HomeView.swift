@@ -83,8 +83,12 @@ struct HomeView: View {
     /// home-11. Set once a crystal's detail has been opened. Until then a
     /// tip under the jar says crystals can be tapped; afterwards the tip and
     /// its 72 pt row go away and the jar keeps its full height.
-    @AppStorage(AccountScopedLocalState.defaultsKey(base: "jar.aggregate-detail-seen"))
+    @AppStorage(AccountScopedLocalState.defaultsKey(base: HomeView.aggregateDetailSeenStorageBase))
     private var didSeeAggregateDetail = false
+    /// Also forgotten by a new UI test's first launch
+    /// (`UITestLocalStateIsolation`), so one test's opened detail does not
+    /// take the tip row away from the next test's jar.
+    static let aggregateDetailSeenStorageBase = "jar.aggregate-detail-seen"
     @AppStorage(AccountScopedLocalState.defaultsKey(base: HomeAtmosphere.storageKey))
     private var homeAtmosphereRawValue = HomeAtmosphere.aurora.rawValue
     @AppStorage(AccountScopedLocalState.defaultsKey(base: RecentCustomFocusDurations.storageKey))
