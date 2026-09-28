@@ -1595,9 +1595,12 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         retainScreenshot(named: "Tenth Reward Bridge — exact completed orbit")
 
         dismissBridge.tap()
-        let celebration = app.staticTexts["10粒を、ひとつに整理した"]
+        let celebration = app.staticTexts["fusion.celebration.title"]
         XCTAssertTrue(celebration.waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["2.5kg"].waitForExistence(timeout: 4))
+        // The sheet's own mass line, not a match somewhere on Home behind it.
+        let celebrationMass = app.staticTexts["fusion.celebration.mass"]
+        XCTAssertTrue(celebrationMass.waitForExistence(timeout: 4))
+        XCTAssertEqual(celebrationMass.label, "重さはそのまま 2.50kg")
         waitForUISettle()
         retainScreenshot(named: "First decimal fusion — lossless celebration")
 

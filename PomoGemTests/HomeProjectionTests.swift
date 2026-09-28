@@ -2005,6 +2005,74 @@ final class HomeProjectionTests: XCTestCase {
         XCTAssertEqual(metrics.weeklyMeasuredGrams, 250)
     }
 
+    /// walk-std-07: the same calendar week's self-reported focus, from the
+    /// same query as the measured figure, for the completion card's
+    /// 「今週の実測 …・自己申告 …」. A timer demoted to self-reported counts
+    /// there, not as measured; last week's entry does not count.
+    func testCompletionMetricsNameThisWeeksSelfReportedFocus() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 2, hour: 12))!
+        let timerID = UUID()
+        let manualID = UUID()
+        let demotedID = UUID()
+        context.insert(StudySession(
+            id: timerID,
+            startAt: now.addingTimeInterval(-1_500),
+            endAt: now,
+            seconds: 1_500,
+            source: .timer,
+            grams: 250,
+            deviceDayKey: "fixture"
+        ))
+        let manual = ManualDuration.thirtyMinutes
+        context.insert(StudySession(
+            id: manualID,
+            startAt: now.addingTimeInterval(-7_200),
+            endAt: now.addingTimeInterval(-7_200 + Double(manual.seconds)),
+            seconds: manual.seconds,
+            source: .manual,
+            grams: manual.grams,
+            deviceDayKey: "fixture"
+        ))
+        context.insert(StudySession(
+            id: demotedID,
+            startAt: now.addingTimeInterval(-12_000),
+            endAt: now.addingTimeInterval(-10_500),
+            seconds: 1_500,
+            source: .timerDemoted,
+            grams: 250,
+            deviceDayKey: "fixture"
+        ))
+        // Eight days earlier: outside this calendar week.
+        context.insert(StudySession(
+            id: UUID(),
+            startAt: now.addingTimeInterval(-8 * 86_400 - Double(manual.seconds)),
+            endAt: now.addingTimeInterval(-8 * 86_400),
+            seconds: manual.seconds,
+            source: .manual,
+            grams: manual.grams,
+            deviceDayKey: "fixture"
+        ))
+        try context.save()
+
+        let metrics = try HomeProjectionPolicy.completionMetrics(
+            context: context,
+            resetMarkers: [],
+            roots: [],
+            looseSessions: [],
+            at: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(metrics.weeklyMeasuredSessionIDs, [timerID])
+        XCTAssertEqual(metrics.weeklyMeasuredGrams, 250)
+        XCTAssertEqual(metrics.weeklySelfReportedSessionIDs, [manualID, demotedID])
+        XCTAssertEqual(metrics.weeklySelfReportedGrams, manual.grams + 250)
+    }
+
     func testWeeklyReturnsCountTimersWhileScreenTimeStillAddsMass() throws {
         let container = try makeContainer()
         let context = container.mainContext
