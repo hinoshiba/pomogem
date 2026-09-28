@@ -468,7 +468,10 @@
     "Widgets": "PomoGemWidgets/Localization/Widgets.xcstrings"
   },
   "system_tables": {
-    "AppShortcuts": "App Shortcut phrases (PomoGemShortcuts). The App Intents metadata processor writes them to ExtractedAppShortcutsMetadata.stringsdata; Apple reads their translations only from PomoGem/Localization/AppShortcuts.xcstrings, which is created when English is enabled (Docs/Localization.md). sync and check skip this table."
+    "AppShortcuts": "App Shortcut phrases (PomoGemShortcuts). The App Intents metadata processor writes them to ExtractedAppShortcutsMetadata.stringsdata; Apple reads their translations only from the catalog named AppShortcuts.xcstrings (system_catalogs). Each shortcut is one key whose value is a stringSet of phrases. l10n.py sync merges them there (never into a feature catalog) and writes the Japanese phrases while the development region is not Japanese; check requires ${applicationName} in every translated phrase. Owned by l10n-02-focus-system for the English phrases."
+  },
+  "system_catalogs": {
+    "AppShortcuts": "PomoGem/Localization/AppShortcuts.xcstrings"
   },
   "catalog_bundles": {
     "PomoGem.app": [

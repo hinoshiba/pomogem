@@ -32,7 +32,9 @@ final class LocalizationCatalogTests: XCTestCase {
     /// A stray catalog (including a default Localizable.xcstrings) or a legacy
     /// `.strings` file would silently take strings the table map assigns elsewhere.
     func testNoCatalogOrLegacyStringsOutsideTheTableMap() throws {
-        let expected = Set(map.catalogs.values).union(map.infoPlistCatalogs.map(\.catalog))
+        let expected = Set(map.catalogs.values)
+            .union(map.infoPlistCatalogs.map(\.catalog))
+            .union((map.systemCatalogs ?? [:]).values)
         var found: Set<String> = []
         var legacy: [String] = []
         for root in map.sourceRoots {

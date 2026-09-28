@@ -109,7 +109,11 @@ final class LocalizationEnvironmentTests: XCTestCase {
             )
             for table in map.catalogBundles[name] ?? [] {
                 let catalog = try LocalizationCatalogFile(table: table, relativePath: try XCTUnwrap(map.catalogs[table]))
-                guard !catalog.strings.isEmpty else { continue }
+                // xcstringstool compiles a table for English once it holds an
+                // English value. During the localization wave some tables have
+                // none yet; `l10n.py check --strict` requires every key.
+                let translated = catalog.strings.values.contains { LocalizationCatalogFile.localizations(of: $0)["en"] != nil }
+                guard translated else { continue }
                 let compiled = english.url(forResource: table, withExtension: "strings")
                     ?? english.url(forResource: table, withExtension: "stringsdict")
                 XCTAssertNotNil(compiled, "\(name) en.lproj has no \(table) table")
