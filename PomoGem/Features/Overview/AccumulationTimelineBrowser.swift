@@ -131,7 +131,7 @@ struct AccumulationTimelineBrowser: View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 SectionEyebrow(
-                    text: "TIME ARCHIVE",
+                    text: String(localized: "年表", table: "Overview", comment: "Eyebrow over 年月をたどる (the timeline of months and years)"),
                     foreground: PomoGemTheme.text
                 )
                 Text("年月をたどる")

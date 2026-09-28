@@ -131,7 +131,7 @@ struct ManualEntrySheet: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            SectionEyebrow(text: "SELF-REPORTED")
+            SectionEyebrow(text: String(localized: "自己申告", table: "Home", comment: "Eyebrow over the manual-entry sheet title 手動で積む: the entry counts as self-reported"))
             Text("手動で積む")
                 .font(PomoGemTheme.brand(26))
                 .accessibilityAddTraits(.isHeader)
@@ -187,7 +187,7 @@ struct ManualEntrySheet: View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 4) {
-                    SectionEyebrow(text: "CONFIRM")
+                    SectionEyebrow(text: String(localized: "確認", table: "Home", comment: "Eyebrow over the manual-entry confirmation card"))
                     Text("この内容で積みますか？")
                         .font(PomoGemTheme.brand(21))
                         .accessibilityAddTraits(.isHeader)

@@ -375,10 +375,10 @@ private struct ValuePage: View {
 
     private var promise: some View {
         VStack(spacing: 14) {
-            // The English eyebrow is decoration; at AX sizes it would take
-            // the first lines of the first screen.
+            // The eyebrow is decoration; at AX sizes it would take the
+            // first lines of the first screen.
             if !dynamicTypeSize.isAccessibilitySize {
-                SectionEyebrow(text: "YOUR TIME, IN THE JAR")
+                SectionEyebrow(text: String(localized: "集中を瓶に", table: "Onboarding", comment: "Eyebrow of onboarding page 1 (集中を終えると、一粒。)"))
             }
             Text("集中を終えると、一粒。")
                 .font(PomoGemTheme.brand(30))
@@ -552,10 +552,10 @@ private struct TrialDropPage: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                // Decorative English; at AX sizes it would take the page's
+                // Decorative; at AX sizes it would take the page's
                 // first lines (walk-edge-04).
                 if !dynamicTypeSize.isAccessibilitySize {
-                    SectionEyebrow(text: "THE FIRST DROP")
+                    SectionEyebrow(text: String(localized: "はじめての一粒", table: "Onboarding", comment: "Eyebrow of the onboarding trial drop page"))
                 }
                 JarSpriteView(scene: scene, totalGrams: 0, pebbleCount: dropped ? 1 : 0)
                     .frame(width: 240, height: jarHeight)
@@ -809,7 +809,7 @@ private struct SubjectSetupPage: View {
             VStack(alignment: .leading, spacing: 26) {
                 VStack(alignment: .leading, spacing: 10) {
                     if !dynamicTypeSize.isAccessibilitySize {
-                        SectionEyebrow(text: "YOUR BOTTLE")
+                        SectionEyebrow(text: String(localized: "あなたの瓶", table: "Onboarding", comment: "Eyebrow over 最初のテーマを選ぶ"))
                     }
                     Text("最初のテーマを選ぶ")
                         .font(PomoGemTheme.brand(30))
@@ -1137,7 +1137,7 @@ private struct RareRewardOnboardingPage: View {
         ScrollView {
             RareRewardChoicePanel(
                 selection: $selection,
-                eyebrow: "OPTIONAL VARIATION",
+                eyebrow: String(localized: "任意の設定", table: "Onboarding", comment: "Eyebrow of the optional rare-gem choice page"),
                 title: "レア粒は、自分で選ぶ。",
                 introduction: "どれを選んでも、質量・粒の融合・結晶・成果・使える機能は同じです。ランダムな結果を使わない「抽選しない」が安全な基準です。"
             )

@@ -2412,7 +2412,7 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 13) {
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 3) {
-                        SectionEyebrow(text: "SPACE")
+                        SectionEyebrow(text: String(localized: "背景", table: "Home", comment: "Eyebrow over the menu card 集中する空間 (Home background)"))
                         Text("集中する空間")
                             .pomogemSectionTitle(size: 21)
                     }

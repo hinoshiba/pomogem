@@ -121,7 +121,7 @@ struct AccumulationPlanView: View {
                     .frame(width: 34)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 6) {
-                    SectionEyebrow(text: "SIMULATED · READ ONLY")
+                    SectionEyebrow(text: String(localized: "試算・保存されません", table: "Planning", comment: "Eyebrow over これは予測です: the plan is a simulation and nothing is saved"))
                     Text("これは予測です")
                         .pomogemSectionTitle(size: 21)
                     Text("ここで動かす瓶や数値は、実際の学習記録・保存領域・ウィジェットには保存されません。画面を閉じると入力も消えます。")
@@ -139,7 +139,7 @@ struct AccumulationPlanView: View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
-                    SectionEyebrow(text: "YOUR ROUTINE")
+                    SectionEyebrow(text: String(localized: "ペース", table: "Planning", comment: "Eyebrow over 続け方を選ぶ (focuses per week)"))
                     Text("続け方を選ぶ")
                         .pomogemSectionTitle(size: 21)
                     Text("1回の集中を完走する想定で、週あたりの回数から試算します。")
@@ -232,7 +232,7 @@ struct AccumulationPlanView: View {
             VStack(alignment: .leading, spacing: 13) {
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 3) {
-                        SectionEyebrow(text: "TIME TRAVEL PREVIEW")
+                        SectionEyebrow(text: String(localized: "未来の瓶", table: "Planning", comment: "Eyebrow over the previewed month (e.g. 3年後) of the plan timeline"))
                         Text(previewPeriodTitle)
                             .pomogemSectionTitle(size: 23)
                     }
@@ -296,7 +296,7 @@ struct AccumulationPlanView: View {
                     .accessibilityHidden(true)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        SectionEyebrow(text: "BOTTLE CYCLE")
+                        SectionEyebrow(text: String(localized: "瓶の杯数", table: "Planning", comment: "Eyebrow over how many times the jar has filled at the previewed month"))
                         Text(bottleCycleTitle)
                             .pomogemSectionTitle()
                         Text(bottleCycleStatus)
@@ -384,7 +384,7 @@ struct AccumulationPlanView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 3) {
-                        SectionEyebrow(text: "SIMULATED ACCUMULATION")
+                        SectionEyebrow(text: String(localized: "試算", table: "Planning", comment: "Eyebrow over この計画で積む分 (simulated mass)"))
                         Text("この計画で積む分", tableName: "Planning", comment: "Title of the card that previews only what the plan adds")
                             .pomogemSectionTitle(size: 21)
                     }

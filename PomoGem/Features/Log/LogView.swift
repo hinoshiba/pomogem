@@ -1490,7 +1490,7 @@ struct LogView: View {
         return PomoGemCard {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 4) {
-                    SectionEyebrow(text: "MASS")
+                    SectionEyebrow(text: String(localized: "質量", table: "Log", comment: "Eyebrow over the chart 質量の推移"))
                     Text("質量の推移")
                         .pomogemSectionTitle()
                 }
@@ -1582,7 +1582,7 @@ struct LogView: View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 17) {
                 VStack(alignment: .leading, spacing: 4) {
-                    SectionEyebrow(text: "SUBJECTS")
+                    SectionEyebrow(text: String(localized: "テーマ", table: "Log", comment: "Eyebrow over テーマの構成"))
                     Text("テーマの構成")
                         .pomogemSectionTitle()
                 }
@@ -1666,7 +1666,7 @@ struct LogView: View {
             PomoGemCard {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
-                        SectionEyebrow(text: "MILESTONES")
+                        SectionEyebrow(text: String(localized: "記念石", table: "Log", comment: "Eyebrow over 記念石アーカイブ"))
                         Text("記念石アーカイブ")
                             .pomogemSectionTitle()
                         Text(achievementArchiveDescription(count: stones.count))
@@ -1740,7 +1740,7 @@ struct LogView: View {
             PomoGemCard {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
-                        SectionEyebrow(text: "MONTHLY WRAPPED")
+                        SectionEyebrow(text: String(localized: "毎月のまとめ", table: "Log", comment: "Eyebrow over 月の振り返り (monthly Wrapped recaps)"))
                         // Not 「月ごとの瓶」: that is 積み上がり's 年月 shelf, a
                         // different view (history-11).
                         Text("月の振り返り", tableName: "Log", comment: "Log section title: the monthly Wrapped recaps")
@@ -2937,7 +2937,7 @@ private struct AchievementEditorSheet: View {
             .shadow(color: Color(hex: kind.gemGlowHex).opacity(0.4), radius: 10)
             .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
-                SectionEyebrow(text: "MILESTONE")
+                SectionEyebrow(text: String(localized: "記念石", table: "Log", comment: "Eyebrow over an achievement stone being edited"))
                 Text(AchievementStone.sanitizedNote(note).isEmpty ? kind.title : AchievementStone.sanitizedNote(note))
                     .pomogemSectionTitle(size: 22)
                     .lineLimit(2)

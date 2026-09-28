@@ -1016,7 +1016,7 @@ struct AccumulationOverviewView: View {
         .accessibilityHidden(true)
 
         VStack(alignment: .leading, spacing: 9) {
-            SectionEyebrow(text: "THIS WEEK")
+            SectionEyebrow(text: String(localized: "今週", table: "Overview", comment: "Eyebrow over this week's headline in 積み上がり"))
             Text(currentWeekHeadline)
                 .font(PomoGemTheme.brand(22))
             Text(currentWeekCaption)

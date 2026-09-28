@@ -535,7 +535,7 @@ struct ShareComposerView: View {
             .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("SHARE STUDIO")
+                Text("シェアカード", tableName: "Share", comment: "Eyebrow over the share composer title 積み重ねを、動く一枚に")
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .tracking(1.8)
                     .foregroundStyle(PomoGemTheme.amber)
@@ -575,7 +575,7 @@ struct ShareComposerView: View {
                         Text(kind.rawValue)
                             .font(.system(.subheadline, design: .rounded, weight: .bold))
                         if kind == .animatedGIF, !isAccessibilitySize {
-                            Text("NEW")
+                            Text("新機能", tableName: "Share", comment: "Badge on the 動くGIF choice")
                                 .font(.system(size: 8, weight: .black, design: .rounded))
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 3)
