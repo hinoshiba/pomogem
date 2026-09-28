@@ -731,6 +731,59 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         finishBreakEnd(breakEnd)
     }
 
+    /// The relaunch counterpart: a break that ended while the app was not
+    /// running is recovered silently, never re-armed as a loop.
+    func testRelaunchAfterTheBreakEndDoesNotStartTheAlarm() throws {
+        executionTimeAllowance = 600
+        enterFiveMinuteBreakFromDemoReward()
+        app.terminate()
+        sleep(310)
+        app.launch()
+        let breakEnd = app.buttons["break.completion-alert.stop"]
+        XCTAssertTrue(breakEnd.waitForExistence(timeout: 15))
+        let alarm = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "停止して瓶へ戻る"),
+            object: breakEnd
+        )
+        alarm.isInverted = true
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [alarm], timeout: 3), .completed,
+            "A break that ended before the relaunch must not start the repeating alarm"
+        )
+        XCTAssertEqual(breakEnd.label, "瓶へ戻る")
+        retainScreenshot(named: "Relaunched after the break end — no alarm")
+        finishBreakEnd(breakEnd)
+    }
+
+    /// A focus recovered by a relaunch that then ends with the app on screen
+    /// is a live end: its alarm repeats until stopped. The recovered view
+    /// appears while the cold-launched scene is still inactive, the order
+    /// that used to leave a recovered timer silent at 00:00. Paused across
+    /// the relaunch so a slow launch cannot use up the 12 seconds.
+    func testARecoveredFocusThatEndsOnScreenRingsUntilStopped() throws {
+        selectDemoDurationForVisualAudit()
+        startDemoFocusForVisualAudit()
+        app.buttons["一時停止"].tap()
+        XCTAssertTrue(waitForHittable(app.buttons["再開する"], timeout: 4))
+        app.terminate()
+        app.launch()
+        let resume = app.buttons["再開する"]
+        XCTAssertTrue(
+            waitForHittable(resume, timeout: 15),
+            "The paused focus must come back after the relaunch"
+        )
+        resume.tap()
+        let stop = app.buttons["focus.completion-alert.stop"]
+        XCTAssertTrue(
+            stop.waitForExistence(timeout: 25),
+            "The recovered 12-second focus must end on screen with its repeating alarm"
+        )
+        XCTAssertTrue(app.staticTexts["止めるまで、音と触覚を繰り返します"].exists)
+        retainScreenshot(named: "Recovered focus ended on screen — alarm repeats")
+        XCTAssertTrue(stopCompletionAlertIfPresented(in: app))
+        finishReceiptAfterReturn(named: "Recovered focus — receipt after Stop")
+    }
+
     func testPausedFocusIsHonestAndTheRingDoesNotMove() throws {
         app.buttons["home.duration-picker"].tap()
         app.buttons["25分"].tap()

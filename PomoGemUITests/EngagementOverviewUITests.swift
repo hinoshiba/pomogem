@@ -599,6 +599,99 @@ final class EngagementOverviewUITests: XCTestCase {
         app.terminate()
     }
 
+    /// A receipt whose session is gone from the store Home has verified can
+    /// never land (`HomeProjectionPolicy.orphanedPendingRewardReceiptIDs`).
+    /// Home retires it, and the start button comes back. The app seeds the
+    /// receipt (`RewardReceiptUITestFixture`): production reaches this only
+    /// when the dataset under a receipt is replaced or purged.
+    func testAReceiptWhoseSessionIsGoneNoLongerBlocksTheStartButton() {
+        let app = rewardReceiptFixtureApp(scenario: "landing-without-session")
+        app.launch()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 12))
+
+        let launcher = app.buttons["home.focus-launcher"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            waitUntil(launcher, isEnabled: true, timeout: 10),
+            "A receipt whose gem can never land must not keep the start button disabled"
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)["reward.bridge"].exists,
+            "A receipt already past its card shows no card"
+        )
+        app.terminate()
+    }
+
+    /// The same receipt while its card is up. Home keeps it, so 「閉じる」
+    /// still has a receipt to acknowledge (without it, the card would only
+    /// ask to be closed again). Closing it goes on to Home as a landing
+    /// would, and the start button comes back.
+    func testAReceiptCardWhoseSessionIsGoneClosesAndFreesTheStartButton() {
+        let app = rewardReceiptFixtureApp(scenario: "card-without-session")
+        app.launch()
+        let bridge = app.descendants(matching: .any)["reward.bridge"]
+        XCTAssertTrue(
+            bridge.waitForExistence(timeout: 12),
+            "The card shows from the receipt's own snapshot"
+        )
+        XCTAssertTrue(
+            waitForProbeValue(in: app, containing: ["count=0;"], timeout: 8),
+            "The premise: Home has read the store with the card up"
+        )
+        XCTAssertFalse(
+            bridge.waitForNonExistence(timeout: 3),
+            "Home must not retire a receipt under its own card"
+        )
+        let launcher = app.buttons["home.focus-launcher"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: 3))
+        XCTAssertFalse(launcher.isEnabled, "The card still holds the start button")
+
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = "Receipt card whose session is gone — before 閉じる"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+
+        let dismiss = app.buttons["reward.dismiss"]
+        XCTAssertTrue(dismiss.waitForExistence(timeout: 3))
+        dismiss.tap()
+        XCTAssertTrue(
+            bridge.waitForNonExistence(timeout: 5),
+            "「閉じる」 must close the card"
+        )
+        let retryToast = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS %@", "もう一度「閉じる」")
+        ).firstMatch
+        XCTAssertFalse(retryToast.exists, "「閉じる」 must not ask to be pressed again")
+        XCTAssertTrue(
+            waitUntil(launcher, isEnabled: true, timeout: 10),
+            "Once closed, the receipt that can never land must free the start button"
+        )
+        app.terminate()
+    }
+
+    /// A receipt whose row exists but does not resolve yet is kept: here the
+    /// row's reset marker has not arrived, and once it does the gem lands.
+    /// The start button waits for it, as for any receipt.
+    func testAReceiptWhoseSessionAwaitsItsEpochStillHoldsTheStartButton() {
+        let app = rewardReceiptFixtureApp(
+            scenario: "landing-with-session-in-another-epoch"
+        )
+        app.launch()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 12))
+        XCTAssertTrue(
+            waitForProbeValue(in: app, containing: ["count=0;"], timeout: 8),
+            "The row is in another epoch, so the jar shows nothing yet"
+        )
+        let launcher = app.buttons["home.focus-launcher"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: 5))
+        // Longer than the retirement above takes to free the button.
+        XCTAssertFalse(
+            waitUntil(launcher, isEnabled: true, timeout: 6),
+            "A receipt whose session still exists must not be retired"
+        )
+        app.terminate()
+    }
+
     /// A running timer survives the test's own relaunch, which relaunch tests
     /// rely on, but the next test must open on Home. Launching again with a
     /// new `PomoGemUITestScenario` identifier stands in for that next test.
@@ -816,6 +909,29 @@ final class EngagementOverviewUITests: XCTestCase {
             app.descendants(matching: .any)["reward.bridge"].waitForExistence(timeout: 1),
             "A new store must not show another test's completion card"
         )
+    }
+
+    /// A local preview launch whose new store starts with one seeded reward
+    /// receipt (`RewardReceiptUITestFixture.Scenario`).
+    private func rewardReceiptFixtureApp(scenario: String) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
+        app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
+        app.launchEnvironment["POMOGEM_UI_TEST_REWARD_RECEIPT"] = scenario
+        PomoGemUITestLanguage.configureJapanese(app)
+        return app
+    }
+
+    private func waitUntil(
+        _ element: XCUIElement,
+        isEnabled: Bool,
+        timeout: TimeInterval
+    ) -> Bool {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isEnabled == %@", NSNumber(value: isEnabled)),
+            object: element
+        )
+        return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
     }
 
     private func rewardReceiptApp(

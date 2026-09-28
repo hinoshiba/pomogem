@@ -137,6 +137,171 @@ final class HomeProjectionTests: XCTestCase {
         XCTAssertFalse(context.hasChanges)
     }
 
+    // MARK: - Orphaned reward receipts
+
+    /// Home disables its start button while a receipt waits. A receipt whose
+    /// session is gone from a verified store can never land, so it is
+    /// retired; every other receipt stays.
+    func testOrphanedReceiptIsRetiredOnlyWhenItsSessionIsAbsentFromAVerifiedRead() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let end = Date(timeIntervalSince1970: 1_800_500_000)
+        let saved = pendingRewardSession(endAt: end)
+        context.insert(saved)
+        try context.save()
+        let gone = pendingRewardSession(endAt: end.addingTimeInterval(1))
+        let receipts = [
+            pendingRewardReceipt(for: saved),
+            pendingRewardReceipt(for: gone)
+        ]
+        let resolved = try HomeProjectionPolicy.pendingRewardSessionCandidates(
+            for: receipts, context: context, resetMarkers: []
+        )
+
+        XCTAssertEqual(
+            try orphans(receipts, resolved: resolved, verified: true, context: context),
+            [gone.id]
+        )
+        XCTAssertFalse(context.hasChanges, "Deciding must never write to the store")
+    }
+
+    func testNoReceiptIsRetiredWhileICloudIsStillBeingChecked() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let gone = pendingRewardSession(endAt: Date(timeIntervalSince1970: 1_800_500_100))
+        let receipts = [
+            pendingRewardReceipt(for: gone),
+            pendingRewardReceipt(for: gone, phase: .awaitingLanding)
+        ]
+        var lookups = 0
+        let result = try HomeProjectionPolicy.orphanedPendingRewardReceiptIDs(
+            in: receipts,
+            resolvedSessionIDs: [],
+            storeReadIsVerified: false,
+            presentedCardIsPending: false,
+            sessionExists: { _ in
+                lookups += 1
+                return false
+            }
+        )
+        XCTAssertEqual(result, [])
+        XCTAssertEqual(lookups, 0, "A pending read is not evidence; the store is not even asked")
+    }
+
+    func testAReceiptWhoseRowExistsButDoesNotResolveIsKept() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let end = Date(timeIntervalSince1970: 1_800_500_200)
+        let currentEpoch = UUID()
+        let marker = ActivityResetSnapshot(
+            id: UUID(), epochID: currentEpoch, sequence: 1,
+            resetAt: end.addingTimeInterval(-2_000), writerDeviceID: "orphan-test"
+        )
+        // Another epoch, and an unsupported row in this one: neither
+        // resolves, and neither is proof that the reward is gone.
+        let otherEpoch = pendingRewardSession(endAt: end, epochID: UUID())
+        let unsupported = pendingRewardSession(endAt: end.addingTimeInterval(1), epochID: currentEpoch)
+        unsupported.seconds = -1
+        [otherEpoch, unsupported].forEach { context.insert($0) }
+        try context.save()
+        let receipts = [otherEpoch, unsupported].map {
+            pendingRewardReceipt(for: $0, phase: .awaitingLanding)
+        }
+        let resolved = try HomeProjectionPolicy.pendingRewardSessionCandidates(
+            for: receipts, context: context, resetMarkers: [marker]
+        )
+        XCTAssertTrue(resolved.isEmpty)
+
+        XCTAssertEqual(
+            try orphans(receipts, resolved: resolved, verified: true, context: context),
+            []
+        )
+    }
+
+    func testALegacyReceiptIsNeverRetiredHere() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let gone = pendingRewardSession(endAt: Date(timeIntervalSince1970: 1_800_500_300))
+        // Its gem already landed; its card's 「閉じる」 always retires it.
+        let receipts = [pendingRewardReceipt(for: gone, phase: nil)]
+        XCTAssertEqual(
+            try orphans(receipts, resolved: [], verified: true, context: context),
+            []
+        )
+    }
+
+    func testAReceiptUnderAPresentedCardWaitsUntilItIsAcknowledged() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let end = Date(timeIntervalSince1970: 1_800_500_400)
+        let presented = pendingRewardSession(endAt: end)
+        let landing = pendingRewardSession(endAt: end.addingTimeInterval(1))
+        let receipts = [
+            pendingRewardReceipt(for: presented),
+            pendingRewardReceipt(for: landing, phase: .awaitingLanding)
+        ]
+
+        XCTAssertEqual(
+            try orphans(
+                receipts, resolved: [], verified: true,
+                presentedCardIsPending: true, context: context
+            ),
+            [landing.id],
+            "「閉じる」 must still have a receipt to acknowledge"
+        )
+        XCTAssertEqual(
+            try orphans(receipts, resolved: [], verified: true, context: context),
+            [presented.id, landing.id]
+        )
+    }
+
+    func testAFailedLookupKeepsEveryReceipt() {
+        let gone = pendingRewardSession(endAt: Date(timeIntervalSince1970: 1_800_500_500))
+        struct LookupFailed: Error {}
+        XCTAssertThrowsError(try HomeProjectionPolicy.orphanedPendingRewardReceiptIDs(
+            in: [pendingRewardReceipt(for: gone, phase: .awaitingLanding)],
+            resolvedSessionIDs: [],
+            storeReadIsVerified: true,
+            presentedCardIsPending: false,
+            sessionExists: { _ in throw LookupFailed() }
+        )) { error in
+            XCTAssertTrue(error is LookupFailed)
+        }
+    }
+
+    func testPhysicalSessionLookupFindsAnyRowWithTheID() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let end = Date(timeIntervalSince1970: 1_800_500_600)
+        let otherEpoch = pendingRewardSession(endAt: end, epochID: UUID())
+        let unsupported = pendingRewardSession(endAt: end.addingTimeInterval(1))
+        unsupported.seconds = -1
+        [otherEpoch, unsupported].forEach { context.insert($0) }
+        try context.save()
+
+        XCTAssertTrue(try HomeProjectionPolicy.physicalSessionExists(id: otherEpoch.id, context: context))
+        XCTAssertTrue(try HomeProjectionPolicy.physicalSessionExists(id: unsupported.id, context: context))
+        XCTAssertFalse(try HomeProjectionPolicy.physicalSessionExists(id: UUID(), context: context))
+    }
+
+    private func orphans(
+        _ receipts: [PendingRewardReceipt],
+        resolved: [StudySession],
+        verified: Bool,
+        presentedCardIsPending: Bool = false,
+        context: ModelContext
+    ) throws -> [UUID] {
+        try HomeProjectionPolicy.orphanedPendingRewardReceiptIDs(
+            in: receipts,
+            resolvedSessionIDs: Set(resolved.map(\.id)),
+            storeReadIsVerified: verified,
+            presentedCardIsPending: presentedCardIsPending,
+            sessionExists: {
+                try HomeProjectionPolicy.physicalSessionExists(id: $0, context: context)
+            }
+        )
+    }
+
     private func pendingRewardSession(
         id: UUID = UUID(),
         endAt: Date,

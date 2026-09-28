@@ -292,12 +292,13 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         let introduction = app.staticTexts["overview.introduction"]
         XCTAssertTrue(introduction.waitForExistence(timeout: 5))
         XCTAssertTrue(introduction.isHittable)
-        // Each independent lens test verifies the real intro contrast before
-        // scrolling can leave SwiftUI's synthetic under-navigation frame in
-        // the hierarchy. Its later filter never relies on another test/order.
+        // Each independent lens test verifies the real intro contrast and
+        // text clipping before scrolling can leave SwiftUI's synthetic
+        // under-navigation frame in the hierarchy. Its later filter never
+        // relies on another test/order.
         try auditVisibleScreen(
             named: "AX5 Overview — natural intro",
-            contrastOnly: true
+            only: ["contrast", "text clipping"]
         )
 
         let lens = app.descendants(matching: .any)["overview.lens"]
@@ -650,17 +651,15 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         named name: String,
         includesTextClipping: Bool = true,
         previouslyAuditedIdentifiers: Set<String> = [],
-        contrastOnly: Bool = false
+        only: Set<String>? = nil
     ) throws {
-        let audits: [(String, XCUIAccessibilityAuditType)] = contrastOnly
-            ? [("contrast", .contrast)]
-            : [
-                ("contrast", .contrast),
-                ("hit region", .hitRegion),
-                ("description", .sufficientElementDescription),
-                ("text clipping", .textClipped),
-                ("traits", .trait)
-            ]
+        let audits: [(String, XCUIAccessibilityAuditType)] = [
+            ("contrast", .contrast),
+            ("hit region", .hitRegion),
+            ("description", .sufficientElementDescription),
+            ("text clipping", .textClipped),
+            ("traits", .trait)
+        ].filter { only?.contains($0.0) ?? true }
         // A swipe keeps decelerating after XCTest returns from it. Audit the
         // resting screen, not a frame in which a row is still sliding under
         // the navigation bar.
@@ -704,6 +703,18 @@ final class AccessibilityAdversarialUITests: XCTestCase {
                     height: max(0, scrollFrame.maxY - contentTop)
                 )
                 try app.performAccessibilityAudit(for: auditType) { issue in
+                    // On a 4.7-inch screen the scroll that brings the lens
+                    // picker into view leaves the introduction half under the
+                    // opaque navigation bar, and the text-clipping audit then
+                    // reports the bar cutting it. It passed that audit
+                    // unobscured at its natural top first; ignore only this
+                    // exact identifier while it straddles the bar's edge.
+                    if auditName == "text clipping",
+                       let element = issue.element,
+                       previouslyAuditedIdentifiers.contains(element.identifier) {
+                        let frame = element.frame
+                        return frame.minY < contentTop && frame.maxY > contentTop
+                    }
                     // A ScrollView keeps upcoming rows in its hierarchy. The
                     // contrast audit can sample only the antialiased edge of a
                     // label that is almost entirely below the viewport and
