@@ -8,10 +8,13 @@ import XCTest
 ///
 /// The Simulator cannot establish any of this: its clock, suspension,
 /// notification delivery and SpriteKit/Metal cost differ from a phone, so every
-/// test refuses to run there. The application is always launched with an empty
-/// launch environment and no launch arguments other than the Japanese language
-/// pin every UI test uses (PomoGemUITestLanguage), exactly as it ships; no hook
-/// exists in the app target for this suite.
+/// test refuses to run there. The application is launched as it ships: no
+/// launch environment beyond the scenario tag every UI test sends (only the
+/// Debug Simulator build reads it), and only argument-domain preferences as
+/// launch arguments — the Japanese language pin every UI test uses
+/// (PomoGemUITestLanguage) and the leave-pause switch (off for test01–test07,
+/// on for test08, test09 and test12). No hook exists in the app target for
+/// this suite.
 ///
 /// Set these in the UI TEST RUNNER's environment (EnvironmentVariables in a
 /// private .xctestrun, or TEST_RUNNER_ variables):
@@ -26,6 +29,26 @@ import XCTest
 ///   POMOGEM_REAL_CORE_LOOP_HOLD_SECONDS=<30...900>
 ///        Opts in to test07, which holds the app idle on Home for that long
 ///        so Instruments can be recorded from the Mac. Absent ⇒ test07 skips.
+///   POMOGEM_REAL_CORE_LOOP_EXTRAS=1
+///        Opts in to the focused device checks test08–test12 (each takes real
+///        time: test09 and test12 wait out a focus and a 5-minute break).
+///        Absent ⇒ they skip.
+///   POMOGEM_REAL_CORE_LOOP_PHOTOS=allow|deny
+///        test10's answer to iOS's Photos permission prompt. test10 saves two
+///        animated GIFs to the phone's Photos library, so it skips unless this
+///        is set.
+///   POMOGEM_REAL_CORE_LOOP_MANUAL_ADDS=<1...3>
+///        How many 「時間を手動で積む」 entries test11 saves. They count against
+///        the app's per-device daily allowance (3), so it skips unless set.
+///   POMOGEM_REAL_CORE_LOOP_PROFILE_PAUSE=<5...180>
+///        test11 attaches the marker 「profile-landing-ready」 and waits this
+///        long before its last entry, so Instruments can attach from the Mac
+///        and record that gem landing.
+///   POMOGEM_REAL_CORE_LOOP_ICLOUD_RESTORE=1
+///        Runs ONLY test20 and test21 (every other test skips): a fresh
+///        install that chooses iCloud on an Apple Account with existing
+///        PomoGem data, then the same installation. They observe and never
+///        answer a dialog that could replace or delete data.
 ///
 /// The tests are ordered by name and share one app process: run the whole
 /// class once after an independent uninstall/reinstall, or run any single
@@ -40,6 +63,29 @@ import XCTest
 ///           return → completion/reward flow → the gem is credited
 ///   test06  Log and Settings reflect the completed focus; ends on Home
 ///   test07  (opt-in) holds the idle Home screen for Instruments profiling
+///   test08  (extras) the leave pause (#51, Docs/FocusLeavePause.md): a
+///           10-second visit to the Home Screen leaves the focus running; a
+///           longer absence pauses it at the moment of leaving and delivers
+///           「集中が切れています」; 再開する continues
+///   test09  (extras) the focus ends on screen and rings until stopped →
+///           reward → 5分休憩 → the break screen → a relaunch mid-break
+///           recovers it → a relaunch with about 25 s left → the recovered
+///           break rings at its end until stopped (#49)
+///   test10  (extras, Photos) share → 動くGIF → 写真に2サイズ保存 → the
+///           Photos permission prompt → the saved status
+///   test11  (extras, manual adds) 時間を手動で積む within the daily allowance;
+///           each gem's landing, the totals and the undo toast
+///   test12  (extras) another on-screen focus end → 5分休憩 → 休憩をスキップ →
+///           Home; no break-end notification arrives at the break's old end
+///   test20  (iCloud restore run only) fresh install → iCloud → the restore
+///           screen with live counts → Home; short and long absences
+///   test21  (iCloud restore run only, after test20) how long Home's
+///           「iCloudを確認中」 lasts after launch and after 5 s and 10 s
+///           absences, with a burst of captures on each return
+///
+/// The lock screen (the break's Live Activity, a real lock) cannot be driven
+/// from XCTest without a passcode risk, so those rows of the device tables in
+/// Docs/FocusLeavePause.md stay manual.
 ///
 /// Operator steps
 ///  1. Build the Release app for the phone (development signing), and the
@@ -51,10 +97,14 @@ import XCTest
 ///     whose UITargetAppPath is the Release app, whose EnvironmentVariables
 ///     carry the flags above, and whose UITargetAppEnvironmentVariables and
 ///     launch arguments are empty. Run it with `xcodebuild test-without-building`.
+///     That command rewrites the runner bundle in place (it loses its
+///     Info.plist, and the next run fails with "not a valid bundle"), so keep
+///     a copy of the freshly built runner and restore it before every run.
 ///  3. Keep the phone unlocked, connected and awake. This suite never enters a
 ///     passcode and never opens iOS Settings; if the phone locks or a passcode
-///     prompt appears it stops with "needs human". It uses the local-only
-///     storage mode, so it never touches iCloud data.
+///     prompt appears it stops with "needs human". test01–test12 use the
+///     local-only storage mode and never touch iCloud data; test20 chooses
+///     iCloud on an account that already has data and only observes.
 ///  4. Screenshots, the accessibility hierarchy on failure and a transcript
 ///     with every measured number are attached with .keepAlways; export them
 ///     with `xcrun xcresulttool export attachments`.
@@ -86,6 +136,11 @@ final class RealDeviceCoreLoopUITests: XCTestCase {
     private var themeName = RealDeviceCoreLoopUITests.defaultThemeName
     private var notificationAnswer = NotificationAnswer.allow
     private var holdSeconds = 0
+    private var extrasEnabled = false
+    private var photosAnswer: NotificationAnswer?
+    private var manualAdds = 0
+    private var profilePauseSeconds = 0
+    private var cloudRestoreRun = false
     private var transcript: [String] = []
     private var attachmentIndex = 0
     private var retainedFailureEvidence = false
@@ -103,7 +158,10 @@ final class RealDeviceCoreLoopUITests: XCTestCase {
         }
         let permittedKeys: Set<String> = [
             "POMOGEM_REAL_CORE_LOOP_AUDIT", "POMOGEM_REAL_CORE_LOOP_THEME",
-            "POMOGEM_REAL_CORE_LOOP_NOTIFICATIONS", "POMOGEM_REAL_CORE_LOOP_HOLD_SECONDS"
+            "POMOGEM_REAL_CORE_LOOP_NOTIFICATIONS", "POMOGEM_REAL_CORE_LOOP_HOLD_SECONDS",
+            "POMOGEM_REAL_CORE_LOOP_EXTRAS", "POMOGEM_REAL_CORE_LOOP_PHOTOS",
+            "POMOGEM_REAL_CORE_LOOP_MANUAL_ADDS", "POMOGEM_REAL_CORE_LOOP_PROFILE_PAUSE",
+            "POMOGEM_REAL_CORE_LOOP_ICLOUD_RESTORE"
         ]
         let unexpected = environment.keys.filter {
             ($0.hasPrefix("POMOGEM_") && !permittedKeys.contains($0))
@@ -134,6 +192,34 @@ final class RealDeviceCoreLoopUITests: XCTestCase {
                 throw AuditFailure.stopped
             }
             holdSeconds = seconds
+        }
+        extrasEnabled = environment["POMOGEM_REAL_CORE_LOOP_EXTRAS"] == "1"
+        if let raw = environment["POMOGEM_REAL_CORE_LOOP_PHOTOS"] {
+            guard let answer = NotificationAnswer(rawValue: raw), answer != .skip else {
+                XCTFail("POMOGEM_REAL_CORE_LOOP_PHOTOS must be allow or deny.")
+                throw AuditFailure.stopped
+            }
+            photosAnswer = answer
+        }
+        if let raw = environment["POMOGEM_REAL_CORE_LOOP_MANUAL_ADDS"] {
+            guard let count = Int(raw), (1...3).contains(count) else {
+                XCTFail("POMOGEM_REAL_CORE_LOOP_MANUAL_ADDS must be an integer in 1...3.")
+                throw AuditFailure.stopped
+            }
+            manualAdds = count
+        }
+        if let raw = environment["POMOGEM_REAL_CORE_LOOP_PROFILE_PAUSE"] {
+            guard let seconds = Int(raw), (5...180).contains(seconds) else {
+                XCTFail("POMOGEM_REAL_CORE_LOOP_PROFILE_PAUSE must be an integer in 5...180.")
+                throw AuditFailure.stopped
+            }
+            profilePauseSeconds = seconds
+        }
+        cloudRestoreRun = environment["POMOGEM_REAL_CORE_LOOP_ICLOUD_RESTORE"] == "1"
+        // The iCloud restore run needs its own fresh install; nothing else
+        // may run in it (test01 would choose local-only storage).
+        if cloudRestoreRun, !(name.contains("test20") || name.contains("test21")) {
+            throw XCTSkip("POMOGEM_REAL_CORE_LOOP_ICLOUD_RESTORE=1 runs only test20 and test21.")
         }
         // Backup only: the prompt is normally answered explicitly through
         // SpringBoard. The monitor is limited to the notification prompt so
@@ -469,6 +555,617 @@ final class RealDeviceCoreLoopUITests: XCTestCase {
         capture("home-hold-end")
     }
 
+    // MARK: - test08 leave pause (extras)
+
+    /// #51 in its shipping default (Docs/FocusLeavePause.md): leaving for the
+    /// Home Screen pauses the focus at the moment of leaving once 20 s have
+    /// passed without a lock, and 「集中が切れています」 arrives about 30 s
+    /// after leaving. A visit shorter than that changes nothing.
+    func test08LeavePauseIgnoresAShortVisitAndPausesALongAbsenceRetroactively() throws {
+        try requireExtras()
+        let app = attachWithLeavePause()
+        try ensureRunningFocus()
+        let runningRow = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS %@", "一時停止します")
+        ).firstMatch
+        // With a passcode the row says the lock does not pause; without one
+        // it says the screen turning off does.
+        note("LEAVE running row: \(labelIfPresent(runningRow))")
+        capture("leave-focus-running")
+
+        // A visit shorter than the 20-second lock window.
+        let shortBefore = try timerRemainingSeconds()
+        let shortSampled = Date()
+        XCUIDevice.shared.press(.home)
+        lastKeepAwake = Date()
+        pause(2)
+        capture("leave-short-springboard")
+        pause(max(0, 10 - Date().timeIntervalSince(shortSampled)))
+        let shortAway = Date().timeIntervalSince(shortSampled)
+        try returnToApp(reason: "leave-short-visit")
+        try requireFocus(paused: false, timeout: 20)
+        let shortAfter = try timerRemainingSeconds()
+        let shortElapsed = Date().timeIntervalSince(shortSampled)
+        let notice = app.descendants(matching: .any)["focus.leave-paused-notice"].firstMatch
+        note("LEAVE short visit \(format(shortAway)) s away: remaining \(shortBefore) s → \(shortAfter) s over \(format(shortElapsed)) s (drift \(format(Double(shortBefore - shortAfter) - shortElapsed)) s); leave notice shown: \(notice.exists)")
+        capture("leave-short-returned")
+        try require(!notice.exists, "A visit under 15 s must not leave-pause the focus.")
+        try require(abs(Double(shortBefore - shortAfter) - shortElapsed) <= 4,
+                    "After a short visit the countdown must have kept wall-clock time.")
+        _ = try requireRunningCountdown()
+        // The visit's window closes on return; nothing may pause it later.
+        pause(25)
+        try requireFocus(paused: false)
+        try require(!notice.exists, "A short visit must not pause the focus after the return either.")
+        capture("leave-short-still-running")
+
+        // An absence longer than the lock window.
+        let longBefore = try timerRemainingSeconds()
+        let longSampled = Date()
+        XCUIDevice.shared.press(.home)
+        let leftAt = Date()
+        lastKeepAwake = leftAt
+        let springboard = XCUIApplication(bundleIdentifier: Self.springboardID)
+        let nudge = springboard.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS %@", "集中が切れています")
+        ).firstMatch
+        var nudgeSeenAt: Date?
+        // Keep-awake presses stay out of 25...43 s so the Home press cannot
+        // dismiss a banner due at about +30 s.
+        var keepAwakeMarks: [TimeInterval] = [12, 24, 44]
+        let watchDeadline = leftAt.addingTimeInterval(60)
+        while Date() < watchDeadline {
+            let away = Date().timeIntervalSince(leftAt)
+            if nudgeSeenAt == nil, nudge.exists {
+                nudgeSeenAt = Date()
+                note("LEAVE nudge banner at +\(format(away)) s after leaving: \(labelIfPresent(nudge))")
+                capture("leave-nudge-banner")
+            }
+            if nudgeSeenAt != nil, away >= 34 { break }
+            if let mark = keepAwakeMarks.first, away >= mark {
+                keepAwakeMarks.removeFirst()
+                if nudgeSeenAt == nil {
+                    try guardAgainstLock()
+                    XCUIDevice.shared.press(.home)
+                    lastKeepAwake = Date()
+                }
+            }
+            pause(0.5)
+        }
+        if nudgeSeenAt == nil {
+            note("LEAVE no 「集中が切れています」 banner within 60 s of leaving")
+            capture("leave-no-nudge-banner")
+            attach(string: springboard.debugDescription, name: "springboard-hierarchy-no-nudge")
+        }
+        let away = Date().timeIntervalSince(leftAt)
+        if nudgeSeenAt != nil, nudge.exists, nudge.isHittable {
+            nudge.tap()
+            note("LEAVE return through the nudge banner after \(format(away)) s")
+            if !waitForForeground(app, timeout: 10) {
+                try returnToApp(reason: "after-nudge-tap-failed")
+            }
+        } else {
+            try returnToApp(reason: "leave-long-absence")
+        }
+        try requireFocus(paused: true, timeout: 20)
+        try require(notice.waitForExistence(timeout: 10),
+                    "A focus paused by leaving must say so on the timer screen.")
+        let pausedRemaining = try timerRemainingSeconds()
+        let expected = Double(longBefore) - leftAt.timeIntervalSince(longSampled)
+        note("LEAVE long absence \(format(away)) s: remaining \(longBefore) s → \(pausedRemaining) s; paused at the moment of leaving would read \(format(expected)) s (difference \(format(Double(pausedRemaining) - expected)) s); notice 「\(notice.label)」")
+        capture("leave-long-returned-paused")
+        try require(abs(Double(pausedRemaining) - expected) <= 4,
+                    "The leave pause must take effect retroactively at the moment of leaving.")
+        pause(8)
+        let heldRemaining = try timerRemainingSeconds()
+        note("LEAVE paused remaining \(pausedRemaining) s → \(heldRemaining) s after 8 s")
+        try require(heldRemaining == pausedRemaining, "A leave-paused focus must hold its remaining time.")
+
+        try tap(app.buttons["再開する"])
+        try requireFocus(paused: false)
+        _ = try requireRunningCountdown()
+        try require(waitForAbsence(notice, timeout: 5), "A resumed focus is no longer leave-paused.")
+        capture("leave-resumed")
+        try require(nudgeSeenAt != nil,
+                    "「集中が切れています」 must be delivered about 30 s after leaving (notifications were allowed in test02).")
+    }
+
+    // MARK: - test09 on-screen end, break, relaunches, recovered alarm (extras)
+
+    func test09FocusEndsOnScreenThenBreakRecoversAcrossRelaunchesAndRings() throws {
+        try requireExtras()
+        let app = attachWithLeavePause()
+        try ensureRunningFocus()
+        try waitForOnScreenFocusCompletion()
+        try startBreakFromReward()
+
+        // The break screen and its countdown.
+        let first = try breakRemainingSeconds()
+        let firstAt = Date()
+        note("BREAK screen: header 休憩=\(app.staticTexts["休憩"].exists); notice \(labelIfPresent(breakNotificationRow)); remaining \(first) s")
+        capture("break-screen")
+        pause(6)
+        let second = try breakRemainingSeconds()
+        let elapsed = Date().timeIntervalSince(firstAt)
+        note("BREAK countdown \(first) s → \(second) s over \(format(elapsed)) s (drift \(format(Double(first - second) - elapsed)) s)")
+        try require(abs(Double(first - second) - elapsed) <= 3, "The break countdown must follow wall-clock time.")
+
+        // A relaunch mid-break reopens the break with the right time.
+        let beforeKill = try breakRemainingSeconds()
+        let killedAt = Date()
+        capture("break-before-relaunch")
+        app.terminate()
+        note("BREAK terminated with \(beforeKill) s left")
+        pause(3)
+        app.launch()
+        try require(breakSkip.waitForExistence(timeout: 60), "A relaunch mid-break must reopen the break screen.")
+        let recovered = try breakRemainingSeconds()
+        let away = Date().timeIntervalSince(killedAt)
+        note("BREAK recovered after relaunch: \(beforeKill) s → \(recovered) s over \(format(away)) s (drift \(format(Double(beforeKill - recovered) - away)) s)")
+        capture("break-recovered-after-relaunch")
+        try require(abs(Double(beforeKill - recovered) - away) <= 5,
+                    "The recovered break must keep wall-clock time across the relaunch.")
+
+        // #49: relaunch with about 25 s left and stay on screen; the recovered
+        // break must ring at its end until stopped.
+        var left = try breakRemainingSeconds()
+        while left > 26 {
+            pause(min(20, Double(left - 26)))
+            try guardAgainstLock()
+            left = try breakRemainingSeconds()
+        }
+        let breakEnd = Date().addingTimeInterval(TimeInterval(left))
+        capture("break-before-late-relaunch")
+        app.terminate()
+        note("BREAK terminated again with \(left) s left")
+        pause(1)
+        app.launch()
+        note("BREAK relaunched; XCTest's launch returned \(format(breakEnd.timeIntervalSinceNow)) s before the break's end")
+        capture("break-late-recovered")
+        let stop = app.buttons["break.completion-alert.stop"]
+        let ringing = waitForLabel(stop, containing: "停止して瓶へ戻る", timeout: max(15, breakEnd.timeIntervalSinceNow + 30))
+        note("BREAK end on screen: stop button 「\(labelIfPresent(stop))」 \(format(-breakEnd.timeIntervalSinceNow)) s after the break's end; 「休憩終了のアラート中」 shown: \(app.staticTexts["休憩終了のアラート中"].exists)")
+        capture("break-end-after-recovery")
+        try require(ringing, "A recovered break that ends on screen must ring until stopped (#49).")
+        pause(8)
+        note("BREAK 8 s later: 「\(labelIfPresent(stop))」")
+        capture("break-alarm-still-ringing")
+        try require(stop.label.contains("停止して瓶へ戻る"), "The break-end alarm must keep repeating until stopped.")
+        try tap(stop)
+        try requireHome(timeout: 30)
+        pause(1)
+        capture("home-after-break-alarm")
+    }
+
+    // MARK: - test10 share the animated GIF to Photos (extras, Photos)
+
+    func test10ShareSavesTheAnimatedGIFToPhotos() throws {
+        try requireExtras()
+        guard let photosAnswer else {
+            throw XCTSkip("Set POMOGEM_REAL_CORE_LOOP_PHOTOS=allow|deny: this test saves two GIFs to the Photos library.")
+        }
+        let app = attach(freshLaunch: false)
+        let screen = try waitForHomeOrFocus()
+        try require(screen == .home, "Share is audited from Home without a running timer.")
+        try dismissRewardIfPresent()
+        let totals = try readHomeTotals(label: "before-share")
+        try require(totals.pebbles >= 1, "Sharing the jar needs at least one gem.")
+
+        try openMenuAction("動く瓶をシェア")
+        try require(app.navigationBars["カードにする"].waitForExistence(timeout: 20), "The share composer must open.")
+        pause(2)
+        capture("share-composer")
+        let include = app.buttons["share.include-self-reported-direct"]
+        if include.exists, include.isHittable {
+            note("SHARE including self-reported gems (offered directly)")
+            include.tap()
+        }
+        // The composer pins its share button over the bottom of the scroll
+        // view; XCTest still calls a row under it hittable, and a tap there
+        // starts the share. Every control is scrolled clear of it first.
+        let primary = app.descendants(matching: .any)["share.primary-action"].firstMatch
+        // The segment reads 「動くGIF、NEW」 while its badge is up.
+        let gif = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "動くGIF")).firstMatch
+        if !gif.exists {
+            let adjustments = app.buttons["調整"]
+            note("SHARE 調整 before scrolling: \(adjustments.exists ? "\(adjustments.frame)" : "<absent>") under the share button at \(primary.exists ? "\(primary.frame)" : "<absent>")")
+            try scrollClear(adjustments, of: primary)
+            try tap(adjustments)
+        }
+        try scrollClear(gif, of: primary)
+        note("SHARE media 動くGIF selected: \(gif.isSelected)")
+        if !gif.isSelected { try tap(gif) }
+        capture("share-gif-selected")
+        let save = app.buttons["写真に2サイズ保存"]
+        try scrollClear(save, of: primary, attempts: 16)
+        capture("share-before-save")
+        try tap(save)
+        let savedAt = Date()
+
+        let springboard = XCUIApplication(bundleIdentifier: Self.springboardID)
+        let promptDeadline = Date().addingTimeInterval(30)
+        var answered = false
+        let status = app.staticTexts["share.status"]
+        while Date() < promptDeadline, !answered {
+            for alert in [springboard.alerts.firstMatch, app.alerts.firstMatch] where alert.exists {
+                guard alert.label.contains("写真") || alert.label.localizedCaseInsensitiveContains("photo") else {
+                    capture("share-unexpected-alert")
+                    try require(false, "An unexpected alert appeared while saving: \(alert.label)")
+                    throw AuditFailure.stopped
+                }
+                note("PHOTOS prompt 「\(alert.label)」 buttons \(alert.buttons.allElementsBoundByIndex.map(\.label)) after \(seconds(since: savedAt)) s")
+                capture("photos-permission-prompt")
+                let predicate = photosAnswer == .deny
+                    ? NSPredicate(format: "label CONTAINS %@ OR label CONTAINS[c] %@", "しない", "don")
+                    : NSPredicate(format: "(label BEGINSWITH %@ AND NOT (label CONTAINS %@)) OR label ==[c] %@",
+                                  "許可", "しない", "allow")
+                let button = alert.buttons.matching(predicate).firstMatch
+                try require(button.exists, "The Photos prompt must offer an allow/deny button.")
+                note("PHOTOS answered 「\(button.label)」")
+                button.tap()
+                answered = true
+                break
+            }
+            if !answered, status.exists, status.label.contains("写真に保存") { break }
+            pause(0.5)
+        }
+        if !answered { note("PHOTOS no permission prompt within 30 s (already answered?)") }
+
+        let outcome = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND (label CONTAINS %@ OR label CONTAINS %@)",
+                                   "写真に保存しました", "保存できませんでした"),
+            object: status
+        )
+        let settled = XCTWaiter.wait(for: [outcome], timeout: 120) == .completed
+        note("SHARE status after \(seconds(since: savedAt)) s: 「\(labelIfPresent(status))」")
+        capture("share-after-save")
+        try require(settled, "Saving to Photos must end with a status line.")
+        if photosAnswer == .allow {
+            try require(status.label.contains("動くGIFをフィード用とストーリー用で写真に保存しました"),
+                        "An allowed save of 動くGIF must report both GIFs saved.")
+        }
+        try tap(app.buttons["share.close"])
+        try requireHome(timeout: 15)
+    }
+
+    // MARK: - test11 manual adds (extras, manual adds)
+
+    func test11ManualAddsDropGemsWithinTheDailyAllowance() throws {
+        try requireExtras()
+        guard manualAdds > 0 else {
+            throw XCTSkip("Set POMOGEM_REAL_CORE_LOOP_MANUAL_ADDS=1...3: entries count against the daily allowance.")
+        }
+        let app = attach(freshLaunch: false)
+        let screen = try waitForHomeOrFocus()
+        try require(screen == .home, "Manual adds are audited from Home without a running timer.")
+        try dismissRewardIfPresent()
+        var before = try readHomeTotals(label: "before-manual")
+        let choices: [(title: String, grams: Int)] = [("2時間", 1_200), ("1時間", 600), ("30分", 300)]
+        for index in 0..<manualAdds {
+            let step = index + 1
+            if index == manualAdds - 1, profilePauseSeconds > 0 {
+                capture("profile-landing-ready")
+                note("PROFILE waiting \(profilePauseSeconds) s for Instruments before entry \(step)")
+                pause(TimeInterval(profilePauseSeconds))
+            }
+            try openMenuAction("時間を手動で積む")
+            let remaining = app.staticTexts["manual.remaining-count"]
+            try require(remaining.waitForExistence(timeout: 10), "The manual entry sheet must open.")
+            note("MANUAL \(step): 「\(remaining.label)」")
+            capture("manual-sheet-\(step)")
+            if remaining.label.contains("あと0回") {
+                note("MANUAL the daily allowance is used up; stopping")
+                app.buttons["閉じる"].firstMatch.tap()
+                try requireHome()
+                break
+            }
+            let choice = choices[index % choices.count]
+            let option = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", choice.title + "、")).firstMatch
+            try scrollTo(option)
+            try tap(option)
+            let confirm = app.buttons["manual.confirm"]
+            try require(confirm.waitForExistence(timeout: 5), "Choosing a duration must show 「確認して積む」.")
+            capture("manual-confirm-\(step)")
+            try tap(confirm)
+            let savedAt = Date()
+            try requireHome(timeout: 15)
+            capture("manual-dropping-\(step)")
+            var toastNoted = false
+            for sample in 1...6 {
+                note("MANUAL \(step) jar +\(seconds(since: savedAt)) s (\(sample)): \(describeValue(jarElement))")
+                if !toastNoted, app.descendants(matching: .any)["app.toast"].firstMatch.exists {
+                    noteToastOverlap(context: "after manual add \(step)")
+                    toastNoted = true
+                }
+                pause(0.4)
+            }
+            capture("manual-landed-\(step)")
+            if index == manualAdds - 1, profilePauseSeconds > 0 {
+                pause(6)
+                capture("profile-landing-done")
+            }
+            // Past the few-second undo window before the menu covers Home.
+            pause(8)
+            let after = try readHomeTotals(label: "after-manual-\(step)")
+            note("MANUAL \(step) \(choice.title): pebbles \(before.pebbles) → \(after.pebbles); grams \(before.grams) → \(after.grams)")
+            try require(after.grams == before.grams + choice.grams,
+                        "A \(choice.title) manual entry must add \(choice.grams) g.")
+            before = after
+        }
+        pause(3)
+        note("MANUAL jar at rest: \(describeValue(jarElement))")
+        capture("home-after-manual-adds")
+    }
+
+    // MARK: - test12 skip a break (extras)
+
+    func test12BreakSkipReturnsToTheJarWithoutALaterNotification() throws {
+        try requireExtras()
+        _ = attachWithLeavePause()
+        try ensureRunningFocus()
+        try waitForOnScreenFocusCompletion()
+        try startBreakFromReward()
+        let left = try breakRemainingSeconds()
+        let breakEnd = Date().addingTimeInterval(TimeInterval(left))
+        capture("skip-break-screen")
+        let skip = app.buttons.matching(NSPredicate(format: "label == %@", "休憩をスキップ")).allElementsBoundByIndex
+            .last(where: { $0.exists && $0.isHittable })
+        try require(skip != nil, "The break screen must offer 「休憩をスキップ」.")
+        skip?.tap()
+        let skippedAt = Date()
+        try requireHome(timeout: 20)
+        note("SKIP Home \(seconds(since: skippedAt)) s after 休憩をスキップ with \(left) s of break left")
+        capture("skip-home")
+
+        // Wait out the break's old end on the Home Screen: a skipped break
+        // must not notify.
+        XCUIDevice.shared.press(.home)
+        lastKeepAwake = Date()
+        try waitOnHomeScreen(until: breakEnd.addingTimeInterval(-5), captureEvery: nil)
+        let springboard = XCUIApplication(bundleIdentifier: Self.springboardID)
+        let banner = springboard.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS %@", "休憩はここまで")
+        ).firstMatch
+        var bannerSeen = false
+        let watchDeadline = breakEnd.addingTimeInterval(25)
+        while Date() < watchDeadline {
+            if banner.exists { bannerSeen = true; break }
+            if Date().timeIntervalSince(lastKeepAwake) > 14 {
+                try guardAgainstLock()
+                XCUIDevice.shared.press(.home)
+                lastKeepAwake = Date()
+            }
+            pause(0.5)
+        }
+        note("SKIP break-end banner at the old end: \(bannerSeen ? labelIfPresent(banner) : "none")")
+        capture("skip-after-old-break-end")
+        try returnToApp(reason: "after-skipped-break")
+        try requireHome()
+        try require(!app.buttons["break.completion-alert.stop"].exists, "A skipped break must not come back.")
+        try require(!bannerSeen, "A skipped break must not deliver its end notification.")
+        capture("skip-home-final")
+    }
+
+    // MARK: - test20 iCloud reinstall (iCloud restore run only)
+
+    /// #35 launch-06: a fresh install that chooses iCloud on an Apple Account
+    /// that already has PomoGem data shows 「iCloudから記録を復元しています」
+    /// with live counts instead of the tutorial, then Home with the restored
+    /// jar. #40: a short absence keeps the iCloud session. This test only
+    /// observes: it never taps 「新しく始める」 and stops, without answering,
+    /// at any dialog it did not expect.
+    func test20ICloudReinstallRestoresWithoutTheTutorial() throws {
+        guard cloudRestoreRun else {
+            throw XCTSkip("Set POMOGEM_REAL_CORE_LOOP_ICLOUD_RESTORE=1 (after a fresh install) to run test20.")
+        }
+        let app = attach(freshLaunch: true)
+        let cloudChoice = app.buttons["iCloudに保存して同期"]
+        let launchStarted = Date()
+        while !cloudChoice.exists, Date().timeIntervalSince(launchStarted) < 60 {
+            if app.buttons["メニュー"].exists || focusTimer.exists {
+                capture("icloud-not-at-storage-choice")
+                throw XCTSkip("Not a fresh install: the app opened past the storage choice.")
+            }
+            pause(0.5)
+        }
+        try require(cloudChoice.exists, "A fresh install must open at the storage choice within 60 s.")
+        note("ICLOUD storage choice \(seconds(since: launchStarted)) s after launch")
+        capture("icloud-storage-choice")
+        try tap(cloudChoice)
+        let confirmation = app.alerts["iCloudに保存して同期しますか？"]
+        try require(confirmation.waitForExistence(timeout: 5), "Choosing iCloud must ask for confirmation.")
+        capture("icloud-confirmation")
+        try tap(confirmation.buttons["確認して続ける"])
+        let chosenAt = Date()
+
+        let springboard = XCUIApplication(bundleIdentifier: Self.springboardID)
+        let restoreTitle = app.descendants(matching: .any)["cloud-restore.title"]
+        let restoreScreen = app.descendants(matching: .any)["cloud-restore.waiting"]
+        let quiet = app.descendants(matching: .any)["cloud-restore.quiet"]
+        let onboarding = app.buttons["onboarding.next"]
+        let checking = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS %@", "確認中")
+        ).firstMatch
+        let menu = app.buttons["メニュー"]
+        var seen = Set<String>()
+        var lastRestoreNote = Date.distantPast
+        var restoreCaptures = 0
+        var lastOtherNote = Date()
+        let deadline = chosenAt.addingTimeInterval(420)
+        while Date() < deadline {
+            let at = seconds(since: chosenAt)
+            for alert in [app.alerts.firstMatch, springboard.alerts.firstMatch] where alert.exists {
+                note("ICLOUD unexpected dialog at +\(at) s: 「\(alert.label)」 buttons \(alert.buttons.allElementsBoundByIndex.map(\.label)); stopping without answering")
+                capture("icloud-unexpected-dialog")
+                attach(string: app.debugDescription, name: "icloud-dialog-hierarchy")
+                try require(false, "An unexpected dialog appeared during the iCloud restore; it was left unanswered.")
+            }
+            if restoreTitle.exists {
+                if seen.insert("restore").inserted {
+                    note("ICLOUD restore screen at +\(at) s: \(labelIfPresent(restoreTitle))")
+                }
+                if Date().timeIntervalSince(lastRestoreNote) >= 3 {
+                    lastRestoreNote = Date()
+                    let texts = restoreScreen.exists
+                        ? restoreScreen.staticTexts.allElementsBoundByIndex.map(\.label).joined(separator: " | ")
+                        : "<screen>"
+                    note("ICLOUD restore +\(at) s: \(texts)")
+                    if restoreCaptures < 8 {
+                        restoreCaptures += 1
+                        capture("icloud-restore-\(restoreCaptures)")
+                    }
+                }
+                if quiet.exists, seen.insert("quiet").inserted {
+                    note("ICLOUD restore quiet hint at +\(at) s (waiting; 新しく始める is never tapped)")
+                    capture("icloud-restore-quiet")
+                }
+            }
+            if onboarding.exists, seen.insert("onboarding").inserted {
+                note("ICLOUD the tutorial appeared at +\(at) s instead of the restore/Home")
+                capture("icloud-tutorial-shown")
+                try require(false, "An account with iCloud data must not be sent to the tutorial; it was left untouched.")
+            }
+            if checking.exists, seen.insert("checking").inserted {
+                note("ICLOUD 「\(labelIfPresent(checking))」 at +\(at) s")
+                capture("icloud-checking")
+            }
+            if menu.exists, menu.isHittable {
+                note("ICLOUD Home at +\(at) s (restore screen seen: \(seen.contains("restore")))")
+                break
+            }
+            // Anything else (a launch check, a stop screen) is recorded,
+            // never answered.
+            if !restoreTitle.exists, Date().timeIntervalSince(lastOtherNote) >= 20 {
+                lastOtherNote = Date()
+                let texts = app.staticTexts.allElementsBoundByIndex.prefix(12).map(\.label).joined(separator: " | ")
+                note("ICLOUD +\(at) s other screen: \(texts)")
+                capture("icloud-other-\(Int(Date().timeIntervalSince(chosenAt)))s")
+            }
+            pause(0.5)
+        }
+        try require(menu.exists && menu.isHittable, "The restored jar must open within 7 minutes.")
+        capture("icloud-home-first")
+        // The mass presentation right after launch: sample the jar's value
+        // (it carries the HUD's text) until it stops saying 確認中.
+        let homeAt = Date()
+        var lastValue = ""
+        while Date().timeIntervalSince(homeAt) < 90 {
+            let value = describeValue(jarElement)
+            if value != lastValue {
+                note("ICLOUD jar +\(seconds(since: homeAt)) s: \(value)")
+                lastValue = value
+                capture("icloud-home-jar")
+            }
+            if !value.contains("確認中") && Date().timeIntervalSince(homeAt) > 10 { break }
+            pause(1)
+        }
+        let totals = try readHomeTotals(label: "icloud-restored")
+        note("ICLOUD restored totals: \(totals.label)")
+        capture("icloud-home-settled")
+        try inspectCrystalIfPresent()
+
+        try openMenuAction("設定")
+        try require(app.navigationBars["設定"].waitForExistence(timeout: 10), "Settings must open.")
+        let storage = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label BEGINSWITH %@", "現在の保存先")
+        ).firstMatch
+        try scrollTo(storage, attempts: 24)
+        note("ICLOUD settings storage: \(labelIfPresent(storage))")
+        capture("icloud-settings-storage")
+        for _ in 0..<12 { app.swipeDown() }
+        try returnHome(from: "設定")
+
+        // #40: a short absence keeps the session; a long one retires it.
+        for awaySeconds in [10.0, 40.0] {
+            capture("icloud-before-away-\(Int(awaySeconds))s")
+            XCUIDevice.shared.press(.home)
+            let leftAt = Date()
+            lastKeepAwake = leftAt
+            try waitOnHomeScreen(until: leftAt.addingTimeInterval(awaySeconds), captureEvery: nil)
+            let returnedAt = Date()
+            app.activate()
+            var states: [String] = []
+            var firstHittable: TimeInterval?
+            var index = 0
+            while Date().timeIntervalSince(returnedAt) < 20 {
+                let state: String
+                if menu.exists && menu.isHittable {
+                    state = "home"
+                    if firstHittable == nil { firstHittable = Date().timeIntervalSince(returnedAt) }
+                } else if checking.exists {
+                    state = "checking(\(labelIfPresent(checking)))"
+                } else if restoreTitle.exists {
+                    state = "restore"
+                } else {
+                    state = "other"
+                }
+                if states.last != state {
+                    states.append(state)
+                    index += 1
+                    capture("icloud-return-\(Int(awaySeconds))s-\(index)-\(state.prefix(8))")
+                }
+                if firstHittable != nil, Date().timeIntervalSince(returnedAt) > 8 { break }
+                pause(0.25)
+            }
+            note("ICLOUD back after \(Int(awaySeconds)) s away: states \(states) ; Home usable after \(firstHittable.map { format($0) } ?? "never") s; jar: \(describeValue(jarElement))")
+            try require(firstHittable != nil, "Home must come back after \(Int(awaySeconds)) s away.")
+        }
+        capture("icloud-final-home")
+    }
+
+    // MARK: - test21 iCloud verification after short absences (iCloud restore run only)
+
+    /// #40 keeps the iCloud session through an absence shorter than the
+    /// 15-second grace window. This measures what Home shows on the way
+    /// back: whether the jar's totals drop back to 「iCloudを確認中」, for how
+    /// long, and what the first frames look like.
+    func test21ICloudShortAbsencesKeepTheSettledJar() throws {
+        guard cloudRestoreRun else {
+            throw XCTSkip("Set POMOGEM_REAL_CORE_LOOP_ICLOUD_RESTORE=1 to run test21 on the iCloud installation.")
+        }
+        _ = attach(freshLaunch: false)
+        let screen = try waitForHomeOrFocus()
+        try require(screen == .home, "test21 starts on Home.")
+        let settledAfterLaunch = waitForSettledJar(label: "start", limit: 150)
+        try require(settledAfterLaunch != nil, "The jar must settle (no 確認中) on the iCloud installation.")
+        capture("icloud21-settled")
+        for awaySeconds in [5.0, 10.0] {
+            XCUIDevice.shared.press(.home)
+            let leftAt = Date()
+            lastKeepAwake = leftAt
+            pause(awaySeconds)
+            let returnedAt = Date()
+            app.activate()
+            for index in 1...5 {
+                capture("icloud21-return-\(Int(awaySeconds))s-burst-\(index)")
+                pause(0.15)
+            }
+            note("ICLOUD21 back after \(format(returnedAt.timeIntervalSince(leftAt))) s away")
+            let settled = waitForSettledJar(label: "after \(Int(awaySeconds)) s away", limit: 150)
+            note("ICLOUD21 after \(Int(awaySeconds)) s away the jar settled \(settled.map { format($0) } ?? "never (150 s)") s after the return")
+            capture("icloud21-after-\(Int(awaySeconds))s-settled")
+        }
+    }
+
+    /// Seconds until the jar's value stops saying 確認中 (nil if it never does
+    /// within `limit`), noting each distinct value on the way.
+    private func waitForSettledJar(label: String, limit: TimeInterval) -> TimeInterval? {
+        let started = Date()
+        var last = ""
+        while Date().timeIntervalSince(started) < limit {
+            let value = describeValue(jarElement)
+            if value != last {
+                note("ICLOUD21 [\(label)] +\(seconds(since: started)) s: \(value)")
+                last = value
+            }
+            if !value.contains("確認中"), value != "<missing>" {
+                return Date().timeIntervalSince(started)
+            }
+            pause(1)
+        }
+        return nil
+    }
+
     // MARK: - focus helpers
 
     private var focusTimer: XCUIElement {
@@ -633,6 +1330,36 @@ final class RealDeviceCoreLoopUITests: XCTestCase {
     /// The completion normally passes through the commit view and the
     /// foreground completion alert before Home shows the reward card.
     private func followCompletionToHome(returnStarted: Date) throws {
+        try waitForRewardCard(since: returnStarted)
+        let rewardHeading = app.descendants(matching: .any)["reward.heading"]
+        capture("reward-card")
+        let jar = jarElement
+        // dev-D7: the jar's accessibility value carries the HUD's totals
+        // (the HUD itself is hidden from VoiceOver), so reading it through
+        // the drop shows whether the totals move before the gem lands.
+        note("JAR value at the reward card: \(describeValue(jar))")
+        let dismiss = app.buttons["reward.dismiss"]
+        try require(dismiss.waitForExistence(timeout: 5), "The reward card must offer 「閉じる」.")
+        try tap(dismiss)
+        let dismissedAt = Date()
+        try require(waitForAbsence(rewardHeading, timeout: 10), "Closing the reward must retire the card.")
+        pause(0.4)
+        capture("gem-dropping")
+        var toastNoted = false
+        for index in 1...8 {
+            note("JAR value +\(seconds(since: dismissedAt)) s after 閉じる (\(index)): \(describeValue(jar))")
+            if !toastNoted, app.descendants(matching: .any)["app.toast"].firstMatch.exists {
+                noteToastOverlap(context: "after the reward drop")
+                toastNoted = true
+            }
+            pause(0.4)
+        }
+        capture("gem-landed")
+        note("JAR value after the drop (+\(seconds(since: dismissedAt)) s): \(describeValue(jar))")
+        if !toastNoted { noteToastOverlap(context: "after the reward drop") }
+    }
+
+    private func waitForRewardCard(since returnStarted: Date) throws {
         let stopAlert = app.buttons["focus.completion-alert.stop"]
         let saveError = app.descendants(matching: .any)["focus.completion-save.error"]
         let committing = app.staticTexts["粒を瓶へ運んでいます"]
@@ -675,17 +1402,24 @@ final class RealDeviceCoreLoopUITests: XCTestCase {
             pause(0.5)
         }
         try require(rewardHeading.exists, "Home must present the reward for the completed focus.")
-        capture("reward-card")
-        let dismiss = app.buttons["reward.dismiss"]
-        try require(dismiss.waitForExistence(timeout: 5), "The reward card must offer 「閉じる」.")
-        try tap(dismiss)
-        try require(waitForAbsence(rewardHeading, timeout: 10), "Closing the reward must retire the card.")
-        pause(0.4)
-        capture("gem-dropping")
-        pause(3)
-        capture("gem-landed")
-        let jar = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "瓶")).firstMatch
-        note("JAR value after the drop: \(describeValue(jar))")
+    }
+
+    private var jarElement: XCUIElement {
+        app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "瓶")).firstMatch
+    }
+
+    /// home-03/#33: a toast must never sit on Home's start button.
+    private func noteToastOverlap(context: String) {
+        let toast = app.descendants(matching: .any)["app.toast"].firstMatch
+        let launcher = app.buttons["home.focus-launcher"]
+        guard toast.exists else {
+            note("TOAST none visible \(context)")
+            return
+        }
+        let toastFrame = toast.frame
+        let launcherFrame = launcher.exists ? launcher.frame : .null
+        note("TOAST \(context): 「\(toast.label)」 frame=\(toastFrame) launcher=\(launcherFrame) overlaps=\(toastFrame.intersects(launcherFrame))")
+        capture("toast-\(context.replacingOccurrences(of: " ", with: "-"))")
     }
 
     private func dismissRewardIfPresent() throws {
@@ -695,6 +1429,161 @@ final class RealDeviceCoreLoopUITests: XCTestCase {
         capture("pending-reward-card")
         try tap(dismiss)
         _ = waitForAbsence(dismiss, timeout: 10)
+    }
+
+    /// A restored jar with crystals: find one by tapping the resting pile
+    /// (a tap only bounces gems), then check where its card appears at the
+    /// default text size. The first card sits in the row under the jar until
+    /// a crystal's detail has been opened once; after that it hangs over
+    /// the upper jar under the readout (home-11). Opening the detail is
+    /// read-only.
+    private func inspectCrystalIfPresent() throws {
+        let jar = jarElement
+        let value = describeValue(jar)
+        guard value.contains("、結晶") else {
+            note("CRYSTAL none in this jar: \(value)")
+            return
+        }
+        let card = app.buttons["jar.aggregate.inspect"]
+        func sweep(_ label: String) -> Bool {
+            let frame = jar.frame
+            for row in 0..<5 {
+                for column in 0..<5 {
+                    let point = CGPoint(
+                        x: frame.minX + frame.width * (0.18 + 0.16 * CGFloat(column)),
+                        y: frame.minY + frame.height * (0.5 + 0.1 * CGFloat(row))
+                    )
+                    app.coordinate(withNormalizedOffset: .zero)
+                        .withOffset(CGVector(dx: point.x, dy: point.y)).tap()
+                    if card.waitForExistence(timeout: 1.2) {
+                        note("CRYSTAL \(label) card after a tap at \(point): \(card.label); card=\(card.frame) jar=\(frame)")
+                        return true
+                    }
+                }
+            }
+            note("CRYSTAL \(label) no card after 25 taps over the pile")
+            return false
+        }
+        guard sweep("first") else { return }
+        capture("crystal-card-first")
+        let jarFrame = jar.frame
+        let inside = card.frame.minY >= jarFrame.minY && card.frame.maxY <= jarFrame.maxY
+        note("CRYSTAL first card \(inside ? "over the jar" : "outside the jar (row under it)")")
+        guard !inside else { return }
+        try tap(card)
+        let detail = app.navigationBars["結晶の内訳"]
+        try require(detail.waitForExistence(timeout: 8), "The crystal card must open its detail.")
+        pause(1)
+        capture("crystal-detail")
+        let close = app.buttons["overview.cluster.close"]
+        try tap(close.exists ? close : detail.buttons.element(boundBy: 0))
+        try requireHome()
+        pause(7)
+        guard sweep("second") else { return }
+        capture("crystal-card-over-jar")
+        let hudClear = card.frame.minY >= jar.frame.minY + 187
+        note("CRYSTAL second card inside the jar: \(card.frame.minY >= jar.frame.minY && card.frame.maxY <= jar.frame.maxY); at or below the former 188 pt line: \(hudClear)")
+    }
+
+    // MARK: - extras helpers (leave pause, on-screen end, break)
+
+    private func requireExtras() throws {
+        guard extrasEnabled else {
+            throw XCTSkip("Set POMOGEM_REAL_CORE_LOOP_EXTRAS=1 to run the focused device checks.")
+        }
+    }
+
+    /// Whether this runner process launched the app with the leave pause on.
+    /// `attach` launches it off (see there); test08, test09 and test12 need
+    /// the shipping default, so the first of them relaunches the app once.
+    /// A running focus or break survives the relaunch.
+    private static var appLaunchedWithLeavePause = false
+
+    @discardableResult
+    private func attachWithLeavePause() -> XCUIApplication {
+        let application = XCUIApplication()
+        application.launchEnvironment = [:]
+        // Explicitly on, whatever this phone has stored; the argument domain
+        // is never persisted.
+        application.launchArguments = [
+            "-focus.leave-pause.enabled", "YES",
+            "-focus.leave-pause.nudges.enabled", "YES"
+        ]
+        PomoGemUITestLanguage.configureJapanese(application)
+        app = application
+        if Self.appLaunchedWithLeavePause, application.state != .notRunning {
+            note("APP activate (leave pause on; state was \(application.state.rawValue))")
+            application.activate()
+        } else {
+            note("APP relaunch with the leave pause on (state was \(application.state.rawValue))")
+            if application.state != .notRunning { application.terminate() }
+            application.launch()
+            Self.appLaunchedWithLeavePause = true
+        }
+        return application
+    }
+
+    /// Waits in the foreground for the running focus to end (the timer
+    /// screen keeps the phone awake by default), checks that its alarm keeps
+    /// repeating until stopped, stops it and follows it to the reward card.
+    private func waitForOnScreenFocusCompletion() throws {
+        try requireFocus(paused: false)
+        let remaining = try timerRemainingSeconds()
+        let expectedEnd = Date().addingTimeInterval(TimeInterval(remaining))
+        note("ONSCREEN waiting \(remaining) s for the focus to end on screen")
+        capture("onscreen-wait-start")
+        while expectedEnd.timeIntervalSinceNow > 20 {
+            pause(min(60, expectedEnd.timeIntervalSinceNow - 20))
+            try guardAgainstLock()
+            try require(focusTimer.exists && app.buttons["一時停止"].exists,
+                        "The focus must keep running on screen until its end.")
+        }
+        let stop = app.buttons["focus.completion-alert.stop"]
+        try require(stop.waitForExistence(timeout: max(10, expectedEnd.timeIntervalSinceNow + 30)),
+                    "A focus that ends on screen must start its completion alarm.")
+        let rangAt = Date()
+        note("ONSCREEN alarm 「\(labelIfPresent(stop))」 \(format(rangAt.timeIntervalSince(expectedEnd))) s after the expected end")
+        capture("onscreen-alarm-ringing")
+        pause(6)
+        try require(stop.exists && stop.isHittable, "The completion alarm must keep ringing until stopped.")
+        capture("onscreen-alarm-still-ringing")
+        stop.tap()
+        try waitForRewardCard(since: rangAt)
+        capture("onscreen-reward-card")
+        note("JAR value at the reward card: \(describeValue(jarElement))")
+    }
+
+    private func startBreakFromReward() throws {
+        let offer = app.buttons.matching(NSPredicate(format: "label ENDSWITH %@", "分休憩する")).firstMatch
+        try require(offer.waitForExistence(timeout: 10), "The reward card must offer the break.")
+        let title = offer.label
+        try tap(offer)
+        let tappedAt = Date()
+        try require(breakSkip.waitForExistence(timeout: 30), "The break screen must open.")
+        note("BREAK screen \(seconds(since: tappedAt)) s after 「\(title)」")
+    }
+
+    private var breakSkip: XCUIElement {
+        app.buttons.matching(NSPredicate(format: "label == %@", "休憩をスキップ")).firstMatch
+    }
+
+    private var breakNotificationRow: XCUIElement {
+        app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "通知")).firstMatch
+    }
+
+    private func breakRemainingSeconds() throws -> Int {
+        let timer = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "残り")).firstMatch
+        try require(timer.waitForExistence(timeout: 10), "The break screen must show its countdown.")
+        let value = timer.label
+        let expression = try NSRegularExpression(pattern: "残り([0-9]+)分([0-9]+)秒")
+        guard let match = expression.firstMatch(in: value, range: NSRange(value.startIndex..., in: value)),
+              let minutesRange = Range(match.range(at: 1), in: value),
+              let secondsRange = Range(match.range(at: 2), in: value),
+              let minutes = Int(value[minutesRange]), let seconds = Int(value[secondsRange]) else {
+            try require(false, "The break must expose a readable remaining duration: \(value).")
+            throw AuditFailure.stopped
+        }
+        return minutes * 60 + seconds
     }
 
     // MARK: - background helpers
@@ -756,14 +1645,15 @@ final class RealDeviceCoreLoopUITests: XCTestCase {
         // This suite measures a focus that keeps running on the Home Screen
         // (test03 and the lock-screen completion banner). F1's leave pause
         // (Docs/FocusLeavePause.md) is switched off for this process only;
-        // the argument domain is never persisted. Its own real-device matrix
-        // is manual until this suite gains an F1 case.
+        // the argument domain is never persisted. test08 audits F1 itself
+        // (`attachWithLeavePause`); its lock rows stay manual.
         application.launchArguments = ["-focus.leave-pause.enabled", "NO"]
         PomoGemUITestLanguage.configureJapanese(application)
         app = application
         if freshLaunch || application.state == .notRunning {
             note("APP launch (fresh=\(freshLaunch), state was \(application.state.rawValue))")
             application.launch()
+            Self.appLaunchedWithLeavePause = false
         } else {
             note("APP activate (state was \(application.state.rawValue))")
             application.activate()
@@ -785,6 +1675,16 @@ final class RealDeviceCoreLoopUITests: XCTestCase {
                 note("PRECONDITION \(title) was left open; returning to Home")
                 let back = app.navigationBars[title].buttons.element(boundBy: 0)
                 if back.exists, back.isHittable { back.tap() }
+            }
+            // An interrupted share (test10) can leave iOS's share sheet and
+            // the composer open; both only close without saving anything.
+            for identifier in ["header.closeButton", "share.close"] {
+                let close = app.buttons[identifier]
+                if close.exists, close.isHittable {
+                    note("PRECONDITION \(identifier) was left open; closing it")
+                    close.tap()
+                    break
+                }
             }
             pause(0.5)
         } while Date() < deadline
@@ -865,6 +1765,23 @@ final class RealDeviceCoreLoopUITests: XCTestCase {
     // MARK: - plumbing
 
     private enum ScrollDirection { case up, down }
+
+    /// Drags the content up in short steps until `element` sits wholly above
+    /// `cover`, a pinned bar XCTest does not treat as covering it.
+    private func scrollClear(_ element: XCUIElement, of cover: XCUIElement, attempts: Int = 12) throws {
+        func isClear() -> Bool {
+            guard element.exists, element.isHittable else { return false }
+            return !cover.exists || element.frame.maxY <= cover.frame.minY - 8
+        }
+        for _ in 0..<attempts {
+            if isClear() { return }
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.42))
+            start.press(forDuration: 0.05, thenDragTo: end)
+            pause(0.4)
+        }
+        try require(isClear(), "Could not reveal required content above the pinned action.")
+    }
 
     private func tap(_ element: XCUIElement) throws {
         let ready = XCTNSPredicateExpectation(
