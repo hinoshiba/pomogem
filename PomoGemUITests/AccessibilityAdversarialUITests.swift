@@ -110,6 +110,11 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         XCTAssertTrue(menu.isHittable)
         XCTAssertTrue(jar.waitForExistence(timeout: 5))
         try auditVisibleScreen(named: "AX5 Home")
+        // At its natural top the theme row peeks above the pinned start
+        // button, cut by it, and counts only in an audit that shows it whole.
+        let themePicker = app.buttons["home.subject-picker"]
+        XCTAssertTrue(scrollUntilFullyVisibleInContent(themePicker, attempts: 12))
+        try auditVisibleScreen(named: "AX5 Home — theme and length")
 
         menu.tap()
         let menuClose = app.buttons["home.menu.close"]
@@ -752,6 +757,20 @@ final class AccessibilityAdversarialUITests: XCTestCase {
                     // tile's 「0」 on a 17 Pro, 「表示中の結晶」 on an SE). Such
                     // a row counts only in audits that show it in full view.
                     if frame.minY < contentTop - 0.5, frame.maxY > contentTop + 0.5 {
+                        return true
+                    }
+                    // A row cut by the scroll view's lower edge where
+                    // something is pinned below it (Home's start button at
+                    // accessibility sizes, home-03): the button is painted
+                    // over the row's lower part and XCTest samples its
+                    // colour inside the row's frame as the text's
+                    // background. Home's theme row peeks there at its
+                    // natural top; since #47's floor light warms the card
+                    // behind it, 「英語」 failed on the coral button's colour.
+                    // Such a row counts in the audit that shows it whole.
+                    if scrollFrame.maxY < windowFrame.maxY - 0.5,
+                       frame.minY < viewport.maxY - 0.5,
+                       frame.maxY > viewport.maxY + 0.5 {
                         return true
                     }
                     // The same row resting flush against the bar's lower
