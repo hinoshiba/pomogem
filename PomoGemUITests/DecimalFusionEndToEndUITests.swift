@@ -179,6 +179,31 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
             waitForCondition(timeout: 4) { self.app.buttons["瓶"].frame.height > jarHeightWithTip + 40 },
             "The jar must regain the tip row's height: before=\(jarHeightWithTip) after=\(app.buttons["瓶"].frame.height)"
         )
+        // The next tap shows the card over the upper jar. Since #47 the
+        // readout follows the bottle's mouth, lower on a stage taller than
+        // the bottle, and the card hangs under the readout, never above the
+        // former fixed 188 pt.
+        tapCrystal(from: presentationProbe)
+        XCTAssertTrue(
+            inspectAggregate.waitForExistence(timeout: 3),
+            "After its detail, a tap shows the crystal's card over the jar"
+        )
+        let jarFrame = app.buttons["瓶"].frame
+        XCTAssertGreaterThanOrEqual(
+            inspectAggregate.frame.minY,
+            jarFrame.minY + 187,
+            "Under the readout: card=\(inspectAggregate.frame) jar=\(jarFrame)"
+        )
+        XCTAssertLessThanOrEqual(
+            inspectAggregate.frame.maxY,
+            jarFrame.maxY,
+            "Inside the jar: card=\(inspectAggregate.frame) jar=\(jarFrame)"
+        )
+        saveScreenshot("crystal-card-over-jar")
+        XCTAssertTrue(
+            waitForCondition(timeout: 9) { !inspectAggregate.exists },
+            "The card still closes by itself"
+        )
 
         let afterDirectInspection = try waitForPresentationCount(
             1,
@@ -303,7 +328,7 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
     /// opened, the next tap shows its card in the row under the jar, whole
     /// and above the pinned start button. Over the short AX5 jar the card
     /// covered the readout, lost its title and spilled onto the start button.
-    /// The time core's in-jar plate is not drawn at this size either.
+    /// The time core's labels are #47's, placed below the measured readout.
     func testCrystalCardStaysUnderTheJarAtAccessibilitySizeAfterItsDetail() throws {
         executionTimeAllowance = 900
         app.terminate()
