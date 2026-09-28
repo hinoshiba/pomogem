@@ -192,8 +192,11 @@ final class ScreenTimeObstacleTests: XCTestCase {
         XCTAssertNotEqual(body.collisionBitMask & JarPhysicsCategory.floor, 0)
         XCTAssertTrue(node.hasLanded)
         XCTAssertEqual(node.glowWidth, 0)
-        XCTAssertNotNil(node.childNode(withName: "obstacle.crack"))
-        XCTAssertNotNil(node.childNode(withName: "obstacle.roughFacet"))
+        // Outline, facets and crack are one baked rubble sprite now.
+        let rubble = try XCTUnwrap(node.childNode(withName: "obstacle.body") as? SKSpriteNode)
+        XCTAssertNotNil(rubble.texture)
+        XCTAssertEqual(rubble.blendMode, .alpha)
+        XCTAssertFalse(node.children.contains { $0 is SKShapeNode })
         XCTAssertTrue(scene.bouncePebbles(at: node.position))
         XCTAssertEqual(scene.activeTapMotionPebbleID, descriptor.id)
         XCTAssertNil(scene.lastAcceptedTapSelection?.inspectableAggregateID)

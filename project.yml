@@ -136,6 +136,9 @@ targets:
       # The constant pomogem:// routes behind widget taps (notify-03). Routes
       # only: no data, no App Group, no store.
       - path: Shared/AppEntryLink.swift
+      # D19: the data-free raw-stone artwork the widget draws in place of
+      # the jar (drawn by code; no data, no App Group).
+      - path: Shared/RawStoneArtwork.swift
       - path: PomoGemWidgets/PrivacyInfo.xcprivacy
         buildPhase: resources
     settings:

@@ -210,6 +210,9 @@ struct EffortConstellationView: View {
     let totalGrams: Int
     let totalPebbleCount: Int
     let projectionIsLowerBound: Bool
+    /// The time core's theme fan, as Home computes it (roots and loose
+    /// gems). Empty derives it from the roots alone.
+    let coreColorShares: [GemColorShare]
     var onSelect: ((UUID) -> Void)?
 
     init(
@@ -217,12 +220,14 @@ struct EffortConstellationView: View {
         totalGrams: Int,
         totalPebbleCount: Int,
         projectionIsLowerBound: Bool = false,
+        coreColorShares: [GemColorShare] = [],
         onSelect: ((UUID) -> Void)? = nil
     ) {
         self.nodes = nodes
         self.totalGrams = totalGrams
         self.totalPebbleCount = totalPebbleCount
         self.projectionIsLowerBound = projectionIsLowerBound
+        self.coreColorShares = coreColorShares
         self.onSelect = onSelect
     }
 
@@ -236,6 +241,18 @@ struct EffortConstellationView: View {
 
     private var coreColorHex: String {
         EffortConstellationPresentation.dominantColorHex(nodes: nodes)
+    }
+
+    private var resolvedCoreColorShares: [GemColorShare] {
+        guard coreColorShares.isEmpty else { return coreColorShares }
+        return JarLifetimeCorePresentation.colorShares(nodes.map { node in
+            JarLifetimeCorePresentation.ColorContribution(
+                grams: node.grams,
+                colorMix: node.colorMix.isEmpty
+                    ? [StratumColorFraction(hex: node.colorHex, fraction: 1)]
+                    : node.colorMix
+            )
+        })
     }
 
     private var coreIsMaterialized: Bool {
@@ -337,7 +354,11 @@ struct EffortConstellationView: View {
             min(240, min(size.width * 0.58, size.height * 0.62))
         )
         let labelWidth = stageDiameter * 0.66
-        let labelOffset = stageDiameter * 0.11
+        let labelFontSizeForOffset = min(coreLabelTextSize, max(9, stageDiameter * 0.07))
+        // Below the whole orbit, never over the core (the stone is the same
+        // baked art as Home's and must stay whole).
+        let labelOffset = stageDiameter * 0.5
+            + (labelFontSizeForOffset * 1.25 + max(4, stageDiameter * 0.024) * 2) / 2 + 4
         let labelFontSize = min(
             coreLabelTextSize,
             max(9, stageDiameter * 0.07)
@@ -351,7 +372,8 @@ struct EffortConstellationView: View {
                     projectionIsLowerBound: projectionIsLowerBound
                 ),
                 colorHex: coreColorHex,
-                scale: .chronicle
+                scale: .chronicle,
+                colorShares: resolvedCoreColorShares
             )
             .frame(width: stageDiameter, height: stageDiameter)
             .scaleEffect(auraExpanded ? 1.025 : 0.985)
@@ -382,9 +404,7 @@ struct EffortConstellationView: View {
             .padding(.vertical, max(4, stageDiameter * 0.024))
             // The crystal color changes with lifetime subjects, so a shadow
             // cannot guarantee text contrast. Keep the core caption on a
-            // deterministic dark optical label instead. The label lives
-            // inside the lower half of the core, leaving a geometry-derived
-            // gap before the six-o'clock satellite at every stage size.
+            // deterministic dark optical label instead, below the orbit.
             .background(.black.opacity(0.86), in: Capsule())
             .overlay(Capsule().stroke(.white.opacity(0.22), lineWidth: 0.5))
             .offset(y: labelOffset)
@@ -452,7 +472,10 @@ struct EffortConstellationView: View {
                 completionCount: node.pebbleCount,
                 colorHex: node.colorHex,
                 level: node.level,
-                showsCount: true
+                showsCount: true,
+                grams: node.grams,
+                // The crystal's own colour mix, as the Home jar paints it.
+                colorShares: GemArtworkSpec.aggregateColors(node.colorMix, fallbackHex: node.colorHex)
             )
             .frame(width: diameter, height: diameter)
         }

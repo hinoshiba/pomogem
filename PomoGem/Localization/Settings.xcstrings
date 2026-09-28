@@ -31,11 +31,17 @@
     "「毎日のリマインダー」と「先月の瓶のお知らせ」は既定でオフです。赤いバッジや連続記録の警告は使いません。タイマー終了の通知だけは「即時通知」として送るため、iPhoneの集中モード（おやすみモードなど）で即時通知を許可していれば、その間も届きます。" : {
       "comment" : "Settings footer under the Notifications card. The default-off sentence names only this card's two switches, because the leave-pause notifications in the Focus card are on by default. Suggested English: Daily Reminder and Last Month's Jar are off by default. The app never uses red badges or streak warnings. Only timer-end alerts are sent as Time Sensitive, so they still arrive during a Focus such as Do Not Disturb if Time Sensitive notifications are allowed there."
     },
+    "「視差効果を減らす」がオンのため、いまは控えめで表示しています。" : {
+      "comment" : "Settings note under Effect intensity while the system Reduce Motion setting is on"
+    },
     "「集中が切れたらお知らせ」は、タイマーが止まっていることを知らせる通知で、アプリに戻ると残りは届きません。このiPhoneで通知を許可していない場合は届きません。「アプリを離れたら一時停止」がオンのあいだは、「集中に戻るお知らせ」の代わりにこちらを使います。" : {
       "comment" : "Settings footer under the leave-pause notification switch; it replaces the older Return-to-Focus Reminder while the leave pause is on. The switch is on by default, so the permission sentence is a plain fact with no call to action. Suggested English: These notifications say the timer is paused, and the rest are withdrawn when you come back. They do not arrive unless notifications are allowed on this iPhone. While Pause When You Leave the App is on, they replace the Return-to-Focus Reminder."
     },
     "「集中に戻るお知らせ」は既定でオフです。オンにすると、集中タイマー中にホーム画面や別のアプリへ移ったとき、30秒後に一度通知し、戻ると取り消します。画面をロックしただけなら通知しません（パスコードを使っていないiPhoneなどでは届くことがあります）。一時停止中・休憩中・終了間際も通知しません。" : {
       "comment" : "Settings caption under the return-to-focus reminder switch"
+    },
+    "きらめきと傾けたときの星を止め、光を弱め、着地と融合を短くします" : {
+      "comment" : "Effect intensity detail for Subtle"
     },
     "このiPhoneのみ" : {
       "comment" : "Support mail: records are kept only on this iPhone"
@@ -127,6 +133,12 @@
     "承認待ち・承認されると自動で使えます" : {
       "comment" : "Settings Pro row subtitle while a purchase request awaits approval"
     },
+    "控えめ" : {
+      "comment" : "Effect intensity option: calmer light and shorter effects (Subtle)"
+    },
+    "控えめにしても、粒の重さや数、融合、カットは変わりません。「視差効果を減らす」がオンのときは、常に控えめで表示します。この設定はこのiPhoneだけに保存され、iCloudでは同期しません。" : {
+      "comment" : "Settings footer explaining Effect intensity"
+    },
     "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにあるすべての記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このiPhoneのデータはアプリの削除で、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除できます。" : {
       "comment" : "Settings export footer in iCloud mode"
     },
@@ -142,6 +154,9 @@
     "朱色" : {
       "comment" : "Theme colour swatch (vermilion)"
     },
+    "標準" : {
+      "comment" : "Effect intensity option: every light and motion effect (Standard)"
+    },
     "機種：%@" : {
       "comment" : "Support mail line; the argument is the model identifier, e.g. iPhone13,1"
     },
@@ -154,6 +169,9 @@
     "毎月1日に一度だけ" : {
       "comment" : "Settings switch subtitle: the monthly notification is sent on the 1st"
     },
+    "演出の強さ" : {
+      "comment" : "Settings row: how much light and motion the jar's rewards use (Effect intensity)"
+    },
     "珊瑚" : {
       "comment" : "Theme colour swatch (coral)"
     },
@@ -165,6 +183,9 @@
     },
     "瑠璃" : {
       "comment" : "Theme colour swatch (lapis blue)"
+    },
+    "瓶の表示" : {
+      "comment" : "Settings section header: how the jar is shown (Jar display)"
     },
     "画面を閉じたときの表示は、iPhoneの設定でライブアクティビティを許可している場合に出ます。アプリを離れたときにタイマーを止めるかどうかは、「アプリを離れたら一時停止」の設定に従います。" : {
       "comment" : "Settings footer: the Live Activity switch. Suggested English: The Lock Screen timer appears when Live Activities are allowed in iPhone Settings. Whether the timer stops when you leave the app follows Pause When You Leave the App."
@@ -180,6 +201,9 @@
     },
     "自動では再開しません。アプリに戻って「再開する」をタップすると、離れた時点の続きから進みます。休憩中と、終了まで%@以内の集中は止めません。オフのときは、アプリを離れてもタイマーは止まりません。" : {
       "comment" : "Settings footer under the leave-pause switch: how the timer resumes, what is never paused, and the off state. The argument is the final stretch that is never paused (1分). Suggested English: The timer never resumes by itself. Go back to the app and tap Resume to continue from where you left. Breaks and the last %@ of a focus are never paused. When off, the timer keeps running after you leave the app."
+    },
+    "自然なきらめきと傾けたときの星、光の広がりをすべて表示します" : {
+      "comment" : "Effect intensity detail for Standard"
     },
     "自由な集中時間・結晶の月刻印・勉強アプリ数の無制限" : {
       "comment" : "Settings Pro row subtitle for free users: what Pro adds"

@@ -170,6 +170,9 @@ struct SettingsView: View {
                 rarePebbleSection
             }
             sensorySection
+            // 演出の強さ sits with 音と触覚: both are how the app feels on
+            // this iPhone, not what it records.
+            JarEffectsSettingsSection()
             notificationSection
             shareSection
             // 記録とiCloud: where the records live, moving them, exporting
