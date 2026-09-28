@@ -169,6 +169,12 @@
     "瓶はまだ空です。下のボタンから最初の集中を始められます" : {
       "comment" : "VoiceOver, empty jar at accessibility text sizes"
     },
+    "瓶をタップすると粒が跳ねます" : {
+      "comment" : "One-line jar tip in a short jar at accessibility text sizes"
+    },
+    "瓶をダブルタップすると粒が跳ねます" : {
+      "comment" : "One-line jar tip in a short jar at accessibility text sizes, with VoiceOver on"
+    },
     "積んだ直後は、ホームで数秒のあいだ取り消せます。" : {
       "comment" : "Manual entry: under the confirm button; the entry can be undone briefly on Home"
     },

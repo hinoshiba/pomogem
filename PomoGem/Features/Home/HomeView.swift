@@ -1479,8 +1479,9 @@ struct HomeView: View {
     ) -> some View {
         // At accessibility sizes the jar can be as short as 300 pt (the
         // pinned start button takes the rest, home-03). There the one-time
-        // hint sits closer to the readout and is capped lower, so it still
-        // ends above the first gem resting on the floor.
+        // hint sits closer to the readout and is capped lower, and at
+        // accessibility sizes it is one short line (`jarInteractionHint`),
+        // so it still ends above the first gem resting on the floor.
         let isShortJar = stageHeight < 380
         return VStack(spacing: isShortJar ? 8 : 14) {
             jarMetricReadout(hud)
@@ -1491,7 +1492,7 @@ struct HomeView: View {
             // middle. On the floor it covered the first gem — the very
             // pebble it asks people to tap.
             if aggregateInspectionSummary == nil, showsTiltHint, !isJarEmpty {
-                jarInteractionHint
+                jarInteractionHint(compact: isShortJar && dynamicTypeSize.isAccessibilitySize)
                     .dynamicTypeSize(...(isShortJar ? DynamicTypeSize.xLarge : .xxxLarge))
                     // A short settle, not a slide from the edge: sliding in
                     // from above would pass over the readout.
@@ -1509,9 +1510,14 @@ struct HomeView: View {
         .allowsHitTesting(false)
     }
 
-    private var jarInteractionHint: some View {
+    /// `compact`: a short jar at accessibility sizes. The hint is then one
+    /// line at the default text size. Since #47 a young jar's first gem is
+    /// about 57 pt across, and on an iPhone SE at AX5 the two-line hint
+    /// covered its top. The tilt half of the tip is left to the jar's
+    /// VoiceOver hint there; the tap is the one people need first.
+    private func jarInteractionHint(compact: Bool) -> some View {
         Label(
-            jarInteractionHintText,
+            compact ? jarInteractionShortHintText : jarInteractionHintText,
             systemImage: jarInteractionHintSymbol
         )
             .font(.caption.weight(.bold))
@@ -1519,11 +1525,13 @@ struct HomeView: View {
             // fixed canvas. At accessibility sizes it grew past the jar and
             // back over the gem; VoiceOver reads the same guidance from the
             // jar itself.
-            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+            .dynamicTypeSize(...(compact ? DynamicTypeSize.large : .xxxLarge))
             .foregroundStyle(PomoGemTheme.text)
             .multilineTextAlignment(.center)
+            .lineLimit(compact ? 1 : nil)
+            .minimumScaleFactor(compact ? 0.85 : 1)
             .padding(.horizontal, 13)
-            .padding(.vertical, 9)
+            .padding(.vertical, compact ? 7 : 9)
             .background(.ultraThinMaterial, in: Capsule())
             .overlay {
                 Capsule().stroke(PomoGemTheme.glassEdge.opacity(0.2), lineWidth: 1)
@@ -5141,6 +5149,14 @@ struct HomeView: View {
 #else
         return "瓶をタップすると粒が跳ね、iPhoneを傾けると転がります"
 #endif
+    }
+
+    private var jarInteractionShortHintText: String {
+        voiceOverEnabled
+            ? String(localized: "瓶をダブルタップすると粒が跳ねます", table: "Home",
+                     comment: "One-line jar tip in a short jar at accessibility text sizes, with VoiceOver on")
+            : String(localized: "瓶をタップすると粒が跳ねます", table: "Home",
+                     comment: "One-line jar tip in a short jar at accessibility text sizes")
     }
 
     private var jarInteractionHintSymbol: String {
