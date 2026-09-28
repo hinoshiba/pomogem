@@ -110,6 +110,16 @@ enum TimerEndNotificationSound: Equatable, Sendable {
             return .ringtone(choice)
         }
     }
+
+    /// The Library/Sounds file this selection plays (`AlarmSoundLibrary`),
+    /// or nil for silence and for the synced short chime.
+    var alarmSoundFile: (kind: AlarmSoundFileKind, choice: AlarmSoundChoice)? {
+        switch self {
+        case let .ringtone(choice): (.ringtone, choice)
+        case let .alarmCue(choice): (.cue, choice)
+        case .silent, .legacyChime: nil
+        }
+    }
 }
 
 /// The device-local inputs of `TimerEndNotificationSound` and the files it
@@ -127,14 +137,8 @@ struct TimerEndNotificationSounds {
             strength: { preferences.strength },
             choice: { preferences.sound(legacy: $0) },
             file: { selection in
-                switch selection {
-                case let .ringtone(choice):
-                    return await AlarmSoundLibrary.notificationSound(.ringtone, for: choice)
-                case let .alarmCue(choice):
-                    return await AlarmSoundLibrary.notificationSound(.cue, for: choice)
-                case .silent, .legacyChime:
-                    return nil
-                }
+                guard let file = selection.alarmSoundFile else { return nil }
+                return await AlarmSoundLibrary.notificationSound(file.kind, for: file.choice)
             }
         )
     }
@@ -775,12 +779,15 @@ final class NotificationManager {
         completionSound: TimerCompletionSound = .standard,
         channel: AlarmBackgroundChannel? = nil
     ) async throws -> TimerCompletionNotificationScheduleResult {
-        guard !Task.isCancelled, !timerSchedulingIsSuspendedForAccountBoundary else {
-            return .superseded
-        }
         if channel == .systemAlarm {
+            // Before the cancellation guard: withdrawing is always safe, and
+            // an alarm that is already booked must never ring next to an
+            // earlier notification for the same end.
             cancelFocusCompletionRequest(sessionID: sessionID)
             return .deferredToSystemAlarm
+        }
+        guard !Task.isCancelled, !timerSchedulingIsSuspendedForAccountBoundary else {
+            return .superseded
         }
         let content = notificationContent(
             // Notification Center can deliver a request while this process is
@@ -1174,12 +1181,13 @@ final class NotificationManager {
         completionSound: TimerCompletionSound = .standard,
         channel: AlarmBackgroundChannel? = nil
     ) async throws -> TimerCompletionNotificationScheduleResult {
-        guard !Task.isCancelled, !timerSchedulingIsSuspendedForAccountBoundary else {
-            return .superseded
-        }
         if channel == .systemAlarm {
+            // Before the guard, as in `scheduleFocusCompletion`.
             cancelBreakCompletionRequest(id: id)
             return .deferredToSystemAlarm
+        }
+        guard !Task.isCancelled, !timerSchedulingIsSuspendedForAccountBoundary else {
+            return .superseded
         }
         let content = notificationContent(
             body: "休憩はここまで。次の一粒へ、ゆっくり戻りましょう。",
@@ -1259,6 +1267,9 @@ final class NotificationManager {
     /// its accepted lock-screen notifications must remain scheduled.
     func suspendTimerSchedulingForAccountBoundary() {
         timerSchedulingIsSuspendedForAccountBoundary = true
+        // F5: a system alarm still being booked (its ringtone may be
+        // rendering) books nothing either.
+        systemAlarms?.abandonBookingsInFlight()
         registeredFocusReturnReminder = nil
         cancelFocusReturnReminder()
         cancelFocusLeaveNudges()

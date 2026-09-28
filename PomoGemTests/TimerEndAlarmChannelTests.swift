@@ -61,11 +61,27 @@ final class TimerEndAlarmChannelTests: XCTestCase {
                 choice: { preferences.sound(legacy: $0) },
                 file: { [unowned self] selection in
                     self.requestedFiles.append(selection)
-                    return self.fileAvailable ? UNNotificationSound(named: UNNotificationSoundName("fake.caf")) : nil
+                    return self.fileAvailable ? Self.fakeSound(selection) : nil
                 }
             ) : nil,
             systemAlarms: scheduler
         )
+    }
+
+    /// A distinct sound per file, so a test sees which one the request
+    /// plays (`UNNotificationSound` compares by name).
+    private static func fakeSound(_ selection: TimerEndNotificationSound) -> UNNotificationSound {
+        let name: String
+        switch selection {
+        case let .ringtone(choice): name = "fake-ringtone-\(choice.rawValue).caf"
+        case let .alarmCue(choice): name = "fake-cue-\(choice.rawValue).caf"
+        case .silent, .legacyChime: name = "fake-unexpected.caf"
+        }
+        return UNNotificationSound(named: UNNotificationSoundName(name))
+    }
+
+    private func focusRequest(_ sessionID: UUID) -> UNNotificationRequest? {
+        pending["pomogem.focus.complete.\(sessionID.uuidString.lowercased())"]
     }
 
     private var focusRequest: UNNotificationRequest? {
@@ -95,8 +111,8 @@ final class TimerEndAlarmChannelTests: XCTestCase {
         _ = try await manager.scheduleBreakCompletion(id: UUID(), endDate: clock.addingTimeInterval(300))
         XCTAssertEqual(requestedFiles, [.ringtone(.standard), .ringtone(.standard)],
                        "標準 by default; the break uses the same sound and strength")
-        XCTAssertNotNil(focusRequest?.content.sound)
-        XCTAssertNotNil(breakRequest?.content.sound)
+        XCTAssertEqual(focusRequest?.content.sound, Self.fakeSound(.ringtone(.standard)), "the ringtone it asked for")
+        XCTAssertEqual(breakRequest?.content.sound, Self.fakeSound(.ringtone(.standard)))
         // The Time Sensitive invariant is unchanged.
         XCTAssertEqual(focusRequest?.content.interruptionLevel, .timeSensitive)
         XCTAssertEqual(breakRequest?.content.interruptionLevel, .timeSensitive)
@@ -104,18 +120,36 @@ final class TimerEndAlarmChannelTests: XCTestCase {
 
     func testEachStrengthAndChoiceGetsItsOwnFile() async throws {
         let manager = makeManager()
+        let (ringtone, cue, chime) = (UUID(), UUID(), UUID())
         preferences.select(.alarmClock)
-        _ = try await manager.scheduleFocusCompletion(sessionID: UUID(), endDate: clock.addingTimeInterval(600))
+        _ = try await manager.scheduleFocusCompletion(sessionID: ringtone, endDate: clock.addingTimeInterval(600))
         preferences.setStrength(.gentle)
-        _ = try await manager.scheduleFocusCompletion(sessionID: UUID(), endDate: clock.addingTimeInterval(600))
+        _ = try await manager.scheduleFocusCompletion(sessionID: cue, endDate: clock.addingTimeInterval(600))
         preferences.select(.bright)
         _ = try await manager.scheduleFocusCompletion(
-            sessionID: UUID(), endDate: clock.addingTimeInterval(600), completionSound: .bright
+            sessionID: chime, endDate: clock.addingTimeInterval(600), completionSound: .bright
         )
         XCTAssertEqual(requestedFiles, [.ringtone(.alarmClock), .alarmCue(.alarmClock)],
                        "控えめ with an original chime keeps today's file and asks for nothing")
         XCTAssertEqual(pending.count, 3)
-        XCTAssertTrue(pending.values.allSatisfy { $0.content.sound != nil })
+        XCTAssertEqual(focusRequest(ringtone)?.content.sound, Self.fakeSound(.ringtone(.alarmClock)))
+        XCTAssertEqual(focusRequest(cue)?.content.sound, Self.fakeSound(.alarmCue(.alarmClock)))
+        XCTAssertEqual(
+            focusRequest(chime)?.content.sound,
+            TimerCompletionSoundLibrary.notificationSound(for: .bright),
+            "today's short chime"
+        )
+    }
+
+    /// The live closure asks the library for the file kind each selection
+    /// plays: the ≤ 28 s ringtone or one cycle.
+    func testEachSelectionPlaysItsOwnKindOfFile() {
+        XCTAssertEqual(TimerEndNotificationSound.ringtone(.bell).alarmSoundFile?.kind, .ringtone)
+        XCTAssertEqual(TimerEndNotificationSound.ringtone(.bell).alarmSoundFile?.choice, .bell)
+        XCTAssertEqual(TimerEndNotificationSound.alarmCue(.digital).alarmSoundFile?.kind, .cue)
+        XCTAssertEqual(TimerEndNotificationSound.alarmCue(.digital).alarmSoundFile?.choice, .digital)
+        XCTAssertNil(TimerEndNotificationSound.legacyChime(.soft).alarmSoundFile)
+        XCTAssertNil(TimerEndNotificationSound.silent.alarmSoundFile)
     }
 
     func testSoundOffStaysSilentAndAMissingFileFallsBackToTheChime() async throws {
@@ -129,13 +163,17 @@ final class TimerEndAlarmChannelTests: XCTestCase {
         pending.removeAll()
         fileAvailable = false
         _ = try await manager.scheduleFocusCompletion(sessionID: UUID(), endDate: clock.addingTimeInterval(600))
-        XCTAssertNotNil(focusRequest?.content.sound, "The short chime stands in")
+        XCTAssertEqual(
+            focusRequest?.content.sound,
+            TimerCompletionSoundLibrary.notificationSound(for: .standard),
+            "The short chime stands in"
+        )
     }
 
     func testAManagerWithoutAlarmSoundsKeepsTodaysChime() async throws {
         let manager = makeManager(sounds: false)
         _ = try await manager.scheduleFocusCompletion(sessionID: UUID(), endDate: clock.addingTimeInterval(600))
-        XCTAssertNotNil(focusRequest?.content.sound)
+        XCTAssertEqual(focusRequest?.content.sound, TimerCompletionSoundLibrary.notificationSound(for: .standard))
         XCTAssertTrue(requestedFiles.isEmpty)
     }
 
@@ -302,6 +340,178 @@ final class TimerEndAlarmChannelTests: XCTestCase {
         )
         XCTAssertEqual(outcome, .notification(.superseded))
         XCTAssertTrue(client.scheduled.isEmpty)
+        XCTAssertTrue(pending.isEmpty)
+    }
+
+    // MARK: A cancel while the ringtone is prepared
+
+    private func makeBooker(_ manager: NotificationManager, ringtone: HeldAlarmSoundFile) -> TimerEndAnnouncementBooker {
+        TimerEndAnnouncementBooker(
+            notifications: manager,
+            systemAlarms: scheduler,
+            preferences: preferences,
+            ringtoneFileName: { _ in await ringtone.provide() }
+        )
+    }
+
+    /// The ringtone may still be rendering when the person pauses (its
+    /// first use, after complete deletion, after a file version bump). Every
+    /// way a timer stops owning its end must reach that booking.
+    func testEveryCancelWhileTheRingtoneIsPreparedBooksNothing() async throws {
+        let manager = makeManager()
+        await manager.refreshAuthorizationStatus()
+        preferences.setStrength(.maximum)
+        let library = FileManager.default.temporaryDirectory
+            .appendingPathComponent("timer-end-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: library) }
+        let scheduler = self.scheduler!
+        let cancels: [(String, FocusEndAlarmPhase, @MainActor (NotificationManager, UUID) async -> Void)] = [
+            ("pause", .focus, { $0.cancelFocusCompletion(sessionID: $1) }),
+            ("F1 auto-pause", .focus, { $0.cancelFocusCompletion(sessionID: $1, withdrawingLeaveNudges: false) }),
+            ("skip the break", .breakTime, { $0.cancelBreakCompletion(id: $1) }),
+            ("reset recovery", .focus, { manager, _ in await manager.prepareTimerNotificationCleanup()() }),
+            ("account boundary", .focus, { manager, _ in manager.suspendTimerSchedulingForAccountBoundary() }),
+            ("complete deletion", .breakTime, { _, _ in
+                FocusEndAlarmMaintenance.eraseForCompleteDataDeletion(scheduler: scheduler, libraryDirectory: library)
+            })
+        ]
+        for (name, phase, cancel) in cancels {
+            let ringtone = HeldAlarmSoundFile()
+            let booker = makeBooker(manager, ringtone: ringtone)
+            let session = UUID()
+            let end = clock.addingTimeInterval(1_500)
+            let booking = Task {
+                switch phase {
+                case .focus:
+                    try await booker.bookFocusEnd(sessionID: session, endDate: end, playsSound: true, completionSound: .standard)
+                case .breakTime:
+                    try await booker.bookBreakEnd(id: session, endDate: end, playsSound: true, completionSound: .standard)
+                }
+            }
+            await ringtone.waitUntilHeld()
+            await cancel(manager, session)
+            ringtone.release()
+            let outcome = try await booking.value
+
+            XCTAssertEqual(outcome, .notification(.superseded), name)
+            XCTAssertTrue(client.scheduled.isEmpty, "\(name): nothing may ring for a timer that stopped")
+            XCTAssertNil(scheduler.booking, name)
+            XCTAssertTrue(pending.isEmpty, name)
+            manager.resumeTimerSchedulingAfterAccountBoundary()
+        }
+    }
+
+    /// Start, then a quick pause and resume: the resumed end wins whichever
+    /// ringtone call finishes first.
+    func testTheNewerOfTwoOverlappingBookingsWins() async throws {
+        let manager = makeManager()
+        await manager.refreshAuthorizationStatus()
+        preferences.setStrength(.maximum)
+        let ringtone = HeldAlarmSoundFile()
+        let booker = makeBooker(manager, ringtone: ringtone)
+        let session = UUID()
+        let started = clock.addingTimeInterval(1_500)
+        let resumed = clock.addingTimeInterval(1_530)
+        let first = Task {
+            try await booker.bookFocusEnd(sessionID: session, endDate: started, playsSound: true, completionSound: .standard)
+        }
+        await ringtone.waitUntilHeld()
+        let second = Task {
+            try await booker.bookFocusEnd(sessionID: session, endDate: resumed, playsSound: true, completionSound: .standard)
+        }
+        await ringtone.waitUntilHeld(count: 2)
+
+        ringtone.releaseLast("pomogem-alarm-standard-v1.caf")
+        let newer = try await second.value
+        ringtone.release()
+        let older = try await first.value
+
+        guard case let .systemAlarm(booking) = newer else { return XCTFail("\(newer)") }
+        XCTAssertEqual(older, .notification(.superseded))
+        XCTAssertEqual(booking.fireDate, resumed)
+        XCTAssertEqual(client.scheduled.values.map(\.fireDate), [resumed])
+        XCTAssertEqual(scheduler.booking, booking)
+    }
+
+    /// A caller cancelled after AlarmKit accepted the alarm still withdraws
+    /// the earlier notification: the end is never announced twice.
+    func testABookedAlarmWithdrawsTheNotificationEvenForACancelledCaller() async throws {
+        let manager = makeManager()
+        await manager.refreshAuthorizationStatus()
+        let session = UUID()
+        let end = clock.addingTimeInterval(1_500)
+        _ = try await manager.scheduleFocusCompletion(sessionID: session, endDate: end)
+        XCTAssertNotNil(focusRequest)
+
+        preferences.setStrength(.maximum)
+        let booker = makeBooker(manager)
+        client.holdsSchedules = true
+        let booking = Task {
+            try await booker.bookFocusEnd(sessionID: session, endDate: end, playsSound: true, completionSound: .standard)
+        }
+        await client.waitForPendingSchedule()
+        booking.cancel()
+        client.releaseSchedules()
+        let outcome = try await booking.value
+
+        guard case .systemAlarm = outcome else { return XCTFail("\(outcome)") }
+        XCTAssertEqual(client.scheduled.count, 1)
+        XCTAssertNil(focusRequest, "one channel per end")
+    }
+
+    // MARK: Alarms without notification permission
+
+    /// Someone who allowed alarms but declined notifications still gets the
+    /// alarm the Settings status promises; the booker decides, so the timer
+    /// screens call it whatever the notification permission.
+    func testAlarmsAllowedWithNotificationsDeclinedBookExactlyOneAlarm() async throws {
+        let manager = makeManager()
+        XCTAssertFalse(manager.isAuthorized)
+        preferences.setStrength(.maximum)
+        let booker = makeBooker(manager)
+        XCTAssertEqual(booker.channel(playsSound: true), .systemAlarm)
+        let session = UUID()
+        let end = clock.addingTimeInterval(1_500)
+        guard case let .systemAlarm(booking) = try await booker.bookFocusEnd(
+            sessionID: session, endDate: end, playsSound: true, completionSound: .standard
+        ) else { return XCTFail("the alarm was not booked") }
+        // The activation reschedule books the same end again.
+        guard case let .systemAlarm(again) = try await booker.bookFocusEnd(
+            sessionID: session, endDate: end, playsSound: true, completionSound: .standard
+        ) else { return XCTFail("the alarm was not kept") }
+        XCTAssertEqual(again, booking)
+        XCTAssertEqual(Array(client.scheduled.keys), [booking.alarmID], "exactly one alarm")
+        XCTAssertTrue(client.cancelled.isEmpty)
+        XCTAssertTrue(pending.isEmpty, "no notification")
+    }
+
+    func testNothingCanAnnounceTheEndWithoutEitherPermission() async throws {
+        let manager = makeManager()
+        preferences.setStrength(.maximum)
+        let booker = makeBooker(manager)
+        let session = UUID()
+        guard case .systemAlarm = try await booker.bookFocusEnd(
+            sessionID: session, endDate: clock.addingTimeInterval(1_500), playsSound: true, completionSound: .standard
+        ) else { return XCTFail("the alarm was not booked") }
+
+        // Alarms turned off later: the leftover alarm goes, nothing replaces it.
+        client.authorization = .denied
+        XCTAssertEqual(booker.channel(playsSound: true), AlarmBackgroundChannel.none)
+        let none = try await booker.bookFocusEnd(
+            sessionID: session, endDate: clock.addingTimeInterval(1_500), playsSound: true, completionSound: .standard
+        )
+        XCTAssertEqual(none, .noChannel)
+        XCTAssertNil(scheduler.booking)
+        XCTAssertTrue(client.scheduled.isEmpty)
+        XCTAssertTrue(pending.isEmpty)
+
+        // AlarmKit refuses the booking and notifications are declined.
+        client.authorization = .authorized
+        client.scheduleError = FakeFocusEndAlarmClient.Failure()
+        let failed = try await booker.bookBreakEnd(
+            id: UUID(), endDate: clock.addingTimeInterval(300), playsSound: true, completionSound: .standard
+        )
+        XCTAssertEqual(failed, .noChannel)
         XCTAssertTrue(pending.isEmpty)
     }
 

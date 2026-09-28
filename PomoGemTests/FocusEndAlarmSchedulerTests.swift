@@ -187,6 +187,209 @@ final class FocusEndAlarmSchedulerTests: XCTestCase {
         XCTAssertTrue(client.cancelled.isEmpty)
     }
 
+    // MARK: The fence before the sound file is ready
+
+    func testACancelWhileTheSoundFileIsPreparedBooksNothing() async {
+        let file = HeldAlarmSoundFile()
+        let session = UUID()
+        let booking = Task { await scheduler.schedule(sessionID: session, phase: .focus, endDate: clock.addingTimeInterval(600)) { await file.provide() } }
+        await file.waitUntilHeld()
+        XCTAssertNil(store.load(), "nothing is written before the file is ready")
+
+        scheduler.cancel(sessionID: UUID())
+        scheduler.cancel(sessionID: session)
+        file.release()
+        let result = await booking.value
+
+        XCTAssertEqual(result, .superseded, "a paused timer must never ring at its old end")
+        XCTAssertTrue(client.scheduled.isEmpty)
+        XCTAssertNil(store.load())
+    }
+
+    func testAnotherSessionsCancelLeavesABookingThatWaitsForItsFile() async {
+        let file = HeldAlarmSoundFile()
+        let session = UUID()
+        let booking = Task { await scheduler.schedule(sessionID: session, phase: .focus, endDate: clock.addingTimeInterval(600)) { await file.provide() } }
+        await file.waitUntilHeld()
+        scheduler.cancel(sessionID: UUID())
+        file.release()
+        guard case let .booked(booked) = await booking.value else { return XCTFail() }
+        XCTAssertEqual(booked.soundFileName, "pomogem-alarm-bell-v1.caf")
+        XCTAssertEqual(Array(client.scheduled.keys), [booked.alarmID])
+    }
+
+    func testEveryEndOfTheTimerSupersedesABookingThatWaitsForItsFile() async {
+        let supersede: [(String, (FocusEndAlarmScheduler, UUID) -> Void)] = [
+            ("hand-off", { _ = $0.handOffToForeground(sessionID: $1) }),
+            ("acknowledge", { $0.acknowledge(sessionID: $1) }),
+            ("cancel all", { scheduler, _ in scheduler.cancelAll() }),
+            ("reset of another timer", { scheduler, _ in scheduler.cancelAll(preserving: [UUID()]) }),
+            ("account boundary", { scheduler, _ in scheduler.abandonBookingsInFlight() })
+        ]
+        for (name, action) in supersede {
+            let file = HeldAlarmSoundFile()
+            let session = UUID()
+            let booking = Task { await scheduler.schedule(sessionID: session, phase: .focus, endDate: clock.addingTimeInterval(600)) { await file.provide() } }
+            await file.waitUntilHeld()
+            action(scheduler, session)
+            file.release()
+            let result = await booking.value
+            XCTAssertEqual(result, .superseded, name)
+            XCTAssertTrue(client.scheduled.isEmpty, name)
+            XCTAssertNil(store.load(), name)
+        }
+    }
+
+    func testAHandOffWhileTheFileIsPreparedReturnsThatEnd() async {
+        let file = HeldAlarmSoundFile()
+        let session = UUID()
+        let end = clock.addingTimeInterval(600)
+        let booking = Task { await scheduler.schedule(sessionID: session, phase: .focus, endDate: end) { await file.provide() } }
+        await file.waitUntilHeld()
+        clock = end.addingTimeInterval(-1)
+        XCTAssertEqual(scheduler.handOffToForeground(sessionID: session), end, "the app announces this end alone")
+        file.release()
+        let result = await booking.value
+        XCTAssertEqual(result, .superseded)
+        XCTAssertTrue(client.scheduled.isEmpty)
+    }
+
+    func testResetRecoveryKeepsTheBookingOfThePreservedTimerWhileItsFileIsPrepared() async {
+        let file = HeldAlarmSoundFile()
+        let session = UUID()
+        let orphan = UUID()
+        client.insert(orphan, state: .scheduled)
+        let booking = Task { await scheduler.schedule(sessionID: session, phase: .focus, endDate: clock.addingTimeInterval(600)) { await file.provide() } }
+        await file.waitUntilHeld()
+        scheduler.cancelAll(preserving: [session])
+        XCTAssertTrue(client.cancelled.contains(orphan))
+        file.release()
+        guard case .booked = await booking.value else { return XCTFail("the preserved timer keeps its end") }
+    }
+
+    /// A start and then a quick resume: the newer end must win whichever
+    /// file is ready first.
+    func testTheOlderOfTwoOverlappingBookingsNeverWinsAfterItsFileArrivesLast() async {
+        for olderFileArrivesLast in [true, false] {
+            client = FakeFocusEndAlarmClient()
+            defaults.removePersistentDomain(forName: suiteName)
+            scheduler = makeScheduler()
+            let file = HeldAlarmSoundFile()
+            let session = UUID()
+            let older = Task { await scheduler.schedule(sessionID: session, phase: .focus, endDate: clock.addingTimeInterval(600)) { await file.provide() } }
+            await file.waitUntilHeld()
+            let newer = Task { await scheduler.schedule(sessionID: session, phase: .focus, endDate: clock.addingTimeInterval(900)) { await file.provide() } }
+            await file.waitUntilHeld(count: 2)
+
+            let olderResult: FocusEndAlarmScheduleResult
+            let newerResult: FocusEndAlarmScheduleResult
+            if olderFileArrivesLast {
+                file.releaseLast("newer.caf")
+                newerResult = await newer.value
+                file.release("older.caf")
+                olderResult = await older.value
+            } else {
+                file.releaseFirst("older.caf")
+                olderResult = await older.value
+                file.release("newer.caf")
+                newerResult = await newer.value
+            }
+            XCTAssertEqual(olderResult, .superseded, "\(olderFileArrivesLast)")
+            guard case let .booked(booking) = newerResult else { return XCTFail("\(newerResult)") }
+            XCTAssertEqual(booking.fireDate, clock.addingTimeInterval(900))
+            XCTAssertEqual(Array(client.scheduled.keys), [booking.alarmID], "\(olderFileArrivesLast)")
+            XCTAssertEqual(client.scheduled[booking.alarmID]?.soundFileName, "newer.caf")
+            XCTAssertEqual(store.load(), booking)
+        }
+    }
+
+    func testNoFileIsPreparedWhenAlarmKitWillNotBeAsked() async {
+        let file = HeldAlarmSoundFile()
+        client.authorization = .denied
+        let refused = await scheduler.schedule(sessionID: UUID(), phase: .focus, endDate: clock.addingTimeInterval(600)) { await file.provide() }
+        XCTAssertEqual(refused, .notAuthorized)
+        client.authorization = .authorized
+        let tooSoon = await scheduler.schedule(sessionID: UUID(), phase: .focus, endDate: clock.addingTimeInterval(2)) { await file.provide() }
+        XCTAssertEqual(tooSoon, .tooSoon)
+        XCTAssertEqual(file.requests, 0)
+    }
+
+    func testAnEndThatCameCloseWhileTheFileWasPreparedIsTooSoon() async {
+        let file = HeldAlarmSoundFile()
+        let end = clock.addingTimeInterval(8)
+        let booking = Task { await scheduler.schedule(sessionID: UUID(), phase: .focus, endDate: end) { await file.provide() } }
+        await file.waitUntilHeld()
+        clock = end.addingTimeInterval(-2)
+        file.release()
+        let result = await booking.value
+        XCTAssertEqual(result, .tooSoon)
+        XCTAssertTrue(client.scheduled.isEmpty)
+    }
+
+    // MARK: Rebooking the same end
+
+    func testBookingTheSameEndAndSoundAgainKeepsTheAlarm() async {
+        let session = UUID()
+        let end = clock.addingTimeInterval(600)
+        guard case let .booked(first) = await scheduler.schedule(sessionID: session, phase: .focus, endDate: end, soundFileName: "a.caf") else { return XCTFail() }
+        // Every activation of a running focus books its end again.
+        guard case let .booked(again) = await scheduler.schedule(sessionID: session, phase: .focus, endDate: end.addingTimeInterval(0.4), soundFileName: "a.caf") else { return XCTFail() }
+        XCTAssertEqual(again, first)
+        XCTAssertTrue(client.cancelled.isEmpty, "never a moment without the alarm")
+        XCTAssertEqual(Array(client.scheduled.keys), [first.alarmID])
+
+        guard case let .booked(newSound) = await scheduler.schedule(sessionID: session, phase: .focus, endDate: end, soundFileName: "b.caf") else { return XCTFail() }
+        XCTAssertNotEqual(newSound.alarmID, first.alarmID, "a new sound is a new alarm")
+        XCTAssertEqual(client.cancelled, [first.alarmID])
+        XCTAssertEqual(Array(client.scheduled.keys), [newSound.alarmID])
+
+        // Gone from the system (alarms turned off and on again): booked anew.
+        client.remove(newSound.alarmID)
+        guard case let .booked(rebooked) = await scheduler.schedule(sessionID: session, phase: .focus, endDate: end, soundFileName: "b.caf") else { return XCTFail() }
+        XCTAssertNotEqual(rebooked.alarmID, newSound.alarmID)
+        XCTAssertEqual(Array(client.scheduled.keys), [rebooked.alarmID])
+    }
+
+    func testANewEndIsBookedBeforeTheOldAlarmIsCancelled() async {
+        let session = UUID()
+        guard case let .booked(first) = await scheduler.schedule(sessionID: session, phase: .focus, endDate: clock.addingTimeInterval(600), soundFileName: nil) else { return XCTFail() }
+        client.holdsSchedules = true
+        let replacement = Task { await scheduler.schedule(sessionID: session, phase: .focus, endDate: clock.addingTimeInterval(900), soundFileName: nil) }
+        await client.waitForPendingSchedule()
+        XCTAssertNotNil(client.scheduled[first.alarmID], "the old alarm stays until the new one is booked")
+        XCTAssertEqual(scheduler.reconcile(owner: nil).cancelIDs, [], "reconcile leaves both to the booking")
+        client.releaseSchedules()
+        guard case let .booked(second) = await replacement.value else { return XCTFail() }
+        XCTAssertEqual(Array(client.scheduled.keys), [second.alarmID])
+        XCTAssertTrue(client.cancelled.contains(first.alarmID))
+    }
+
+    func testAPauseDuringAReplacementLeavesNeitherAlarm() async {
+        let session = UUID()
+        guard case let .booked(first) = await scheduler.schedule(sessionID: session, phase: .focus, endDate: clock.addingTimeInterval(600), soundFileName: nil) else { return XCTFail() }
+        client.holdsSchedules = true
+        let replacement = Task { await scheduler.schedule(sessionID: session, phase: .focus, endDate: clock.addingTimeInterval(900), soundFileName: nil) }
+        await client.waitForPendingSchedule()
+        scheduler.cancel(sessionID: session)
+        client.releaseSchedules()
+        let result = await replacement.value
+        XCTAssertEqual(result, .superseded)
+        XCTAssertTrue(client.scheduled.isEmpty, "neither the old end nor the new one may ring")
+        XCTAssertTrue(client.cancelled.contains(first.alarmID))
+        XCTAssertNil(store.load())
+    }
+
+    func testAFailedReplacementStillCancelsTheOldEnd() async {
+        let session = UUID()
+        guard case let .booked(first) = await scheduler.schedule(sessionID: session, phase: .focus, endDate: clock.addingTimeInterval(600), soundFileName: nil) else { return XCTFail() }
+        client.scheduleError = FakeFocusEndAlarmClient.Failure()
+        let result = await scheduler.schedule(sessionID: session, phase: .focus, endDate: clock.addingTimeInterval(900), soundFileName: nil)
+        XCTAssertEqual(result, .failed, "the caller falls back to the notification for the new end")
+        XCTAssertTrue(client.scheduled.isEmpty)
+        XCTAssertTrue(client.cancelled.contains(first.alarmID))
+        XCTAssertNil(store.load())
+    }
+
     // MARK: Cancel, hand-off, acknowledge, erase
 
     func testCancelOnlyTouchesTheNamedSession() async {
@@ -404,9 +607,40 @@ final class FocusEndAlarmSchedulerTests: XCTestCase {
         store.setPendingCancelIDs([pending])
         scheduler.cancelAll()
         XCTAssertTrue(client.scheduled.isEmpty)
-        XCTAssertTrue(client.cancelled.contains(orphan))
+        XCTAssertTrue(client.states.isEmpty)
+        XCTAssertEqual(client.stopped, [orphan], "one that is ringing is stopped")
         XCTAssertTrue(client.cancelled.contains(pending))
         XCTAssertNil(store.load())
+        XCTAssertTrue(store.pendingCancelIDs.isEmpty)
+    }
+
+    /// Account change and complete deletion: an alarm ringing right now
+    /// is stopped, even when AlarmKit refuses to cancel it.
+    func testTeardownStopsARingingAlarmWhoseCancelIsRefused() async {
+        let ringing = UUID()
+        client.insert(ringing, state: .alerting)
+        client.cancelError = FakeFocusEndAlarmClient.Failure()
+        scheduler.cancelAll()
+        XCTAssertEqual(client.stopped, [ringing])
+        XCTAssertTrue(client.states.isEmpty)
+        XCTAssertTrue(store.pendingCancelIDs.isEmpty)
+
+        let other = UUID()
+        client.insert(other, state: .alerting)
+        scheduler.cancelAll(preserving: [UUID()])
+        XCTAssertEqual(client.stopped, [ringing, other])
+
+        // A cancel that failed earlier is retried with Stop once it rings.
+        let late = UUID()
+        client.insert(late, state: .scheduled)
+        client.stopError = FakeFocusEndAlarmClient.Failure()
+        store.setPendingCancelIDs([late])
+        scheduler.retryPendingCancels()
+        XCTAssertEqual(store.pendingCancelIDs, [late], "still listed, still pending")
+        client.stopError = nil
+        client.states[late] = .alerting
+        scheduler.retryPendingCancels()
+        XCTAssertEqual(client.stopped, [ringing, other, late])
         XCTAssertTrue(store.pendingCancelIDs.isEmpty)
     }
 
@@ -751,5 +985,45 @@ final class FakeFocusEndAlarmClient: FocusEndAlarmClient {
         let ready = pendingWaiters.filter { pending.count >= $0.count }
         pendingWaiters.removeAll { pending.count >= $0.count }
         ready.forEach { $0.continuation.resume() }
+    }
+}
+
+/// A `soundFile` provider the test releases by hand, like a ringtone
+/// that is still rendering.
+@MainActor
+final class HeldAlarmSoundFile {
+    private var waiting: [CheckedContinuation<String?, Never>] = []
+    private(set) var requests = 0
+
+    func provide() async -> String? {
+        requests += 1
+        return await withCheckedContinuation { waiting.append($0) }
+    }
+
+    /// Yields until `count` calls wait for their file (bounded).
+    func waitUntilHeld(count: Int = 1) async {
+        var turns = 0
+        while waiting.count < count, turns < 10_000 {
+            turns += 1
+            await Task.yield()
+        }
+    }
+
+    func release(_ name: String? = "pomogem-alarm-bell-v1.caf") {
+        let continuations = waiting
+        waiting.removeAll()
+        continuations.forEach { $0.resume(returning: name) }
+    }
+
+    /// Releases the oldest waiting call only.
+    func releaseFirst(_ name: String?) {
+        guard !waiting.isEmpty else { return }
+        waiting.removeFirst().resume(returning: name)
+    }
+
+    /// Releases the newest waiting call only.
+    func releaseLast(_ name: String?) {
+        guard !waiting.isEmpty else { return }
+        waiting.removeLast().resume(returning: name)
     }
 }

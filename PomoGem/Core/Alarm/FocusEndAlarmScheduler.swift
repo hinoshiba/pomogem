@@ -14,6 +14,10 @@ struct FocusEndAlarmBooking: Codable, Equatable, Sendable {
     let sessionID: UUID
     let phase: FocusEndAlarmPhase
     let fireDate: Date
+    /// The Library/Sounds file the alarm plays, or nil for the system alarm
+    /// sound. A later booking for the same end with the same sound keeps
+    /// this alarm instead of replacing it.
+    let soundFileName: String?
     /// True once AlarmKit accepted the alarm, or later listed it. A
     /// write-ahead record that was never confirmed proves nothing could
     /// ring, so it is never a delivery witness.
@@ -24,17 +28,19 @@ struct FocusEndAlarmBooking: Codable, Equatable, Sendable {
         sessionID: UUID,
         phase: FocusEndAlarmPhase,
         fireDate: Date,
+        soundFileName: String? = nil,
         isConfirmed: Bool = false
     ) {
         self.alarmID = alarmID
         self.sessionID = sessionID
         self.phase = phase
         self.fireDate = fireDate
+        self.soundFileName = soundFileName
         self.isConfirmed = isConfirmed
     }
 
     private enum CodingKeys: String, CodingKey {
-        case alarmID, sessionID, phase, fireDate, isConfirmed
+        case alarmID, sessionID, phase, fireDate, soundFileName, isConfirmed
     }
 
     init(from decoder: Decoder) throws {
@@ -43,6 +49,7 @@ struct FocusEndAlarmBooking: Codable, Equatable, Sendable {
         sessionID = try container.decode(UUID.self, forKey: .sessionID)
         phase = try container.decode(FocusEndAlarmPhase.self, forKey: .phase)
         fireDate = try container.decode(Date.self, forKey: .fireDate)
+        soundFileName = try container.decodeIfPresent(String.self, forKey: .soundFileName)
         isConfirmed = try container.decodeIfPresent(Bool.self, forKey: .isConfirmed) ?? false
     }
 }
@@ -167,9 +174,10 @@ enum FocusEndAlarmReconcilePolicy {
     static let fireDateTolerance: TimeInterval = 1
 
     /// `inFlightAlarmIDs` are alarms a `schedule` in this process is still
-    /// booking. The system may not list them yet, and the newest one is the
-    /// booking itself: they are neither orphans nor vanished, so reconcile
-    /// leaves them to `schedule`.
+    /// booking, or replacing (it cancels those once the new alarm is
+    /// booked). The system may not list a new one yet, and the newest one
+    /// is the booking itself: they are neither orphans nor vanished, so
+    /// reconcile leaves them to `schedule`.
     static func reconcile(
         booking: FocusEndAlarmBooking?,
         alarms: [FocusEndAlarmSnapshot],
@@ -265,15 +273,19 @@ enum FocusEndAlarmScheduleResult: Equatable, Sendable {
     case failed
 }
 
+
 /// Owns the single AlarmKit alarm for the end of this device's running focus
 /// or break (F5, maximum strength). All mutations are serialized on the main
 /// actor and fenced by a generation, like `NotificationManager`: a cancel that
 /// arrives while a booking is in flight wins, and the late booking removes
-/// its own alarm.
+/// its own alarm. The fence starts at the `schedule` call itself, before the
+/// ringtone file is ready: a pause during that wait books nothing.
 ///
 /// Phase B wiring, in order of the timer's life:
-/// - start, resume, recovery: `schedule` (a result other than `.booked` or
-///   `.superseded` falls back to the notification channel);
+/// - start, resume, recovery, every activation of a running timer:
+///   `schedule` (a result other than `.booked` or `.superseded` falls back
+///   to the notification channel). Booking the same end with the same sound
+///   again keeps the alarm, so rebooking on activation is free;
 /// - pause, abandon, early finish, ownership loss: `cancel(sessionID:)`;
 /// - the app active just before the end (`AlarmChannelPolicy
 ///   .shouldHandOffToForeground`): `handOffToForeground`, and book
@@ -284,17 +296,30 @@ enum FocusEndAlarmScheduleResult: Equatable, Sendable {
 ///   that rang as the witness, so their order does not matter;
 /// - launch and every foreground: `reconcile(owner:)`, which also retries
 ///   failed cancels;
-/// - account change, complete data deletion: `cancelAll`.
+/// - account change, complete data deletion: `cancelAll`; an Apple Account
+///   boundary: `abandonBookingsInFlight`.
 @MainActor
 final class FocusEndAlarmScheduler {
     static let shared = FocusEndAlarmScheduler(client: FocusEndAlarmClientFactory.live())
+
+    /// The newest `schedule` call while it runs. A cancel, hand-off,
+    /// acknowledge or erase of its session supersedes it even before its
+    /// write-ahead record exists (while the ringtone is still rendering).
+    private struct BookingIntent {
+        let generation: UInt64
+        let sessionID: UUID
+        let endDate: Date
+    }
 
     private let client: FocusEndAlarmClient
     private let store: FocusEndAlarmBookingStore
     private let now: () -> Date
     private let makeAlarmID: () -> UUID
     private var generation: UInt64 = 0
-    /// Alarms whose `client.schedule` has not returned yet.
+    private var pendingIntent: BookingIntent?
+    /// Alarms a `schedule` in this process is still booking or replacing:
+    /// the new one until `client.schedule` returns, and the one it replaces
+    /// until the new one is booked.
     private var inFlightAlarmIDs: Set<UUID> = []
 
     init(
@@ -340,45 +365,91 @@ final class FocusEndAlarmScheduler {
         return booking.fireDate
     }
 
-    /// Books the one alarm for `endDate`, replacing any earlier booking. A
-    /// call that books nothing (no permission, too soon) still silences the
-    /// earlier alarm; only an alarm of the same session that has already
-    /// rung stays, as that session's delivery witness.
+    /// `schedule(sessionID:phase:endDate:soundFile:)` with a file name that
+    /// is already known.
     func schedule(
         sessionID: UUID,
         phase: FocusEndAlarmPhase,
         endDate: Date,
         soundFileName: String?
     ) async -> FocusEndAlarmScheduleResult {
+        await schedule(sessionID: sessionID, phase: phase, endDate: endDate) { soundFileName }
+    }
+
+    /// Books the one alarm for `endDate`, replacing any earlier booking. A
+    /// call that books nothing (no permission, too soon) still silences the
+    /// earlier alarm; only an alarm of the same session that has already
+    /// rung stays, as that session's delivery witness.
+    ///
+    /// `soundFile` gives the Library/Sounds file name (nil: the system alarm
+    /// sound). It is awaited only once AlarmKit will be asked, and it may
+    /// render the ringtone first. The call is fenced from its first line: a
+    /// cancel, hand-off or acknowledge of `sessionID`, an erase, an account
+    /// boundary or a newer booking that arrives while the file is prepared
+    /// or while AlarmKit books makes this call book nothing
+    /// (`.superseded`).
+    ///
+    /// The same end (within `FocusEndAlarmReconcilePolicy.fireDateTolerance`)
+    /// with the same sound keeps the confirmed alarm the system still lists
+    /// as scheduled. Otherwise the new alarm is booked before the one it
+    /// replaces is cancelled, so the end never goes without an alarm.
+    func schedule(
+        sessionID: UUID,
+        phase: FocusEndAlarmPhase,
+        endDate: Date,
+        soundFile: @MainActor () async -> String?
+    ) async -> FocusEndAlarmScheduleResult {
         generation &+= 1
         let bookingGeneration = generation
+        pendingIntent = BookingIntent(generation: bookingGeneration, sessionID: sessionID, endDate: endDate)
+        defer {
+            if pendingIntent?.generation == bookingGeneration {
+                pendingIntent = nil
+            }
+        }
         retryPendingCancels()
 
-        switch client.authorization {
-        case .authorized: break
-        case .unsupported:
+        if let refusal = refusal(endDate: endDate) {
             releaseBooking(keepingWitnessOf: sessionID)
-            return .unsupported
-        case .notDetermined, .denied:
-            releaseBooking(keepingWitnessOf: sessionID)
-            return .notAuthorized
+            return refusal
         }
-        guard AlarmChannelPolicy.systemAlarmLeadIsSufficient(endDate: endDate, now: now()) else {
+        let soundFileName = await soundFile()
+        guard generation == bookingGeneration else { return .superseded }
+        // Preparing the file may have taken a while.
+        if let refusal = refusal(endDate: endDate) {
             releaseBooking(keepingWitnessOf: sessionID)
-            return .tooSoon
+            return refusal
         }
 
-        releaseBooking(keepingWitnessOf: nil)
+        let listed = try? client.alarms()
+        if let existing = store.load(),
+           existing.isConfirmed,
+           existing.sessionID == sessionID,
+           existing.phase == phase,
+           abs(existing.fireDate.timeIntervalSince(endDate))
+            <= FocusEndAlarmReconcilePolicy.fireDateTolerance,
+           existing.soundFileName == soundFileName,
+           listed?.first(where: { $0.id == existing.alarmID })?.state == .scheduled {
+            return .booked(existing)
+        }
+
+        let replaced = store.load()
         let booking = FocusEndAlarmBooking(
             alarmID: makeAlarmID(),
             sessionID: sessionID,
             phase: phase,
-            fireDate: endDate
+            fireDate: endDate,
+            soundFileName: soundFileName
         )
         store.save(booking)
         inFlightAlarmIDs.insert(booking.alarmID)
-        defer { inFlightAlarmIDs.remove(booking.alarmID) }
+        if let replaced { inFlightAlarmIDs.insert(replaced.alarmID) }
+        defer {
+            inFlightAlarmIDs.remove(booking.alarmID)
+            if let replaced { inFlightAlarmIDs.remove(replaced.alarmID) }
+        }
 
+        let result: FocusEndAlarmScheduleResult
         do {
             try await client.schedule(FocusEndAlarmRequest(
                 alarmID: booking.alarmID,
@@ -386,32 +457,40 @@ final class FocusEndAlarmScheduler {
                 fireDate: endDate,
                 soundFileName: soundFileName
             ))
+            if generation == bookingGeneration, store.load()?.alarmID == booking.alarmID {
+                var confirmed = booking
+                confirmed.isConfirmed = true
+                store.save(confirmed)
+                result = .booked(confirmed)
+            } else {
+                silence(booking.alarmID, alerting: false)
+                clearBooking(ifAlarmID: booking.alarmID)
+                result = .superseded
+            }
         } catch {
             silence(booking.alarmID, alerting: false)
             clearBooking(ifAlarmID: booking.alarmID)
-            return generation == bookingGeneration ? .failed : .superseded
+            result = generation == bookingGeneration ? .failed : .superseded
         }
-
-        guard generation == bookingGeneration,
-              store.load()?.alarmID == booking.alarmID else {
-            silence(booking.alarmID, alerting: false)
-            clearBooking(ifAlarmID: booking.alarmID)
-            return .superseded
+        // The alarm this booking replaced (another end, sound or session)
+        // goes whatever happened: the store forgot it at the write-ahead, so
+        // no cancel in between could reach it.
+        if let replaced {
+            silence(replaced.alarmID, alerting: isAlerting(replaced.alarmID))
         }
-        var confirmed = booking
-        confirmed.isConfirmed = true
-        store.save(confirmed)
-        return .booked(confirmed)
+        return result
     }
 
-    /// Cancels the booked alarm (any session, or only `sessionID`'s). For a
-    /// pause, abandon, early finish or ownership loss. An alarm that has
-    /// already rung is stopped but kept as its session's delivery witness.
-    /// Returns false when the system still lists the alarm after a failed
-    /// cancel; it is then retried by `retryPendingCancels`.
+    /// Cancels the booked alarm (any session, or only `sessionID`'s), and a
+    /// booking of that session still in flight. For a pause, abandon, early
+    /// finish or ownership loss. An alarm that has already rung is stopped
+    /// but kept as its session's delivery witness. Returns false when the
+    /// system still lists the alarm after a failed cancel; it is then
+    /// retried by `retryPendingCancels`.
     @discardableResult
     func cancel(sessionID: UUID? = nil) -> Bool {
         retryPendingCancels()
+        supersedeBookingInFlight(of: sessionID)
         guard let booking = store.load() else { return true }
         if let sessionID, booking.sessionID != sessionID { return true }
         generation &+= 1
@@ -420,9 +499,10 @@ final class FocusEndAlarmScheduler {
 
     /// The app is active just before the end
     /// (`AlarmChannelPolicy.shouldHandOffToForeground`): cancels the alarm
-    /// that has not rung yet, so the in-app alarm is the only one. Returns
-    /// the end the app now announces alone, or nil when nothing was handed
-    /// off: no alarm is booked for the session, or its fire date has passed
+    /// that has not rung yet, and a booking of the session still in flight,
+    /// so the in-app alarm is the only one. Returns the end the app now
+    /// announces alone, or nil when nothing was handed off: no alarm is
+    /// booked or being booked for the session, or its fire date has passed
     /// and the system may be ringing (resolve that through
     /// `deliveryWitnessFireDate` and `acknowledge`). If the scene stops being
     /// active before the returned end, book
@@ -430,56 +510,87 @@ final class FocusEndAlarmScheduler {
     @discardableResult
     func handOffToForeground(sessionID: UUID) -> Date? {
         retryPendingCancels()
-        guard let booking = store.load(),
-              booking.sessionID == sessionID,
-              booking.fireDate > now()
-        else { return nil }
-        generation &+= 1
-        releaseBooking(keepingWitnessOf: nil)
-        return booking.fireDate
+        var handedOff: Date?
+        if let intent = pendingIntent, intent.sessionID == sessionID, intent.endDate > now() {
+            handedOff = intent.endDate
+        }
+        supersedeBookingInFlight(of: sessionID)
+        if let booking = store.load(),
+           booking.sessionID == sessionID,
+           booking.fireDate > now() {
+            generation &+= 1
+            releaseBooking(keepingWitnessOf: nil)
+            handedOff = handedOff ?? booking.fireDate
+        }
+        return handedOff
     }
 
     /// The completion for `sessionID` was resolved in the app (the person is
     /// looking at it): Stop the alarm if it is ringing, cancel it if it has
-    /// not rung. An alarm that rang stays recorded as the delivery witness,
-    /// so reading `deliveryWitnessFireDate` before or after this call gives
-    /// the same answer.
+    /// not rung, and drop a booking still in flight. An alarm that rang stays
+    /// recorded as the delivery witness, so reading `deliveryWitnessFireDate`
+    /// before or after this call gives the same answer.
     func acknowledge(sessionID: UUID) {
         retryPendingCancels()
+        supersedeBookingInFlight(of: sessionID)
         guard let booking = store.load(), booking.sessionID == sessionID else { return }
         generation &+= 1
         releaseBooking(keepingWitnessOf: sessionID)
     }
 
+    /// An Apple Account boundary blocks timer requests
+    /// (`NotificationManager.suspendTimerSchedulingForAccountBoundary`): a
+    /// booking still in flight books nothing. The booked alarm stays until
+    /// the cleanup that follows (`cancelAll`).
+    func abandonBookingsInFlight() {
+        generation &+= 1
+        pendingIntent = nil
+    }
+
     /// Account change and complete data deletion: nothing of this app may
-    /// ring afterwards.
+    /// ring afterwards. An alarm that is ringing now is stopped.
     func cancelAll() {
         generation &+= 1
-        var ids = Set(listedAlarmIDs())
+        pendingIntent = nil
+        let listed = listedAlarms()
+        var ids = Set(listed.map(\.id))
         ids.formUnion(store.pendingCancelIDs)
         store.setPendingCancelIDs([])
         if let booking = store.load() {
             ids.insert(booking.alarmID)
         }
         for id in ids {
-            silence(id, alerting: false)
+            silence(id, alerting: listed.contains { $0.id == id && $0.state == .alerting })
         }
         store.clear()
     }
 
     /// iCloud retirement and reset recovery
     /// (`NotificationManager.prepareTimerNotificationCleanup`): cancels every
-    /// alarm except the booked one of a session in `sessionIDs`, which the
-    /// caller keeps running. With no such booking this is `cancelAll`.
+    /// alarm except the booked one of a session in `sessionIDs` (or the one
+    /// such a session is booking now), which the caller keeps running. With
+    /// no such booking this is `cancelAll`.
     func cancelAll(preserving sessionIDs: Set<UUID>) {
-        guard let kept = store.load(), sessionIDs.contains(kept.sessionID) else {
+        let stored = store.load()
+        let kept = stored.flatMap { sessionIDs.contains($0.sessionID) ? $0 : nil }
+        let keepsIntent = pendingIntent.map { sessionIDs.contains($0.sessionID) } ?? false
+        guard kept != nil || keepsIntent else {
             cancelAll()
             return
         }
         retryPendingCancels()
-        for id in listedAlarmIDs()
-        where id != kept.alarmID && !inFlightAlarmIDs.contains(id) {
-            silence(id, alerting: false)
+        if !keepsIntent, pendingIntent != nil {
+            generation &+= 1
+            pendingIntent = nil
+        }
+        let listed = listedAlarms()
+        for snapshot in listed
+        where snapshot.id != kept?.alarmID && !inFlightAlarmIDs.contains(snapshot.id) {
+            silence(snapshot.id, alerting: snapshot.state == .alerting)
+        }
+        if kept == nil, let stored {
+            silence(stored.alarmID, alerting: listed.contains { $0.id == stored.alarmID && $0.state == .alerting })
+            clearBooking(ifAlarmID: stored.alarmID)
         }
     }
 
@@ -521,25 +632,54 @@ final class FocusEndAlarmScheduler {
         return decision
     }
 
-    /// Cancels again every alarm whose cancel failed earlier. Every other
-    /// entry point runs this first.
+    /// Silences again every alarm whose cancel (or Stop) failed earlier:
+    /// Stop for one that is ringing now, cancel otherwise. Every other entry
+    /// point runs this first.
     func retryPendingCancels() {
         let pending = store.pendingCancelIDs
         guard !pending.isEmpty else { return }
         store.setPendingCancelIDs([])
+        let listed = listedAlarms()
         for id in pending {
-            silence(id, alerting: false)
+            silence(id, alerting: listed.contains { $0.id == id && $0.state == .alerting })
         }
     }
 
     // MARK: Private
 
+    /// Why AlarmKit cannot book `endDate` now, or nil when it can.
+    private func refusal(endDate: Date) -> FocusEndAlarmScheduleResult? {
+        switch client.authorization {
+        case .authorized: break
+        case .unsupported: return .unsupported
+        case .notDetermined, .denied: return .notAuthorized
+        }
+        guard AlarmChannelPolicy.systemAlarmLeadIsSufficient(endDate: endDate, now: now()) else {
+            return .tooSoon
+        }
+        return nil
+    }
+
+    /// Supersedes the newest `schedule` while it runs when it books
+    /// `sessionID`'s end (any session's when nil).
+    private func supersedeBookingInFlight(of sessionID: UUID?) {
+        guard let intent = pendingIntent,
+              sessionID == nil || intent.sessionID == sessionID
+        else { return }
+        generation &+= 1
+        pendingIntent = nil
+    }
+
     /// The system's list of this app's alarms. An app that was never allowed
     /// alarms (or runs on iOS 17–25) cannot have any, so AlarmKit is not
     /// asked at all: most people never choose the maximum preset.
-    private func listedAlarmIDs() -> [UUID] {
+    private func listedAlarms() -> [FocusEndAlarmSnapshot] {
         guard systemMayListAlarms else { return [] }
-        return (try? client.alarms())?.map(\.id) ?? []
+        return (try? client.alarms()) ?? []
+    }
+
+    private func isAlerting(_ id: UUID) -> Bool {
+        listedAlarms().contains { $0.id == id && $0.state == .alerting }
     }
 
     private var systemMayListAlarms: Bool {

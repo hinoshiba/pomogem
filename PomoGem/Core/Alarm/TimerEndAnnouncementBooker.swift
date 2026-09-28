@@ -4,17 +4,68 @@ import Foundation
 /// is not in the foreground (F5): the AlarmKit alarm at the maximum preset
 /// (iOS 26+, alarms allowed, the app's sound on), otherwise the Time
 /// Sensitive notification. Exactly one is booked; switching channel
-/// withdraws the other.
+/// withdraws the other. The booker decides every permission itself, so the
+/// timer screens call it whether or not notifications are allowed: someone
+/// who allowed alarms but declined notifications still gets the alarm.
 ///
-/// Part 2 wiring: the timer screens call `bookFocusEnd` / `bookBreakEnd`
-/// where they call `NotificationManager.scheduleFocusCompletion` /
-/// `scheduleBreakCompletion` today (start, resume, recovery, adoption).
-/// Every existing cancel keeps working unchanged: `NotificationManager
-/// .cancelFocusCompletion` and `cancelBreakCompletion` also cancel the
-/// alarm (and stop one that is ringing, keeping it as the witness). At the
-/// end: `handOffToForegroundIfDue` from the ticker,
-/// `book…EndAfterLeavingDuringHandoff` when the scene stops being active
-/// after a hand-off, and `externalAlertMayHaveFired` for the cue.
+/// Part 2 wiring (the timer screens; #49's resolver decides whether an end
+/// rings in the app, this only books how it is announced while away):
+///
+/// 1. Booking. Replace every `NotificationManager.scheduleFocusCompletion`
+///    / `scheduleBreakCompletion` call of a timer screen with
+///    `bookFocusEnd` / `bookBreakEnd`: FocusView start, resume, activation
+///    reschedule, recovery, adoption and the 「終了通知を設定」 retry;
+///    BreakTimerView prepare, the sensory-preference reschedule and the
+///    reschedule after the permission request; and
+///    `RewardBreakNotificationHandoff.begin` (the 「N分休憩」 tap in
+///    HomeView), which must store the delivery date only for
+///    `.notification(.accepted)`.
+/// 2. The permission gate. Gate those calls on
+///    `channel(playsSound:) != .none` instead of
+///    `notifications.isAuthorized` (FocusView's
+///    `scheduleCurrentCompletionNotification` guard, its resume and
+///    running-row gates; BreakTimerView's sensory `onChange` and
+///    `requestNotificationAuthorizationAndSchedule`). BreakTimerView's
+///    `.denied` / `.permissionNotDetermined` paths must still call the
+///    booker when the channel is `.systemAlarm`; only the notification UI
+///    shows the denied state. The first-focus notification ask stays as it
+///    is (once, never on recovery).
+/// 3. The outcome. Before the call the screen shows its scheduling state
+///    (#49's resolver waits while a booker call is in flight, which is
+///    `isScheduling`). Every outcome must leave that state:
+///    `.notification(.accepted(date))` as today; `.systemAlarm` settles it
+///    with no notification delivery date (for example `.scheduled` with a
+///    nil date, then save recovery state) and shows an alarm variant of the
+///    running notice (today's notice needs `notifications.isAuthorized`);
+///    `.notification(.superseded)` leaves it to the call that superseded it;
+///    `.noChannel` settles it as not scheduled. Today's
+///    `guard case .accepted = result else { return }` would leave
+///    `.scheduling` for `.systemAlarm`, and #49 would never resolve the end
+///    on screen.
+/// 4. Cancels need no change: `NotificationManager.cancelFocusCompletion`
+///    and `cancelBreakCompletion` (pause, F1's auto-pause, abandon,
+///    ownership loss, skip) also cancel the alarm, including a booking
+///    still preparing its sound, and stop one that is ringing while keeping
+///    it as the witness. Reset recovery, iCloud retirement, the account
+///    boundary and complete deletion are wired in `NotificationManager` and
+///    `FocusEndAlarmMaintenance`.
+/// 5. The end. From the ticker, `handOffToForegroundIfDue`; when the scene
+///    stops being active after a hand-off returned an end,
+///    `book…EndAfterLeavingDuringHandoff`. For #49's cue decision,
+///    `externalAlertMayHaveFired` in place of the notification-only
+///    witness. When the completion resolves on screen,
+///    `FocusEndAlarmScheduler.shared.acknowledge(sessionID:)` (Stop while
+///    the system alarm rings). While the in-app alarm rings,
+///    `TimerCompletionAlertController.keepsScreenAwake(sessionID:)` joins
+///    the idle-timer decision through
+///    `TimerCompletionAlarmScreenAwakePolicy`.
+/// 6. Activation. Rebooking a running timer's end on every activation (as
+///    FocusView does today) is free: the same end and sound keep the booked
+///    alarm (`FocusEndAlarmScheduler.schedule`). That rebooking also covers
+///    `FocusEndAlarmReconciliation.ownerNeedsBooking` and a change of the
+///    Alarms permission in the Settings app, so the host needs no extra
+///    booking. BreakTimerView has no activation reschedule today; add one
+///    for a running break (or book on `ownerNeedsBooking`).
 @MainActor
 final class TimerEndAnnouncementBooker {
     enum Outcome: Equatable, Sendable {
@@ -22,6 +73,10 @@ final class TimerEndAnnouncementBooker {
         case notification(TimerCompletionNotificationScheduleResult)
         /// A system alarm announces the end; no notification is booked.
         case systemAlarm(FocusEndAlarmBooking)
+        /// Nothing can announce the end while the app is away: notifications
+        /// are not allowed and no system alarm could be booked. An earlier
+        /// alarm for the session was cancelled.
+        case noChannel
     }
 
     typealias RingtoneFileName = @MainActor (AlarmSoundChoice) async -> String?
@@ -218,17 +273,19 @@ final class TimerEndAnnouncementBooker {
             return .notification(.superseded)
         }
         var notificationChannel: AlarmBackgroundChannel?
-        if channel(playsSound: playsSound) == .systemAlarm {
-            let fileName = await ringtoneFileName(preferences.sound(legacy: completionSound))
-            guard !Task.isCancelled, notifications.acceptsTimerScheduling else {
-                return .notification(.superseded)
-            }
+        switch channel(playsSound: playsSound) {
+        case .systemAlarm:
+            // The scheduler is fenced from this call on: a pause or cancel
+            // while the ringtone is prepared books nothing.
+            let choice = preferences.sound(legacy: completionSound)
+            let ringtoneFileName = ringtoneFileName
             let result = await systemAlarms.schedule(
                 sessionID: sessionID,
                 phase: phase,
-                endDate: endDate,
-                soundFileName: fileName
-            )
+                endDate: endDate
+            ) {
+                await ringtoneFileName(choice)
+            }
             switch result {
             case let .booked(booking):
                 // Booked first, withdrawn second: the end is never left
@@ -248,10 +305,16 @@ final class TimerEndAnnouncementBooker {
                 notificationChannel = AlarmChannelPolicy.notificationChannel(
                     strength: preferences.strength,
                     soundEnabled: playsSound,
-                    notificationsAuthorized: true
+                    notificationsAuthorized: notifications.isAuthorized
                 )
+                guard notificationChannel != AlarmBackgroundChannel.none else {
+                    return .noChannel
+                }
             }
-        } else {
+        case .none:
+            systemAlarms.cancel(sessionID: sessionID)
+            return .noChannel
+        case .timeSensitiveNotification:
             // A booking left from an earlier choice (the strength changed,
             // alarms were turned off) must not ring next to the notification.
             systemAlarms.cancel(sessionID: sessionID)
