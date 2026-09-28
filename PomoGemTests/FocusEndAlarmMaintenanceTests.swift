@@ -142,6 +142,42 @@ final class FocusEndAlarmMaintenanceTests: XCTestCase {
         XCTAssertTrue(client.scheduled.isEmpty)
     }
 
+    /// F1 applies an absence before anything reads the saved timer. A
+    /// relaunch after the process died inside the leave window must see the
+    /// focus paused through the production loader, never keep its alarm.
+    func testARelaunchAfterTheLeaveWindowCancelsTheAlarmOfTheFocusF1Paused() async throws {
+        let session = UUID()
+        let (running, _) = try focus(sessionID: session)
+        let key = "alarm-maintenance-focus-\(UUID().uuidString)"
+        let leftAt = start.addingTimeInterval(30)
+        var away = running
+        away.leaveExcursion = FocusLeaveExcursion(sessionID: session, leftAt: leftAt)
+        FocusPersistence.replace(away, key: key, defaults: defaults)
+        guard case let .booked(booking) = await scheduler.schedule(
+            sessionID: session, phase: .focus, endDate: start.addingTimeInterval(1_500), soundFileName: nil
+        ) else { return XCTFail() }
+        let savedTimer = FocusEndAlarmSavedTimer(
+            defaults: defaults,
+            focusKey: key,
+            now: { [unowned self] in self.clock },
+            returnedAt: { nil }
+        )
+
+        // Inside the window nothing is decided yet: the focus still runs.
+        clock = leftAt.addingTimeInterval(10)
+        let inside = FocusEndAlarmMaintenance.reconcileOnActivation(scheduler: scheduler, savedTimer: savedTimer)
+        XCTAssertFalse(inside.clearsBooking)
+        XCTAssertEqual(scheduler.booking, booking)
+
+        clock = leftAt.addingTimeInterval(FocusLeavePolicy.lockDetectionWindow + 1)
+        let relaunch = FocusEndAlarmMaintenance.reconcileOnActivation(scheduler: scheduler, savedTimer: savedTimer)
+        XCTAssertTrue(relaunch.clearsBooking)
+        XCTAssertFalse(relaunch.ownerNeedsBooking, "a paused focus has no end to ring")
+        XCTAssertNil(scheduler.booking)
+        XCTAssertTrue(client.cancelled.contains(booking.alarmID))
+        XCTAssertEqual(FocusPersistence.loadStored(key: key, defaults: defaults)?.engine.phase, .paused)
+    }
+
     // MARK: Files
 
     func testCueFilesAreCurrentAndStaleOnesGo() throws {

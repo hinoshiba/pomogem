@@ -34,6 +34,27 @@ extension FocusEndAlarmOwner {
     }
 }
 
+/// The saved timer the launch and activation reconcile read. The focus goes
+/// through `FocusPersistence.load(key:defaults:at:returnedAt:)`, which first
+/// applies an absence whose lock window has certainly ended (F1): after the
+/// process died inside the leave window, the relaunch sees the focus paused
+/// at the moment the person left, so its alarm is cancelled instead of
+/// ringing for a paused timer. Tests point it at their own defaults.
+struct FocusEndAlarmSavedTimer {
+    var defaults: UserDefaults = .standard
+    var focusKey: String = FocusPersistence.key
+    var now: () -> Date = Date.init
+    var returnedAt: () -> Date? = { FocusLeaveReturnWitness.confirmedReturn }
+
+    func focus() -> FocusRecoveryEnvelope? {
+        FocusPersistence.load(key: focusKey, defaults: defaults, at: now(), returnedAt: returnedAt())
+    }
+
+    func rest() -> BreakRecoveryEnvelope? {
+        FocusPersistence.loadBreak(defaults: defaults, at: now())
+    }
+}
+
 /// F5 upkeep the app host runs outside any timer screen.
 @MainActor
 enum FocusEndAlarmMaintenance {
@@ -48,8 +69,21 @@ enum FocusEndAlarmMaintenance {
     @discardableResult
     static func reconcileOnActivation(
         scheduler: FocusEndAlarmScheduler? = nil,
-        focus: FocusRecoveryEnvelope? = FocusPersistence.load(),
-        rest: BreakRecoveryEnvelope? = FocusPersistence.loadBreak()
+        savedTimer: FocusEndAlarmSavedTimer = FocusEndAlarmSavedTimer()
+    ) -> FocusEndAlarmReconciliation {
+        reconcileOnActivation(
+            scheduler: scheduler,
+            focus: savedTimer.focus(),
+            rest: savedTimer.rest()
+        )
+    }
+
+    /// `reconcileOnActivation` for a saved timer already read.
+    @discardableResult
+    static func reconcileOnActivation(
+        scheduler: FocusEndAlarmScheduler? = nil,
+        focus: FocusRecoveryEnvelope?,
+        rest: BreakRecoveryEnvelope?
     ) -> FocusEndAlarmReconciliation {
         (scheduler ?? .shared).reconcile(
             owner: FocusEndAlarmOwner.current(focus: focus, rest: rest)
