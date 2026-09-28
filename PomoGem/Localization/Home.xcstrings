@@ -23,6 +23,9 @@
         }
       }
     },
+    "%@ ・ まもなく瓶に入ります" : {
+      "comment" : "Undo banner subtitle: the mass added (+300g), and that the entry is saved shortly"
+    },
     "%@、%@、%@の一粒。" : {
       "comment" : "VoiceOver: the completion card main line. %1$@ theme name (user data), %2$@ spoken focus time, %3$@ spoken mass. en: '%1$@, %2$@, a %3$@ gem'",
       "localizations" : {
@@ -132,9 +135,6 @@
     "%lld粒ぶんの時間が、\nひとつの結晶に。" : {
       "comment" : "Fusion sheet headline, two lines. %lld is the gems the new crystal holds (10). en: 'The time of %lld gems,\\nin one crystal.'"
     },
-    "+%@ ・ まもなく瓶に入ります" : {
-      "comment" : "Undo banner subtitle: the mass, and that the entry is saved shortly"
-    },
     "10粒がそろうと、瓶の中でひとつの結晶にまとまります。瓶を軽く保つための整理で、一粒ずつの時間も、%@の重さも、記録にそのまま残ります。" : {
       "comment" : "Fusion sheet 「しくみ」: fusing ten gems keeps the jar light and loses nothing. %@ is the crystal's mass"
     },
@@ -217,6 +217,9 @@
     },
     "今の瓶をカードにして共有できます。" : {
       "comment" : "VoiceOver announcement: the completion card's share button is available"
+    },
+    "今回の %@ は保存済みです。これまでの合計は確認が済むと表示します。" : {
+      "comment" : "Completion card for an old receipt while iCloud is checked: %@ is the mass this focus added (+250g)"
     },
     "今回の記録は保存済みです。これまでの合計は確認が済むと表示します。" : {
       "comment" : "VoiceOver announcement while iCloud is checked: this focus is saved; the totals follow"
@@ -361,6 +364,9 @@
     "瓶をダブルタップすると粒が跳ねます" : {
       "comment" : "One-line jar tip in a short jar at accessibility text sizes, with VoiceOver on"
     },
+    "確認" : {
+      "comment" : "Eyebrow over the manual-entry confirmation card"
+    },
     "積んだ直後は、ホームで数秒のあいだ取り消せます。" : {
       "comment" : "Manual entry: under the confirm button; the entry can be undone briefly on Home"
     },
@@ -408,11 +414,17 @@
     "結晶を見つけました" : {
 
     },
+    "背景" : {
+      "comment" : "Eyebrow over the menu card 集中する空間 (Home background)"
+    },
+    "自己申告" : {
+      "comment" : "Eyebrow over the manual-entry sheet title 手動で積む: the entry counts as self-reported"
+    },
     "虹%lld" : {
       "comment" : "Completion card: rainbow gems among a long focus's draws. %lld is the count. en: 'Rainbow %lld'"
     },
     "記念石" : {
-      "comment" : "Home menu metric caption: achievement stone count"
+      "comment" : "Eyebrow over the achievement sheet question どんな成果だった？\nHome menu metric caption: achievement stone count"
     },
     "記念石は0gで、集中時間・質量・通常の粒数には加わりません。瓶では新しい12個が動き、前の石も記録棚にずっと残ります。" : {
 

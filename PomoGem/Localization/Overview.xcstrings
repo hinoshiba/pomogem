@@ -120,6 +120,9 @@
     "テーマ別・日ごとの記録と、この月の代表瓶を開きます" : {
 
     },
+    "今週" : {
+      "comment" : "Eyebrow over this week's headline in 積み上がり"
+    },
     "今週の実測" : {
       "comment" : "Weekly card tile: measured mass this week"
     },
@@ -171,6 +174,9 @@
     },
     "完走した回数" : {
       "comment" : "Weekly card tile: timers that ran to their end this week"
+    },
+    "年表" : {
+      "comment" : "Eyebrow over 年月をたどる (the timeline of months and years)"
     },
     "日ごとの記録" : {
       "comment" : "Heading of a month's list of days"

@@ -7,6 +7,9 @@
     "%@kg" : {
       "comment" : "Mass in kilograms. %@ is the number, already formatted. en: '%@ kg'."
     },
+    "%@t" : {
+      "comment" : "Mass in metric tonnes. %@ is the number, already formatted. en: '%@ t'."
+    },
     "%lld分" : {
       "comment" : "A duration in whole minutes"
     },
