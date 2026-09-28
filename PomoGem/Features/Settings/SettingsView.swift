@@ -911,7 +911,7 @@ struct SettingsView: View {
             } label: {
                 SettingValueRowLabel(
                     title: AlarmSettingsCopy.strengthRowTitle,
-                    subtitle: alarmStrength.detail,
+                    subtitle: alarmStrength.summary,
                     symbol: "alarm",
                     value: alarmStrength.title
                 )

@@ -175,6 +175,9 @@
     "標準に加えて、アプリを開いているときはサイレントスイッチがオンでも音を鳴らします。iOS 26以降でアラームを許可すると、アプリを開いていないときもアラームで知らせます。" : {
       "comment" : "Alarm strength description. Suggested English: Everything in Standard, and while the app is open the sound plays even with the silent switch on. On iOS 26 or later, once you allow alarms, an alarm also rings when the app is not open."
     },
+    "標準に加えて、サイレントスイッチがオンでも鳴らします" : {
+      "comment" : "One-line summary of the Maximum alarm strength under its Settings row; the status line below it explains when the app is not open. Suggested English: Like Standard, and plays even with the silent switch on"
+    },
     "次の曲" : {
       "comment" : "Skip to the next track in the Music app"
     },
@@ -183,6 +186,9 @@
     },
     "止めるまで音と強い振動をくり返します。鳴っている間は画面をつけたままにし、%@で自動的に止まります。サイレントスイッチに従います。" : {
       "comment" : "Alarm strength description; %@ is a duration such as 3分 (3 min). Suggested English: Repeats the sound and a strong vibration until you stop it. The screen stays on while it rings, and it stops by itself after %@. Follows the silent switch."
+    },
+    "止めるまで鳴らし続けます" : {
+      "comment" : "One-line summary of the Standard alarm strength under its Settings row. Suggested English: Rings until you stop it"
     },
     "澄んだ鐘を3回ずつ打ち鳴らします" : {
       "comment" : "Alarm sound description. Suggested English: A clear bell struck three times, over and over"
@@ -204,6 +210,9 @@
     },
     "目覚まし時計" : {
       "comment" : "Alarm sound name: a mechanical twin-bell alarm clock. Suggested English: Alarm clock"
+    },
+    "短い音と振動で知らせます" : {
+      "comment" : "One-line summary of the Gentle alarm strength under its Settings row. Suggested English: A short sound and vibration"
     },
     "短い音と振動で知らせます。サイレントスイッチに従います。" : {
       "comment" : "Alarm strength description. Suggested English: A short sound and vibration. Follows the silent switch."

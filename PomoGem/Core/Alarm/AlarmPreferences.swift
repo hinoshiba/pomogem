@@ -144,6 +144,20 @@ enum AlarmStrength: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    /// One line under the Settings row. `detail` (in the list of strengths)
+    /// and the section footer say everything; at accessibility text sizes
+    /// the full paragraph made the row taller than the screen.
+    var summary: String {
+        switch self {
+        case .gentle:
+            String(localized: "短い音と振動で知らせます", table: "Focus", comment: "One-line summary of the Gentle alarm strength under its Settings row. Suggested English: A short sound and vibration")
+        case .standard:
+            String(localized: "止めるまで鳴らし続けます", table: "Focus", comment: "One-line summary of the Standard alarm strength under its Settings row. Suggested English: Rings until you stop it")
+        case .maximum:
+            String(localized: "標準に加えて、サイレントスイッチがオンでも鳴らします", table: "Focus", comment: "One-line summary of the Maximum alarm strength under its Settings row; the status line below it explains when the app is not open. Suggested English: Like Standard, and plays even with the silent switch on")
+        }
+    }
+
     /// How long a ringing alarm lasts at the stronger presets.
     static let automaticStopDuration: TimeInterval = 180
 

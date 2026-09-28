@@ -55,6 +55,17 @@ final class AlarmSettingsTests: XCTestCase {
         XCTAssertEqual(AlarmSettingsCopy.optionLabel(title: "ベル", detail: ""), "ベル")
     }
 
+    /// The Settings row shows one line; the list and the footer keep the
+    /// full description. Each line stays true to its strength.
+    func testEachStrengthRowSummaryIsOneShortLine() {
+        for strength in AlarmStrength.allCases {
+            XCTAssertLessThan(strength.summary.count, strength.detail.count, "\(strength)")
+            XCTAssertFalse(strength.summary.contains("。"), "One sentence: \(strength.summary)")
+        }
+        XCTAssertTrue(AlarmStrength.maximum.summary.contains("サイレントスイッチがオンでも"))
+        XCTAssertFalse(AlarmStrength.standard.summary.contains("サイレントスイッチ"))
+    }
+
     func testTheMaximumStatusExplainsEachPermissionState() {
         XCTAssertNil(AlarmSettingsCopy.maximumStatus(strength: .standard, authorization: .denied, soundOn: true))
         XCTAssertNil(AlarmSettingsCopy.maximumStatus(strength: .gentle, authorization: .authorized, soundOn: true))
