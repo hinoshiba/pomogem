@@ -653,8 +653,12 @@ final class EngagementOverviewUITests: XCTestCase {
             "Home must not retire a receipt under its own card"
         )
         let launcher = app.buttons["home.focus-launcher"]
-        XCTAssertTrue(launcher.waitForExistence(timeout: 3))
-        XCTAssertFalse(launcher.isEnabled, "The card still holds the start button")
+        // While a completion card is up its start button sits hidden behind
+        // it, out of the accessibility tree (and disabled underneath).
+        XCTAssertFalse(
+            launcher.exists && launcher.isEnabled,
+            "The card still holds the start button"
+        )
 
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = "Receipt card whose session is gone — before 閉じる"
@@ -672,6 +676,7 @@ final class EngagementOverviewUITests: XCTestCase {
             NSPredicate(format: "label CONTAINS %@", "もう一度「閉じる」")
         ).firstMatch
         XCTAssertFalse(retryToast.exists, "「閉じる」 must not ask to be pressed again")
+        XCTAssertTrue(launcher.waitForExistence(timeout: 5), "Closing the card shows the start button again")
         XCTAssertTrue(
             waitUntil(launcher, isEnabled: true, timeout: 10),
             "Once closed, the receipt that can never land must free the start button"
