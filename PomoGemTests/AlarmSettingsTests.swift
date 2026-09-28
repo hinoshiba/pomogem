@@ -13,6 +13,10 @@ final class AlarmSettingsTests: XCTestCase {
             let footer = AlarmSettingsCopy.sectionFooter(strength: strength)
             if strength == .maximum {
                 XCTAssertTrue(subtitle.contains("オンでも鳴ります"), subtitle)
+                // The switch covers every sound; only the end alarm is the
+                // exception, so the row must not say the app ignores it.
+                XCTAssertTrue(subtitle.hasPrefix("サイレントスイッチに従います"), subtitle)
+                XCTAssertTrue(subtitle.contains("終了アラームだけ"), subtitle)
                 XCTAssertTrue(footer.contains("サイレントスイッチがオンでも鳴らします"), footer)
                 XCTAssertTrue(footer.contains("iOS 26"), footer)
                 XCTAssertTrue(footer.contains("小さく"), "Music is lowered, not stopped: \(footer)")
@@ -30,6 +34,25 @@ final class AlarmSettingsTests: XCTestCase {
         let gentle = AlarmSettingsCopy.sectionFooter(strength: .gentle)
         XCTAssertFalse(gentle.contains("画面をつけたまま"), "控えめ keeps today's behaviour")
         XCTAssertFalse(gentle.contains("自動的に止まります"))
+    }
+
+    /// VoiceOver speaks what each option does as part of its label, as the
+    /// other option rows in Settings do: hints may be turned off.
+    func testEveryOptionSpeaksWhatItDoesInItsLabel() {
+        for strength in AlarmStrength.allCases {
+            let label = AlarmSettingsCopy.optionLabel(title: strength.title, detail: strength.detail)
+            XCTAssertEqual(label, "\(strength.title)。\(strength.detail)")
+        }
+        XCTAssertTrue(
+            AlarmSettingsCopy.optionLabel(title: AlarmStrength.maximum.title, detail: AlarmStrength.maximum.detail)
+                .contains("サイレントスイッチ")
+        )
+        for choice in AlarmSoundChoice.allCases {
+            let label = AlarmSettingsCopy.optionLabel(title: choice.title, detail: choice.detail)
+            XCTAssertTrue(label.hasPrefix(choice.title), label)
+            XCTAssertTrue(label.contains(choice.detail), label)
+        }
+        XCTAssertEqual(AlarmSettingsCopy.optionLabel(title: "ベル", detail: ""), "ベル")
     }
 
     func testTheMaximumStatusExplainsEachPermissionState() {

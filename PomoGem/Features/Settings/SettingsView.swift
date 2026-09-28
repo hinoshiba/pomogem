@@ -852,16 +852,12 @@ struct SettingsView: View {
                     onSelect: selectAlarmSound
                 )
             } label: {
-                HStack(spacing: 8) {
-                    SettingLabel(
-                        title: AlarmSettingsCopy.soundRowTitle,
-                        subtitle: alarmSound.detail,
-                        symbol: alarmSound.systemImage
-                    )
-                    Spacer(minLength: 4)
-                    Text(verbatim: alarmSound.title)
-                        .foregroundStyle(PomoGemTheme.muted)
-                }
+                SettingValueRowLabel(
+                    title: AlarmSettingsCopy.soundRowTitle,
+                    subtitle: alarmSound.detail,
+                    symbol: alarmSound.systemImage,
+                    value: alarmSound.title
+                )
             }
             .disabled(!sensoryPreferences.soundOn)
             .accessibilityLabel(Text(verbatim: AlarmSettingsCopy.soundRowTitle))
@@ -913,16 +909,12 @@ struct SettingsView: View {
                     onSelect: selectAlarmStrength
                 )
             } label: {
-                HStack(spacing: 8) {
-                    SettingLabel(
-                        title: AlarmSettingsCopy.strengthRowTitle,
-                        subtitle: alarmStrength.detail,
-                        symbol: "alarm"
-                    )
-                    Spacer(minLength: 4)
-                    Text(verbatim: alarmStrength.title)
-                        .foregroundStyle(PomoGemTheme.muted)
-                }
+                SettingValueRowLabel(
+                    title: AlarmSettingsCopy.strengthRowTitle,
+                    subtitle: alarmStrength.detail,
+                    symbol: "alarm",
+                    value: alarmStrength.title
+                )
             }
             .accessibilityLabel(Text(verbatim: AlarmSettingsCopy.strengthRowTitle))
             .accessibilityValue(Text(verbatim: alarmStrength.title))
@@ -2642,6 +2634,7 @@ final class TimerCompletionPreviewController {
 
     private let sleeper: Sleeper
     private let playback: Playback
+    private let stopPlayback: @MainActor () -> Void
     private var task: Task<Void, Never>?
     private var generation: UInt64 = 0
 
@@ -2650,8 +2643,10 @@ final class TimerCompletionPreviewController {
             try await Task.sleep(for: .seconds(1))
         },
         playback: @escaping Playback = { configuration in
-            // One cue as a return would play it: this iPhone's sound and
-            // strength (F5), today's chime for the original three.
+            // What an end on screen plays with this iPhone's sound and
+            // strength (F5): the short cue at 控えめ (today's chime for the
+            // original three), the loop and the strong vibration for a few
+            // seconds at 標準 and 最大.
             if configuration.sound != nil {
                 SoundSynth.shared.isEnabled = true
             }
@@ -2664,13 +2659,17 @@ final class TimerCompletionPreviewController {
                     sound: configuration.sound,
                     haptic: configuration.haptic
                 ),
-                .single
+                .repeating
             )
-            LiveTimerCompletionAlarmPlayer().playCue(request)
+            TimerCompletionAlarmPreview.shared.play(request)
+        },
+        stopPlayback: @escaping @MainActor () -> Void = {
+            TimerCompletionAlarmPreview.shared.cancel()
         }
     ) {
         self.sleeper = sleeper
         self.playback = playback
+        self.stopPlayback = stopPlayback
     }
 
     var isRunning: Bool { state != .idle }
@@ -2684,6 +2683,7 @@ final class TimerCompletionPreviewController {
         generation &+= 1
         let previewGeneration = generation
         task?.cancel()
+        stopPlayback()
         state = .countingDown(3)
         let sleeper = self.sleeper
         let playback = self.playback
@@ -2718,11 +2718,14 @@ final class TimerCompletionPreviewController {
         }
     }
 
+    /// Also stops a preview that is still sounding (the loop at 標準 and
+    /// 最大 plays for a few seconds).
     func cancel() {
         generation &+= 1
         task?.cancel()
         task = nil
         state = .idle
+        stopPlayback()
     }
 }
 

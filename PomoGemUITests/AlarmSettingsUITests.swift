@@ -50,6 +50,8 @@ final class AlarmSettingsUITests: XCTestCase {
             element("settings.completion-sound.standard").frame.minY
         )
         let bell = element("settings.completion-sound.bell")
+        // VoiceOver speaks what each sound is, not only its name.
+        XCTAssertTrue(bell.label.contains("澄んだ鐘"), bell.label)
         tapUntilSelected(bell)
         XCTAssertEqual(element("settings.completion-sound.standard").value as? String, "未選択")
         let softHint = app.staticTexts.matching(
@@ -102,6 +104,7 @@ final class AlarmSettingsUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["終了アラームの強さ"].waitForExistence(timeout: 5))
         let option = element("settings.alarm-strength.\(raw)")
         XCTAssertTrue(option.waitForExistence(timeout: 3))
+        XCTAssertTrue(option.label.contains("サイレントスイッチ"), "What the strength does is in its label: \(option.label)")
         tapUntilSelected(option)
         goBack(from: "終了アラームの強さ")
     }

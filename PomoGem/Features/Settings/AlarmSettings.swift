@@ -5,13 +5,15 @@ import UIKit
 /// pinned by tests: the silent switch, the screen, the automatic stop and
 /// what rings when the app is not open must stay true per strength.
 enum AlarmSettingsCopy {
-    /// The subtitle of the 「音」 switch.
+    /// The subtitle of the 「音」 switch. The switch covers every sound of
+    /// the app, and only the timer end alarm at 最大 plays through the
+    /// silent switch, so the exception is named as the alarm's.
     static func soundSubtitle(strength: AlarmStrength) -> String {
         if strength.overridesSilentSwitch {
             return String(
-                localized: "アプリを開いているときはサイレントスイッチがオンでも鳴ります",
+                localized: "サイレントスイッチに従います。終了アラームだけは、アプリを開いているときはオンでも鳴ります",
                 table: "Settings",
-                comment: "Subtitle of the Sound switch at the Maximum alarm strength. Suggested English: Plays even with the silent switch on while the app is open"
+                comment: "Subtitle of the Sound switch at the Maximum alarm strength: every sound follows the silent switch except the timer end alarm while the app is open. Suggested English: Follows the silent switch, except the timer end alarm while the app is open"
             )
         }
         return String(
@@ -129,6 +131,19 @@ enum AlarmSettingsCopy {
     static var strengthRowTitle: String {
         String(localized: "終了アラームの強さ", table: "Settings", comment: "Settings row: how insistently the end rings (Gentle, Standard, Maximum). Suggested English: Alarm Strength")
     }
+
+    /// VoiceOver label of an option in the two lists: its name and what it
+    /// does, as the other option rows in Settings speak them. The
+    /// description is the substance of the choice, so it is never left to
+    /// a hint that people may have turned off.
+    static func optionLabel(title: String, detail: String) -> String {
+        detail.isEmpty ? title : "\(title)。\(detail)"
+    }
+
+    /// VoiceOver hint of a sound option: what choosing it does.
+    static var soundOptionHint: Text {
+        Text("選ぶと1回鳴らします", tableName: "Settings", comment: "VoiceOver hint of a timer end sound option: choosing it plays it once. Suggested English: Plays it once when chosen")
+    }
 }
 
 /// Plays one cycle of a sound as the chosen strength would (the maximum
@@ -231,9 +246,9 @@ struct AlarmSoundPickerView: View {
         .buttonStyle(PomoGemBareButtonStyle())
         .accessibilityElement(children: .ignore)
         .accessibilityAddTraits(.isButton)
-        .accessibilityLabel(Text(verbatim: choice.title))
+        .accessibilityLabel(Text(verbatim: AlarmSettingsCopy.optionLabel(title: choice.title, detail: choice.detail)))
         .accessibilityValue(AlarmSettingsCopy.selectionValue(isSelected))
-        .accessibilityHint(Text(verbatim: choice.detail))
+        .accessibilityHint(AlarmSettingsCopy.soundOptionHint)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("settings.completion-sound.\(choice.rawValue)")
         .accessibilityAction { choose(choice) }
@@ -300,11 +315,43 @@ struct AlarmStrengthPickerView: View {
         .buttonStyle(PomoGemBareButtonStyle())
         .accessibilityElement(children: .ignore)
         .accessibilityAddTraits(.isButton)
-        .accessibilityLabel(Text(verbatim: strength.title))
+        .accessibilityLabel(Text(verbatim: AlarmSettingsCopy.optionLabel(title: strength.title, detail: strength.detail)))
         .accessibilityValue(AlarmSettingsCopy.selectionValue(isSelected))
-        .accessibilityHint(Text(verbatim: strength.detail))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("settings.alarm-strength.\(strength.rawValue)")
         .accessibilityAction { choose(strength) }
+    }
+}
+
+/// A Settings row that opens a list: the label with its subtitle and, at
+/// the trailing edge, the current value. At accessibility text sizes the
+/// value moves under the label instead of squeezing it, like the system
+/// navigation-link picker it replaces.
+struct SettingValueRowLabel: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    let title: String
+    let subtitle: String
+    let symbol: String
+    let value: String
+
+    var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 4) {
+                SettingLabel(title: title, subtitle: subtitle, symbol: symbol)
+                Text(verbatim: value)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(PomoGemTheme.text)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            HStack(spacing: 8) {
+                SettingLabel(title: title, subtitle: subtitle, symbol: symbol)
+                Spacer(minLength: 4)
+                Text(verbatim: value)
+                    .foregroundStyle(PomoGemTheme.muted)
+            }
+        }
     }
 }
