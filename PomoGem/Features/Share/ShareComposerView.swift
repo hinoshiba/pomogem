@@ -261,146 +261,111 @@ struct ShareComposerView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
-                    shareStudioHeader
+            // The action bar sits below the scroll view, not over it
+            // (device-verify-2 P5): as a bottom safe-area inset it only
+            // covered the scroll view's last points, so on first appearance
+            // 「調整」 lay under the pinned シェア button, readable through
+            // its material, and a tap there started the share. Below the
+            // viewport, whatever shows is what a tap reaches.
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(spacing: 20) {
+                        shareStudioHeader
 
-                    if let coverageNotice {
-                        Label(coverageNotice, systemImage: "rectangle.stack.badge.exclamationmark")
-                            .font(.caption)
-                            .foregroundStyle(PomoGemTheme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(14)
-                            .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 14))
-                            .accessibilityIdentifier("share.partial-coverage-notice")
-                    }
-
-                    if let dataLoadError {
-                        Label(dataLoadError, systemImage: "exclamationmark.triangle")
-                            .font(.caption)
-                            .foregroundStyle(PomoGemTheme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-
-                    if isLoadingData {
-                        ProgressView("カードの記録を読み込み中")
-                            .frame(maxWidth: .infinity, minHeight: 280)
-                    } else if selection.hasShareableContent {
-                        AnimatedShareCardPreview(
-                            sessions: selection.sessions,
-                            aggregates: selection.aggregates,
-                            achievements: selection.achievements,
-                            includesSelfReportedFocus: selection.includesSelfReportedFocus,
-                            format: format,
-                            jarSnapshot: jarSnapshot,
-                            periodLabel: effectivePeriodLabel,
-                            hashtags: activeHashtags,
-                            usesAnimatedArtwork: mediaKind == .animatedGIF,
-                            animates: mediaKind == .animatedGIF && !reduceMotion && playAnimatedImages,
-                            jarMotion: jarMotion
-                        )
-                        .aspectRatio(format == .feed ? 4 / 5 : 9 / 16, contentMode: .fit)
-                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                                .stroke(
-                                    LinearGradient(
-                                        colors: [PomoGemTheme.amber.opacity(0.48), .white.opacity(0.08), .clear],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    ),
-                                    lineWidth: 1
-                                )
+                        if let coverageNotice {
+                            Label(coverageNotice, systemImage: "rectangle.stack.badge.exclamationmark")
+                                .font(.caption)
+                                .foregroundStyle(PomoGemTheme.muted)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(14)
+                                .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 14))
+                                .accessibilityIdentifier("share.partial-coverage-notice")
                         }
-                        .shadow(color: PomoGemTheme.amber.opacity(0.10), radius: 34, y: 16)
-                        .shadow(color: .black.opacity(0.38), radius: 28, y: 16)
-                        .padding(.horizontal, format == .feed ? 26 : 72)
-                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: format)
-                    } else {
-                        emptyShareState
-                    }
 
-                    if showsExcludedSelfReportedNotice {
-                        excludedSelfReportedNotice
-                    }
+                        if let dataLoadError {
+                            Label(dataLoadError, systemImage: "exclamationmark.triangle")
+                                .font(.caption)
+                                .foregroundStyle(PomoGemTheme.muted)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
 
-                    shareSettingsSummary
-                    shareAdjustments
+                        if isLoadingData {
+                            ProgressView("カードの記録を読み込み中")
+                                .frame(maxWidth: .infinity, minHeight: 280)
+                        } else if selection.hasShareableContent {
+                            AnimatedShareCardPreview(
+                                sessions: selection.sessions,
+                                aggregates: selection.aggregates,
+                                achievements: selection.achievements,
+                                includesSelfReportedFocus: selection.includesSelfReportedFocus,
+                                format: format,
+                                jarSnapshot: jarSnapshot,
+                                periodLabel: effectivePeriodLabel,
+                                hashtags: activeHashtags,
+                                usesAnimatedArtwork: mediaKind == .animatedGIF,
+                                animates: mediaKind == .animatedGIF && !reduceMotion && playAnimatedImages,
+                                jarMotion: jarMotion
+                            )
+                            .aspectRatio(format == .feed ? 4 / 5 : 9 / 16, contentMode: .fit)
+                            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                    .stroke(
+                                        LinearGradient(
+                                            colors: [PomoGemTheme.amber.opacity(0.48), .white.opacity(0.08), .clear],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ),
+                                        lineWidth: 1
+                                    )
+                            }
+                            .shadow(color: PomoGemTheme.amber.opacity(0.10), radius: 34, y: 16)
+                            .shadow(color: .black.opacity(0.38), radius: 28, y: 16)
+                            .padding(.horizontal, format == .feed ? 26 : 72)
+                            .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: format)
+                        } else {
+                            emptyShareState
+                        }
 
-                    if let statusMessage {
-                        Text(statusMessage)
-                            .font(.caption)
-                            .foregroundStyle(PomoGemTheme.muted)
-                            .transition(.opacity)
-                            .accessibilityAddTraits(.isStaticText)
-                            .accessibilityIdentifier("share.status")
-                    }
+                        if showsExcludedSelfReportedNotice {
+                            excludedSelfReportedNotice
+                        }
+
+                        shareSettingsSummary
+                        shareAdjustments
 
 #if DEBUG
-                    if LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess {
-                        Text("GIF share lifecycle probe")
-                            .font(.system(size: 1))
-                            .foregroundStyle(Color.clear)
-                            .frame(width: 1, height: 1)
-                            .accessibilityIdentifier("share.debug.gif-lifecycle")
-                            .accessibilityLabel("GIF share lifecycle probe")
-                            .accessibilityValue(Text(verbatim: debugGIFShareLifecycle.accessibilityValue))
-                            .allowsHitTesting(false)
-                            // How often this process resolved the card
-                            // selection versus reused it; typing a tag must
-                            // only reuse it. An overlay, so the probe adds no
-                            // height the UI tests' scrolling would notice.
-                            .overlay {
-                                Text("Share selection probe")
-                                    .font(.system(size: 1))
-                                    .foregroundStyle(Color.clear)
-                                    .frame(width: 1, height: 1)
-                                    .accessibilityIdentifier("share.debug.selection")
-                                    .accessibilityLabel("Share selection probe")
-                                    .accessibilityValue(Text(verbatim: "builds=\(ShareSelectionCache.debugBuildCount);lookups=\(ShareSelectionCache.debugLookupCount)"))
-                                    .allowsHitTesting(false)
-                            }
-                    }
+                        if LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess {
+                            Text("GIF share lifecycle probe")
+                                .font(.system(size: 1))
+                                .foregroundStyle(Color.clear)
+                                .frame(width: 1, height: 1)
+                                .accessibilityIdentifier("share.debug.gif-lifecycle")
+                                .accessibilityLabel("GIF share lifecycle probe")
+                                .accessibilityValue(Text(verbatim: debugGIFShareLifecycle.accessibilityValue))
+                                .allowsHitTesting(false)
+                                // How often this process resolved the card
+                                // selection versus reused it; typing a tag must
+                                // only reuse it. An overlay, so the probe adds no
+                                // height the UI tests' scrolling would notice.
+                                .overlay {
+                                    Text("Share selection probe")
+                                        .font(.system(size: 1))
+                                        .foregroundStyle(Color.clear)
+                                        .frame(width: 1, height: 1)
+                                        .accessibilityIdentifier("share.debug.selection")
+                                        .accessibilityLabel("Share selection probe")
+                                        .accessibilityValue(Text(verbatim: "builds=\(ShareSelectionCache.debugBuildCount);lookups=\(ShareSelectionCache.debugLookupCount)"))
+                                        .allowsHitTesting(false)
+                                }
+                        }
 #endif
-
-                    if shareCompleted {
-                        shareSuccessBanner
-                            .transition(.scale(scale: 0.96).combined(with: .opacity))
                     }
-
+                    .padding(20)
                 }
-                .padding(20)
-            }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                VStack(spacing: 8) {
-                    Button {
-                        startShareExport()
-                    } label: {
-                        shareLaunchLabel
-                    }
-                    .buttonStyle(PomoGemPrimaryButtonStyle())
-                    // Keep the pinned bar well under half of a 667 pt screen
-                    // at AX5, as the timer's pinned controls do.
-                    .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-                    // One render at a time: a photo save renders the same
-                    // cards on the main actor.
-                    .disabled(isRendering || isSaving || !selection.hasShareableContent)
-                    .accessibilityIdentifier("share.primary-action")
-                    .accessibilityHint(
-                        mediaKind == .animatedGIF
-                            ? "瓶と質量の短いGIF、公式サイトURL、選択中のハッシュタグをシステム共有画面に渡します"
-                            : "瓶と質量の画像、公式サイトURL、選択中のハッシュタグをシステム共有画面に渡します"
-                    )
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 10)
-                .padding(.bottom, 8)
-                .background(.ultraThinMaterial)
-                .overlay(alignment: .top) {
-                    Divider().overlay(PomoGemTheme.glassEdge.opacity(0.16))
-                }
+                shareActionBar
             }
             .background(NightBackground())
             .navigationTitle("カードにする")
@@ -484,6 +449,68 @@ struct ShareComposerView: View {
             )
             .systemShareSheetPresentation()
         }
+    }
+
+    /// The pinned シェア button, with the outcome of the last action right
+    /// above it (device-verify-2 P3). The result of 「写真に2サイズ保存」, a
+    /// copy, a cancelled share or a failure used to be a line at the end of
+    /// the scrolled content: under the pinned button, or above the screen
+    /// when the person had scrolled back up, so a save looked like it did
+    /// nothing. Here it is on screen at every scroll position, next to both
+    /// the button and the 調整 panel's end, and VoiceOver still hears it
+    /// (`updateStatus`).
+    private var shareActionBar: some View {
+        VStack(spacing: 8) {
+            if shareCompleted {
+                shareSuccessBanner
+                    .transition(.scale(scale: 0.96).combined(with: .opacity))
+            } else if let statusMessage {
+                shareStatusLine(statusMessage)
+                    .transition(.opacity)
+            }
+            Button {
+                startShareExport()
+            } label: {
+                shareLaunchLabel
+            }
+            .buttonStyle(PomoGemPrimaryButtonStyle())
+            // One render at a time: a photo save renders the same
+            // cards on the main actor.
+            .disabled(isRendering || isSaving || !selection.hasShareableContent)
+            .accessibilityIdentifier("share.primary-action")
+            .accessibilityHint(
+                mediaKind == .animatedGIF
+                    ? "瓶と質量の短いGIF、公式サイトURL、選択中のハッシュタグをシステム共有画面に渡します"
+                    : "瓶と質量の画像、公式サイトURL、選択中のハッシュタグをシステム共有画面に渡します"
+            )
+        }
+        // Keep the pinned bar well under half of a 667 pt screen at AX5, as
+        // the timer's pinned controls do; the outcome line included.
+        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+        .padding(.horizontal, 20)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .top) {
+            Divider().overlay(PomoGemTheme.glassEdge.opacity(0.16))
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("share.action-bar")
+    }
+
+    private func shareStatusLine(_ message: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 7) {
+            Image(systemName: "info.circle.fill")
+                .foregroundStyle(PomoGemTheme.amber)
+                .accessibilityHidden(true)
+            Text(message)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isStaticText)
+                .accessibilityIdentifier("share.status")
+            Spacer(minLength: 0)
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(PomoGemTheme.text)
     }
 
     private var shareStudioHeader: some View {
@@ -1988,6 +2015,9 @@ struct ShareComposerView: View {
     @MainActor
     private func updateStatus(_ message: String) {
         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
+            // The bar shows one outcome at a time: a newer one replaces the
+            // 「共有できました」 banner of an earlier share.
+            shareCompleted = false
             statusMessage = message
         }
         guard UIAccessibility.isVoiceOverRunning else { return }

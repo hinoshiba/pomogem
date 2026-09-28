@@ -104,12 +104,10 @@ final class GIFShareLifecycleUITests: XCTestCase {
         XCTAssertTrue(stillImage.waitForExistence(timeout: 5))
         let primaryShare = app.descendants(matching: .any)["share.primary-action"]
         XCTAssertTrue(primaryShare.waitForExistence(timeout: 5))
-        // The fixed share CTA can overlap this segment while XCTest still
-        // reports the underlying control as hittable. Move the picker into
-        // the unobscured scroll region before tapping it.
+        // Tap the segment where it is whole, above the pinned action bar.
         app.swipeUp()
         XCTAssertTrue(
-            scrollUntilHittable(stillImage, avoiding: primaryShare),
+            scrollUntilHittable(stillImage, avoiding: shareActionBar),
             "The still-image segment must be visible above the persistent share CTA"
         )
         XCTAssertFalse(
@@ -124,7 +122,7 @@ final class GIFShareLifecycleUITests: XCTestCase {
 
         let copyCaption = app.buttons["share.copy-caption"]
         XCTAssertTrue(
-            scrollUntilHittable(copyCaption, avoiding: primaryShare),
+            scrollUntilHittable(copyCaption, avoiding: shareActionBar),
             "The copy CTA must remain independently discoverable and hittable"
         )
         XCTAssertTrue(copyCaption.isHittable)
@@ -274,6 +272,128 @@ final class GIFShareLifecycleUITests: XCTestCase {
         )
     }
 
+    /// device-verify-2 P5. The pinned シェア button used to be a safe-area
+    /// inset over the scroll view, so on first appearance 「調整」 lay under
+    /// it and a tap there — as XCTest makes, and as a person reading it
+    /// through the bar's material would — started the share. The bar now
+    /// sits below the scroll view: a control is either clear of it or
+    /// scrolled into view before the tap.
+    func testAdjustmentsTappedWhereTheyFirstAppearOpenWithoutStartingTheShare() {
+        addShareableSession()
+        openMenuAction(containing: "動く瓶をシェア")
+        XCTAssertTrue(app.navigationBars["カードにする"].waitForExistence(timeout: 8))
+        includeSelfReportedDirectlyIfOffered()
+        for _ in 0..<3 { app.swipeDown(velocity: .slow) }
+
+        let share = app.descendants(matching: .any)["share.primary-action"]
+        XCTAssertTrue(waitUntilEnabled(share, timeout: 12), "A mis-tap on the bar would start the share")
+        let adjustments = app.buttons["調整"]
+        XCTAssertTrue(adjustments.waitForExistence(timeout: 8))
+        XCTAssertTrue(shareActionBar.exists)
+        if adjustments.isHittable {
+            XCTAssertLessThanOrEqual(
+                adjustments.frame.midY, shareActionBar.frame.minY,
+                "Nothing the composer shows may lie under the pinned bar"
+            )
+        }
+        saveScreenshot("share-first-appearance")
+
+        adjustments.tap()
+        XCTAssertTrue(
+            app.buttons["静止画"].waitForExistence(timeout: 5),
+            "Tapping 「調整」 must open the adjustments"
+        )
+        XCTAssertFalse(
+            app.otherElements["ActivityListView"].waitForExistence(timeout: 3),
+            "Tapping 「調整」 must not start the share"
+        )
+    }
+
+    /// device-verify-2 P3. After 「写真に2サイズ保存」 the result line sat at
+    /// the end of the scrolled content: under the pinned シェア button, or
+    /// above the screen once scrolled back up, so the save seemed to do
+    /// nothing. It is now in the pinned bar, on screen wherever the content
+    /// is scrolled.
+    func testPhotoSaveOutcomeStaysOnScreenAboveTheShareButton() {
+        addShareableSession()
+        openMenuAction(containing: "動く瓶をシェア")
+        XCTAssertTrue(app.navigationBars["カードにする"].waitForExistence(timeout: 8))
+        includeSelfReportedDirectlyIfOffered()
+        expandAdjustmentsIfNeeded()
+
+        // Two stills render faster than two GIFs; the outcome line is shared.
+        let stillImage = app.buttons["静止画"]
+        XCTAssertTrue(scrollUntilHittable(stillImage, avoiding: shareActionBar))
+        stillImage.tap()
+        let save = app.buttons["写真に2サイズ保存"]
+        XCTAssertTrue(scrollUntilHittable(save, avoiding: shareActionBar))
+        save.tap()
+
+        // Photos asks once per install; answer it when it comes.
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let status = app.staticTexts["share.status"]
+        let deadline = Date().addingTimeInterval(20)
+        while Date() < deadline {
+            let alert = springboard.alerts.firstMatch
+            if alert.exists {
+                let allow = alert.buttons.matching(NSPredicate(
+                    format: "(label BEGINSWITH %@ AND NOT (label CONTAINS %@)) OR label ==[c] %@",
+                    "許可", "しない", "allow"
+                )).firstMatch
+                XCTAssertTrue(allow.exists, "The Photos prompt must offer 許可: \(alert.buttons.allElementsBoundByIndex.map(\.label))")
+                allow.tap()
+                break
+            }
+            if status.exists, status.label.contains("写真に保存") { break }
+            pause(0.5)
+        }
+        XCTAssertTrue(
+            waitForLabel(status, containing: "フィード用とストーリー用を写真に保存しました", timeout: 60),
+            "status=\(status.exists ? status.label : "<absent>")"
+        )
+        assertOnScreenInTheActionBar(status)
+        saveScreenshot("share-photo-save-outcome")
+
+        // Scrolled back to the top, the outcome is still on screen.
+        for _ in 0..<4 { app.swipeDown() }
+        assertOnScreenInTheActionBar(status)
+        saveScreenshot("share-photo-save-outcome-scrolled-top")
+    }
+
+    private func assertOnScreenInTheActionBar(
+        _ element: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let window = app.windows.firstMatch.frame
+        XCTAssertTrue(element.exists, file: file, line: line)
+        XCTAssertTrue(element.isHittable, "The outcome line must be visible", file: file, line: line)
+        XCTAssertGreaterThanOrEqual(element.frame.minY, shareActionBar.frame.minY, file: file, line: line)
+        XCTAssertLessThanOrEqual(element.frame.maxY, min(shareActionBar.frame.maxY, window.maxY), file: file, line: line)
+        let share = app.descendants(matching: .any)["share.primary-action"]
+        XCTAssertLessThanOrEqual(element.frame.maxY, share.frame.minY,
+                                 "The outcome line sits above the button", file: file, line: line)
+    }
+
+    private func pause(_ seconds: TimeInterval) {
+        let idle = XCTestExpectation(description: "pause")
+        idle.isInverted = true
+        _ = XCTWaiter.wait(for: [idle], timeout: seconds)
+    }
+
+    /// Keeps a screenshot with the result bundle and, when the runner is
+    /// given POMOGEM_SHOTS_DIR, also as a PNG for review.
+    private func saveScreenshot(_ name: String) {
+        let screenshot = XCUIScreen.main.screenshot()
+        let attachment = XCTAttachment(screenshot: screenshot)
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        guard let directory = ProcessInfo.processInfo.environment["POMOGEM_SHOTS_DIR"] else { return }
+        let url = URL(fileURLWithPath: directory).appendingPathComponent("\(name).png")
+        try? screenshot.pngRepresentation.write(to: url)
+    }
+
     /// walk-std-04 / walk-edge-08: a month holding only self-reported focus
     /// and a 記念石, opened from its Wrapped screen, must explain the excluded
     /// time in 分 and offer to include it next to the card, not read as an
@@ -413,8 +533,7 @@ final class GIFShareLifecycleUITests: XCTestCase {
         // inline button had scrolled off the top by then and the tap missed
         // it. Bring it back, clear of the navigation bar and the pinned
         // share bar, first.
-        let primaryShare = app.descendants(matching: .any)["share.primary-action"]
-        XCTAssertTrue(scrollUntilHittable(include, avoiding: primaryShare, searchingTowardTop: true))
+        XCTAssertTrue(scrollUntilHittable(include, avoiding: shareActionBar, searchingTowardTop: true))
         tapUntilGone(include, "Including self-reported time must retire the inline button")
         XCTAssertTrue(waitForNonExistence(notice, timeout: 8))
         app.navigationBars["カードにする"].buttons["閉じる"].tap()
@@ -600,16 +719,15 @@ final class GIFShareLifecycleUITests: XCTestCase {
         // A fast fling can carry the element past the top, where XCTest still
         // reports it hittable under the translucent navigation bar and a tap
         // lands on the bar instead. Require it below the bar, and come back
-        // down slowly when it has gone past. The obstruction is the share CTA
-        // pinned to the bottom: its material bar covers everything from about
-        // 10 pt above the button to the screen edge, so an element below the
-        // button is just as covered as one overlapping it.
+        // down slowly when it has gone past. The obstruction is the action
+        // bar pinned under the scroll view (`share.action-bar`): the scroll
+        // view ends at its top edge, so an element there is cut off.
         let navigationBar = app.navigationBars.firstMatch
         func isClear() -> Bool {
             element.exists
                 && obstruction.exists
                 && element.isHittable
-                && element.frame.maxY <= obstruction.frame.minY - 12
+                && element.frame.maxY <= obstruction.frame.minY
                 && (!navigationBar.exists || element.frame.minY >= navigationBar.frame.maxY)
         }
         for _ in 0..<attempts {
@@ -629,7 +747,7 @@ final class GIFShareLifecycleUITests: XCTestCase {
             // bar and the share bar is shorter than a slow swipe, and whole
             // swipes kept carrying the element from one side to the other.
             let top = navigationBar.exists ? navigationBar.frame.maxY : app.windows.firstMatch.frame.minY
-            let bottom = obstruction.frame.minY - 12
+            let bottom = obstruction.frame.minY
             let frame = element.frame
             let correction = frame.minY < top
                 ? top - frame.minY + 8
@@ -645,6 +763,12 @@ final class GIFShareLifecycleUITests: XCTestCase {
             )
         }
         return isClear()
+    }
+
+    /// The pinned bar under the composer's scroll view: the outcome line
+    /// and the シェア button.
+    private var shareActionBar: XCUIElement {
+        app.descendants(matching: .any)["share.action-bar"]
     }
 
     private func expandAdjustmentsIfNeeded() {
