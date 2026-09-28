@@ -537,6 +537,12 @@ struct JarSpriteView: View {
             }
         }
         .accessibilityElement(children: .ignore)
+        // The element's frame is the stage. Without this it took in layers
+        // placed past the stage's lower edge (with a time core in a short
+        // stage, such as Home's 300 pt jar at accessibility sizes on an
+        // iPhone SE, it ran 40 pt below the jar over the row under it),
+        // which VoiceOver then treated as the jar. Merge of #47 into #50.
+        .contentShape(.accessibility, Rectangle())
         .accessibilityLabel("瓶")
         .accessibilityValue(accessibilityValue)
         .accessibilityHint(accessibilityHint)
