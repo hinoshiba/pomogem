@@ -6,7 +6,9 @@ import XCTest
 /// Japanese localization, but once it also ships English a Simulator or iPhone
 /// set to English would open the app in English and those queries would miss.
 /// Every launch goes through this helper so none can forget the pin;
-/// `Scripts/l10n/l10n.py check` rejects a launch that is not pinned.
+/// `Scripts/l10n/l10n.py check` rejects a launch that is not pinned. For the
+/// same reason it also tags the launch with the running test
+/// (`PomoGemUITestScenario`).
 enum PomoGemUITestLanguage {
     static let japaneseArguments = ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
 
@@ -14,6 +16,7 @@ enum PomoGemUITestLanguage {
     /// same application keeps exactly one language pin.
     static func configureJapanese(_ application: XCUIApplication) {
         application.launchArguments = withoutLanguagePin(application.launchArguments) + japaneseArguments
+        PomoGemUITestScenario.tag(application)
     }
 
     /// Launch in Japanese with 設定 > 一般 > 言語と地域 > 暦法 set to 和暦, for
@@ -22,6 +25,7 @@ enum PomoGemUITestLanguage {
     static func configureJapaneseWithJapaneseCalendar(_ application: XCUIApplication) {
         application.launchArguments = withoutLanguagePin(application.launchArguments)
             + ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP@calendar=japanese"]
+        PomoGemUITestScenario.tag(application)
     }
 
     private static func withoutLanguagePin(_ arguments: [String]) -> [String] {

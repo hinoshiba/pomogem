@@ -115,7 +115,8 @@ buildするよう求めています。開始時に[Upcoming Requirements](https:
 1. Bundle ID `com.hinoshiba.pomogem`、iCloud/CloudKit、Push Notifications、
    In-App Purchaseのcapabilityが同じteamにある
 2. Widget bundle `com.hinoshiba.pomogem.widgets`は登録するが、Version 1.0ではApp Group、iCloud、
-   CloudKit、APNs capabilityを付けない。account-neutralな起動導線だけを表示する
+   CloudKit、APNs capabilityを付けない。account-neutralな起動導線だけを表示し、tapで渡すのは
+   固定の`pomogem://focus/start`（任意で25／45／60／90分）だけにする
 3. `com.hinoshiba.pomogem.pro.lifetime`をNon-Consumableで1件だけ作り、米国USD 0.99を基準価格、
    日本JPY 100をcustom price、その他をAppleの現地相当額にする
 4. AppとIAPを現行EU 27を除く148／175 Countries or Regionsへ設定し、今後追加されるstorefrontの
@@ -265,9 +266,11 @@ unit test、主要UI test、static analyzerを実行します。40年soakはrele
 - iCloud選択時のonline確認、各launch／resume、A→B block→A復帰、通信断時fail-closedと保存data非削除
 - 既存CloudKit補助directoryを残した再起動、リセット履歴反映前の新規記録拒否と反映後の記録保持、
   iCloud通常resetの一時停止とlocal-only通常resetの継続
-- Home／Lock Screen Widgetが利用者dataを表示せずアプリを開くこと
+- Home／Lock Screen Widgetが利用者dataを表示せずアプリを開き、Homeの開始buttonと同じ条件で集中を
+  始めること。Siri、Spotlight、ショートカットの「集中を始める」も同じ入口として動くこと
 - Live Activityの開始、pause、resume、期限到達、cancel、完了後dismiss、手動dismiss後に再生成しないこと、
-  SettingsでOFFにすると即終了すること。全状態でtheme名、memo、質量、account情報を表示しないこと
+  SettingsでOFFにすると即終了すること。完走後に選んだ休憩の「休憩中」「休憩終了」表示と、休憩の
+  skip／「瓶へ戻る」での終了。全状態でtheme名、memo、質量、account情報を表示しないこと
 - 「タイマー中は画面をロックしない」のON/OFF。ONでは集中、集中直後の短い／長い休憩、Homeからの
   単独休憩が前面で残時間のある間だけ点灯を維持し、pause、期限到達、skip／close、backgroundで
   即座に通常の自動ロックへ戻ること

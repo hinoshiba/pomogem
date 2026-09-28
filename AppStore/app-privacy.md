@@ -43,6 +43,10 @@ Apple teamの実際のaccess、mail運用を照合して最終回答します。
 - `AggregatePebble`、`Stratum`、`Bedrock`、`GachaState`の4種類は端末内だけの表示用projectionで、
   同期元記録から再構築しCloudKitへuploadしない
 - 瓶用のCore Motionはその場で処理し、保存・送信しない
+- 1.1.0候補の集中用の音楽は、MusicKit／MediaPlayerで「ミュージック」アプリの再生を操作するだけで、
+  カタログ取得・登録状況の確認・登録の案内はAppleが処理する。選んだ音楽のIDと自動再生の設定だけを
+  このiPhoneのUserDefaultsに保存し、曲名・再生状態・ライブラリ・履歴をdeveloperへ送らないため、
+  この機能自体によるdeveloperのdata collectionはない（[FocusMusic.md](../Docs/FocusMusic.md)）
 - 集中・休憩タイマーはUIKitのdevice orientation通知で上下左右の表示を切り替える。追加の権限要求や
   Core Motion managerの追加はない。端末から届く向きとタイマー中の一時的な手動選択は実行中のメモリだけに
   保持する。設定で選ぶ既定の向き（自動／上／右／下／左）だけをこのiPhoneのUserDefaultsに保存し、
@@ -52,9 +56,14 @@ Apple teamの実際のaccess、mail運用を照合して最終回答します。
   選択した保存・共有先へ渡す。JSON再importはなく、このファイルによる復元・移行には対応しない。
   設定の保存先切り替えもJSONを読み込む処理ではない
 - StoreKit transactionは端末上でApple署名をverifyし、developer serverへ送らない
-- Live Activityは明示的に開始した集中のランダムなsession UUID、秒数、終了日時／残り時間、状態だけを
-  ActivityKitへ渡して端末内更新する。theme名、memo、質量、Apple Account／CloudKit dataを含めず、
-  ActivityKit pushやdeveloper serverを使わないため、この機能自体によるdeveloperのdata collectionはない
+- Live Activityは明示的に開始した集中、または完走後に本人が選んだ休憩のランダムなsession UUID（休憩は
+  休憩ごとのUUID）、秒数、終了日時／残り時間、状態だけをActivityKitへ渡して端末内更新する。theme名、memo、
+  質量、Apple Account／CloudKit dataを含めず、ActivityKit pushやdeveloper serverを使わないため、この機能
+  自体によるdeveloperのdata collectionはない
+- Widgetのtapと`pomogem://`リンク、App Shortcut「集中を始める」（Siri／Spotlight／ショートカット／
+  アクションボタン）は、固定の行き先（`focus/start`と任意の25／45／60／90分）だけをアプリへ渡す。
+  集中の開始はアプリ内でHomeの開始buttonと同じ条件で行い、intentは記録・theme名を返さず、background
+  で記録を変更しない。Siriへ渡るのはアプリが定義した固定のフレーズとaction名だけで、data typeの追加はない
 - third-party SDKがない
 - version 1.0ではrare rewardのUI／writer／runtime repository pathと、二つ目のoperations CloudKit
   containerに接続するentitlement／capabilityを無効化している。将来検討用sourceと公開identifierは
@@ -110,7 +119,7 @@ App Managerが最終決定・Publishします。
 - Main app required-reason APIs: File Timestamp `C617.1`、System Boot Time `35F9.1`、standard User Defaults
   `CA92.1`
 - Widget required-reason APIs: none。Version 1.0のWidgetとLive Activity extensionは利用者data、CloudKit、
-  App Group、UserDefaultsを読まず、account-neutralな起動導線または時間／状態だけを表示
+  App Group、UserDefaultsを読まず、account-neutralな集中開始の導線（固定URLだけ）または時間／状態だけを表示
 - タイマーのUIKit device orientation利用によるdata type／required-reason API categoryの追加はない。
   端末内だけで処理する向きは[Appleの収集の定義](https://developer.apple.com/app-store/app-privacy-details/)に
   該当せず、使用APIは[required-reason APIの一覧](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitype)に該当しない

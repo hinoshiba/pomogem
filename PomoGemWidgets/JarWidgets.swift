@@ -43,8 +43,6 @@ struct JarHomeWidget: Widget {
                 .containerBackground(for: .widget) {
                     WidgetPalette.backgroundGradient
                 }
-                // Home, where the focus button is (never starts a timer).
-                .widgetURL(StartFocusLink.url)
         }
         .configurationDisplayName("ポモジェム")
         .description("今日の集中を始める")
@@ -53,6 +51,12 @@ struct JarHomeWidget: Widget {
     }
 }
 
+/// Taps start a focus in the app exactly as Home's start button does, with
+/// the theme chosen there (notify-03, product-04). The small widget says
+/// 「集中を始める」 and uses the length chosen in the app; the medium one
+/// starts only from its four length buttons, whose length is on the button,
+/// and the rest of it opens the jar. The URLs are constants: the widget still
+/// reads and shows no user data.
 private struct JarHomeWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let entry: JarWidgetEntry
@@ -60,9 +64,13 @@ private struct JarHomeWidgetView: View {
     var body: some View {
         switch family {
         case .systemMedium:
+            // The jar and heading cannot show the length a start would use,
+            // so they open the app; the buttons below are the starts.
             mediumLayout
+                .widgetURL(AppEntryLink.homeURL)
         default:
             smallLayout
+                .widgetURL(AppEntryLink.focusStartURL())
         }
     }
 
@@ -70,7 +78,7 @@ private struct JarHomeWidgetView: View {
         VStack(spacing: 6) {
             wordmark
             // The widget's own opaque navy is the plate here.
-            RawStoneWidgetArtwork(framed: false)
+            NeutralJarArtwork(framed: false)
                 .frame(maxHeight: .infinity)
             Text("集中を始める")
                 .font(.system(size: 16, weight: .heavy, design: .rounded))
@@ -82,31 +90,39 @@ private struct JarHomeWidgetView: View {
         .accessibilityLabel("ポモジェムで集中を始める")
     }
 
+    /// The jar and the heading on top, then one row of equal buttons across
+    /// the whole width, so all four free lengths fit even the narrowest
+    /// medium widget with a comfortable tap target each.
     private var mediumLayout: some View {
-        HStack(spacing: 16) {
-            RawStoneWidgetArtwork(framed: true)
-                .frame(width: 126)
-                .padding(.vertical, 12)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                // D19: the raw stone on its own navy plate.
+                NeutralJarArtwork(framed: true)
+                    .frame(width: 88)
 
-            VStack(alignment: .leading, spacing: 0) {
-                wordmark
-                Spacer(minLength: 8)
-                Text("今日のひと粒を積もう")
-                    .font(.system(size: 23, weight: .heavy, design: .rounded))
-                    .foregroundStyle(WidgetPalette.warmText)
-                    .minimumScaleFactor(0.72)
-                    .lineLimit(2)
-                Spacer(minLength: 8)
-                Label("タップしてアプリを開く", systemImage: "arrow.up.forward.app")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(WidgetPalette.mutedText)
+                VStack(alignment: .leading, spacing: 4) {
+                    wordmark
+                    Text("今日のひと粒を積もう")
+                        .font(.system(size: 21, weight: .heavy, design: .rounded))
+                        .foregroundStyle(WidgetPalette.warmText)
+                        .minimumScaleFactor(0.72)
+                        .lineLimit(2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(Text(
+                    "ポモジェムを開く",
+                    tableName: "Widgets",
+                    comment: "VoiceOver: the medium widget's jar and heading, which open the app (its length buttons start a focus)"
+                ))
             }
-            .padding(.vertical, 14)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxHeight: .infinity)
+
+            FocusPresetLinks()
         }
-        .padding(.horizontal, 14)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("ポモジェムで今日の集中を始める")
+        .padding(14)
+        // The heading and each length stay separate for VoiceOver.
+        .accessibilityElement(children: .contain)
     }
 
     private var wordmark: some View {
@@ -125,13 +141,42 @@ private struct JarHomeWidgetView: View {
 
 }
 
+/// One tap to a focus of a free length: the fixed lengths the Home picker
+/// offers everyone. The widget cannot know the length last used in the app.
+/// Each button is 44 pt tall, the minimum comfortable tap target, which still
+/// leaves the jar and heading room on the narrowest medium widget.
+private struct FocusPresetLinks: View {
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(FocusStartPreset.allCases, id: \.self) { preset in
+                Link(destination: AppEntryLink.focusStartURL(preset)) {
+                    // Timer lengths, as Home's picker writes them: 「90分」.
+                    Text(verbatim: DurationText.short(seconds: preset.seconds, units: .minutesSeconds))
+                        .font(.system(size: 14, weight: .heavy, design: .rounded))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .foregroundStyle(WidgetPalette.night)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(WidgetPalette.amber, in: Capsule())
+                }
+                .accessibilityLabel(String(
+                    localized: "\(DurationText.spoken(seconds: preset.seconds, units: .minutesSeconds))集中する",
+                    table: "Widgets",
+                    comment: "VoiceOver: a medium-widget button that starts a focus; the argument is its length, e.g. 25分"
+                ))
+            }
+        }
+    }
+}
+
 /// D19 (Docs/GemExperienceDesign.md §8.7): the next gem as a still,
 /// colourless raw stone — the same picture for everyone, with no account
 /// data. In full colour it always sits on opaque deep navy (the widget's
 /// background, and in the medium widget a plate of its own), so a light
 /// wallpaper never muddies it; a tinted Home Screen draws its own
 /// background, so the plate is left out and the facets carry the stone.
-private struct RawStoneWidgetArtwork: View {
+private struct NeutralJarArtwork: View {
     /// Draws the stone's own plate (the medium widget's specimen card).
     let framed: Bool
 
@@ -155,7 +200,6 @@ struct JarLockScreenWidget: Widget {
         StaticConfiguration(kind: kind, provider: JarTimelineProvider()) { entry in
             JarLockScreenView(entry: entry)
                 .containerBackground(for: .widget) { Color.clear }
-                .widgetURL(StartFocusLink.url)
         }
         .configurationDisplayName("ポモジェム")
         .description("集中を始める")
@@ -172,6 +216,12 @@ private struct JarLockScreenView: View {
     let entry: JarWidgetEntry
 
     var body: some View {
+        content
+            .widgetURL(AppEntryLink.focusStartURL())
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch family {
         case .accessoryInline:
             Label(

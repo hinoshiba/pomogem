@@ -99,10 +99,19 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
             // window in which a user who started a focus and left the app at
             // once kept the old hold.
             .onReceive(NotificationCenter.default.publisher(for: FocusPersistence.didChange)) { _ in
+                // Before the learning-hold dedupe below, which skips saves
+                // that leave the hold as it was. The shield follows the focus
+                // session, not the hold, and dedupes on its own decision.
+                reconcileFocusShield()
                 let pause = currentLearningPause()
                 guard pause != lastNotifiedLearningPause else { return }
                 lastNotifiedLearningPause = pause
                 reconcileNow(learningPause: pause)
+            }
+            // A save that switches the focus shield on or off, or changes the
+            // distraction apps, applies at once instead of on the next pass.
+            .onChange(of: controller.configuration) { _, _ in
+                reconcileFocusShield()
             }
             .onChange(of: resolvedIsPro) { _, _ in
                 // Also fires when StoreKit first answers, which is when a gate
@@ -158,6 +167,20 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
         )
     }
 
+    /// F2. Same inputs as the learning hold — the saved timer and this
+    /// activity generation — and the same rule that only a bound owner acts.
+    /// Deliberately not gated on `scenePhase`: a pause saved while PomoGem is
+    /// leaving the foreground must reach the shield, which keeps it.
+    @MainActor
+    private func reconcileFocusShield(force: Bool = false) {
+        guard isReady, isCurrentOwner else { return }
+        controller.reconcileFocusShield(
+            contextKey: contextKey, dataEpochID: dataEpochID,
+            focus: FocusShieldFocusState(envelope: FocusPersistence.load(), dataEpochID: dataEpochID),
+            force: force
+        )
+    }
+
     @MainActor
     private var canContinueRefresh: Bool {
         !Task.isCancelled && isCurrentOwner
@@ -186,6 +209,10 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
             // this pass — not reconcile — is what notices it.
             await controller.invalidateAuthorizationIfRevoked()
             guard canContinueRefresh else { return }
+            // Every activation re-derives the shield from the saved timer (a
+            // relaunch, a focus that ended while PomoGem was closed, a shield
+            // the extension already lifted); the 3 s passes only act on change.
+            reconcileFocusShield(force: forceReconcile)
             try await retireDeletedLearningThemeIfNeeded()
             guard canContinueRefresh else { return }
             let learningPause = currentLearningPause()
@@ -258,7 +285,9 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
 /// Which timer state holds the Screen Time learning lane, and until when.
 ///
 /// A running focus or in-timer break holds it until the phase's end date; a
-/// paused timer holds it with no end; anything else — including the
+/// paused timer holds it with no end, except a focus paused because the
+/// person left the app (F1), which holds it until the end it had when they
+/// left; anything else — including the
 /// completion screen and a phase whose end has passed but that the app has
 /// not advanced yet — holds nothing. Breaks timed from Home (`BreakTimerView`)
 /// have their own persistence and never hold the lane, as before.
@@ -277,6 +306,13 @@ enum ScreenTimeTimerHold {
             guard let end = envelope.engine.endDate else { return .none }
             return ScreenTimeLearningPause.until(end).normalized(at: now)
         case .paused:
+            // F1: a focus this device paused because the person left the
+            // app holds the lane only until the end it had when they left.
+            // Study-app time after that counts again even if they never come
+            // back; a pause the person chose still holds it indefinitely.
+            if let leavePause = envelope.currentLeavePause {
+                return ScreenTimeLearningPause.until(leavePause.plannedEndDate).normalized(at: now)
+            }
             return .indefinite
         case .idle, .focusCompleted, .breakCompleted:
             return .none

@@ -496,7 +496,9 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
 
         let keepAwake = app.switches["settings.keep-screen-awake"]
-        XCTAssertTrue(keepAwake.waitForExistence(timeout: 5))
+        // On a 4.7-inch iPhone the switch is below the fold and the list has
+        // not laid it out yet, so scroll to it (as the 40-year test does).
+        XCTAssertTrue(scrollUntilHittable(keepAwake, in: app))
         let original = keepAwake.value as? String
         tapSwitchControl(keepAwake)
         let didChange = waitForValue(of: keepAwake, toDifferFrom: original)
@@ -584,14 +586,20 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
         return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }
 
+    /// Short drags, judged only once the list has stopped. On an iPhone SE
+    /// a fling carried the Home menu past 設定 between two checks, and the
+    /// row was never safely on screen.
     private func scrollUntilHittable(
         _ element: XCUIElement,
         in app: XCUIApplication,
         attempts: Int = 8
     ) -> Bool {
         for _ in 0..<attempts {
+            if element.exists { _ = waitUntilFrameSettles(element, timeout: 3) }
             if isSafelyHittable(element, in: app) { return true }
-            app.swipeUp()
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8))
+                .press(forDuration: 0.05, thenDragTo:
+                    app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)))
         }
         return isSafelyHittable(element, in: app)
     }
@@ -824,6 +832,12 @@ final class FortyYearPlanningUITests: XCTestCase {
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "0"
         PomoGemUITestLanguage.configureJapanese(app)
+        // Without the UI-test flag nothing skips first-run onboarding, so on
+        // a fresh Simulator this launch stops there; it only reached Home when
+        // an earlier test had happened to finish onboarding. Mark onboarding
+        // done for this launch only (argument domain, unscoped local key) so
+        // the test always checks the Home and menu it is about.
+        app.launchArguments += ["-onboarding.completed", "YES"]
         app.launch()
         defer { app.terminate() }
 

@@ -52,6 +52,9 @@ targets:
         UIUserInterfaceStyle: Dark
         NSPhotoLibraryAddUsageDescription: シェアカードを写真に保存します。
         NSMotionUsageDescription: 端末の傾きや振る操作に合わせて瓶の粒を動かすために使います。値は保存・送信しません。
+        # Focus music (Docs/FocusMusic.md): MusicKit authorization to control
+        # the Music app from the timer. No audio background mode is added.
+        NSAppleMusicUsageDescription: タイマー画面から『ミュージック』アプリで集中用の音楽を再生するために使います。
         ITSAppUsesNonExemptEncryption: false
         # The CloudKit container environment, expanded from the SAME build
         # setting that fills the icloud-container-environment entitlement, so
@@ -130,10 +133,12 @@ targets:
       # PomoGemLocale and DurationText, so the Live Activity and widgets format
       # durations like the app (Docs/Localization.md).
       - path: Shared/LocalizedDuration.swift
-      # D19: the data-free raw-stone widget (drawn by code; no data, no
-      # App Group) and the start link it opens.
+      # The constant pomogem:// routes behind widget taps (notify-03). Routes
+      # only: no data, no App Group, no store.
+      - path: Shared/AppEntryLink.swift
+      # D19: the data-free raw-stone artwork the widget draws in place of
+      # the jar (drawn by code; no data, no App Group).
       - path: Shared/RawStoneArtwork.swift
-      - path: Shared/StartFocusLink.swift
       - path: PomoGemWidgets/PrivacyInfo.xcprivacy
         buildPhase: resources
     settings:
@@ -166,6 +171,9 @@ targets:
       - path: Shared/ScreenTimeCallbackDiagnostics.swift
       - path: Shared/ScreenTimeStore.swift
       - path: Shared/ScreenTimeMonitoring.swift
+      # The focus shield's record and failsafe handler: the extension clears
+      # the shield when its DeviceActivity interval ends (F2).
+      - path: Shared/ScreenTimeFocusShield.swift
     entitlements:
       path: PomoGemScreenTimeMonitor/PomoGemScreenTimeMonitor.entitlements
       properties:

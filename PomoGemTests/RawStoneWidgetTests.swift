@@ -3,9 +3,10 @@ import XCTest
 @testable import PomoGem
 
 /// D19 (Docs/GemExperienceDesign.md §8.7): the home-screen widget shows a
-/// still, colourless raw stone with no account data and opens the start
-/// screen. The widget extension stays data-free: no App Group, no stored
-/// snapshot, no store — only two small shared sources.
+/// still, colourless raw stone with no account data, in the jar slot of the
+/// #43 widget, whose links (`AppEntryLink`, notify-03) it keeps. The widget
+/// extension stays data-free: no App Group, no stored snapshot, no store —
+/// only small shared sources.
 @MainActor
 final class RawStoneWidgetTests: XCTestCase {
     private var projectRoot: URL {
@@ -100,38 +101,6 @@ final class RawStoneWidgetTests: XCTestCase {
         XCTAssertLessThan(plated.pixels[nearCorner + 2], 90, "Deep navy")
     }
 
-    // MARK: The link
-
-    func testStartLinkOnlyShowsHome() {
-        XCTAssertEqual(StartFocusLink.url.absoluteString, "pomogem://start")
-        XCTAssertEqual(AppLinks.startFocus, StartFocusLink.url)
-        XCTAssertTrue(StartFocusLink.matches(URL(string: "POMOGEM://Start")!))
-        XCTAssertFalse(StartFocusLink.matches(URL(string: "pomogem://settings")!))
-        XCTAssertFalse(StartFocusLink.matches(URL(string: "https://pomogem.hinoshiba.com/start")!))
-
-        let router = AppRouter()
-        XCTAssertTrue(router.openStartLink(StartFocusLink.url))
-        XCTAssertEqual(router.selectedTab, .jar, "A launch opens on Home, where the focus button is")
-        router.selectedTab = .settings
-        XCTAssertFalse(router.openStartLink(URL(string: "pomogem://other")!))
-        XCTAssertEqual(router.selectedTab, .settings)
-        // A page the person left open is never popped (its sheets, unsaved
-        // edits or an export in flight would be lost).
-        for page in [AppTab.settings, .log, .screenTime] {
-            router.selectedTab = page
-            XCTAssertTrue(router.openStartLink(StartFocusLink.url))
-            XCTAssertEqual(router.selectedTab, page, "\(page) stays open")
-        }
-        XCTAssertFalse(router.focusPresentationIsActive, "Nothing starts")
-        XCTAssertFalse(router.sharePresented)
-        XCTAssertFalse(router.paywallPresented)
-
-        // The scheme the link uses is the one the app registers.
-        let schemes = (Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]] ?? [])
-            .flatMap { $0["CFBundleURLSchemes"] as? [String] ?? [] }
-        XCTAssertTrue(schemes.contains("pomogem"))
-    }
-
     // MARK: The privacy boundary
 
     func testWidgetExtensionStaysDataFree() throws {
@@ -145,13 +114,19 @@ final class RawStoneWidgetTests: XCTestCase {
         for forbidden in ["UserDefaults(suiteName", "containerURL", "WidgetSnapshot", "ModelContainer", "group.com.hinoshiba", "FileManager"] {
             XCTAssertFalse(homeWidget.contains(forbidden), "The home widget never reads \(forbidden)")
         }
+        // The stone fills #43's jar slot in both sizes; the links stay #43's.
         XCTAssertTrue(homeWidget.contains("RawStoneArtwork("))
-        XCTAssertTrue(homeWidget.contains(".widgetURL(StartFocusLink.url)"))
+        XCTAssertTrue(homeWidget.contains("NeutralJarArtwork(framed: false)"))
+        XCTAssertTrue(homeWidget.contains("NeutralJarArtwork(framed: true)"))
+        XCTAssertTrue(homeWidget.contains("FocusPresetLinks()"))
+        XCTAssertTrue(homeWidget.contains(".widgetURL(AppEntryLink.focusStartURL())"))
+        XCTAssertTrue(homeWidget.contains(".widgetURL(AppEntryLink.homeURL)"))
+        XCTAssertFalse(homeWidget.contains("pomogem://"), "URLs come only from Shared/AppEntryLink.swift")
         XCTAssertTrue(homeWidget.contains(".supportedFamilies([.systemSmall, .systemMedium])"))
 
         // main's duration formatting (Docs/Localization.md) is compiled
         // into the widget too, so it is held to the same boundary.
-        for shared in ["RawStoneArtwork.swift", "StartFocusLink.swift", "LocalizedDuration.swift"] {
+        for shared in ["RawStoneArtwork.swift", "AppEntryLink.swift", "LocalizedDuration.swift"] {
             let source = try String(contentsOf: projectRoot.appendingPathComponent("Shared/\(shared)"), encoding: .utf8)
             for forbidden in ["UserDefaults", "FileManager", "import UIKit", "import SpriteKit", "import SwiftData", "CloudKit"] {
                 XCTAssertFalse(source.contains(forbidden), "\(shared) stays free of \(forbidden)")
@@ -169,8 +144,8 @@ final class RawStoneWidgetTests: XCTestCase {
         XCTAssertEqual(sharedSources, [
             "- path: Shared/FocusActivityAttributes.swift",
             "- path: Shared/LocalizedDuration.swift",
-            "- path: Shared/RawStoneArtwork.swift",
-            "- path: Shared/StartFocusLink.swift"
+            "- path: Shared/AppEntryLink.swift",
+            "- path: Shared/RawStoneArtwork.swift"
         ])
         XCTAssertFalse(widgetTarget.contains("entitlements:\n      properties"), "No entitlement properties for the widget")
     }

@@ -195,6 +195,13 @@ enum LocalPreviewLaunchPolicy {
     /// app asks in this process, as on a new or reinstalled iPhone. A
     /// simulator keeps its answer across UI tests and one cannot reset it.
     static let unaskedNotificationPermissionUITestEnvironmentKey = "POMOGEM_UI_TEST_NOTIFICATIONS_UNASKED"
+    /// With the unasked fixture only: answers this process's permission
+    /// request itself ("granted" or "refused") without showing iOS's prompt,
+    /// so a test can pin either branch whatever the simulator answered before.
+    static let notificationPermissionAnswerUITestEnvironmentKey = "POMOGEM_UI_TEST_NOTIFICATIONS_ANSWER"
+    /// Seeds a second theme with this colour, as 1.0.x's HSB suggestion
+    /// saved it: a colour that is not a palette swatch (a11y-04).
+    static let legacyThemeColorUITestEnvironmentKey = "POMOGEM_UI_TEST_LEGACY_THEME_COLOR"
 #else
     // Keep the policy API available to ordinary production code while making
     // the test protocol and its environment tokens absent from Release output.
@@ -208,6 +215,8 @@ enum LocalPreviewLaunchPolicy {
     static let deletedThemeHistoryUITestEnvironmentKey = ""
     static let syncedReminderIntentUITestEnvironmentKey = ""
     static let unaskedNotificationPermissionUITestEnvironmentKey = ""
+    static let notificationPermissionAnswerUITestEnvironmentKey = ""
+    static let legacyThemeColorUITestEnvironmentKey = ""
 #endif
 
     static func isEnabled(
@@ -340,6 +349,14 @@ struct PomoGemApp: App {
         case .inMemoryPreview, .persistentSimulator, .localOnly:
             AccountScopedLocalState.useUnscopedLocalMode()
         }
+#if DEBUG && targetEnvironment(simulator)
+        // The first launch of a UI test forgets the timer, its notification
+        // requests and the queues the previous test left behind; the test's
+        // own relaunches keep them. Simulator only: on a real iPhone the
+        // device tests run against the owner's own store, timer and
+        // notifications, which must never be cleared.
+        UITestLocalStateIsolation.beginScenarioIfNeeded()
+#endif
 
         // StoreKit delivery must begin before persistence preparation or the
         // first view asks for Pro state. The singleton installs its updates
@@ -350,6 +367,9 @@ struct PomoGemApp: App {
         // A return reminder belongs only to the preceding absence. Cancel it
         // before any asynchronous storage/account recovery on a cold launch.
         NotificationManager.shared.cancelFocusReturnReminder()
+#if DEBUG
+        FocusLeavePreferences.startUITestProcessFromItsDefault()
+#endif
 
         if !ReleaseExternalSurfacePolicy.supportsLiveActivities
             || !FocusActivityPreference.isEnabled()
@@ -368,6 +388,11 @@ struct PomoGemApp: App {
             PomoGemPersistenceLaunchHost()
                 .preferredColorScheme(.dark)
                 .tint(PomoGemTheme.amber)
+                // Widgets and links (notify-03). Only a constant route is
+                // kept; Root acts on it after the launch checks mount the jar.
+                .onOpenURL { url in
+                    AppEntryInbox.shared.receive(url: url)
+                }
         }
     }
 }
@@ -615,6 +640,9 @@ private struct PomoGemPersistenceLaunchHost: View {
     @State private var focusReturnReminderWindow = FocusReturnReminderLockWindow(
         dependencies: .live
     )
+    /// F1. Lives here for the same reason: it must decide an absence and
+    /// pause the saved timer after the iCloud grace has retired FocusView.
+    @State private var focusLeaveMonitor = FocusLeaveMonitor(dependencies: .live)
     @State private var containerLifetimes =
         PersistenceContainerLifetimeTracker<ModelContainer>()
     /// quality-01. Holds a verified iCloud session through a short background
@@ -703,10 +731,22 @@ private struct PomoGemPersistenceLaunchHost: View {
         .onChange(of: scenePhase) { _, phase in
             handleScenePhaseChange(phase)
         }
+        .onChange(of: appEntryStopState, initial: true) { _, state in
+            // A widget, link or Shortcut request never waits behind a stop
+            // screen (account check failed, offline, storage choice…). Once
+            // the person has dealt with that screen, the jar opens as usual
+            // and nothing starts on its own.
+            if state.showsStopScreen { AppEntryInbox.shared.discard() }
+        }
         .onReceive(
             NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
                 .receive(on: RunLoop.main)
         ) { _ in
+            // A return the scene callback could not yet confirm (UIKit still
+            // inactive) is confirmed here.
+            if !requiresStorageTransferRelaunch {
+                focusLeaveMonitor.handleApplicationDidBecomeActive()
+            }
             // SwiftUI and UIKit can report activation in either order. If the
             // scene callback ran first, retry once UIKit is also ready. A
             // running preparation, published session, or settled choice/error
@@ -721,6 +761,26 @@ private struct PomoGemPersistenceLaunchHost: View {
             cancelLaunchActivationDeadline()
             handleScenePhaseChange(.active)
         }
+    }
+
+    private struct AppEntryStopState: Equatable {
+        let requestID: UUID?
+        let showsStopScreen: Bool
+    }
+
+    private var appEntryStopState: AppEntryStopState {
+        let showsStopScreen: Bool
+        if session != nil {
+            showsStopScreen = false
+        } else if case .preparing = launchState {
+            showsStopScreen = false
+        } else {
+            showsStopScreen = true
+        }
+        return AppEntryStopState(
+            requestID: AppEntryInbox.shared.pending?.id,
+            showsStopScreen: showsStopScreen
+        )
     }
 
     private var launchStatusContent: some View {
@@ -1095,6 +1155,12 @@ private struct PomoGemPersistenceLaunchHost: View {
                 environment: ProcessInfo.processInfo.environment
             ) {
                 let schema = PersistenceStoreTopology.shippingSchema
+                // A store this launch creates or wipes starts empty, so any
+                // receipt in UserDefaults still names another store's rows.
+                if fixtureRequest.action != .normal
+                    || !FileManager.default.fileExists(atPath: fixtureRequest.storeURL.path) {
+                    UITestLocalStateIsolation.forgetStateDerivedFromPreviousStores()
+                }
                 let configuration = try FortyYearPersistentUITestFixture.makeConfiguration(
                     schema: schema,
                     request: fixtureRequest
@@ -1115,6 +1181,14 @@ private struct PomoGemPersistenceLaunchHost: View {
             let mode = LocalPreviewLaunchPolicy.persistenceModeForCurrentProcess
             guard mode == .cloudKit else {
                 AccountScopedLocalState.useUnscopedLocalMode()
+#if DEBUG && targetEnvironment(simulator)
+                // Every preview launch (UI test or not) opens a new, empty
+                // in-memory store. Simulator only, like the other two calls:
+                // a Debug build on a real iPhone keeps its queues untouched.
+                if mode == .inMemoryPreview {
+                    UITestLocalStateIsolation.forgetStateDerivedFromPreviousStores()
+                }
+#endif
                 session = try makeLocalSession(mode: mode)
                 return
             }
@@ -2850,6 +2924,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         // in this process, so nothing else would retire the Screen Time lease.
         ScreenTimeOwnerBoundaryPolicy.retire(for: .storageTransferRelaunch)
         NotificationManager.shared.cancelFocusReturnReminder()
+        focusLeaveMonitor.cancel()
         beginContainerRetirement()
         isQuiescingAccountChange = false
         isPreparing = false
@@ -3332,6 +3407,10 @@ private struct PomoGemPersistenceLaunchHost: View {
         // first async cleanup yields. A verified replacement account reopens
         // scheduling only after its new container has mounted.
         NotificationManager.shared.suspendTimerSchedulingForAccountBoundary()
+        // An absence being watched belongs to the account that is leaving.
+        // Its marker stays in that account's saved timer and is applied if
+        // the same account comes back.
+        focusLeaveMonitor.cancel()
         suspendedAccountBinding = suspendedAccountBinding
             ?? AccountScopedLocalState.activeBinding()
         // Clearing the cross-process binding first makes widget/local state
@@ -3407,9 +3486,19 @@ private struct PomoGemPersistenceLaunchHost: View {
         )
         guard !requiresStorageTransferRelaunch else {
             focusReturnReminderWindow.cancel()
+            focusLeaveMonitor.cancel()
             return
         }
-        focusReturnReminderWindow.handle(phase)
+        // F1 supersedes the single return reminder: never both. With the
+        // leave pause off, the reminder behaves exactly as before.
+        if FocusLeavePreferences.isEnabled() {
+            focusReturnReminderWindow.cancel()
+        } else {
+            focusReturnReminderWindow.handle(phase)
+        }
+        // Before any retirement below: an absence is written to this
+        // account's saved timer while its key is still the active one.
+        focusLeaveMonitor.handle(phase)
         if phase == .active, backgroundGrace.sceneBecameActive() {
             // quality-01. Back within the grace: the process was never
             // suspended, so Root, its sheets and the jar simply stay. The
@@ -3638,6 +3727,11 @@ private struct PomoGemPersistenceLaunchHost: View {
         // the same timer remounts and restores it; otherwise its session never
         // comes back in the new account's namespace.
         TimerCompletionAlertController.shared.suspendForContainerRetirement()
+        // The focus shield goes with the timer's other surfaces: its record is
+        // not owner-bound, and at a cold launch that never admitted
+        // persistence no Screen Time lease exists to retire it. If the account
+        // turns out unchanged, the remounted timer shields again.
+        ScreenTimeController.shared.focusShield.retire(reason: .ownerRetired)
         if let namespace = suspendedAccountBinding?.namespace {
             FocusPersistence.clearScheduledCompletionNotificationWitness(
                 namespace: namespace

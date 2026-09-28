@@ -753,7 +753,12 @@ final class RealDeviceCoreLoopUITests: XCTestCase {
     private func attach(freshLaunch: Bool) -> XCUIApplication {
         let application = XCUIApplication()
         application.launchEnvironment = [:]
-        application.launchArguments = []
+        // This suite measures a focus that keeps running on the Home Screen
+        // (test03 and the lock-screen completion banner). F1's leave pause
+        // (Docs/FocusLeavePause.md) is switched off for this process only;
+        // the argument domain is never persisted. Its own real-device matrix
+        // is manual until this suite gains an F1 case.
+        application.launchArguments = ["-focus.leave-pause.enabled", "NO"]
         PomoGemUITestLanguage.configureJapanese(application)
         app = application
         if freshLaunch || application.state == .notRunning {

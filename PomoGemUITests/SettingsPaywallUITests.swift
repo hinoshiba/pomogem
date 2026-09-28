@@ -160,6 +160,70 @@ final class SettingsPaywallUITests: XCTestCase {
         XCTAssertFalse(notice.exists, "Told once")
     }
 
+    /// F4 (Docs/FocusMusic.md). 設定 → 集中 → 「集中用の音楽」 names the chosen
+    /// music and opens the timer's music sheet. The choice is seeded through
+    /// the argument domain. Nothing here needs an Apple Music account: the
+    /// row and the sheet only read the MusicKit status, and the access
+    /// button a fresh Simulator shows is never tapped.
+    func testTheFocusMusicRowOpensTheMusicSheet() {
+        let classical = "pl.cf8514b686374fadbe6807a6339dfd89"
+        app.launchArguments += ["-music.focus.source", classical]
+        launchAndOpenSettings()
+
+        let row = app.buttons["settings.focus-music"]
+        XCTAssertTrue(reveal(row))
+        XCTAssertEqual(row.label, "集中用の音楽")
+        let value = row.value as? String ?? ""
+        XCTAssertTrue(value.contains("作業用BGM：クラシック"), value)
+        // In the 集中 card, after the timer's own rows.
+        let orientation = app.buttons["settings.timer-default-orientation"]
+        if orientation.exists {
+            XCTAssertLessThan(orientation.frame.minY, row.frame.minY)
+        }
+        // The leave-pause card (F1) follows the 集中 card, above the Live Activity.
+        let leavePause = app.switches["settings.focus-leave-pause"]
+        if leavePause.exists {
+            XCTAssertLessThan(row.frame.maxY, leavePause.frame.minY)
+        }
+        let liveActivity = app.switches["settings.live-activity"]
+        if liveActivity.exists {
+            XCTAssertLessThan(row.frame.maxY, liveActivity.frame.minY)
+        }
+        attach("Settings — focus music row")
+
+        row.tap()
+        let close = app.buttons["focus-music.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 8))
+        XCTAssertTrue(app.navigationBars["集中用の音楽"].exists)
+        let chosen = element("focus-music.source.\(classical)")
+        XCTAssertTrue(chosen.waitForExistence(timeout: 4))
+        XCTAssertEqual(chosen.value as? String, "選択中")
+        for source in [
+            "ra.985486574",
+            "pl.cb4d1c09a2df4230a78d0395fe1f8fde",
+            "pl.f6ab843650ff4d6aafbd96de3a0b8a13",
+            "pl.9b8a976ba78741d9925e6e9a050703de"
+        ] {
+            let other = element("focus-music.source.\(source)")
+            XCTAssertTrue(other.exists, source)
+            XCTAssertEqual(other.value as? String, "未選択", source)
+        }
+        XCTAssertTrue(element("focus-music.autoplay").exists)
+        // Opening the sheet reads the status only; the MusicKit prompt
+        // appears solely from a tap on 「Apple Musicへのアクセスを許可」.
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let musicPrompt = springboard.alerts.matching(
+            NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS %@", "Apple Music", "メディア")
+        ).firstMatch
+        XCTAssertFalse(musicPrompt.waitForExistence(timeout: 2), "No MusicKit prompt without a tap")
+        attach("Focus music sheet — opened from Settings")
+
+        close.tap()
+        XCTAssertTrue(waitForAbsence(close, timeout: 6))
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
+        XCTAssertTrue(row.exists)
+    }
+
     // MARK: - Helpers
 
     private func waitForAbsence(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
@@ -177,11 +241,53 @@ final class SettingsPaywallUITests: XCTestCase {
         launchAndOpenSettings()
         attach("\(prefix) — top")
 
+        // F4. The 集中 card's music row keeps its 44 pt target and its name;
+        // at AX5 the sheet it opens stays closable and scrolls to its end.
+        let music = app.buttons["settings.focus-music"]
+        XCTAssertTrue(reveal(music))
+        XCTAssertGreaterThanOrEqual(music.frame.height, 43.5)
+        XCTAssertEqual(music.label, "集中用の音楽")
+        XCTAssertFalse((music.value as? String ?? "").isEmpty, "The row names the chosen music or 未選択")
+        attach("\(prefix) — focus music row")
+        if accessibility5 {
+            checkFocusMusicSheetAtAccessibilitySize(from: music)
+        }
+
+        // F1. UI-test processes start with the leave pause off (shared
+        // Simulators background many focuses); FocusLeaveSettingsUITests
+        // covers the product default, on.
+        let leavePause = app.switches["settings.focus-leave-pause"]
+        XCTAssertTrue(reveal(leavePause))
+        XCTAssertTrue(leavePause.label.contains("アプリを離れたら一時停止"), leavePause.label)
+        XCTAssertEqual(leavePause.value as? String, "0")
+        XCTAssertFalse(app.switches["settings.focus-leave-nudges"].exists,
+                       "The series exists only while the leave pause is on")
+        XCTAssertTrue(reveal(text(containing: "パスコードがないiPhoneでは、ロックとアプリの切り替えを区別できないため")))
+        XCTAssertTrue(reveal(text(containing: "オフのときは、アプリを離れてもタイマーは止まりません")))
+        attach("\(prefix) — leave pause and its footer")
+        if music.exists, music.isHittable, leavePause.isHittable {
+            XCTAssertLessThan(music.frame.minY, leavePause.frame.minY,
+                              "The 集中 card ends with 集中用の音楽; the leave pause card follows it")
+        }
+
+        // The leave pause sits with the timer, above the Live Activity. Its
+        // card's last footer paragraph and the Live Activity row are
+        // compared while both are on screen, at every text size.
         let liveActivity = app.switches["settings.live-activity"]
+        let resumeFooter = element("settings.focus-leave-footer.resume")
         XCTAssertTrue(reveal(liveActivity))
+        XCTAssertTrue(resumeFooter.exists, "The leave-pause card ends right above the Live Activity card")
+        XCTAssertLessThanOrEqual(resumeFooter.frame.maxY, liveActivity.frame.minY + 1,
+                                 "The leave pause sits with the timer, above the Live Activity")
+        if !accessibility5 {
+            XCTAssertTrue(leavePause.exists)
+            XCTAssertLessThan(leavePause.frame.minY, liveActivity.frame.minY,
+                              "The leave pause sits with the timer, above the Live Activity")
+        }
         let returnReminder = app.switches["settings.focus-return-reminder"]
-        XCTAssertTrue(reveal(returnReminder))
-        XCTAssertTrue(reveal(text(containing: "タイマーはバックグラウンドでも止まりません")))
+        XCTAssertTrue(reveal(returnReminder), "With the leave pause off the return reminder is offered as before")
+        XCTAssertTrue(reveal(text(containing: "「アプリを離れたら一時停止」の設定に従います")))
+        XCTAssertFalse(text(containing: "タイマーはバックグラウンドでも止まりません").exists)
         attach("\(prefix) — timer notices and their footer")
 
         let pro = app.buttons["settings.pro"]
@@ -190,6 +296,15 @@ final class SettingsPaywallUITests: XCTestCase {
         XCTAssertTrue(pro.label.contains("自由な集中時間"), pro.label)
         XCTAssertTrue(reveal(text(containing: "Proは1回だけの買い切りです")))
         attach("\(prefix) — Pro beside the timer")
+
+        // Only this card's switches are off by default: the leave-pause
+        // series in the Focus card is on by default.
+        let notificationsFooter = element("settings.notifications-footer")
+        XCTAssertTrue(reveal(notificationsFooter))
+        XCTAssertTrue(notificationsFooter.label.contains("「毎日のリマインダー」と「先月の瓶のお知らせ」は既定でオフです"),
+                      notificationsFooter.label)
+        XCTAssertFalse(notificationsFooter.label.hasPrefix("既定はオフ。"), notificationsFooter.label)
+        attach("\(prefix) — notifications footer")
 
         let export = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "データを書き出す")).firstMatch
         XCTAssertTrue(reveal(export))
@@ -231,6 +346,51 @@ final class SettingsPaywallUITests: XCTestCase {
         XCTAssertTrue(close.waitForExistence(timeout: 6))
         close.tap()
         XCTAssertTrue(app.navigationBars["このアプリについて"].waitForExistence(timeout: 6))
+    }
+
+    /// Settings hands its Dynamic Type size to the music sheet, which opens
+    /// at the medium detent. Nothing in the sheet is tapped except 閉じる:
+    /// the access button would show the MusicKit prompt and a list row
+    /// would start playback.
+    private func checkFocusMusicSheetAtAccessibilitySize(from row: XCUIElement) {
+        row.tap()
+        let close = app.buttons["focus-music.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 8))
+        XCTAssertTrue(close.isHittable)
+        let bar = app.navigationBars["集中用の音楽"]
+        XCTAssertTrue(bar.exists)
+        // iOS 26 draws a sheet at its medium detent slightly scaled down: the
+        // bar, laid out at the window's width, shows about 96% of it. The
+        // 44 pt target is compared in that scale here, and at full size once
+        // the sheet has grown to its large detent below.
+        let window = app.windows.firstMatch.frame
+        let mediumScale = min(1, settledFrame(of: bar).width / window.width)
+        XCTAssertGreaterThanOrEqual(settledFrame(of: close).height, 43.5 * mediumScale)
+        XCTAssertTrue(element("focus-music.source.pl.cf8514b686374fadbe6807a6339dfd89").waitForExistence(timeout: 4))
+        attach("Settings AX5 — focus music sheet, medium detent")
+
+        let autoplay = element("focus-music.autoplay")
+        XCTAssertTrue(autoplay.waitForExistence(timeout: 4))
+        let sheetScroll = app.scrollViews
+            .containing(NSPredicate(format: "identifier == %@", "focus-music.autoplay"))
+            .firstMatch
+        let bottom = window.maxY - 20
+        for _ in 0..<10 {
+            if autoplay.isHittable, autoplay.frame.maxY <= bottom { break }
+            sheetScroll.swipeUp(velocity: .slow)
+        }
+        XCTAssertTrue(autoplay.isHittable, "The sheet scrolls to its last row at AX5")
+        XCTAssertLessThanOrEqual(autoplay.frame.maxY, bottom)
+        XCTAssertTrue(close.isHittable, "閉じる stays reachable after scrolling")
+        // Scrolling up from the medium detent grows the sheet first.
+        XCTAssertEqual(settledFrame(of: bar).width, window.width, accuracy: 0.5, "The sheet reached its large detent")
+        XCTAssertGreaterThanOrEqual(settledFrame(of: close).height, 43.5)
+        attach("Settings AX5 — focus music sheet, scrolled to the end")
+
+        close.tap()
+        XCTAssertTrue(waitForAbsence(close, timeout: 6))
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
+        XCTAssertTrue(row.exists)
     }
 
     private func launchAndOpenSettings() {
