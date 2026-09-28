@@ -804,12 +804,6 @@ private struct SubjectSetupPage: View {
         return "あと\(SubjectNamePolicy.remainingCharacters(for: customSubjectName))文字入力できます"
     }
 
-    private var suggestionColumns: [GridItem] {
-        dynamicTypeSize.isAccessibilitySize
-            ? [GridItem(.flexible())]
-            : [GridItem(.flexible()), GridItem(.flexible())]
-    }
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 26) {
@@ -843,23 +837,35 @@ private struct SubjectSetupPage: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                LazyVGrid(columns: suggestionColumns, spacing: 10) {
+                // device-verify-2 P9: two columns only when every name fits
+                // on one line in half the width, otherwise one full-width
+                // column. The fixed two-column grid broke 「資料作成」 and
+                // 「顧客対応」 in the middle of the word at the default size
+                // on a 375 pt iPhone.
+                ThemeChoiceColumns(spacing: 10) {
                     ForEach(SubjectSuggestionCatalog.presets) { preset in
                         let isSelected = effectiveSelection.contains(preset.name)
                         Button {
                             choosePreset(preset)
                         } label: {
-                            HStack(spacing: 10) {
+                            HStack(spacing: 8) {
                                 Circle()
                                     .fill(Color(hex: preset.colorHex))
                                     .frame(width: 14, height: 14)
                                 Text(preset.name)
                                     .font(.system(.body, design: .rounded, weight: .bold))
-                                Spacer()
+                                    // A name is never split across lines; the
+                                    // one-column layout gives it the full
+                                    // width, and only a name wider than that
+                                    // shrinks a little.
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.7)
+                                    .layoutPriority(1)
+                                Spacer(minLength: 4)
                                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                                     .foregroundStyle(isSelected ? PomoGemTheme.amber : PomoGemTheme.muted)
                             }
-                            .padding(.horizontal, 14)
+                            .padding(.horizontal, 12)
                             .frame(minHeight: 50)
                             .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 13))
                         }
@@ -1065,6 +1071,62 @@ private struct SubjectSetupPage: View {
 
     private func requiresNewSubject(named name: String) -> Bool {
         !existingSubjectKeys.contains(SubjectNamePolicy.comparisonKey(name))
+    }
+}
+
+/// Equal columns for the onboarding theme choices: two when the widest
+/// choice fits on one line in half the width, otherwise one (device-verify-2
+/// P9). Each choice is measured at its ideal (one-line) width, so the
+/// decision follows the text size and the screen instead of a fixed rule.
+private struct ThemeChoiceColumns: Layout {
+    var spacing: CGFloat
+
+    private struct Arrangement {
+        var size: CGSize
+        var frames: [CGRect]
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        arrange(width: proposal.width, subviews: subviews).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let arrangement = arrange(width: bounds.width, subviews: subviews)
+        for (subview, frame) in zip(subviews, arrangement.frames) {
+            subview.place(
+                at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                anchor: .topLeading,
+                proposal: ProposedViewSize(width: frame.width, height: frame.height)
+            )
+        }
+    }
+
+    private func arrange(width proposedWidth: CGFloat?, subviews: Subviews) -> Arrangement {
+        let widest = subviews.map { $0.sizeThatFits(.unspecified).width }.max() ?? 0
+        let width = proposedWidth ?? (widest * 2 + spacing)
+        let columns = widest * 2 + spacing <= width ? 2 : 1
+        let columnWidth = columns == 2 ? (width - spacing) / 2 : width
+        var frames: [CGRect] = []
+        var y: CGFloat = 0
+        for rowStart in stride(from: 0, to: subviews.count, by: columns) {
+            let row = rowStart..<min(rowStart + columns, subviews.count)
+            let height = row.map {
+                subviews[$0].sizeThatFits(ProposedViewSize(width: columnWidth, height: nil)).height
+            }.max() ?? 0
+            for (column, _) in row.enumerated() {
+                frames.append(CGRect(
+                    x: CGFloat(column) * (columnWidth + spacing),
+                    y: y,
+                    width: columnWidth,
+                    height: height
+                ))
+            }
+            y += height + spacing
+        }
+        return Arrangement(
+            size: CGSize(width: width, height: max(0, y - spacing)),
+            frames: frames
+        )
     }
 }
 
