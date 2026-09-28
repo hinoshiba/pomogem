@@ -273,11 +273,12 @@ final class GIFShareLifecycleUITests: XCTestCase {
     }
 
     /// device-verify-2 P5. The pinned シェア button used to be a safe-area
-    /// inset over the scroll view, so on first appearance 「調整」 lay under
-    /// it and a tap there — as XCTest makes, and as a person reading it
-    /// through the bar's material would — started the share. The bar now
-    /// sits below the scroll view: a control is either clear of it or
-    /// scrolled into view before the tap.
+    /// inset over the scroll view: the scroll view ran on under the bar, so
+    /// on first appearance 「調整」 lay under the button, readable through
+    /// its material, and a tap there started the share. The bar now sits
+    /// below the scroll view, which ends at the bar's top edge: a row is cut
+    /// off there, never drawn under the button, and a tap on what shows of
+    /// it opens it.
     func testAdjustmentsTappedWhereTheyFirstAppearOpenWithoutStartingTheShare() {
         addShareableSession()
         openMenuAction(containing: "動く瓶をシェア")
@@ -290,15 +291,32 @@ final class GIFShareLifecycleUITests: XCTestCase {
         let adjustments = app.buttons["調整"]
         XCTAssertTrue(adjustments.waitForExistence(timeout: 8))
         XCTAssertTrue(shareActionBar.exists)
-        if adjustments.isHittable {
-            XCTAssertLessThanOrEqual(
-                adjustments.frame.midY, shareActionBar.frame.minY,
-                "Nothing the composer shows may lie under the pinned bar"
-            )
-        }
+        let content = app.scrollViews.containing(NSPredicate(format: "label == %@", "調整")).firstMatch
+        XCTAssertTrue(content.exists)
+        XCTAssertLessThanOrEqual(
+            content.frame.maxY, shareActionBar.frame.minY + 1,
+            "The composer's content must end at the pinned bar, not run on under it"
+        )
         saveScreenshot("share-first-appearance")
 
-        adjustments.tap()
+        // Tap what a person sees of the row: its part above the bar. XCTest
+        // aims at an element's centre even when the scroll view cuts it off,
+        // and a row wholly below the fold is scrolled into view first.
+        let barTop = shareActionBar.frame.minY
+        var row = adjustments.frame
+        if row.maxY > barTop, row.minY >= barTop - 12 {
+            // Only a sliver shows: bring the row up the way a person would.
+            app.swipeUp(velocity: .slow)
+            row = adjustments.frame
+        }
+        if row.maxY > barTop, row.minY < barTop - 12 {
+            let visibleMidY = (row.minY + barTop) / 2
+            app.coordinate(withNormalizedOffset: .zero)
+                .withOffset(CGVector(dx: row.midX, dy: visibleMidY))
+                .tap()
+        } else {
+            adjustments.tap()
+        }
         XCTAssertTrue(
             app.buttons["静止画"].waitForExistence(timeout: 5),
             "Tapping 「調整」 must open the adjustments"
