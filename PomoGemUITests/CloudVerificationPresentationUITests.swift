@@ -136,6 +136,52 @@ final class CloudVerificationPresentationUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [verified], timeout: 8), .completed, String(describing: jar.value))
     }
 
+    /// device-verify-2 P2. On the phone every return inside the 15 s
+    /// background grace — 5 s, 10 s — put Home back to about 65 s of
+    /// 「iCloudを確認中」. A short absence now keeps the verified jar. (The
+    /// fixture never verifies twice, so a revoked presentation would stay.)
+    func testAShortAbsenceKeepsTheVerifiedJar() {
+        launch(verification: "verify-after-3", history: 3)
+        let jar = app.descendants(matching: .any)["瓶"]
+        XCTAssertTrue(jar.waitForExistence(timeout: 8))
+        let verified = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value CONTAINS %@", "記録した集中時間の質量："), object: jar)
+        XCTAssertEqual(XCTWaiter.wait(for: [verified], timeout: 15), .completed, String(describing: jar.value))
+        let verifiedValue = (jar.value as? String) ?? ""
+        for seconds in [5.0, 10.0] {
+            XCUIDevice.shared.press(.home)
+            Thread.sleep(forTimeInterval: seconds)
+            app.activate()
+            XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
+            XCTAssertTrue(jar.waitForExistence(timeout: 5))
+            let seen = sampledValues(of: jar, for: 4)
+            XCTAssertFalse(seen.contains { $0.contains("iCloudを確認中") },
+                           "Back after \(Int(seconds)) s, the jar stays verified: \(seen)")
+            XCTAssertEqual(seen.last, verifiedValue)
+            saveScreenshot("short-absence-\(Int(seconds))s")
+        }
+    }
+
+    /// The other side of the same rule: a longer absence is a new foreground
+    /// epoch, so trust is revoked and iCloud is checked again.
+    func testALongerAbsenceStillChecksICloudAgain() {
+        launch(verification: "verify-after-3", history: 3)
+        let jar = app.descendants(matching: .any)["瓶"]
+        XCTAssertTrue(jar.waitForExistence(timeout: 8))
+        let verified = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value CONTAINS %@", "記録した集中時間の質量："), object: jar)
+        XCTAssertEqual(XCTWaiter.wait(for: [verified], timeout: 15), .completed, String(describing: jar.value))
+        XCUIDevice.shared.press(.home)
+        Thread.sleep(forTimeInterval: 20)
+        app.activate()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
+        let pending = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value CONTAINS %@", "iCloudを確認中。この端末で確認済みの集中時間の質量："),
+            object: jar)
+        XCTAssertEqual(XCTWaiter.wait(for: [pending], timeout: 8), .completed, String(describing: jar.value))
+        saveScreenshot("long-absence-pending")
+    }
+
     func testAX5PendingHomeStaysReadable() {
         launch(verification: "pending", accessibility5: true)
         let jar = app.descendants(matching: .any)["瓶"]
@@ -168,6 +214,17 @@ final class CloudVerificationPresentationUITests: XCTestCase {
         stopCompletionAlertIfPresented(in: app)
         XCTAssertTrue(app.buttons["休憩の提案を閉じる"].waitForExistence(timeout: 25),
                       "The demo focus commits, lands and offers its reward")
+    }
+
+    /// Every accessibility value `element` reports over `seconds`, in order.
+    private func sampledValues(of element: XCUIElement, for seconds: TimeInterval) -> [String] {
+        var values: [String] = []
+        let end = Date().addingTimeInterval(seconds)
+        while Date() < end {
+            if let value = element.value as? String, values.last != value { values.append(value) }
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        return values
     }
 
     private func dismissBreak() {
