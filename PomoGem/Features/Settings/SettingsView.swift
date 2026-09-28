@@ -3708,10 +3708,14 @@ private struct SubjectEditorView: View {
                                                 Circle().stroke(.white, lineWidth: 3).padding(-4)
                                             }
                                         }
+                                    // Two-word English names (12 Leaf Green) wrap
+                                    // at the accessibility sizes instead of
+                                    // truncating; the Japanese names fit one line.
                                     Text(verbatim: "\(index + 1) \(choice.name)")
                                         .font(.caption2)
                                         .foregroundStyle(PomoGemTheme.text)
-                                        .lineLimit(1)
+                                        .multilineTextAlignment(.center)
+                                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
                                         .minimumScaleFactor(0.75)
                                 }
                                 .frame(maxWidth: .infinity, minHeight: 60)

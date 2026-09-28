@@ -4853,7 +4853,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Used for both focus and break timers. Turning a timer for the moment on its screen doesn't change this default."
+            "value" : "Used for both focus and break timers. Changing the orientation on a timer's screen is temporary and doesn't change this default."
           }
         },
         "ja" : {
