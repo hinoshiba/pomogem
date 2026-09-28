@@ -546,6 +546,28 @@ struct JarSpriteView: View {
                     .opacity(scene.isFusionSpotlightActive ? 0 : 1)
                     .animation(.easeInOut(duration: 0.18), value: scene.isFusionSpotlightActive)
                 }
+#if DEBUG
+                // The core has no accessibility frame of its own (the jar is
+                // one element), so Home's jar (the only one with a measured
+                // HUD above its core) reports it for UI tests: the tapped
+                // crystal's card must stay clear of it.
+                if coreTopClearance != nil, let coreDisc {
+                    let labelBottom = coreLayout.map {
+                        $0.labelTop + (coreLabelsBuried ? 0 : coreLabelMetrics.size.height)
+                    } ?? 0
+                    let halfWidth = max(coreDisc.radius, coreLayout == nil ? 0 : coreLabelMetrics.size.width / 2)
+                    let top = coreDisc.center.y - coreDisc.radius
+                    let bottom = max(coreDisc.center.y + coreDisc.radius, labelBottom)
+                    Color.clear
+                        .frame(width: halfWidth * 2, height: max(0, bottom - top))
+                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: {
+                            HomeRenderDiagnostics.jarCoreWindowFrame = $0
+                        }
+                        .position(x: coreDisc.center.x, y: (top + bottom) / 2)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+#endif
             }
         }
         .accessibilityElement(children: .ignore)
