@@ -1687,6 +1687,11 @@ struct HomeView: View {
         } action: { bottom in
             measuredJarHUDBottom = bottom
         }
+#if DEBUG
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: {
+            HomeRenderDiagnostics.jarHUDWindowFrame = $0
+        }
+#endif
         .shadow(color: .black.opacity(0.52), radius: 3, y: 1)
         // A soft ink scrim keeps the value legible over the brighter core,
         // orbit markers and glowing gems behind the glass. The text shadow
@@ -7259,11 +7264,17 @@ private struct FortyYearPersistentFixtureProbe: View {
 /// that keeps climbing. Debug builds only.
 /// It also keeps the one-time jar hint's window frame: the hint is hidden
 /// from accessibility (the jar speaks the same guidance), so a test cannot
-/// otherwise check that it stays clear of the gem it describes.
+/// otherwise check that it stays clear of the gem it describes. For the same
+/// reason it keeps the readout's and the time core's window frames: both are
+/// inside the jar's one accessibility element, and a test pins the tapped
+/// crystal's card clear of them.
 @MainActor
 enum HomeRenderDiagnostics {
     private(set) static var bodyEvaluationCount = 0
     static var jarHintWindowFrame: CGRect?
+    static var jarHUDWindowFrame: CGRect?
+    /// The stone (or, before the core, its vessel) and the label block under it.
+    static var jarCoreWindowFrame: CGRect?
 
     static func recordBodyEvaluation() {
         bodyEvaluationCount &+= 1
@@ -7305,6 +7316,14 @@ private struct JarUITestPresentationProbe: View {
     /// it changes, so reading it cannot inflate the count it reports.
     @State private var homeBodyEvaluations = 0
     @State private var jarHintFrame: CGRect?
+    /// A resting crystal (×10 or larger) in window points, for a test that
+    /// taps one to show its card; -1 while the jar holds none.
+    @State private var crystalWindowX: CGFloat = -1
+    @State private var crystalWindowY: CGFloat = -1
+    @State private var hudFrame: CGRect?
+    @State private var coreFrame: CGRect?
+    /// The bottle (`JarScene.outerJarRect`): every gem rests inside it.
+    @State private var bottleFrame: CGRect?
 
     var body: some View {
         Text("Jar presentation probe")
@@ -7329,7 +7348,7 @@ private struct JarUITestPresentationProbe: View {
 
     private var presentationValue: String {
         String(
-            format: "count=%d;maxY=%.3f;records=%@;bounceSequence=%d;bounceRise=%.3f;targetX=%.5f;targetY=%.5f;dropSequence=%d;dropFall=%.3f;dropLanded=%d;targetWindowX=%.1f;targetWindowY=%.1f;homeBodyEvaluations=%d;jarHint=%@",
+            format: "count=%d;maxY=%.3f;records=%@;bounceSequence=%d;bounceRise=%.3f;targetX=%.5f;targetY=%.5f;dropSequence=%d;dropFall=%.3f;dropLanded=%d;targetWindowX=%.1f;targetWindowY=%.1f;homeBodyEvaluations=%d;jarHint=%@;crystalWindowX=%.1f;crystalWindowY=%.1f;hud=%@;core=%@;bottle=%@",
             count,
             Double(maximumY),
             records,
@@ -7343,15 +7362,26 @@ private struct JarUITestPresentationProbe: View {
             Double(targetWindowX),
             Double(targetWindowY),
             homeBodyEvaluations,
-            jarHintFrame.map {
-                String(format: "%.1f,%.1f,%.1f,%.1f", $0.minX, $0.minY, $0.maxX, $0.maxY)
-            } ?? "none"
+            Self.corners(jarHintFrame),
+            Double(crystalWindowX),
+            Double(crystalWindowY),
+            Self.corners(hudFrame),
+            Self.corners(coreFrame),
+            Self.corners(bottleFrame)
         )
+    }
+
+    private static func corners(_ frame: CGRect?) -> String {
+        frame.map {
+            String(format: "%.1f,%.1f,%.1f,%.1f", $0.minX, $0.minY, $0.maxX, $0.maxY)
+        } ?? "none"
     }
 
     private func samplePresentation() {
         homeBodyEvaluations = HomeRenderDiagnostics.bodyEvaluationCount
         jarHintFrame = HomeRenderDiagnostics.jarHintWindowFrame
+        hudFrame = HomeRenderDiagnostics.jarHUDWindowFrame
+        coreFrame = HomeRenderDiagnostics.jarCoreWindowFrame
         dropSequence = Int(truncatingIfNeeded: scene.completionDropSequence)
         dropFall = scene.completionDropMaximumFall
         dropLanded = scene.completionDropHasLanded
@@ -7375,6 +7405,35 @@ private struct JarUITestPresentationProbe: View {
                 targetWindowX = point.x
                 targetWindowY = point.y
             }
+        }
+
+        if let crystal = pebbles.filter({ $0.descriptor.isAggregate }).min(by: {
+            $0.descriptor.id.uuidString < $1.descriptor.id.uuidString
+        }), let view = scene.view, let window = view.window {
+            let point = view.convert(scene.convertPoint(toView: crystal.position), to: window)
+            crystalWindowX = point.x
+            crystalWindowY = point.y
+        } else {
+            crystalWindowX = -1
+            crystalWindowY = -1
+        }
+        if let view = scene.view, let window = view.window,
+           scene.size.width > 0, scene.size.height > 0 {
+            let outer = JarScene.outerJarRect(sceneSize: scene.size)
+            let topLeft = view.convert(
+                scene.convertPoint(toView: CGPoint(x: outer.minX, y: outer.maxY)),
+                to: window
+            )
+            let bottomRight = view.convert(
+                scene.convertPoint(toView: CGPoint(x: outer.maxX, y: outer.minY)),
+                to: window
+            )
+            bottleFrame = CGRect(
+                x: topLeft.x,
+                y: topLeft.y,
+                width: bottomRight.x - topLeft.x,
+                height: bottomRight.y - topLeft.y
+            )
         }
 
         if trackedRecords != currentRecords {
