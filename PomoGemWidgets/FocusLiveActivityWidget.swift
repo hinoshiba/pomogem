@@ -14,7 +14,7 @@ struct FocusLiveActivityWidget: Widget {
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     Label {
-                        Text("ポモジェム")
+                        Text("ポモジェム", tableName: "Widgets", comment: "The app's name, in the widget gallery, on the widgets and on the Live Activity")
                     } icon: {
                         Image(systemName: phaseSymbol(state: context.state))
                     }
@@ -112,7 +112,7 @@ private struct FocusLockScreenView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("ポモジェム")
+                    Text("ポモジェム", tableName: "Widgets", comment: "The app's name, in the widget gallery, on the widgets and on the Live Activity")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .foregroundStyle(LivePalette.amber)
                     Text(focusStatusTitle(
@@ -266,8 +266,8 @@ private struct FocusStateText: View {
                         Text("休憩終了", tableName: "Widgets", comment: "Live Activity: a break past its end time (title and VoiceOver)")
                     )
             } else if isStale, state.phase == .running {
-                Text("終了")
-                    .accessibilityLabel("集中完了")
+                Text("終了", tableName: "Widgets", comment: "Live Activity countdown after its end time")
+                    .accessibilityLabel(Text("集中完了", tableName: "Widgets", comment: "Live Activity: a focus that has ended (title and VoiceOver)"))
             } else {
                 switch state.phase {
                 case .running:
@@ -283,18 +283,16 @@ private struct FocusStateText: View {
                             showsHours: false
                         )
                         .accessibilityLabel(
-                            Text("残り時間、")
-                                + Text(
-                                    timerInterval: startDate...endDate,
-                                    pauseTime: nil,
-                                    countsDown: true,
-                                    showsHours: false
-                                )
+                            Text(
+                                "残り時間、\(Text(timerInterval: startDate...endDate, pauseTime: nil, countsDown: true, showsHours: false))",
+                                tableName: "Widgets",
+                                comment: "VoiceOver: the focus countdown; the argument is the remaining time"
+                            )
                         )
                     } else {
-                        Text("00:00")
-                            .accessibilityLabel("残り時間")
-                            .accessibilityValue("00:00")
+                        Text(verbatim: "00:00")
+                            .accessibilityLabel(Text("残り時間", tableName: "Widgets", comment: "VoiceOver: label of an unknown focus countdown"))
+                            .accessibilityValue(Text(verbatim: "00:00"))
                     }
                 case .breakRunning:
                     if let endDate = state.endDate {
@@ -314,7 +312,7 @@ private struct FocusStateText: View {
                                 )
                             )
                     } else {
-                        Text("00:00")
+                        Text(verbatim: "00:00")
                             .accessibilityLabel(
                                 Text(
                                     "休憩の残り時間",
@@ -322,17 +320,17 @@ private struct FocusStateText: View {
                                     comment: "VoiceOver: label of an unknown break countdown"
                                 )
                             )
-                            .accessibilityValue("00:00")
+                            .accessibilityValue(Text(verbatim: "00:00"))
                     }
                 case .paused:
                     Text(Self.clockText(seconds: state.pausedRemainingSeconds ?? 0))
-                        .accessibilityLabel("一時停止中の残り時間")
+                        .accessibilityLabel(Text("一時停止中の残り時間", tableName: "Widgets", comment: "VoiceOver: label of the paused focus's remaining time"))
                         .accessibilityValue(
                             Self.clockText(seconds: state.pausedRemainingSeconds ?? 0)
                         )
                 case .completed:
-                    Text("完了")
-                        .accessibilityLabel("集中完了")
+                    Text("完了", tableName: "Widgets", comment: "Live Activity countdown once the focus completed (en: Done)")
+                        .accessibilityLabel(Text("集中完了", tableName: "Widgets", comment: "Live Activity: a focus that has ended (title and VoiceOver)"))
                 }
             }
         }
@@ -387,12 +385,12 @@ private func focusStatusTitle(
             : String(localized: "休憩中", table: "Widgets", comment: "Live Activity title while a break counts down")
     }
     if isStale || state.phase == .completed {
-        return "集中完了"
+        return String(localized: "集中完了", table: "Widgets", comment: "Live Activity: a focus that has ended (title and VoiceOver)")
     }
     if state.phase == .paused {
-        return "一時停止中"
+        return String(localized: "一時停止中", table: "Widgets", comment: "Live Activity title while the focus is paused")
     }
-    return "集中を続けています"
+    return String(localized: "集中を続けています", table: "Widgets", comment: "Live Activity title while the focus counts down (en: Focusing)")
 }
 
 private func focusReturnGuidance(
@@ -405,10 +403,10 @@ private func focusReturnGuidance(
             : String(localized: "タップして休憩へ戻る", table: "Widgets", comment: "Live Activity guidance while a break counts down; like 「タップして集中へ戻る」 for a focus")
     }
     if isStale || state.phase == .completed {
-        return "タップして完了を確認"
+        return String(localized: "タップして完了を確認", table: "Widgets", comment: "Live Activity guidance once the focus ended: the app shows the completed focus")
     }
     if state.phase == .paused {
-        return "タップしてタイマーへ"
+        return String(localized: "タップしてタイマーへ", table: "Widgets", comment: "Live Activity guidance while the focus is paused")
     }
-    return "タップして集中へ戻る"
+    return String(localized: "タップして集中へ戻る", table: "Widgets", comment: "Live Activity guidance while the focus counts down")
 }
