@@ -469,8 +469,16 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
         let addTheme = app.buttons["テーマを追加"]
         XCTAssertTrue(scrollUntilHittable(addTheme))
+        // A tap sent while 設定 is still being pushed can be lost: a failed
+        // run's hierarchy shows 設定 at rest with テーマを追加 hittable and no
+        // editor. Tap once it has settled, and again if no editor came.
+        XCTAssertTrue(waitUntilFrameSettles(addTheme), "設定 must come to rest")
+        let editorBar = app.navigationBars["テーマを追加"]
         addTheme.tap()
-        XCTAssertTrue(app.navigationBars["テーマを追加"].waitForExistence(timeout: 5))
+        if !editorBar.waitForExistence(timeout: 3), addTheme.exists, addTheme.isHittable {
+            addTheme.tap()
+        }
+        XCTAssertTrue(editorBar.waitForExistence(timeout: 5))
         let nameField = app.textFields.firstMatch
         XCTAssertTrue(nameField.waitForExistence(timeout: 4))
         nameField.tap()
