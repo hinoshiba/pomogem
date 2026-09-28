@@ -1,4 +1,5 @@
 import Accessibility
+import OSLog
 import SpriteKit
 import StoreKit
 import SwiftData
@@ -195,6 +196,11 @@ struct HomeView: View {
         _activityResetMarkers = Query(ActivityResetPolicy.currentMarkerDescriptor())
         _preferences = Query(PrefsConsumerPolicy.descriptor())
     }
+
+    private static let receiptLogger = Logger(
+        subsystem: "com.hinoshiba.pomogem",
+        category: "RewardReceipt"
+    )
 
     /// Delivered on the main queue: the store may be written off-main, and a
     /// write made during a view update must not mutate state inside it. Not
@@ -936,7 +942,11 @@ struct HomeView: View {
         }
     }
 
-    private var observedContent: some View {
+    /// The store and projection observers. `observedContent` used to chain
+    /// these with every other observer below and came close to the type
+    /// checker's "unable to type-check in reasonable time" limit under load;
+    /// three shorter chains are each checked on their own.
+    private var storeObservedContent: some View {
         verificationContent
         // Subscribe to the one value the jar needs instead of observing the
         // whole controller: its foreground loop re-reads authorization and
@@ -987,6 +997,11 @@ struct HomeView: View {
             syncScene()
             reconcileAggregateInspection()
         }
+    }
+
+    /// Purchase, preference and motion observers.
+    private var preferenceObservedContent: some View {
+        storeObservedContent
         .onChange(of: purchase.isPro) { _, isPro in
             if isPro {
                 restorePreferredDuration()
@@ -1007,6 +1022,11 @@ struct HomeView: View {
             cancelTiltHintPresentation()
             scheduleTiltHintIfNeeded()
         }
+    }
+
+    /// Announcement and celebration observers.
+    private var observedContent: some View {
+        preferenceObservedContent
         .onChange(of: voiceOverEnabled) { _, enabled in
             cancelTiltHintPresentation()
             scheduleTiltHintIfNeeded()
@@ -3246,12 +3266,28 @@ struct HomeView: View {
         let receipts = PendingRewardReceiptStore.load().filter(\.requiresDrop)
         let screenTimeIDs = ScreenTimeGemDropStore.load()
         guard !receipts.isEmpty || !screenTimeIDs.isEmpty else { return true }
+        let orphanedReceiptIDs: [UUID]
         do {
             var resolved = try HomeProjectionPolicy.pendingRewardSessionCandidates(
                 for: receipts,
                 context: modelContext,
                 resetMarkers: resetSnapshots
             )
+            orphanedReceiptIDs = try HomeProjectionPolicy
+                .orphanedPendingRewardReceiptIDs(
+                    in: receipts,
+                    resolvedSessionIDs: Set(resolved.map(\.id)),
+                    storeReadIsVerified:
+                        !aggregateProjectionPresentation.isCloudVerificationPending,
+                    presentedCardIsPending:
+                        breakOffer != nil || breakOfferTask != nil,
+                    sessionExists: {
+                        try HomeProjectionPolicy.physicalSessionExists(
+                            id: $0,
+                            context: modelContext
+                        )
+                    }
+                )
             for id in screenTimeIDs {
                 if let session = try BoundedHistoryPolicy.resolvedSession(
                     id: id, epochID: currentActivityEpochID, context: modelContext
@@ -3273,11 +3309,28 @@ struct HomeView: View {
             rewardSessionBackfillGeneration = HomeSceneSessionSnapshotGeneration(
                 aggregateProjectionPresentation
             )
-            return true
         } catch {
             // A failed bounded lookup is not proof that a saved reward is gone.
             // Leave the durable receipt intact until the next accepted refresh.
             return false
+        }
+        retireOrphanedRewardReceipts(orphanedReceiptIDs)
+        return true
+    }
+
+    /// A receipt whose session is gone from the verified store can never
+    /// land, and would keep the start button disabled for good
+    /// (`HomeProjectionPolicy.orphanedPendingRewardReceiptIDs`). Finish it as
+    /// if its gem had landed, so whatever the card's 「閉じる」 chose (rest,
+    /// share or Home) still continues.
+    private func retireOrphanedRewardReceipts(_ ids: [UUID]) {
+        for id in ids {
+            let phase = PendingRewardReceiptStore.load()
+                .first { $0.id == id }?.dropPhase
+            Self.receiptLogger.notice(
+                "Retired a reward receipt whose session is absent from the verified store phase=\(phase?.rawValue ?? "none", privacy: .public)"
+            )
+            finishRewardDrop(sessionID: id)
         }
     }
 
