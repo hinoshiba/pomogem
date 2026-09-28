@@ -117,7 +117,6 @@
     },
     "focus-music.source.concentration" : {
       "comment" : "Apple Music Focus playlist title (US storefront: Concentration)",
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
