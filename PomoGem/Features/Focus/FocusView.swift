@@ -1072,25 +1072,34 @@ struct FocusView: View {
             isViewActive = false
             if !didStart { didActivate = false }
         }
-        .alert("今日はここまで", isPresented: $showGiveUpConfirmation) {
-            Button("続ける", role: .cancel) {}
+        .alert(Constants.UIStrings.giveUp, isPresented: $showGiveUpConfirmation) {
+            Button(String(localized: "続ける", table: "Focus",
+                          comment: "Alert button: keep focusing instead of stopping for today"),
+                   role: .cancel) {}
             Button(Constants.UIStrings.giveUp, role: .destructive) { giveUp() }
         } message: {
-            Text("この回の粒は積まれません。これまでの瓶はそのままです。")
+            Text("この回の粒は積まれません。これまでの瓶はそのままです。", tableName: "Focus",
+                 comment: "Stop-for-today confirmation: this session adds no gem, and the jar keeps everything so far")
         }
-        .alert("タイマーを開始できませんでした", isPresented: Binding(
+        .alert(String(localized: "タイマーを開始できませんでした", table: "Focus",
+                      comment: "Alert title: the focus timer could not start"),
+               isPresented: Binding(
             get: { setupErrorMessage != nil },
             set: { if !$0 { setupErrorMessage = nil } }
         )) {
-            Button("閉じる", role: .cancel) { dismiss() }
+            Button(String(localized: "閉じる", table: "Focus", comment: "Alert button: dismiss"),
+                   role: .cancel) { dismiss() }
         } message: {
             Text(setupErrorMessage ?? "")
         }
-        .alert("操作を完了できませんでした", isPresented: Binding(
+        .alert(String(localized: "操作を完了できませんでした", table: "Focus",
+                      comment: "Alert title: a timer action (pause, resume, stop) could not finish"),
+               isPresented: Binding(
             get: { operationErrorMessage != nil },
             set: { if !$0 { operationErrorMessage = nil } }
         )) {
-            Button("閉じる", role: .cancel) {}
+            Button(String(localized: "閉じる", table: "Focus", comment: "Alert button: dismiss"),
+                   role: .cancel) {}
         } message: {
             Text(operationErrorMessage ?? "")
         }
@@ -1128,9 +1137,14 @@ struct FocusView: View {
         let current = engine.snapshot(at: .now)
         let announcement: String
         if wasPaused, current.phase != .paused {
-            announcement = "再開しました。\(accessibleTime(current.remainingSeconds))"
+            announcement = String(
+                localized: "再開しました。\(accessibleTime(current.remainingSeconds))",
+                table: "Focus",
+                comment: "VoiceOver announcement after the timer resumed. %@ is the time left, e.g. 残り24分59秒 (24 minutes, 59 seconds left)."
+            )
         } else if !wasPaused, current.phase == .paused {
-            announcement = "一時停止しました"
+            announcement = String(localized: "一時停止しました", table: "Focus",
+                                  comment: "VoiceOver announcement after the timer paused")
         } else {
             return
         }
@@ -1297,7 +1311,8 @@ struct FocusView: View {
             .buttonStyle(PomoGemPrimaryButtonStyle(tintHex: subjectSnapshot.colorHex))
 
             if snapshot.phase.isBreak || engine.containsRecoverableBreak {
-                Button("休憩をスキップ", action: skipBreak)
+                Button(String(localized: "休憩をスキップ", table: "Focus", comment: "Button: end the break now"),
+                       action: skipBreak)
                     .buttonStyle(PomoGemSecondaryButtonStyle())
             } else {
                 Button {
@@ -1318,12 +1333,19 @@ struct FocusView: View {
 
     private var phaseLabel: String {
         if timerDisplayMode == .filledDial, snapshot.phase != .paused {
-            return snapshot.phase.isBreak ? "休憩中" : "集中中"
+            return snapshot.phase.isBreak
+                ? String(localized: "休憩中", table: "Focus", comment: "Timer header while a break runs")
+                : String(localized: "集中中", table: "Focus", comment: "Timer header while a focus runs")
         }
         return switch snapshot.phase {
-        case .shortBreak: "5分休憩"
-        case .longBreak: "15分休憩"
-        case .paused where completion == nil: engine.currentSource == .timerDemoted ? "自己申告あつかい・一時停止" : "一時停止"
+        case .shortBreak: String(localized: "5分休憩", table: "Focus", comment: "Timer header: the short break")
+        case .longBreak: String(localized: "15分休憩", table: "Focus", comment: "Timer header: the long break")
+        case .paused where completion == nil:
+            engine.currentSource == .timerDemoted
+                ? String(localized: "自己申告あつかい・一時停止", table: "Focus",
+                         comment: "Timer header: paused, and this session counts as self-reported")
+                : String(localized: "focus.header.paused", defaultValue: "一時停止", table: "Focus",
+                         comment: "Timer header while the timer is paused (a state, not the Pause button)")
         default: durationTitle
         }
     }
@@ -1332,7 +1354,8 @@ struct FocusView: View {
 #if DEBUG
         if duration == .demo { return "12秒デモ" }
 #endif
-        return "\(duration.displayLabel)集中"
+        return String(localized: "\(duration.displayLabel)集中", table: "Focus",
+                      comment: "Timer header: the focus length. %@ is a duration, e.g. 25分 (25 min).")
     }
 
     private var timerModeLabel: String {
@@ -1340,7 +1363,9 @@ struct FocusView: View {
         case .shortBreak, .longBreak:
             "BREAK"
         case .paused:
-            "一時停止"
+            // Beside the English-looking BREAK and FOCUS, in capitals.
+            String(localized: "focus.ring.mode.paused", defaultValue: "一時停止", table: "Focus",
+                   comment: "Ring status word while paused, shown where BREAK or FOCUS stands (en: PAUSED, in capitals)")
         default:
             "FOCUS"
         }
@@ -1381,7 +1406,9 @@ struct FocusView: View {
             Button {
                 Task { await enableCompletionNotification() }
             } label: {
-                Label("一時停止中です。再開後の終了通知を許可", systemImage: "bell")
+                Label(String(localized: "一時停止中です。再開後の終了通知を許可", table: "Focus",
+                             comment: "Button while paused: allow the timer-end notification for after resuming"),
+                      systemImage: "bell")
                     .font(.caption.weight(.semibold))
             }
             .buttonStyle(PomoGemBareButtonStyle())
@@ -1393,7 +1420,9 @@ struct FocusView: View {
                 guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
                 UIApplication.shared.open(url)
             } label: {
-                Label("一時停止中です。終了通知は端末の設定から", systemImage: "bell.slash")
+                Label(String(localized: "一時停止中です。終了通知は端末の設定から", table: "Focus",
+                             comment: "Button while paused and notifications are off: opens iOS Settings to allow timer-end notifications"),
+                      systemImage: "bell.slash")
                     .font(.caption.weight(.semibold))
             }
             .buttonStyle(PomoGemBareButtonStyle())
@@ -1401,7 +1430,9 @@ struct FocusView: View {
             .foregroundStyle(PomoGemTheme.amber)
             .accessibilityIdentifier("focus.paused-notice")
         } else {
-            Label("一時停止中はタイマーは進みません", systemImage: "pause.circle")
+            Label(String(localized: "一時停止中はタイマーは進みません", table: "Focus",
+                         comment: "Notice while paused: the timer does not run"),
+                  systemImage: "pause.circle")
                 .font(.caption)
                 .foregroundStyle(PomoGemTheme.muted)
                 .accessibilityIdentifier("focus.paused-notice")
@@ -1419,7 +1450,8 @@ struct FocusView: View {
             HStack(spacing: 8) {
                 ProgressView()
                     .controlSize(.small)
-                Text("終了通知を設定しています")
+                Text("終了通知を設定しています", tableName: "Focus",
+                     comment: "Progress line: the timer-end notification is being scheduled")
                     .font(.caption)
             }
             .foregroundStyle(PomoGemTheme.muted)
@@ -1428,7 +1460,9 @@ struct FocusView: View {
                 Button {
                     Task { await synchronizeCompletionNotificationIfNeeded() }
                 } label: {
-                    Label("通知を予約できませんでした。もう一度試す", systemImage: "arrow.clockwise")
+                    Label(String(localized: "通知を予約できませんでした。もう一度試す", table: "Focus",
+                                 comment: "Button: scheduling the timer-end notification failed; tap to try again"),
+                          systemImage: "arrow.clockwise")
                         .font(.caption.weight(.semibold))
                 }
                 .buttonStyle(PomoGemBareButtonStyle())
@@ -1452,7 +1486,9 @@ struct FocusView: View {
     private var scheduledRunningNotice: some View {
         switch runningNotice {
         case .keepsRunning:
-            Label("画面を閉じてもタイマーは進み、終了時に通知します", systemImage: "bell.badge.fill")
+            Label(String(localized: "画面を閉じてもタイマーは進み、終了時に通知します", table: "Focus",
+                         comment: "Running notice: the timer keeps running with the screen off and notifies at the end"),
+                  systemImage: "bell.badge.fill")
         case .pausesWhenLeavingButNotWhenLocked:
             Label {
                 Text(
@@ -1480,7 +1516,9 @@ struct FocusView: View {
     private var deniedNotificationLabel: some View {
         switch runningNotice {
         case .keepsRunning:
-            Label("画面を閉じても進みます。終了通知は端末の設定から", systemImage: "bell.slash")
+            Label(String(localized: "画面を閉じても進みます。終了通知は端末の設定から", table: "Focus",
+                         comment: "Button opening iOS Settings when timer-end notifications are denied; the timer keeps running with the screen off"),
+                  systemImage: "bell.slash")
         case .pausesWhenLeavingButNotWhenLocked:
             Label {
                 Text(
@@ -1508,7 +1546,9 @@ struct FocusView: View {
     private var askNotificationLabel: some View {
         switch runningNotice {
         case .keepsRunning:
-            Label("画面を閉じても進みます。終了通知を許可", systemImage: "bell")
+            Label(String(localized: "画面を閉じても進みます。終了通知を許可", table: "Focus",
+                         comment: "Button asking for notification permission; the timer keeps running with the screen off"),
+                  systemImage: "bell")
         case .pausesWhenLeavingButNotWhenLocked:
             Label {
                 Text(
@@ -1552,7 +1592,9 @@ struct FocusView: View {
             Button {
                 Task { await scheduleCurrentCompletionNotification() }
             } label: {
-                Label("終了通知を設定", systemImage: "bell")
+                Label(String(localized: "終了通知を設定", table: "Focus",
+                             comment: "Button: schedule the timer-end notification"),
+                      systemImage: "bell")
                     .font(.caption.weight(.semibold))
             }
             .buttonStyle(PomoGemBareButtonStyle())
@@ -1740,7 +1782,11 @@ struct FocusView: View {
     private func saveRareRewardChoiceAndStart() {
         guard let rareRewardChoice, !isSavingRareRewardChoice else { return }
         guard resolvedPreferences != nil else {
-            rareRewardChoiceError = "設定の保存先を準備できませんでした。いったん戻り、もう一度お試しください。"
+            rareRewardChoiceError = String(
+                localized: "設定の保存先を準備できませんでした。いったん戻り、もう一度お試しください。",
+                table: "Focus",
+                comment: "Error: the settings storage was not ready, so the rare-gem choice was not saved"
+            )
             return
         }
 
@@ -1765,7 +1811,11 @@ struct FocusView: View {
         } catch {
             modelContext.rollback()
             isSavingRareRewardChoice = false
-            rareRewardChoiceError = "レア粒の選択を保存できませんでした。タイマーはまだ始まっていません。\n\(error.localizedDescription)"
+            rareRewardChoiceError = String(
+                localized: "レア粒の選択を保存できませんでした。タイマーはまだ始まっていません。\n\(error.localizedDescription)",
+                table: "Focus",
+                comment: "Error: saving the rare-gem choice failed. %@ is the system's error description, on its own line."
+            )
         }
     }
 
@@ -2139,9 +2189,17 @@ struct FocusView: View {
             completionWasRejectedForOwnership = true
             completionSaveError = switch persistenceResult {
             case .awaitingMaterializedCompletion:
-                "完了状態が先に届き、履歴本体が保存領域へ反映されるのを待っています。この端末の復元情報は保持しています。しばらく待ってから保存状態を確認してください。"
+                String(
+                    localized: "完了状態が先に届き、履歴本体が保存領域へ反映されるのを待っています。この端末の復元情報は保持しています。しばらく待ってから保存状態を確認してください。",
+                    table: "Focus",
+                    comment: "Completion save notice: the completion mark synced before the session record itself; this device keeps its recovery copy"
+                )
             default:
-                "この完走は別の保存処理が担当しています。記録が保存領域へ反映されるまで、この端末の復元情報を保持します。しばらく待ってから保存状態を確認してください。"
+                String(
+                    localized: "この完走は別の保存処理が担当しています。記録が保存領域へ反映されるまで、この端末の復元情報を保持します。しばらく待ってから保存状態を確認してください。",
+                    table: "Focus",
+                    comment: "Completion save notice: another save (e.g. another device) owns this completed session; this device keeps its recovery copy"
+                )
             }
             announceCompletionSaveFailure()
             return
@@ -2784,7 +2842,11 @@ struct FocusView: View {
         guard completionAlert.isActive(sessionID: result.sessionID) else {
             UIAccessibility.post(
                 notification: .announcement,
-                argument: "集中が完了しました。\(subjectSnapshot.name)、\(result.grams)グラムを保存しています"
+                argument: String(
+                    localized: "集中が完了しました。\(subjectSnapshot.name)、\(MassText.spoken(grams: result.grams))を保存しています",
+                    table: "Focus",
+                    comment: "VoiceOver announcement when a focus completes. 1 = theme name, 2 = spoken mass, e.g. 250グラム (250 grams)."
+                )
             )
             return
         }
@@ -2798,7 +2860,11 @@ struct FocusView: View {
             UIAccessibility.post(
                 notification: .announcement,
                 argument: NSAttributedString(
-                    string: "集中が完了しました。\(subjectSnapshot.name)、\(result.grams)グラム。2本指でダブルタップすると終了アラートを止められます",
+                    string: String(
+                        localized: "集中が完了しました。\(subjectSnapshot.name)、\(MassText.spoken(grams: result.grams))。2本指でダブルタップすると終了アラートを止められます",
+                        table: "Focus",
+                        comment: "VoiceOver announcement when a focus completes while the end alert repeats. 1 = theme name, 2 = spoken mass, e.g. 250グラム (250 grams)."
+                    ),
                     attributes: [.accessibilitySpeechQueueAnnouncement: true]
                 )
             )
@@ -2864,7 +2930,11 @@ struct FocusView: View {
             completionSaveRetryFocused = true
             UIAccessibility.post(
                 notification: .announcement,
-                argument: "記録をまだ安全に保存できていません。完走は端末に保護されています"
+                argument: String(
+                    localized: "記録をまだ安全に保存できていません。完走は端末に保護されています",
+                    table: "Focus",
+                    comment: "VoiceOver announcement: the completed session is not safely saved yet, but this device keeps it"
+                )
             )
         }
     }
@@ -3086,12 +3156,16 @@ struct FocusView: View {
         Button {
             acknowledgeCompletionAlert(result)
         } label: {
-            Label("終了アラートを止める", systemImage: "stop.fill")
+            Label(String(localized: "終了アラートを止める", table: "Focus",
+                         comment: "Button: stop the repeating end-of-timer alert (sound and haptics)"),
+                  systemImage: "stop.fill")
         }
         .buttonStyle(PomoGemPrimaryButtonStyle())
         // Keep the pinned bar well under half of a 667 pt screen at AX5.
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-        .accessibilityHint("音と触覚を止めます。記録の保存中でも操作でき、2本指のダブルタップでも止められます")
+        .accessibilityHint(Text("音と触覚を止めます。記録の保存中でも操作でき、2本指のダブルタップでも止められます",
+                                tableName: "Focus",
+                                comment: "VoiceOver hint of the stop-alert button"))
         .accessibilityIdentifier("focus.completion-alert.stop")
         .accessibilityFocused($completionAlertStopFocused)
         .modifier(TimerPinnedActionBar())
@@ -3111,11 +3185,14 @@ struct FocusView: View {
             "arrow.down.to.line.compact"
         }
         let title = if completionSaveError != nil {
-            "記録をまだ安全に保存できていません"
+            String(localized: "記録をまだ安全に保存できていません", table: "Focus",
+                   comment: "Completion heading: the session is not safely saved yet")
         } else if completionPersistenceSucceeded {
-            "集中を完走しました"
+            String(localized: "集中を完走しました", table: "Focus",
+                   comment: "Completion heading: the focus session is complete and saved")
         } else {
-            "粒を瓶へ運んでいます"
+            String(localized: "粒を瓶へ運んでいます", table: "Focus",
+                   comment: "Completion heading while the new gem is being saved to the jar")
         }
         // Accessibility text sizes need the space for words and controls, so
         // the decorative icon shrinks instead of pushing them off screen.
@@ -3138,7 +3215,9 @@ struct FocusView: View {
                     .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                     .multilineTextAlignment(.center)
                     .accessibilityAddTraits(.isHeader)
-                Text("\(subjectSnapshot.name)  +\(result.grams)g")
+                // Theme name and mass: no words, so no catalog key. The
+                // mass keeps its plain digits and gets the unit from Common.
+                Text(verbatim: "\(subjectSnapshot.name)  +\(MassText.grams(String(result.grams)))")
                     .font(.system(.headline, design: .rounded, weight: .bold))
                     // Same ceiling as the title, so the facts never outgrow
                     // the heading at the largest sizes.
@@ -3161,14 +3240,16 @@ struct FocusView: View {
                     // The heading's icon already shows the bell at
                     // accessibility sizes; the words alone stay on one line.
                     Label(
-                        "終了アラート中",
+                        String(localized: "終了アラート中", table: "Focus",
+                               comment: "Status while the end-of-focus alert repeats (keep it short: one line at large sizes)"),
                         systemImage: "bell.and.waves.left.and.right.fill"
                     )
                     .labelStyle(AccessibilitySizeTitleOnlyLabelStyle())
                     .font(.headline.weight(.bold))
                     .dynamicTypeSize(...DynamicTypeSize.accessibility2)
                     .foregroundStyle(PomoGemTheme.amber)
-                    Text("止めるまで、音と触覚を繰り返します")
+                    Text("止めるまで、音と触覚を繰り返します", tableName: "Focus",
+                         comment: "Caption under the alert status: sound and haptics repeat until stopped")
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
                         .multilineTextAlignment(.center)
@@ -3188,8 +3269,10 @@ struct FocusView: View {
                 } label: {
                     Label(
                         completionWasRejectedForOwnership
-                            ? "保存状態を確認する"
-                            : "もう一度保存する",
+                            ? String(localized: "保存状態を確認する", table: "Focus",
+                                     comment: "Button: check whether the completed session has been saved")
+                            : String(localized: "もう一度保存する", table: "Focus",
+                                     comment: "Button: try saving the completed session again"),
                         systemImage: "arrow.clockwise"
                     )
                 }
@@ -3202,24 +3285,29 @@ struct FocusView: View {
                 Button {
                     returnHomeKeepingCompletion(result)
                 } label: {
-                    Label("完走を保護してホームへ戻る", systemImage: "house.fill")
+                    Label(String(localized: "完走を保護してホームへ戻る", table: "Focus",
+                                 comment: "Button: keep the unsaved completed session on this device and go back to Home"),
+                          systemImage: "house.fill")
                         .frame(maxWidth: .infinity, minHeight: 48)
                 }
                 .buttonStyle(PomoGemBareButtonStyle())
                 .foregroundStyle(PomoGemTheme.text)
                 .padding(.horizontal, 24)
-                .accessibilityHint("完走は端末に残り、ホームから保存を再試行できます")
+                .accessibilityHint(Text("完走は端末に残り、ホームから保存を再試行できます", tableName: "Focus",
+                                        comment: "VoiceOver hint of the keep-and-go-home button"))
                 .accessibilityIdentifier("focus.completion-save.protect")
             } else if !completionPersistenceSucceeded {
                 ProgressView()
                     .tint(accent)
                     .controlSize(.large)
-                    .accessibilityLabel("記録を保存中")
+                    .accessibilityLabel(Text("記録を保存中", tableName: "Focus",
+                                             comment: "VoiceOver label of the spinner while the session is saved"))
             } else if !isAlerting {
                 ProgressView()
                     .tint(accent)
                     .controlSize(.large)
-                    .accessibilityLabel("瓶へ戻ります")
+                    .accessibilityLabel(Text("瓶へ戻ります", tableName: "Focus",
+                                             comment: "VoiceOver label of the spinner before going back to the jar"))
             }
         }
     }
@@ -3245,7 +3333,8 @@ struct FocusView: View {
         )
         UIApplication.shared.isIdleTimerDisabled = false
         router.showToast(
-            "完走は端末に保護されています。ホームから保存を再試行できます",
+            String(localized: "完走は端末に保護されています。ホームから保存を再試行できます", table: "Focus",
+                   comment: "Toast: the completed session is kept on this device; saving can be retried from Home"),
             symbol: "checkmark.shield.fill",
             duration: .seconds(6)
         )
@@ -3338,7 +3427,11 @@ struct FocusView: View {
                 try modelContext.save()
             } catch {
                 modelContext.rollback()
-                operationErrorMessage = "終了状態を安全に保存できませんでした。タイマーは継続しています。もう一度お試しください。"
+                operationErrorMessage = String(
+                    localized: "終了状態を安全に保存できませんでした。タイマーは継続しています。もう一度お試しください。",
+                    table: "Focus",
+                    comment: "Error: stopping the timer could not be saved safely, so the timer keeps running"
+                )
                 return
             }
         }
@@ -3439,8 +3532,10 @@ struct FocusView: View {
         Task { await FocusActivityManager.shared.cancel(sessionID: sessionID) }
         router.showToast(
             lostOwnership
-                ? "タイマーは別の端末へ引き継がれました"
-                : "先に始めた別端末のタイマーを残しました",
+                ? String(localized: "タイマーは別の端末へ引き継がれました", table: "Focus",
+                         comment: "Toast: another device took over this timer")
+                : String(localized: "先に始めた別端末のタイマーを残しました", table: "Focus",
+                         comment: "Toast: two devices started a timer; the one started first (on another device) was kept"),
             symbol: "icloud.and.arrow.up"
         )
         dismiss()
@@ -3462,7 +3557,8 @@ struct FocusView: View {
         FocusPersistence.clear()
         UIApplication.shared.isIdleTimerDisabled = false
         router.showToast(
-            "別の端末で記録がリセットされたため、このタイマーを終了しました",
+            String(localized: "別の端末で記録がリセットされたため、このタイマーを終了しました", table: "Focus",
+                   comment: "Toast: records were reset on another device, so this timer ended"),
             symbol: "trash"
         )
         dismiss()
@@ -3562,8 +3658,7 @@ struct FocusView: View {
     }
 
     private func accessibleTime(_ total: Int) -> String {
-        let safe = max(0, total)
-        return "残り\(safe / 60)分\(safe % 60)秒"
+        TimerRemainingSpeech.text(seconds: total)
     }
 }
 
@@ -3580,8 +3675,13 @@ private struct RareRewardPreFocusChoiceView: View {
                 RareRewardChoicePanel(
                     selection: $selection,
                     eyebrow: "BEFORE YOUR FIRST FOCUS",
-                    title: "タイマーの前に、1つだけ。",
-                    introduction: "まだレア粒の扱いを選んでいません。説明なしで抽選creditを貯め始めないため、最初の実測タイマーより前に確認します。"
+                    title: String(localized: "タイマーの前に、1つだけ。", table: "Focus",
+                                  comment: "Rare-gem choice before the first timed focus: heading"),
+                    introduction: String(
+                        localized: "まだレア粒の扱いを選んでいません。説明なしで抽選creditを貯め始めないため、最初の実測タイマーより前に確認します。",
+                        table: "Focus",
+                        comment: "Rare-gem choice before the first timed focus: why it is asked now (no draw credits are collected without an explanation)"
+                    )
                 )
 
                 if let errorMessage {
@@ -3598,25 +3698,31 @@ private struct RareRewardPreFocusChoiceView: View {
                         ProgressView()
                             .tint(.black)
                     } else {
-                        Text("この選択でタイマーへ")
+                        Text("この選択でタイマーへ", tableName: "Focus",
+                             comment: "Button: save the rare-gem choice and start the timer")
                     }
                 }
                 .buttonStyle(PomoGemPrimaryButtonStyle())
                 .disabled(selection == nil || isSaving)
                 .accessibilityHint(
                     selection == nil
-                        ? "3つの選択肢から1つ選んでください"
-                        : "選択を保存領域へ確定してからタイマーを開始します"
+                        ? Text("3つの選択肢から1つ選んでください", tableName: "Focus",
+                               comment: "VoiceOver hint: pick one of the three rare-gem options first")
+                        : Text("選択を保存領域へ確定してからタイマーを開始します", tableName: "Focus",
+                               comment: "VoiceOver hint: the choice is saved before the timer starts")
                 )
                 .accessibilityIdentifier("focus.rare-reward-choice.confirm")
 
-                Button("今は戻る", action: onCancel)
+                Button(String(localized: "今は戻る", table: "Focus",
+                              comment: "Button: leave the rare-gem choice for now"),
+                       action: onCancel)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(PomoGemTheme.muted)
                     .frame(minHeight: 44)
                     .buttonStyle(PomoGemBareButtonStyle())
                     .disabled(isSaving)
-                    .accessibilityHint("選択やタイマーを開始せず瓶へ戻ります")
+                    .accessibilityHint(Text("選択やタイマーを開始せず瓶へ戻ります", tableName: "Focus",
+                                            comment: "VoiceOver hint: go back to the jar without choosing or starting the timer"))
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 28)
@@ -3702,6 +3808,37 @@ enum FocusTimerDisplayPolicy {
     }
 }
 
+/// What VoiceOver reads for the time left on the focus and break timers:
+/// both units always, as in 「残り25分0秒」 (en "25 minutes, 0 seconds left").
+/// Each unit is its own phrase so English can pick singular or plural for
+/// each number.
+enum TimerRemainingSpeech {
+    static func text(seconds total: Int, bundle: Bundle = .main, locale: Locale = PomoGemLocale.current) -> String {
+        let safe = max(0, total)
+        let minutes = String(
+            localized: "\(safe / 60)分",
+            table: "Focus",
+            bundle: bundle,
+            locale: locale,
+            comment: "VoiceOver: whole minutes left, read inside 残り%@%@. en needs plural variations: '%lld minute' / '%lld minutes'."
+        )
+        let seconds = String(
+            localized: "\(safe % 60)秒",
+            table: "Focus",
+            bundle: bundle,
+            locale: locale,
+            comment: "VoiceOver: seconds left, read inside 残り%@%@. en needs plural variations: '%lld second' / '%lld seconds'."
+        )
+        return String(
+            localized: "残り\(minutes)\(seconds)",
+            table: "Focus",
+            bundle: bundle,
+            locale: locale,
+            comment: "VoiceOver: time left on the timer. 1 = minutes, 2 = seconds, both always read (e.g. 残り25分0秒)."
+        )
+    }
+}
+
 /// Both ring and dial begin full and remove elapsed time clockwise from
 /// twelve o'clock. The remaining colored area always represents time left.
 struct FocusTimerDisplay: View {
@@ -3745,7 +3882,24 @@ struct FocusTimerDisplay: View {
     }
 
     private var accessibleMode: String {
-        isBreakMode ? "休憩タイマー" : "集中タイマー"
+        isBreakMode
+            ? String(localized: "休憩タイマー", table: "Focus", comment: "VoiceOver label of the timer ring during a break")
+            : String(localized: "集中タイマー", table: "Focus", comment: "VoiceOver label of the timer ring during a focus")
+    }
+
+    /// One sentence per state, so English can order the words its own way.
+    private var accessibleValue: String {
+        isPaused
+            ? String(
+                localized: "\(accessibleRemainingTime)、\(remainingPercent)パーセント残り、一時停止中",
+                table: "Focus",
+                comment: "VoiceOver value of the paused timer ring. 1 = time left, e.g. 残り24分59秒 (24 minutes, 59 seconds left); 2 = percent left."
+            )
+            : String(
+                localized: "\(accessibleRemainingTime)、\(remainingPercent)パーセント残り",
+                table: "Focus",
+                comment: "VoiceOver value of the timer ring. 1 = time left, e.g. 残り24分59秒 (24 minutes, 59 seconds left); 2 = percent left."
+            )
     }
 
     var body: some View {
@@ -3768,11 +3922,14 @@ struct FocusTimerDisplay: View {
         .frame(width: size, height: size)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibleMode)
-        .accessibilityValue(
-            "\(accessibleRemainingTime)、\(remainingPercent)パーセント残り"
-                + (isPaused ? "、一時停止中" : "")
+        .accessibilityValue(accessibleValue)
+        .accessibilityHint(
+            isPaused
+                ? Text("再開ボタンでタイマーを再開できます", tableName: "Focus",
+                       comment: "VoiceOver hint of the paused timer ring: the Resume button restarts it")
+                : Text("一時停止ボタンでタイマーを止められます", tableName: "Focus",
+                       comment: "VoiceOver hint of the timer ring: the Pause button pauses it")
         )
-        .accessibilityHint(isPaused ? "再開ボタンでタイマーを再開できます" : "一時停止ボタンでタイマーを止められます")
         .accessibilityAddTraits(.updatesFrequently)
         .accessibilityIdentifier("focus.timer-display")
     }
@@ -3854,9 +4011,13 @@ struct FocusTimerDisplay: View {
     /// paused stays visible through the amber color and the 「一時停止」 header.
     private var statusLabel: some View {
         ViewThatFits(in: .horizontal) {
-            statusText("\(modeLabel)  ·  \(remainingPercent)% 残り", tracking: 1.2)
+            statusText(String(localized: "\(modeLabel)  ·  \(remainingPercent)% 残り", table: "Focus",
+                              comment: "Ring status: 1 = FOCUS, BREAK or the paused word; 2 = percent of time left"),
+                       tracking: 1.2)
             statusText("\(modeLabel) · \(remainingPercent)%", tracking: 0)
-            statusText("\(remainingPercent)% 残り", tracking: 0)
+            statusText(String(localized: "\(remainingPercent)% 残り", table: "Focus",
+                              comment: "Ring status when space is short: percent of time left"),
+                       tracking: 0)
             statusText("\(remainingPercent)%", tracking: 0)
                 .minimumScaleFactor(0.72)
         }
@@ -4004,9 +4165,11 @@ private struct FocusCompletionView: View {
 
             Spacer()
             VStack(spacing: 11) {
-                Button("休憩をはじめる", action: onStartBreak)
+                Button(String(localized: "休憩をはじめる", table: "Focus", comment: "Button: start the break"),
+                       action: onStartBreak)
                     .buttonStyle(PomoGemPrimaryButtonStyle())
-                Button("瓶を見る", action: onReturnToJar)
+                Button(String(localized: "瓶を見る", table: "Focus", comment: "Button: go back to the jar"),
+                       action: onReturnToJar)
                     .buttonStyle(PomoGemSecondaryButtonStyle())
             }
             .padding(.horizontal, 24)
@@ -4043,12 +4206,14 @@ private struct BreakFinishedView: View {
             Image(systemName: "cup.and.saucer.fill")
                 .font(.system(size: 44))
                 .foregroundStyle(PomoGemTheme.amber)
-            Text("休憩はここまで")
+            Text("休憩はここまで", tableName: "Focus", comment: "Heading when a break is over")
                 .font(PomoGemTheme.brand(30))
-            Text("瓶の粒は、そのまま待っています。")
+            Text("瓶の粒は、そのまま待っています。", tableName: "Focus",
+                 comment: "The gems in the jar wait just as they are (nothing is lost during a break)")
                 .foregroundStyle(PomoGemTheme.muted)
             Spacer()
-            Button("瓶へ戻る", action: onClose)
+            Button(String(localized: "瓶へ戻る", table: "Focus", comment: "Button: back to the jar"),
+                   action: onClose)
                 .buttonStyle(PomoGemPrimaryButtonStyle())
                 .padding(24)
         }

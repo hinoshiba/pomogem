@@ -58,13 +58,17 @@ enum PomodoroDuration: Hashable, Codable, Sendable {
         }
     }
 
+    /// 「25分」「1分30秒」「12秒」; en "25 min", "1 min 30 sec". A timer
+    /// length never switches to hours (「90分」, not 「1時間30分」).
     var displayLabel: String {
-        guard isValid else { return "設定できない時間" }
-        let wholeMinutes = seconds / Constants.Timer.secondsPerMinute
-        let remainder = seconds % Constants.Timer.secondsPerMinute
-        if wholeMinutes == 0 { return "\(remainder)秒" }
-        if remainder == 0 { return "\(wholeMinutes)分" }
-        return "\(wholeMinutes)分\(remainder)秒"
+        guard isValid else {
+            return String(
+                localized: "設定できない時間",
+                table: "Focus",
+                comment: "A timer length outside 1–360 minutes, read from damaged data"
+            )
+        }
+        return DurationText.short(seconds: seconds, units: .minutesSeconds)
     }
 
     var grams: Int {

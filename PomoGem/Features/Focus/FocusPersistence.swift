@@ -82,15 +82,20 @@ enum FocusDemotionNoticeReason: String, Equatable, Sendable {
     var message: String {
         switch self {
         case .clockChanged:
-            "端末時刻の大きな変化を検出。この回だけ自己申告あつかいです"
+            String(localized: "端末時刻の大きな変化を検出。この回だけ自己申告あつかいです", table: "Focus",
+                   comment: "Timer notice: the device clock jumped, so this session counts as self-reported")
         case .adoptedFromOtherDevice:
-            "別の端末から引き継いだため、この回は自己申告あつかいです"
+            String(localized: "別の端末から引き継いだため、この回は自己申告あつかいです", table: "Focus",
+                   comment: "Timer notice: the timer was continued from another device, so this session counts as self-reported")
         case .resumedFromSavedState:
-            "保存済みの状態から再開したため、この回は自己申告あつかいです"
+            String(localized: "保存済みの状態から再開したため、この回は自己申告あつかいです", table: "Focus",
+                   comment: "Timer notice: the timer resumed from a saved state, so this session counts as self-reported")
         case .continuityLost:
-            "再起動などで計測が途切れたため、この回は自己申告あつかいです"
+            String(localized: "再起動などで計測が途切れたため、この回は自己申告あつかいです", table: "Focus",
+                   comment: "Timer notice: timing was interrupted (e.g. a restart), so this session counts as self-reported")
         case .unexplained:
-            "この回は自己申告あつかいです"
+            String(localized: "この回は自己申告あつかいです", table: "Focus",
+                   comment: "Timer notice: this session counts as self-reported (cause unknown)")
         }
     }
 

@@ -16,11 +16,21 @@ enum TimerDefaultOrientation: String, CaseIterable, Identifiable {
     }
     var title: String {
         switch self {
-        case .automatic: "自動"
-        case .up: "上（縦）"
-        case .right: "右（横）"
-        case .down: "下（縦・上下逆）"
-        case .left: "左（横）"
+        case .automatic:
+            String(localized: "自動", table: "Focus",
+                   comment: "Settings: default timer orientation option that follows the device")
+        case .up:
+            String(localized: "上（縦）", table: "Focus",
+                   comment: "Settings: default timer orientation option, top of the timer up (portrait)")
+        case .right:
+            String(localized: "右（横）", table: "Focus",
+                   comment: "Settings: default timer orientation option, top of the timer to the right (landscape)")
+        case .down:
+            String(localized: "下（縦・上下逆）", table: "Focus",
+                   comment: "Settings: default timer orientation option, top of the timer down (portrait, upside down)")
+        case .left:
+            String(localized: "左（横）", table: "Focus",
+                   comment: "Settings: default timer orientation option, top of the timer to the left (landscape)")
         }
     }
     var symbol: String {
@@ -53,12 +63,13 @@ enum TimerOrientation: Int, CaseIterable {
     var degrees: Double { Double(rawValue * 90) }
     var isLandscape: Bool { self == .right || self == .left }
     var next: Self { Self(rawValue: (rawValue + 1) % 4)! }
+    /// VoiceOver value of the rotate button: where the top of the timer points.
     var label: String {
         switch self {
-        case .up: "上"
-        case .right: "右"
-        case .down: "下"
-        case .left: "左"
+        case .up: String(localized: "上", table: "Focus", comment: "VoiceOver value: the timer's top points up")
+        case .right: String(localized: "右", table: "Focus", comment: "VoiceOver value: the timer's top points right")
+        case .down: String(localized: "下", table: "Focus", comment: "VoiceOver value: the timer's top points down")
+        case .left: String(localized: "左", table: "Focus", comment: "VoiceOver value: the timer's top points left")
         }
     }
 
@@ -353,12 +364,20 @@ struct TimerRotationControls: View {
         HStack(spacing: 0) {
             if orientation.state.isManual {
                 Button(action: orientation.followDevice) {
-                    Text("自動")
+                    // A meaningful key: the same 「自動」 is the longer
+                    // Settings option (TimerDefaultOrientation.title).
+                    Text(String(
+                        localized: "timer.rotation.automatic",
+                        defaultValue: "自動",
+                        table: "Focus",
+                        comment: "Small timer button that goes back to following the device's orientation (keep it short)"
+                    ))
                         .font(.caption)
                         .frame(minWidth: 44, minHeight: 44)
                         .contentShape(Rectangle())
                 }
-                .accessibilityLabel("端末の向きに合わせる")
+                .accessibilityLabel(Text("端末の向きに合わせる", tableName: "Focus",
+                                         comment: "VoiceOver label: make the timer follow the device's orientation again"))
                 .accessibilityIdentifier("timer.rotation.automatic")
             }
             Button(action: orientation.rotate) {
@@ -367,9 +386,11 @@ struct TimerRotationControls: View {
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
-            .accessibilityLabel("タイマーの向きを変える")
+            .accessibilityLabel(Text("タイマーの向きを変える", tableName: "Focus",
+                                     comment: "VoiceOver label: the button that rotates the timer"))
             .accessibilityValue(orientation.state.direction.label)
-            .accessibilityHint("上、右、下、左の順に回転し、選んだ向きを保ちます")
+            .accessibilityHint(Text("上、右、下、左の順に回転し、選んだ向きを保ちます", tableName: "Focus",
+                                    comment: "VoiceOver hint: each tap turns the timer up, right, down, left, and keeps the chosen direction"))
             .accessibilityIdentifier("timer.rotate")
         }
         .foregroundStyle(PomoGemTheme.muted)
