@@ -103,7 +103,8 @@ struct ScreenTimeSettingsView: View {
         if onlySwitchesFocusShieldOff { return nil }
         guard draft.enabled else { return focusShieldOnlyValidationMessage }
         guard controller.authorizationGranted else {
-            return "スクリーンタイムへのアクセスを許可してください。"
+            return String(localized: "スクリーンタイムへのアクセスを許可してください。", table: "ScreenTime",
+                          comment: "Error: Screen Time access is needed first")
         }
         if let message = ScreenTimeSelectionValidation.message(
             selection: draft.learningSelection,
@@ -122,10 +123,12 @@ struct ScreenTimeSettingsView: View {
             return message
         }
         guard learningCount + distractionCount > 0 else {
-            return "記録するアプリを1つ以上選んでください。"
+            return String(localized: "記録するアプリを1つ以上選んでください。", table: "ScreenTime",
+                          comment: "Validation: recording is on but no apps are chosen")
         }
         if learningCount > 0 && !selectedThemeExists {
-            return "勉強時間を記録するテーマを選んでください。"
+            return String(localized: "勉強時間を記録するテーマを選んでください。", table: "ScreenTime",
+                          comment: "Error: study apps are chosen but no destination theme")
         }
         return nil
     }
@@ -164,7 +167,7 @@ struct ScreenTimeSettingsView: View {
         }
         .scrollContentBackground(.hidden)
         .background(NightBackground())
-        .navigationTitle("スクリーンタイム")
+        .navigationTitle(Text("スクリーンタイム", tableName: "ScreenTime", comment: "Navigation title: the Screen Time page"))
         .navigationBarTitleDisplayMode(.inline)
         // The system back button would drop unsaved edits without a word.
         .navigationBarBackButtonHidden(hasUnsavedChanges)
@@ -216,7 +219,8 @@ struct ScreenTimeSettingsView: View {
                 }
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("保存", action: save)
+                Button(String(localized: "保存", table: "ScreenTime", comment: "Toolbar button: save the Screen Time settings"),
+                       action: save)
                     .disabled(ScreenTimeDraftPolicy.blocksSave(
                         bound: controller.isBoundToContext, draftEnabled: draft.enabled
                     ) || isRequestingAuthorization
@@ -244,27 +248,33 @@ struct ScreenTimeSettingsView: View {
                 )
             }
         }
-        .alert("設定を完了できませんでした", isPresented: Binding(
+        .alert(String(localized: "設定を完了できませんでした", table: "ScreenTime",
+                      comment: "Alert title: saving, clearing or resetting the Screen Time settings failed"),
+               isPresented: Binding(
             get: { saveError != nil },
             set: { if !$0 { saveError = nil } }
         )) {
-            Button("閉じる", role: .cancel) {}
+            Button(String(localized: "閉じる", table: "ScreenTime", comment: "Alert button: dismiss"),
+                   role: .cancel) {}
         } message: {
             Text(saveError ?? "")
         }
         .alert(String(localized: "黒い石を片付けますか？", table: "ScreenTime",
                       comment: "Alert title: clear only the black stones"),
                isPresented: $isClearBlackStonesConfirmationPresented) {
-            Button("キャンセル", role: .cancel) {}
+            Button(String(localized: "キャンセル", table: "ScreenTime", comment: "Button: cancel"), role: .cancel) {}
             Button(String(localized: "片付ける", table: "ScreenTime", comment: "Alert action: clear the black stones"),
                    action: clearBlackStones)
         } message: {
             Text("瓶の黒い石を、このiPhoneから片付けます。選んだアプリと自動記録はそのまま続き、勉強時間と粒は変わりません。片付けた石は戻せません。",
                  tableName: "ScreenTime", comment: "Alert message: what clearing the black stones does")
         }
-        .alert("スクリーンタイムの内容をリセット", isPresented: $isResetConfirmationPresented) {
-            Button("キャンセル", role: .cancel) {}
-            Button("リセット", role: .destructive, action: reset)
+        .alert(String(localized: "スクリーンタイムの内容をリセット", table: "ScreenTime",
+                      comment: "Button and alert title: delete this iPhone's Screen Time data and stop recording"),
+               isPresented: $isResetConfirmationPresented) {
+            Button(String(localized: "キャンセル", table: "ScreenTime", comment: "Button: cancel"), role: .cancel) {}
+            Button(String(localized: "リセット", table: "ScreenTime", comment: "Destructive alert button: reset Screen Time"),
+                   role: .destructive, action: reset)
         } message: {
             Text("アプリの選択、まだ取り込んでいない利用記録、黒い石をこのiPhoneから削除し、自動記録を停止して、集中中のアプリ制限もオフにします。取り消せません。保存済みの勉強時間と粒は残ります。",
                  tableName: "ScreenTime", comment: "Screen Time reset confirmation. The reset also switches the focus shield (集中中のアプリ制限) off.")
@@ -375,7 +385,11 @@ struct ScreenTimeSettingsView: View {
                 } label: {
                     HStack(spacing: 10) {
                         if isRequestingAuthorization { ProgressView() }
-                        Text(isRequestingAuthorization ? "許可を確認中…" : "アクセスを許可")
+                        Text(isRequestingAuthorization
+                             ? String(localized: "許可を確認中…", table: "ScreenTime",
+                                      comment: "Button while the Screen Time permission request runs")
+                             : String(localized: "アクセスを許可", table: "ScreenTime",
+                                      comment: "Button: ask for Screen Time access"))
                     }
                     .frame(minHeight: 44)
                 }
@@ -383,13 +397,16 @@ struct ScreenTimeSettingsView: View {
                 .accessibilityIdentifier("screen-time.authorize")
             }
         } header: {
-            Text("スクリーンタイムへのアクセス")
+            Text("スクリーンタイムへのアクセス", tableName: "ScreenTime", comment: "Section header: Screen Time access")
         } footer: {
             VStack(alignment: .leading, spacing: 5) {
                 if controller.authorizationStatus == .denied {
-                    Text("アクセスが許可されていないため、自動記録は停止しています。「アクセスを許可」からもう一度確認してください。")
+                    Text("アクセスが許可されていないため、自動記録は停止しています。「アクセスを許可」からもう一度確認してください。",
+                         tableName: "ScreenTime",
+                         comment: "Footer: access was denied, so recording stopped; quotes the Allow Access button")
                 } else {
-                    Text("このiPhoneで使うアプリを、Appleの選択画面から指定します。")
+                    Text("このiPhoneで使うアプリを、Appleの選択画面から指定します。", tableName: "ScreenTime",
+                         comment: "Footer: apps are chosen in Apple's picker")
                 }
                 if !controller.authorizationGranted {
                     Text("許可するには、iPhoneのパスコード、Apple Accountへのサインイン、インターネット接続が必要です。",
@@ -401,10 +418,13 @@ struct ScreenTimeSettingsView: View {
 
     private var recordingSection: some View {
         Section {
-            Toggle("アプリの利用時間を記録", isOn: editedBinding(\.enabled))
+            Toggle(String(localized: "アプリの利用時間を記録", table: "ScreenTime",
+                          comment: "Toggle: record time spent in the chosen apps"),
+                   isOn: editedBinding(\.enabled))
                 .disabled(editsLocked || controller.isSaving || controller.isResetting
                           || (!controller.authorizationGranted && !draft.enabled))
-                .accessibilityHint("アプリとテーマを選び、保存すると反映されます")
+                .accessibilityHint(Text("アプリとテーマを選び、保存すると反映されます", tableName: "ScreenTime",
+                                        comment: "VoiceOver hint: choose apps and a theme, then save"))
                 .accessibilityIdentifier("screen-time.enabled")
 
             if let message = controller.monitoringError ?? controller.bindingError {
@@ -420,7 +440,8 @@ struct ScreenTimeSettingsView: View {
             if controller.isUpdatingMonitoring {
                 HStack(spacing: 10) {
                     ProgressView()
-                    Text("スクリーンタイムの設定を反映中…")
+                    Text("スクリーンタイムの設定を反映中…", tableName: "ScreenTime",
+                         comment: "Progress line: the Screen Time settings are being applied")
                         .font(.subheadline)
                 }
                 .accessibilityElement(children: .combine)
@@ -435,7 +456,7 @@ struct ScreenTimeSettingsView: View {
                     .font(.subheadline)
                     .foregroundStyle(PomoGemTheme.muted)
             } else {
-                Text("自動記録は停止中です。")
+                Text("自動記録は停止中です。", tableName: "ScreenTime", comment: "Status: recording is off")
                     .font(.subheadline)
                     .foregroundStyle(PomoGemTheme.muted)
             }
@@ -455,7 +476,9 @@ struct ScreenTimeSettingsView: View {
             } else if !controller.isBoundToContext {
                 Text(ScreenTimeDraftPolicy.unboundFooterMessage)
             } else {
-                Text("変更は右上の「保存」で反映します。記録を再開できないときも、保存から再試行できます。")
+                Text("変更は右上の「保存」で反映します。記録を再開できないときも、保存から再試行できます。",
+                     tableName: "ScreenTime",
+                     comment: "Footer: changes apply with the Save button at the top right; quotes that button")
             }
         }
     }
@@ -464,10 +487,14 @@ struct ScreenTimeSettingsView: View {
         Section {
             selectionButton(.learning, count: learningCount)
 
-            Picker("記録先のテーマ", selection: editedBinding(\.themeID)) {
-                Text("選んでください").tag(nil as UUID?)
+            Picker(String(localized: "記録先のテーマ", table: "ScreenTime",
+                          comment: "Picker: the theme that study-app time is added to"),
+                   selection: editedBinding(\.themeID)) {
+                Text("選んでください", tableName: "ScreenTime", comment: "Picker placeholder: no theme chosen yet")
+                    .tag(nil as UUID?)
                 if let themeID = draft.themeID, !selectedThemeExists {
-                    Text("削除されたテーマ").tag(Optional(themeID))
+                    Text("削除されたテーマ", tableName: "ScreenTime", comment: "Picker value: the chosen theme was deleted")
+                        .tag(Optional(themeID))
                 }
                 ForEach(subjects, id: \.id) { subject in
                     Text(subject.safeDisplayName).tag(Optional(subject.id))
@@ -480,7 +507,9 @@ struct ScreenTimeSettingsView: View {
                 Button {
                     router.presentPaywall(from: .screenTimeApps)
                 } label: {
-                    Label("Proで勉強アプリを無制限に", systemImage: "sparkles")
+                    Label(String(localized: "Proで勉強アプリを無制限に", table: "ScreenTime",
+                                 comment: "Button: Pro allows unlimited study apps (opens the paywall)"),
+                          systemImage: "sparkles")
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(minHeight: 44)
                 }
@@ -492,7 +521,11 @@ struct ScreenTimeSettingsView: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text("選んだアプリを合計10分使うごとに、記録先のテーマへ粒（10分・100g）と勉強時間を追加します。",
                      tableName: "ScreenTime", comment: "Footer: how study-app time becomes pebbles")
-                Text(purchase.isPro ? "Pro：アプリ数は無制限です。" : "無料：5つまで。Pro：無制限。")
+                Text(purchase.isPro
+                     ? String(localized: "Pro：アプリ数は無制限です。", table: "ScreenTime",
+                              comment: "Footer: with Pro, any number of study apps")
+                     : String(localized: "無料：5つまで。Pro：無制限。", table: "ScreenTime",
+                              comment: "Footer: free plan up to 5 study apps; Pro unlimited"))
                 if showsThemeRemovedNotice && learningCount == 0 {
                     Text("記録先のテーマが削除されたため、勉強アプリの選択を解除しました。アプリとテーマを選び直して保存すると、記録を再開します。",
                          tableName: "ScreenTime", comment: "Footer: the destination theme was deleted and the study apps were cleared")
@@ -500,11 +533,14 @@ struct ScreenTimeSettingsView: View {
                         .accessibilityIdentifier("screen-time.theme-removed")
                 }
                 if learningCount > 0 && !selectedThemeExists {
-                    Text("テーマが未選択、または削除されています。記録先を選び直してください。")
+                    Text("テーマが未選択、または削除されています。記録先を選び直してください。", tableName: "ScreenTime",
+                         comment: "Footer: no destination theme, or it was deleted")
                         .foregroundStyle(.red)
                 }
                 if isKnownFree && learningCount > ScreenTimePolicy.freeLearningApplicationLimit {
-                    Text("現在の選択は無料枠を超えています。5つ以下に減らすか、Proの購入を確認してください。")
+                    Text("現在の選択は無料枠を超えています。5つ以下に減らすか、Proの購入を確認してください。",
+                         tableName: "ScreenTime",
+                         comment: "Footer: more study apps than the free plan allows")
                         .foregroundStyle(.red)
                 }
             }
@@ -517,7 +553,8 @@ struct ScreenTimeSettingsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(String(localized: "黒い石：10分 × \(max(0, controller.negativeGemCount))個ぶん", table: "ScreenTime",
                             comment: "Black-stone total; the number counts ten-minute units"))
-                Text("累計 \(negativeDurationText)")
+                Text("累計 \(negativeDurationText)", tableName: "ScreenTime",
+                     comment: "Total time in the apps to cut down. %@ is a duration, e.g. 30分 (30 min).")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
             }
@@ -549,7 +586,8 @@ struct ScreenTimeSettingsView: View {
                      tableName: "ScreenTime", comment: "Footer: what the black-stone lane does")
                 Text("黒い石同士だけがまとまります。勉強時間には加算されず、積んだ粒も減りません。",
                      tableName: "ScreenTime", comment: "Footer: black stones never reduce study")
-                Text("無料でもアプリ数は無制限です。")
+                Text("無料でもアプリ数は無制限です。", tableName: "ScreenTime",
+                     comment: "Footer: apps to cut down are unlimited, even on the free plan")
             }
         }
     }
@@ -579,13 +617,17 @@ struct ScreenTimeSettingsView: View {
         Section {
             Text("勉強アプリと控えたいアプリは別々に合計します。同じアプリを両方には登録できません。",
                  tableName: "ScreenTime", comment: "About recording: the two lanes are summed separately")
-            Text("次にポモジェムを開くと、届いた記録を瓶に反映します。反映が遅れることがあります。")
-            Text("一部のアプリは、OSが関連Webサイトの利用も含める場合があります。")
-            Text("10分未満の端数は、日付の切り替わりや設定の変更・停止でリセットされます。タイマー中の二重加算を避けるため、勉強アプリの計測もいったん区切ります。")
+            Text("次にポモジェムを開くと、届いた記録を瓶に反映します。反映が遅れることがあります。", tableName: "ScreenTime",
+                 comment: "About recording: new records reach the jar the next time the app opens")
+            Text("一部のアプリは、OSが関連Webサイトの利用も含める場合があります。", tableName: "ScreenTime",
+                 comment: "About recording: iOS may include related websites in an app's time")
+            Text("10分未満の端数は、日付の切り替わりや設定の変更・停止でリセットされます。タイマー中の二重加算を避けるため、勉強アプリの計測もいったん区切ります。",
+                 tableName: "ScreenTime",
+                 comment: "About recording: leftovers under 10 minutes reset at the day boundary or on changes; study-app timing also breaks during a timer")
             Text("アプリの選択、未取り込みの利用記録、黒い石は、このiPhoneだけに保存します。JSON書き出しや保存先の切り替えでは引き継ぎません。",
                  tableName: "ScreenTime", comment: "About recording: device-local data")
         } header: {
-            Text("記録について")
+            Text("記録について", tableName: "ScreenTime", comment: "Section header: about recording")
         }
         .font(.subheadline)
         .foregroundStyle(PomoGemTheme.muted)
@@ -593,7 +635,9 @@ struct ScreenTimeSettingsView: View {
 
     private var resetSection: some View {
         Section {
-            Button("スクリーンタイムの内容をリセット", role: .destructive) {
+            Button(String(localized: "スクリーンタイムの内容をリセット", table: "ScreenTime",
+                          comment: "Button and alert title: delete this iPhone's Screen Time data and stop recording"),
+                   role: .destructive) {
                 isResetConfirmationPresented = true
             }
             .fixedSize(horizontal: false, vertical: true)
@@ -618,17 +662,25 @@ struct ScreenTimeSettingsView: View {
         controller.learningPausedByTimer || controller.learningStoppedByFreeLimit
             ? String(localized: "控えたいアプリだけ自動記録中", table: "ScreenTime",
                      comment: "Status: only the black-stone lane is recording")
-            : "自動記録中"
+            : String(localized: "自動記録中", table: "ScreenTime", comment: "Settings row subtitle: recording")
     }
 
     private var authorizationStatusText: String {
-        controller.authorizationGranted ? "アクセス許可済み" : "アクセスの許可が必要です"
+        controller.authorizationGranted
+            ? String(localized: "アクセス許可済み", table: "ScreenTime", comment: "Status: Screen Time access is allowed")
+            : String(localized: "アクセスの許可が必要です", table: "ScreenTime", comment: "Status: Screen Time access is needed")
     }
 
     private var negativeDurationText: String {
         let (minutes, overflow) = max(0, controller.negativeGemCount)
             .multipliedReportingOverflow(by: ScreenTimePolicy.minutesPerGem)
-        return overflow ? "\(Int.max.formatted())分以上" : "\(minutes.formatted())分"
+        // Whole minutes, never hours, as the page has always shown them.
+        guard !overflow else {
+            return String(localized: "\(Int.max)分以上", table: "ScreenTime",
+                          comment: "Black-stone minutes beyond what can be counted (never seen in practice)")
+        }
+        return String(localized: "\(minutes)分", table: "ScreenTime",
+                      comment: "Minutes spent in the apps to cut down (en: '%lld min')")
     }
 
     private func selectionButton(_ lane: ScreenTimeSelectionLane, count: Int) -> some View {
@@ -641,7 +693,7 @@ struct ScreenTimeSettingsView: View {
                     .frame(width: 26)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("アプリを選ぶ")
+                    Text("アプリを選ぶ", tableName: "ScreenTime", comment: "Button: open Apple's app picker")
                         .foregroundStyle(PomoGemTheme.text)
                     Text(selectionCaption(lane, count: count))
                         .font(.caption)
@@ -661,7 +713,8 @@ struct ScreenTimeSettingsView: View {
                   || controller.isSaving || controller.isResetting)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(lane.chooseAppsLabel)
-        .accessibilityValue("\(count)アプリ選択中")
+        .accessibilityValue(Text("\(count)アプリ選択中", tableName: "ScreenTime",
+                                 comment: "Number of apps chosen. en needs plural variations."))
         .accessibilityHint(selectionHint(lane))
         .accessibilityIdentifier("screen-time.\(lane.rawValue)-apps")
     }
@@ -816,7 +869,9 @@ struct ScreenTimeSettingsView: View {
                 showsThemeRemovedNotice = false
                 draft = controller.configuration
                 hasUserEdits = false
-                router.showToast("スクリーンタイムの内容をリセットしました", symbol: "checkmark")
+                router.showToast(String(localized: "スクリーンタイムの内容をリセットしました", table: "ScreenTime",
+                                        comment: "Toast: Screen Time was reset"),
+                                 symbol: "checkmark")
             } catch {
                 saveError = ScreenTimeFailureMessage.text(
                     for: error, recordedMonitoringError: controller.monitoringError, action: .reset
@@ -916,7 +971,7 @@ enum ScreenTimeDraftPolicy {
         guard !draft.enabled, draft.shieldsDistractionDuringFocusEnabled else { return nil }
         guard authorized else {
             return String(localized: "スクリーンタイムへのアクセスを許可してください。", table: "ScreenTime",
-                          comment: "Validation: the focus shield is switched on without Screen Time access")
+                          comment: "Error: Screen Time access is needed first")
         }
         return ScreenTimeSelectionValidation.blockingMessage(
             selection: draft.distractionSelection, otherSelection: draft.learningSelection
@@ -927,7 +982,8 @@ enum ScreenTimeDraftPolicy {
     /// button's real effect — an explanation — and never promise a save the
     /// controller refuses.
     static let unboundFooterMessage =
-        "記録の準備が完了していないため、いまは変更を保存できません。「保存」を押すと、理由をお知らせします。"
+        String(localized: "記録の準備が完了していないため、いまは変更を保存できません。「保存」を押すと、理由をお知らせします。",
+               table: "ScreenTime", comment: "Footer: the records are not ready, so changes cannot be saved yet; tapping Save explains why")
 
     /// The draft after the picker's 反映. On a first setup — nothing chosen in
     /// either lane yet — picking apps also switches recording on: the switch
@@ -1039,7 +1095,8 @@ private enum ScreenTimeSelectionValidation {
             return blocking
         }
         if exceedsFreeLimit(selection: selection, lane: lane, isPro: isPro) {
-            return "無料では勉強アプリを5つまで選べます。5つ以下に減らしてください。Proでは無制限です。"
+            return String(localized: "無料では勉強アプリを5つまで選べます。5つ以下に減らしてください。Proでは無制限です。",
+                          table: "ScreenTime", comment: "Validation: more than 5 study apps on the free plan")
         }
         return nil
     }
@@ -1050,7 +1107,8 @@ private enum ScreenTimeSelectionValidation {
         otherSelection: FamilyActivitySelection
     ) -> String? {
         if !selection.categoryTokens.isEmpty || !selection.webDomainTokens.isEmpty {
-            return "カテゴリやWebサイトは選べません。カテゴリを開き、アプリを1つずつ選んでください。"
+            return String(localized: "カテゴリやWebサイトは選べません。カテゴリを開き、アプリを1つずつ選んでください。",
+                          table: "ScreenTime", comment: "Validation: a category or website was picked; open the category and pick apps one by one")
         }
         if !selection.applicationTokens.isDisjoint(with: otherSelection.applicationTokens) {
             return String(localized: "同じアプリを勉強アプリと控えたいアプリの両方には登録できません。もう一方の選択から外してください。",
@@ -1208,20 +1266,26 @@ private struct ScreenTimeAppSelectionSheet: View {
     var body: some View {
         NavigationStack {
             FamilyActivityPicker(
-                headerText: "カテゴリを開き、記録するアプリを1つずつ選んでください。",
+                headerText: String(localized: "カテゴリを開き、記録するアプリを1つずつ選んでください。", table: "ScreenTime",
+                                   comment: "Apple app picker header: open a category and pick apps one by one"),
                 footerText: lane == .learning && isPro != true
-                    ? "無料は5つまで。Proでは無制限です。"
-                    : "アプリ数は無制限です。",
+                    ? String(localized: "無料は5つまで。Proでは無制限です。", table: "ScreenTime",
+                             comment: "Apple app picker footer: free plan up to 5 study apps, unlimited with Pro")
+                    : String(localized: "アプリ数は無制限です。", table: "ScreenTime",
+                             comment: "Apple app picker footer: no app limit"),
                 selection: $selection
             )
             .navigationTitle(lane.appsTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("キャンセル") { dismiss() }
+                    Button(String(localized: "キャンセル", table: "ScreenTime", comment: "Button: cancel")) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("反映") { apply(selection) }
+                    Button(String(localized: "反映", table: "ScreenTime",
+                                  comment: "App picker button: use this selection (it is saved later with Save)")) {
+                        apply(selection)
+                    }
                     .disabled(blockingMessage != nil)
                     .accessibilityIdentifier("screen-time.picker-apply")
                 }
@@ -1229,7 +1293,8 @@ private struct ScreenTimeAppSelectionSheet: View {
             .safeAreaInset(edge: .bottom) {
                 VStack(alignment: .leading, spacing: 8) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("\(selection.applicationTokens.count)アプリ選択中")
+                        Text("\(selection.applicationTokens.count)アプリ選択中", tableName: "ScreenTime",
+                             comment: "Number of apps chosen. en needs plural variations.")
                             .font(.subheadline.weight(.semibold))
                         if let noticeMessage {
                             Text(noticeMessage)
@@ -1248,11 +1313,14 @@ private struct ScreenTimeAppSelectionSheet: View {
                     // tokens it never handed out, so fixture picks left in
                     // the sheet could vanish before 反映 was tapped.
                     if ScreenTimeSettingsUITestFixture.isActiveForCurrentProcess {
-                        Button("fixture-pick-apps") {
+                        Button {
                             var picked = FamilyActivitySelection(includeEntireCategory: false)
                             picked.applicationTokens = ScreenTimeSettingsUITestFixture.applicationTokens(
                                 count: 2, seed: lane == .learning ? 0x51 : 0x52)
                             apply(picked)
+                        } label: {
+                            // Verbatim: a test-only control has no catalog key.
+                            Text(verbatim: "fixture-pick-apps")
                         }
                         .font(.caption)
                         .accessibilityIdentifier("screen-time.fixture-pick-apps")
