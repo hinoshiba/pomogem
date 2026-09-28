@@ -89,9 +89,45 @@ final class LocalizationEnvironmentTests: XCTestCase {
         }
     }
 
-    /// Enabled by the English integration: `shipping_languages` gains "en" in
-    /// Scripts/l10n/table-map.json. Until then this test is skipped on purpose,
-    /// because main ships Japanese only.
+    /// Beyond the feature tables: iOS looks a table up in the preferred
+    /// localization and then in the development region's. Any table compiled
+    /// for another language (AppShortcuts, InfoPlist, a feature table) must
+    /// therefore exist in `ja.lproj` with at least the same keys, or a Japanese
+    /// device reads those keys, or Siri its phrases, in English.
+    func testJapaneseDevicesHaveEveryCompiledTableInJapanese() throws {
+        let map = try LocalizationTestSupport.tableMap()
+        func keys(of table: String, in directory: URL) -> Set<String> {
+            var result: Set<String> = []
+            for suffix in ["strings", "stringsdict"] {
+                let url = directory.appendingPathComponent("\(table).\(suffix)")
+                if let data = try? Data(contentsOf: url),
+                   let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] {
+                    result.formUnion(plist.keys)
+                }
+            }
+            return result
+        }
+        for (name, bundle) in try LocalizationTestSupport.productBundles() {
+            let source = bundle.bundleURL.appendingPathComponent("\(map.sourceLanguage).lproj")
+            for language in map.shippingLanguages where language != map.sourceLanguage {
+                let directory = bundle.bundleURL.appendingPathComponent("\(language).lproj")
+                let files = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+                let tables = Set(files.filter { $0.hasSuffix(".strings") || $0.hasSuffix(".stringsdict") }
+                    .map { ($0 as NSString).deletingPathExtension })
+                for table in tables.sorted() {
+                    let missing = keys(of: table, in: directory).subtracting(keys(of: table, in: source))
+                    XCTAssertTrue(
+                        missing.isEmpty,
+                        "\(name) \(table): \(missing.count) key(s) have \(language) values but no \(map.sourceLanguage) value, e.g. \(missing.sorted().prefix(3)). Run Scripts/l10n/l10n.py sync"
+                    )
+                }
+            }
+        }
+    }
+
+    /// Enabled with English (`shipping_languages` gains "en" in
+    /// Scripts/l10n/table-map.json): every bundle carries en.lproj with its
+    /// display name and every table that holds English.
     func testEnglishShipsWithEveryTableOnceActivated() throws {
         guard try LocalizationTestSupport.isShipping("en") else {
             throw XCTSkip(
@@ -109,7 +145,11 @@ final class LocalizationEnvironmentTests: XCTestCase {
             )
             for table in map.catalogBundles[name] ?? [] {
                 let catalog = try LocalizationCatalogFile(table: table, relativePath: try XCTUnwrap(map.catalogs[table]))
-                guard !catalog.strings.isEmpty else { continue }
+                // xcstringstool compiles a table for English once it holds an
+                // English value. During the localization wave some tables have
+                // none yet; `l10n.py check --strict` requires every key.
+                let translated = catalog.strings.values.contains { LocalizationCatalogFile.localizations(of: $0)["en"] != nil }
+                guard translated else { continue }
                 let compiled = english.url(forResource: table, withExtension: "strings")
                     ?? english.url(forResource: table, withExtension: "stringsdict")
                 XCTAssertNotNil(compiled, "\(name) en.lproj has no \(table) table")

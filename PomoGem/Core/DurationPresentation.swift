@@ -21,31 +21,17 @@ import Foundation
 /// drill-down's month, day and theme rows, 記録's month list and Wrapped's
 /// theme rows read their time from the same mass for the same reason.
 enum DurationPresentation {
-    /// Whole minutes as 「N分」, 「H時間」 or 「H時間M分」. Negative input is
-    /// clamped to 「0分」; hours are digit-grouped (「1,234時間」).
-    static func minutesLabel(_ minutes: Int) -> String {
-        let value = max(0, minutes)
-        let hours = value / 60
-        let remainder = value % 60
-        if hours == 0 {
-            return String(
-                localized: "\(remainder)分",
-                table: "Common",
-                comment: "A duration in whole minutes"
-            )
-        }
-        if remainder == 0 {
-            return String(
-                localized: "\(hours)時間",
-                table: "Common",
-                comment: "A duration in whole hours"
-            )
-        }
-        return String(
-            localized: "\(hours)時間\(remainder)分",
-            table: "Common",
-            comment: "A duration in hours and minutes"
-        )
+    /// Whole minutes as 「N分」, 「H時間」 or 「H時間M分」 (en "25 min",
+    /// "2 hr", "4 hr 10 min"). Negative input is clamped to 「0分」; hours are
+    /// digit-grouped (「1,234時間」).
+    ///
+    /// This is `DurationText.short(minutes:)` (Docs/Localization.md), which
+    /// composes the Japanese itself and gives every other language Foundation's
+    /// duration style, formatted in the language the strings are shown in.
+    /// Totals beyond `Int.max` seconds (about 292 billion years) are clamped
+    /// there rather than trapped.
+    static func minutesLabel(_ minutes: Int, locale: Locale = PomoGemLocale.current) -> String {
+        DurationText.short(minutes: max(0, minutes), locale: locale)
     }
 
     /// Whole minutes of focus a mass stands for, rounded down so a label

@@ -2,37 +2,125 @@
   "sourceLanguage" : "ja",
   "strings" : {
     "%@集中する" : {
-      "comment" : "VoiceOver: a medium-widget button that starts a focus; the argument is its length, e.g. 25分"
+      "comment" : "VoiceOver: a medium-widget button that starts a focus; the argument is its length, e.g. 25分",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@集中する"
+          }
+        }
+      }
     },
     "タップして休憩へ戻る" : {
-      "comment" : "Live Activity guidance while a break counts down; like 「タップして集中へ戻る」 for a focus"
+      "comment" : "Live Activity guidance while a break counts down; like 「タップして集中へ戻る」 for a focus",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タップして休憩へ戻る"
+          }
+        }
+      }
     },
     "タップして瓶へ戻る" : {
-      "comment" : "Live Activity guidance after a break ended; the app's break screen offers 「瓶へ戻る」"
+      "comment" : "Live Activity guidance after a break ended; the app's break screen offers 「瓶へ戻る」",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タップして瓶へ戻る"
+          }
+        }
+      }
     },
     "ポモジェムのタイマー" : {
-      "comment" : "VoiceOver: the Dynamic Island mark during a focus"
+      "comment" : "VoiceOver: the Dynamic Island mark during a focus",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェムのタイマー"
+          }
+        }
+      }
     },
     "ポモジェムの休憩" : {
-      "comment" : "VoiceOver: the Dynamic Island mark during a break"
+      "comment" : "VoiceOver: the Dynamic Island mark during a break",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェムの休憩"
+          }
+        }
+      }
     },
     "ポモジェムを開く" : {
-      "comment" : "VoiceOver: the medium widget's jar and heading, which open the app (its length buttons start a focus)"
+      "comment" : "VoiceOver: the medium widget's jar and heading, which open the app (its length buttons start a focus)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェムを開く"
+          }
+        }
+      }
     },
     "休憩の残り時間" : {
-      "comment" : "VoiceOver: label of an unknown break countdown"
+      "comment" : "VoiceOver: label of an unknown break countdown",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩の残り時間"
+          }
+        }
+      }
     },
     "休憩の残り時間、%@" : {
-      "comment" : "VoiceOver: the break countdown; the argument is the remaining time"
+      "comment" : "VoiceOver: the break countdown; the argument is the remaining time",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩の残り時間、%@"
+          }
+        }
+      }
     },
     "休憩中" : {
-      "comment" : "Live Activity title while a break counts down"
+      "comment" : "Live Activity title while a break counts down",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩中"
+          }
+        }
+      }
     },
     "休憩終了" : {
-      "comment" : "Live Activity: a break past its end time (title and VoiceOver)"
+      "comment" : "Live Activity: a break past its end time (title and VoiceOver)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩終了"
+          }
+        }
+      }
     },
     "終了" : {
-      "comment" : "Live Activity countdown after its end time"
+      "comment" : "Live Activity countdown after its end time",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

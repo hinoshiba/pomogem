@@ -6,8 +6,8 @@
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@、%2$@"
+            "state" : "translated",
+            "value" : "%@、%@"
           }
         }
       }
@@ -17,8 +17,8 @@
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@、%2$@、%3$@、プラス%4$lldグラム%5$@、%6$@"
+            "state" : "translated",
+            "value" : "%@、%@、%@、プラス%lldグラム%@、%@"
           }
         }
       }
@@ -28,8 +28,8 @@
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@、%2$@、%3$lldパーセント"
+            "state" : "translated",
+            "value" : "%@、%@、%lldパーセント"
           }
         }
       }
@@ -39,8 +39,8 @@
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@〜%2$@"
+            "state" : "translated",
+            "value" : "%@〜%@"
           }
         }
       }
@@ -50,188 +50,560 @@
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@から%2$@まで"
+            "state" : "translated",
+            "value" : "%@から%@まで"
           }
         }
       }
     },
     "%@の記録を見る" : {
-      "comment" : "VoiceOver action on the mass chart; the argument is a date such as 9月24日"
+      "comment" : "VoiceOver action on the mass chart; the argument is a date such as 9月24日",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@の記録を見る"
+          }
+        }
+      }
     },
     "%@・%lld%%" : {
       "comment" : "Theme row at large text sizes: time, then share of the period in percent",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@・%2$lld%%"
+            "state" : "translated",
+            "value" : "%@・%lld%%"
           }
         }
       }
     },
     "%@（今のまま）" : {
-      "comment" : "Milestone editor theme menu: keep the milestone's theme as it is; the argument is the theme name"
+      "comment" : "Milestone editor theme menu: keep the milestone's theme as it is; the argument is the theme name",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（今のまま）"
+          }
+        }
+      }
     },
     "%@（削除したテーマ）" : {
-      "comment" : "Milestone editor theme menu: keep the milestone's deleted theme; the argument is the theme name"
+      "comment" : "Milestone editor theme menu: keep the milestone's deleted theme; the argument is the theme name",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（削除したテーマ）"
+          }
+        }
+      }
     },
     "%lld粒" : {
-      "comment" : "Gem count"
+      "comment" : "Gem count",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld粒"
+          }
+        }
+      }
     },
     "+%lldg" : {
-      "comment" : "Grams one record added to the jar"
+      "comment" : "Grams one record added to the jar",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+%lldg"
+          }
+        }
+      }
     },
     "+%lldg・%@" : {
       "comment" : "History row at large text sizes: mass added, then how it was recorded",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "+%1$lldg・%2$@"
+            "state" : "translated",
+            "value" : "+%lldg・%@"
           }
         }
       }
     },
     "iCloudの結晶を再集計中です。この端末で確認できた個別記録は引き続き表示しています。" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudの結晶を再集計中です。この端末で確認できた個別記録は引き続き表示しています。"
+          }
+        }
+      }
     },
     "×%lld の結晶" : {
-      "comment" : "Crystal archive row title; the argument is how many gems it holds"
+      "comment" : "Crystal archive row title; the argument is how many gems it holds",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "×%lld の結晶"
+          }
+        }
+      }
     },
     "「%@」は今のテーマ一覧にありません。ほかのテーマを選ばなければ、このまま残ります。" : {
-      "comment" : "Milestone editor: why a theme missing from the list is shown; the argument is the theme name"
+      "comment" : "Milestone editor: why a theme missing from the list is shown; the argument is the theme name",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」は今のテーマ一覧にありません。ほかのテーマを選ばなければ、このまま残ります。"
+          }
+        }
+      }
     },
     "「%@」は設定で削除したテーマです。ほかのテーマを選ばなければ、このまま残ります。" : {
-      "comment" : "Milestone editor: why a deleted theme is shown; the argument is the theme name"
+      "comment" : "Milestone editor: why a deleted theme is shown; the argument is the theme name",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」は設定で削除したテーマです。ほかのテーマを選ばなければ、このまま残ります。"
+          }
+        }
+      }
     },
     "ここでは最新%lld個を表示しています。生涯の質量は、メニューの「積み上がりを見る」で確認できます。" : {
-      "comment" : "Crystal archive note; the argument is how many crystals are listed"
+      "comment" : "Crystal archive note; the argument is how many crystals are listed",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ここでは最新%lld個を表示しています。生涯の質量は、メニューの「積み上がりを見る」で確認できます。"
+          }
+        }
+      }
     },
     "このiPhoneの結晶を確認中です。確認できた個別記録は引き続き表示しています。" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneの結晶を確認中です。確認できた個別記録は引き続き表示しています。"
+          }
+        }
+      }
     },
     "このうち自己申告 %@" : {
-      "comment" : "Log: how much of the period's mass was self-reported; the argument is a mass such as 300g"
+      "comment" : "Log: how much of the period's mass was self-reported; the argument is a mass such as 300g",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このうち自己申告 %@"
+          }
+        }
+      }
     },
     "この日の記録" : {
-      "comment" : "Heading of a day's record list"
+      "comment" : "Heading of a day's record list",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この日の記録"
+          }
+        }
+      }
     },
     "この日の記録、%@、%lld粒、%lldグラム" : {
       "comment" : "VoiceOver summary of a day: focus time, gem count, mass in grams",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "この日の記録、%1$@、%2$lld粒、%3$lldグラム"
+            "state" : "translated",
+            "value" : "この日の記録、%@、%lld粒、%lldグラム"
           }
         }
       }
     },
     "この日の記録は、この端末にはまだ届いていません。" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この日の記録は、この端末にはまだ届いていません。"
+          }
+        }
+      }
     },
     "この日の記録を読み込み中" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この日の記録を読み込み中"
+          }
+        }
+      }
     },
     "この日の記録を読み込めませんでした" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この日の記録を読み込めませんでした"
+          }
+        }
+      }
     },
     "この端末に届いている記録です。" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末に届いている記録です。"
+          }
+        }
+      }
     },
     "ほか%lldテーマ" : {
-      "comment" : "Wrapped: how many more themes are not listed"
+      "comment" : "Wrapped: how many more themes are not listed",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ほか%lldテーマ"
+          }
+        }
+      }
     },
     "ほかに選べるテーマはありません" : {
-      "comment" : "VoiceOver hint: no other theme to choose"
+      "comment" : "VoiceOver hint: no other theme to choose",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ほかに選べるテーマはありません"
+          }
+        }
+      }
     },
     "もっと前の月を見る" : {
-      "comment" : "Log: row under the twelve monthly jars that opens 年月 for older months"
+      "comment" : "Log: row under the twelve monthly jars that opens 年月 for older months",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "もっと前の月を見る"
+          }
+        }
+      }
     },
     "スクリーンタイムの%@は、完走した回数に含みません" : {
-      "comment" : "Log: Screen Time learning in the period is not counted as completed timers; the argument is a duration"
+      "comment" : "Log: Screen Time learning in the period is not counted as completed timers; the argument is a duration",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイムの%@は、完走した回数に含みません"
+          }
+        }
+      }
     },
     "テーマ別" : {
-      "comment" : "Heading of the per-theme time breakdown of a day"
+      "comment" : "Heading of the per-theme time breakdown of a day",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマ別"
+          }
+        }
+      }
     },
     "テーマ別の時間" : {
-      "comment" : "Wrapped: heading of the month's time per theme"
+      "comment" : "Wrapped: heading of the month's time per theme",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマ別の時間"
+          }
+        }
+      }
     },
     "今月" : {
-      "comment" : "Log period picker: the calendar month that contains today"
+      "comment" : "Log period picker: the calendar month that contains today",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今月"
+          }
+        }
+      }
     },
     "今月の質量" : {
-      "comment" : "Log tile: mass added this calendar month"
+      "comment" : "Log tile: mass added this calendar month",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今月の質量"
+          }
+        }
+      }
     },
     "今週" : {
-      "comment" : "Log period picker: the calendar week that contains today"
+      "comment" : "Log period picker: the calendar week that contains today",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今週"
+          }
+        }
+      }
     },
     "今週の質量" : {
-      "comment" : "Log tile: mass added this calendar week"
+      "comment" : "Log tile: mass added this calendar week",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今週の質量"
+          }
+        }
+      }
     },
     "完走した回数" : {
-      "comment" : "Log tile: timers that ran to their end"
+      "comment" : "Log tile: timers that ran to their end",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完走した回数"
+          }
+        }
+      }
     },
     "小さな粒は消えません。10粒ずつ結晶になり、瓶の中で動き続けます。" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "小さな粒は消えません。10粒ずつ結晶になり、瓶の中で動き続けます。"
+          }
+        }
+      }
     },
     "年と月を選んで、日ごとの記録までたどれます" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "年と月を選んで、日ごとの記録までたどれます"
+          }
+        }
+      }
     },
     "時間と粒には、自己申告の記録も含みます。" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間と粒には、自己申告の記録も含みます。"
+          }
+        }
+      }
     },
     "最近の記録を読み込めませんでした。" : {
-      "comment" : "Log: shown under 最近の記録 when the newest records could not be read"
+      "comment" : "Log: shown under 最近の記録 when the newest records could not be read",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近の記録を読み込めませんでした。"
+          }
+        }
+      }
     },
     "月の振り返り" : {
-      "comment" : "Log section title: the monthly Wrapped recaps"
+      "comment" : "Log section title: the monthly Wrapped recaps",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "月の振り返り"
+          }
+        }
+      }
     },
     "月の記録へ戻る" : {
-      "comment" : "Wrapped opened from a month in 年月: returns to that month's sheet"
+      "comment" : "Wrapped opened from a month in 年月: returns to that month's sheet",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "月の記録へ戻る"
+          }
+        }
+      }
     },
     "棒を選ぶと、その日の記録を一件ずつ見られます。" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "棒を選ぶと、その日の記録を一件ずつ見られます。"
+          }
+        }
+      }
     },
     "直近12か月を、月ごとにふり返れます。" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "直近12か月を、月ごとにふり返れます。"
+          }
+        }
+      }
     },
     "確認済みのテーマ別の時間" : {
-      "comment" : "Wrapped: heading of the time per theme when only part of the month is shown or iCloud is re-counting"
+      "comment" : "Wrapped: heading of the time per theme when only part of the month is shown or iCloud is re-counting",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "確認済みのテーマ別の時間"
+          }
+        }
+      }
     },
     "積んだ粒" : {
-      "comment" : "Day summary tile: number of gems"
+      "comment" : "Day summary tile: number of gems",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "積んだ粒"
+          }
+        }
+      }
     },
     "結晶アーカイブ" : {
-      "comment" : "Log section title: the jar's crystals"
+      "comment" : "Log section title: the jar's crystals",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結晶アーカイブ"
+          }
+        }
+      }
     },
     "虹の粒" : {
-      "comment" : "VoiceOver: a rainbow gem"
+      "comment" : "VoiceOver: a rainbow gem",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "虹の粒"
+          }
+        }
+      }
     },
     "記録を読み込み中" : {
-      "comment" : "VoiceOver: Log is loading"
+      "comment" : "VoiceOver: Log is loading",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録を読み込み中"
+          }
+        }
+      }
     },
     "読み込み中にこの端末の記録が変わりました。開き直すと確かめられます。" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "読み込み中にこの端末の記録が変わりました。開き直すと確かめられます。"
+          }
+        }
+      }
     },
     "質量" : {
-      "comment" : "Day summary tile: total mass"
+      "comment" : "Day summary tile: total mass",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "質量"
+          }
+        }
+      }
     },
     "通常の粒" : {
-      "comment" : "VoiceOver: a normal gem"
+      "comment" : "VoiceOver: a normal gem",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通常の粒"
+          }
+        }
+      }
     },
     "過去の記録" : {
-      "comment" : "Title of 年月 opened from Log"
+      "comment" : "Title of 年月 opened from Log",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "過去の記録"
+          }
+        }
+      }
     },
     "過去の記録を月・日ごとに見る" : {
-      "comment" : "Log: opens 年月 to reach older history by month and day"
+      "comment" : "Log: opens 年月 to reach older history by month and day",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "過去の記録を月・日ごとに見る"
+          }
+        }
+      }
     },
     "金の粒" : {
-      "comment" : "VoiceOver: a gold gem"
+      "comment" : "VoiceOver: a gold gem",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "金の粒"
+          }
+        }
+      }
     },
     "集中した時間" : {
-      "comment" : "Day summary tile: total focus time"
+      "comment" : "Day summary tile: total focus time",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中した時間"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

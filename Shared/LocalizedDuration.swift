@@ -12,15 +12,17 @@ import Foundation
 
 /// The locale PomoGem formats numbers, units and dates in.
 ///
-/// `Locale.current` does not always speak the language of the strings. With a
-/// Japanese and an English localization, a Korean iPhone gets the Japanese
-/// strings (the development region) while `Locale.current` becomes en_KR
-/// (iOS 26.5 Simulator), so dates and units would read "Sep 2026" or "25 min"
-/// next to Japanese labels. Pairing the language of the resolved localization
-/// with the user's region keeps each screen in one language. While the app is
-/// Japanese-only this is the same as `Locale.current` (ja_KR, ja_US, ...).
-/// In an extension `Bundle.main` is the extension's own bundle, which ships the
-/// same localizations as the app.
+/// `Locale.current` does not always speak the language of the strings. A
+/// device that prefers neither shipped language gets the development region's
+/// strings, and `Locale.current` need not match them: with the development
+/// region still Japanese, a Korean iPhone showed Japanese strings while
+/// `Locale.current` was en_KR (iOS 26.5 Simulator), so dates and units read
+/// "Sep 2026" or "25 min" next to Japanese labels. Pairing the language of the
+/// resolved localization with the user's region keeps each screen in one
+/// language, whichever language the fallback is (English since the
+/// localization prep: the Korean iPhone formats in en_KR). In an extension
+/// `Bundle.main` is the extension's own bundle, which ships the same
+/// localizations as the app.
 enum PomoGemLocale {
     static var current: Locale {
         locale(localization: Bundle.main.preferredLocalizations.first, base: .current)

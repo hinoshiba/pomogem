@@ -19,13 +19,13 @@ struct PomoGemLogo: View {
             }
             .frame(width: compact ? 28 : 36, height: compact ? 28 : 36)
 
-            Text("ポモジェム")
+            Text("ポモジェム", tableName: "Common", comment: "Brand wordmark beside the jar mark (en: PomoGem)")
                 .font(PomoGemTheme.brand(compact ? 18 : 22))
                 .tracking(0.5)
                 .foregroundStyle(PomoGemTheme.amber)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("ポモジェム")
+        .accessibilityLabel(Text("ポモジェム", tableName: "Common", comment: "Brand wordmark beside the jar mark (en: PomoGem)"))
     }
 }
 

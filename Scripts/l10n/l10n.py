@@ -3,7 +3,8 @@
 
 Commands
   status                     Summarize every String Catalog.
-  sync --derived-data DIR    Merge the compiler's .stringsdata into all feature catalogs.
+  sync --derived-data DIR    Merge the compiler's .stringsdata into all feature catalogs,
+                             and the App Shortcut phrases into AppShortcuts.xcstrings.
                              While the development region is not the source language,
                              also write every key's Japanese value (see below).
   check [--strict] [--derived-data DIR] [--tables T,...]
@@ -125,6 +126,9 @@ class Repo:
         self.info_plist_catalogs = list(self.config.get("info_plist_catalogs", []))
         # Tables the build writes that are not feature catalogs (see table-map.json).
         self.system_tables = dict(self.config.get("system_tables", {}))
+        # Their catalogs (AppShortcuts.xcstrings): Apple reads them by file name,
+        # so they sit beside the feature catalogs but follow their own rules.
+        self.system_catalogs = dict(self.config.get("system_catalogs", {}))
 
     def path(self, relative):
         return self.root / relative
@@ -642,7 +646,7 @@ def catalog_paths_on_disk(repo):
 
 
 def check_catalog_files(repo, findings):
-    expected = set(repo.catalogs.values()) | {item["catalog"] for item in repo.info_plist_catalogs}
+    expected = set(repo.catalogs.values()) | {item["catalog"] for item in repo.info_plist_catalogs} | set(repo.system_catalogs.values())
     for kind, relative in catalog_paths_on_disk(repo):
         if kind == "xcstrings" and relative not in expected:
             if Path(relative).name == "Localizable.xcstrings":
@@ -754,7 +758,10 @@ def check_translation(repo, findings, table, key, entry, language, localization,
             else:
                 findings.warn("glossary", message)
         for forbidden in term.get("forbidden_en", []):
-            if re.search(r"(?<![A-Za-z])" + re.escape(forbidden) + r"(?![A-Za-z])", combined, re.I):
+            # A misspelling that differs from the term only in case (Pomogem,
+            # POMOGEM for PomoGem) is matched exactly, or the term itself would match.
+            flags = 0 if forbidden.lower() == term["en"].lower() else re.I
+            if re.search(r"(?<![A-Za-z])" + re.escape(forbidden) + r"(?![A-Za-z])", combined, flags):
                 findings.warn("glossary", f"{where}: {forbidden!r} is not used for {term['ja']} (glossary: {term['en']})")
     stripped = combined
     for allowed in repo.glossary.get("forbidden_en_allowed", []):
@@ -792,6 +799,94 @@ def check_catalog_contents(repo, findings, documents, tables=None):
                     continue
                 check_translation(repo, findings, table, key, entry, language, localization, table in enforced)
     return enforced
+
+
+APP_NAME_PLACEHOLDER = "${applicationName}"
+PHRASE_PARAMETER = re.compile(r"\$\{([A-Za-z0-9_]+)\}")
+
+
+def phrase_values(localization):
+    """(state, value) for every phrase of one language: a stringSet (App Shortcut phrases) or a stringUnit."""
+    phrases = localization.get("stringSet")
+    if phrases is not None:
+        return [(phrases.get("state"), value) for value in phrases.get("values") or []]
+    unit = localization.get("stringUnit")
+    return [(unit.get("state"), unit.get("value", ""))] if unit is not None else []
+
+
+def check_system_catalogs(repo, findings, system_files=None, tables=None):
+    """AppShortcuts.xcstrings: App Shortcut phrases, one stringSet per shortcut.
+
+    While the development region is not Japanese, every shortcut needs its
+    Japanese phrases as translated values, or xcstringstool writes no
+    ja.lproj/AppShortcuts.strings and a Japanese device's Siri reads the
+    English phrases from en.lproj. Every translated phrase must name the app
+    (${applicationName}) and use only the parameters the Japanese phrases use.
+    """
+    allowed = set(repo.shipping_languages)
+    targets = repo.target_languages()
+    for table, relative in repo.system_catalogs.items():
+        if tables and table not in tables:
+            continue
+        path = repo.path(relative)
+        if not path.exists():
+            findings.error("catalog", f"{relative}: missing catalog for {table} (Docs/Localization.md)")
+            continue
+        text = path.read_text(encoding="utf-8")
+        try:
+            document = json.loads(text)
+        except ValueError as error:
+            findings.error("catalog", f"{relative}: invalid JSON ({error})")
+            continue
+        if document.get("sourceLanguage") != repo.source_language:
+            findings.error("catalog", f"{relative}: sourceLanguage must be {repo.source_language!r}")
+        if dump_catalog(document) != text:
+            findings.enforce("format", f"{relative}: not in Xcode's JSON layout; run Scripts/l10n/l10n.py format")
+        strings = document.get("strings", {})
+        enforced = any(set(targets) & set((entry.get("localizations") or {})) for entry in strings.values())
+        # Compared with the code only when a build wrote this table's phrases.
+        code_phrases = system_code_phrases(system_files, table) if system_files and system_files.get(table) else None
+        for key in sorted(set(code_phrases or {}) - set(strings)):
+            findings.enforce("sync", f"{relative}: {key!r} is not in the catalog; run Scripts/l10n/l10n.py sync", enforced)
+        for key, entry in strings.items():
+            localizations = entry.get("localizations") or {}
+            for language in localizations:
+                if language not in allowed:
+                    findings.error("language", f"{relative}: {key!r} has a {language!r} value, but {language!r} is not in shipping_languages")
+            if entry.get("extractionState") == "stale":
+                findings.enforce("stale", f"{relative}: {key!r} is stale (no longer in code); delete it or carry its translation", enforced)
+                continue
+            source = localizations.get(repo.source_language) or {}
+            source_phrases = [value for state, value in phrase_values(source) if state != "new"]
+            if repo.needs_source_values() and not source_phrases:
+                findings.error(
+                    "source-value",
+                    f"{relative}: {key!r} has no {repo.source_language!r} phrases; with development region "
+                    f"{repo.development_region!r} a Japanese device's Siri would read another language. Build and run Scripts/l10n/l10n.py sync",
+                )
+            if code_phrases is not None and key in code_phrases and source_phrases and source_phrases != code_phrases[key]:
+                findings.error("source-value", f"{relative}: {key!r} Japanese phrases differ from the code; run Scripts/l10n/l10n.py sync")
+            parameters = set()
+            for value in [key] + [value for _, value in phrase_values(source)]:
+                parameters |= set(PHRASE_PARAMETER.findall(value))
+            for language in targets:
+                localization = localizations.get(language)
+                if localization is None:
+                    findings.enforce("missing-translation", f"{relative}: {key!r} has no {language!r} phrases", enforced)
+                    continue
+                phrases = phrase_values(localization)
+                if not phrases:
+                    findings.enforce("translation", f"{relative}: {key!r} [{language}]: no phrases", enforced)
+                for state, value in phrases:
+                    if state != "translated":
+                        findings.enforce("translation-state", f"{relative}: {key!r} [{language}] {value!r}: state is {state!r}", enforced)
+                    if JAPANESE.search(value):
+                        findings.error("translation", f"{relative}: {key!r} [{language}]: Japanese characters left in {value!r}")
+                    if APP_NAME_PLACEHOLDER not in value:
+                        findings.error("translation", f"{relative}: {key!r} [{language}] {value!r} must contain {APP_NAME_PLACEHOLDER}")
+                    unknown = set(PHRASE_PARAMETER.findall(value)) - parameters
+                    if unknown:
+                        findings.error("translation", f"{relative}: {key!r} [{language}] {value!r} uses unknown parameter(s) {sorted(unknown)}")
 
 
 def check_info_plist_catalogs(repo, findings):
@@ -961,6 +1056,46 @@ def collect_stringsdata(repo, derived_data, configuration=None):
     return entries, missing_targets, problems, paths
 
 
+def collect_system_stringsdata(repo, derived_data, configuration=None):
+    """{table: {path: data}}: the newest phrase file of each product target per system table.
+
+    The App Intents metadata processor writes ExtractedAppShortcutsMetadata.stringsdata
+    beside the compiler's output; its table (AppShortcuts) goes to a system catalog.
+    """
+    intermediates = Path(derived_data) / "Build" / "Intermediates.noindex"
+    root = os.path.realpath(repo.root)
+    newest = {}
+    for target in repo.config["product_targets"]:
+        for project in intermediates.glob("*.build"):
+            for configuration_directory in project.glob("*"):
+                if configuration and not configuration_directory.name.startswith(configuration):
+                    continue
+                for path in (configuration_directory / f"{target}.build").glob("Objects-normal/*/*.stringsdata"):
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                    tables = set(data.get("tables", {}))
+                    if not tables or not tables <= set(repo.system_tables):
+                        continue
+                    if not os.path.realpath(data.get("source", "")).startswith(root + os.sep):
+                        continue
+                    modified = path.stat().st_mtime
+                    for table in tables:
+                        if (table, target) not in newest or newest[(table, target)][0] < modified:
+                            newest[(table, target)] = (modified, str(path), data)
+    result = collections.defaultdict(dict)
+    for (table, _), (_, path, data) in sorted(newest.items()):
+        result[table][path] = data
+    return result
+
+
+def system_code_phrases(system_files, table):
+    """{key: [phrases]} as the code states them (the Japanese source)."""
+    phrases = {}
+    for data in system_files.get(table, {}).values():
+        for item in data.get("tables", {}).get(table, []):
+            phrases[item["key"]] = list(item.get("values") or [item.get("value") or item["key"]])
+    return phrases
+
+
 def check_code_against_catalogs(repo, findings, documents, derived_data, configuration=None):
     entries, missing_targets, problems, _ = collect_stringsdata(repo, derived_data, configuration)
     for target in missing_targets:
@@ -1062,12 +1197,14 @@ def command_check(repo, arguments):
     findings = Findings(arguments.strict)
     tables = set(arguments.tables.split(",")) if arguments.tables else None
     if tables:
-        unknown = tables - set(repo.catalogs)
+        unknown = tables - set(repo.catalogs) - set(repo.system_catalogs)
         if unknown:
             raise SystemExit(f"error: unknown table(s): {', '.join(sorted(unknown))}")
     documents = check_catalog_files(repo, findings)
     enforced = check_catalog_contents(repo, findings, documents, tables)
     check_development_region(repo, findings, documents)
+    system_files = collect_system_stringsdata(repo, arguments.derived_data, arguments.configuration) if arguments.derived_data else None
+    check_system_catalogs(repo, findings, system_files, tables)
     check_info_plist_catalogs(repo, findings)
     static_code_checks(repo, findings)
     ui_test_language_checks(repo, findings)
@@ -1135,7 +1272,8 @@ def command_report(repo, arguments):
 def command_status(repo, _arguments):
     languages = repo.shipping_languages
     print(f"source {repo.source_language}; development region {repo.development_region}; shipping {', '.join(languages)}")
-    for table, relative in list(repo.catalogs.items()) + [(item["bundle"] + " InfoPlist", item["catalog"]) for item in repo.info_plist_catalogs]:
+    for table, relative in (list(repo.catalogs.items()) + [(item["bundle"] + " InfoPlist", item["catalog"]) for item in repo.info_plist_catalogs]
+                            + list(repo.system_catalogs.items())):
         path = repo.path(relative)
         if not path.exists():
             print(f"  {table:28s} missing ({relative})")
@@ -1151,6 +1289,8 @@ def command_status(repo, _arguments):
                     continue
                 for _, unit in string_units(localization):
                     states[unit.get("state", "?")] += 1
+                for state, _ in (phrase_values(localization) if "stringSet" in localization else []):
+                    states[state or "?"] += 1
             per_language.append(f"{language}: " + ", ".join(f"{state} {count}" for state, count in sorted(states.items())))
         print(f"  {table:28s} {len(strings):4d} keys, {stale} stale" + ("; " + "; ".join(per_language) if per_language else ""))
     return 0
@@ -1184,11 +1324,28 @@ def command_sync(repo, arguments):
         if repo.needs_source_values():
             written += write_source_values(repo, table, document, code_text)
         write_catalog(path, document)
+    system_files = collect_system_stringsdata(repo, arguments.derived_data, arguments.configuration)
+    for table, relative in repo.system_catalogs.items():
+        path = repo.path(relative)
+        if not path.exists():
+            raise SystemExit(f"error: missing catalog {relative}")
+        files = system_files.get(table, {})
+        if not files:
+            print(f"note: no {table} phrases under {arguments.derived_data}; {relative} left as it is")
+            continue
+        command = ["xcrun", "xcstringstool", "sync", str(path)]
+        for phrase_path in files:
+            command += ["--stringsdata", phrase_path]
+        subprocess.run(command, check=True)
+        document = load_catalog(path)
+        if repo.needs_source_values():
+            written += write_source_phrases(repo, document, system_code_phrases(system_files, table))
+        write_catalog(path, document)
     print(f"Synced {len(repo.catalogs)} catalogs from {len(paths)} .stringsdata files.")
     if written:
         print(f"Wrote {written} {repo.source_language} value(s): development region is {repo.development_region!r}.")
     subprocess.run(
-        ["git", "-C", str(repo.root), "status", "--short", "--", *repo.catalogs.values()],
+        ["git", "-C", str(repo.root), "status", "--short", "--", *repo.catalogs.values(), *repo.system_catalogs.values()],
         check=False,
         stderr=subprocess.DEVNULL,
     )
@@ -1213,6 +1370,22 @@ def write_source_values(repo, table, document, code_text):
             continue  # a hand-made Japanese variation; check reports it if it does not compile
         fallback = (current.get("stringUnit") or {}).get("value", key)
         wanted = {"stringUnit": {"state": "translated", "value": code_text.get((table, key), fallback)}}
+        if current != wanted:
+            localizations[repo.source_language] = wanted
+            written += 1
+    return written
+
+
+def write_source_phrases(repo, document, code_phrases):
+    """Give every live App Shortcut its Japanese phrases as translated values (see write_source_values)."""
+    written = 0
+    for key, entry in document.get("strings", {}).items():
+        if not needs_source_value(entry):
+            continue
+        localizations = entry.setdefault("localizations", {})
+        current = localizations.get(repo.source_language) or {}
+        fallback = (current.get("stringSet") or {}).get("values") or [key]
+        wanted = {"stringSet": {"state": "translated", "values": code_phrases.get(key, fallback)}}
         if current != wanted:
             localizations[repo.source_language] = wanted
             written += 1
@@ -1249,6 +1422,8 @@ def localization_from(spec, state):
 
     if isinstance(spec, str):
         return unit(spec)
+    if isinstance(spec, list):
+        return {"stringSet": {"state": state, "values": list(spec)}}
     localization = {}
     if "value" in spec:
         localization.update(unit(spec["value"]))
@@ -1264,25 +1439,26 @@ def localization_from(spec, state):
 
 
 def command_set(repo, arguments):
-    if arguments.table not in repo.catalogs:
+    catalogs = {**repo.catalogs, **repo.system_catalogs}
+    if arguments.table not in catalogs:
         raise SystemExit(f"error: unknown table {arguments.table}")
     if arguments.language == repo.source_language:
         raise SystemExit("error: the source language comes from code; edit the Swift literal instead")
     if arguments.language not in repo.shipping_languages:
         raise SystemExit(f"error: {arguments.language!r} is not in shipping_languages; activate it first (Docs/Localization.md)")
-    path = repo.path(repo.catalogs[arguments.table])
+    path = repo.path(catalogs[arguments.table])
     document = load_catalog(path)
     translations = parse_translation_file(arguments.source)
     strings = document.setdefault("strings", {})
     written = 0
     for key, spec in translations.items():
         if key not in strings:
-            raise SystemExit(f"error: {key!r} is not in {repo.catalogs[arguments.table]}; build and run `l10n.py sync` first")
+            raise SystemExit(f"error: {key!r} is not in {catalogs[arguments.table]}; build and run `l10n.py sync` first")
         entry = strings[key]
         entry.setdefault("localizations", {})[arguments.language] = localization_from(spec, arguments.state)
         written += 1
     write_catalog(path, document)
-    print(f"Wrote {written} {arguments.language} value(s) to {repo.catalogs[arguments.table]}.")
+    print(f"Wrote {written} {arguments.language} value(s) to {catalogs[arguments.table]}.")
     return 0
 
 
@@ -1319,7 +1495,7 @@ def command_carry(repo, arguments):
 
 def command_format(repo, arguments):
     changed = []
-    for relative in list(repo.catalogs.values()) + [item["catalog"] for item in repo.info_plist_catalogs]:
+    for relative in list(repo.catalogs.values()) + [item["catalog"] for item in repo.info_plist_catalogs] + list(repo.system_catalogs.values()):
         path = repo.path(relative)
         if not path.exists():
             continue
@@ -1422,7 +1598,11 @@ def command_verify_bundle(repo, arguments):
             if language != repo.source_language:
                 for table in repo.config["catalog_bundles"].get(bundle_name, []):
                     document = load_catalog(repo.path(repo.catalogs[table]))
-                    if document.get("strings") and not any((bundle / f"{language}.lproj" / f"{table}{suffix}").exists() for suffix in (".strings", ".stringsdict")):
+                    # A table is compiled for a language once it holds a value in
+                    # it. Tables still waiting for their English (during the
+                    # localization wave) have none; `check --strict` requires them all.
+                    translated = any(language in (entry.get("localizations") or {}) for entry in document.get("strings", {}).values())
+                    if translated and not any((bundle / f"{language}.lproj" / f"{table}{suffix}").exists() for suffix in (".strings", ".stringsdict")):
                         errors.append(f"{bundle_name}: {language}.lproj has no {table} table")
         print(f"{bundle_name}: " + (", ".join(sorted(present)) or "no .lproj"))
     if errors:

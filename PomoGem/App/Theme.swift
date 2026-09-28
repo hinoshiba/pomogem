@@ -38,19 +38,19 @@ enum HomeAtmosphere: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .midnight: "深夜"
-        case .aurora: "オーロラ"
-        case .dawn: "朝凪"
-        case .study: "書斎"
+        case .midnight: String(localized: "深夜", table: "Common", comment: "Home atmosphere name: the dark night-sky look")
+        case .aurora: String(localized: "オーロラ", table: "Common", comment: "Home atmosphere name: the aurora look")
+        case .dawn: String(localized: "朝凪", table: "Common", comment: "Home atmosphere name: the calm, light morning look")
+        case .study: String(localized: "書斎", table: "Common", comment: "Home atmosphere name: the warm den / reading-room look (not 'Study')")
         }
     }
 
     var subtitle: String {
         switch self {
-        case .midnight: "静かな定番"
-        case .aurora: "光に包まれる"
-        case .dawn: "昼にも軽やか"
-        case .study: "仕事にも馴染む"
+        case .midnight: String(localized: "静かな定番", table: "Common", comment: "Home atmosphere subtitle for 深夜 (Midnight)")
+        case .aurora: String(localized: "光に包まれる", table: "Common", comment: "Home atmosphere subtitle for オーロラ (Aurora)")
+        case .dawn: String(localized: "昼にも軽やか", table: "Common", comment: "Home atmosphere subtitle for 朝凪 (Morning Calm)")
+        case .study: String(localized: "仕事にも馴染む", table: "Common", comment: "Home atmosphere subtitle for 書斎 (Den)")
         }
     }
 
@@ -532,7 +532,11 @@ private struct PomoGemSheetCloseButtonStyle: ButtonStyle {
 }
 
 struct PomoGemSheetCloseButton: View {
-    var accessibilityLabel = "閉じる"
+    var accessibilityLabel = String(
+        localized: "閉じる",
+        table: "Common",
+        comment: "Sheet close button (also its VoiceOver label unless the sheet names what it closes)"
+    )
     var accessibilityIdentifier: String?
     let action: () -> Void
 
@@ -561,7 +565,7 @@ struct PomoGemSheetCloseButton: View {
 
     private var closeButton: some View {
         Button(action: action) {
-            Text("閉じる")
+            Text("閉じる", tableName: "Common", comment: "Sheet close button (also its VoiceOver label unless the sheet names what it closes)")
                 .font(.system(.subheadline, design: .rounded, weight: .bold))
                 .foregroundStyle(PomoGemTheme.background)
                 .lineLimit(1)

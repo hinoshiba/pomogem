@@ -384,52 +384,93 @@ enum Constants {
     }
 
     /// User-facing copy fixed by the product specification.
+    ///
+    /// Localized in the `Common` table (Docs/Localization.md). A static is
+    /// resolved once per process, which is enough: changing the language
+    /// relaunches the app.
     enum UIStrings {
-        static let start = "集中をはじめる"
-        static let resume = "再開する"
-        static let pause = "一時停止"
-        static let giveUp = "今日はここまで"
-        static let jarEmptyTitle = "まだ空っぽ。"
-        static let jarEmptyBody = "25分の集中で、ここにひと粒落ちる。"
-        static let goldToast = "✦ 金の粒が出た！ +250g"
-        static let prismToast = "❖ 虹の粒！！ +250g"
-        static let manualCapToast = "自己申告はこの端末で1日3回まで"
-        static let fairnessNote = "自己申告の粒は破線つき。総質量には入るが、シェアの既定は実測のみ。"
-        static let interruptionNote = "画面を離れたので、この回は自己申告あつかいになった"
-        static let processTerminatedNote = "アプリが終了したため、この回は積まれませんでした"
-        static let bedrockCTA = "過去の集中を記録する"
-        static let bedrockNote = "以前取り込んだ時間は記録として保持されます。"
-        static let shareTag = "#ポモジェム"
-        static let eveningNotification = "瓶が待ってる。今日のひと粒、積んでいく？"
-        static let wrappedNotification = "今月の積み重ねを見てみよう。"
-        static let paywallTitle = "ポモジェムPro"
-        static let customDurationRange = "\(Timer.customMinimumMinutes)〜\(Timer.customMaximumMinutes)分"
-        static let onboardingOne = "集中した時間は、消えて見えない。"
-        static let onboardingTwo = "ポモジェムは25分を「1粒」に変えて、瓶に積む。"
-        static let onboardingThree = "減らない。消えない。責めない。"
+        static let resume = String(
+            localized: "再開する",
+            table: "Common",
+            comment: "Timer button: resume a paused focus"
+        )
+        static let pause = String(
+            localized: "一時停止",
+            table: "Common",
+            comment: "Timer button: pause the running focus"
+        )
+        static let giveUp = String(
+            localized: "今日はここまで",
+            table: "Common",
+            comment: "Timer button: a gentle stop that ends this focus without completing it (not 'Give Up' or 'Done')"
+        )
+        static let jarEmptyTitle = String(
+            localized: "まだ空っぽ。",
+            table: "Common",
+            comment: "Home: title inside a jar that holds no gems yet"
+        )
+        static let goldToast = goldToast(grams: Constants.Mass.measuredPebbleGrams)
+        static let prismToast = prismToast(grams: Constants.Mass.measuredPebbleGrams)
+        static let manualCapToast = String(
+            localized: "自己申告はこの端末で1日3回まで",
+            table: "Common",
+            comment: "Toast: self-reported time can be added at most three times a day on this device"
+        )
+        static let fairnessNote = String(
+            localized: "自己申告の粒は破線つき。総質量には入るが、シェアの既定は実測のみ。",
+            table: "Common",
+            comment: "Manual entry: how self-reported gems look and count"
+        )
+        static let interruptionNote = String(
+            localized: "画面を離れたので、この回は自己申告あつかいになった",
+            table: "Common",
+            comment: "Focus: the person left the screen, so the session is counted as self-reported"
+        )
+        static let processTerminatedNote = String(
+            localized: "アプリが終了したため、この回は積まれませんでした",
+            table: "Common",
+            comment: "Toast: the app was terminated during a focus, so that session added nothing"
+        )
+        static let eveningNotification = String(
+            localized: "瓶が待ってる。今日のひと粒、積んでいく？",
+            table: "Common",
+            comment: "Settings: example text of the opt-in daily reminder (an invitation, never pressure)"
+        )
+        static let paywallTitle = String(
+            localized: "ポモジェムPro",
+            table: "Common",
+            comment: "Product name of the one-time Pro purchase"
+        )
+        static let customDurationRange = String(
+            localized: "\(Timer.customMinimumMinutes)〜\(Timer.customMaximumMinutes)分",
+            table: "Common",
+            comment: "Range of custom focus lengths. %1$lld is the shortest and %2$lld the longest length in minutes. en: '%1$lld–%2$lld min'"
+        )
 
         static func dropToast(subject: String) -> String {
-            "\(subject) +250g 積んだ"
+            String(
+                localized: "\(subject) +250g 積んだ",
+                table: "Common",
+                comment: "Toast after a 25-minute focus. %@ is the theme name the gem was added to"
+            )
         }
 
+        /// The rare-reward toasts. The mass is formatted as the plain number the
+        /// toast has always shown (「+600g」, never 「+1,250g」), then unit-labelled.
         static func goldToast(grams: Int) -> String {
-            grams == Constants.Mass.measuredPebbleGrams
-                ? goldToast
-                : "✦ 金の粒が出た！ +\(grams)g"
+            String(
+                localized: "✦ 金の粒が出た！ +\(MassText.grams(String(grams)))",
+                table: "Common",
+                comment: "Toast for a gold gem (rare reward). %@ is the mass with its unit, e.g. 250g"
+            )
         }
 
         static func prismToast(grams: Int) -> String {
-            grams == Constants.Mass.measuredPebbleGrams
-                ? prismToast
-                : "❖ 虹の粒！！ +\(grams)g"
-        }
-
-        static func strataToast(pebbleCount: Int) -> String {
-            "\(pebbleCount)粒が、ひとつの結晶になった"
-        }
-
-        static func bedrockToast(hours: Int) -> String {
-            "過去の\(hours)時間を記録した"
+            String(
+                localized: "❖ 虹の粒！！ +\(MassText.grams(String(grams)))",
+                table: "Common",
+                comment: "Toast for a rainbow gem (rare reward). %@ is the mass with its unit, e.g. 250g"
+            )
         }
     }
 }

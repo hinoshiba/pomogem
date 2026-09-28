@@ -2,13 +2,37 @@
   "sourceLanguage" : "ja",
   "strings" : {
     "タイマーを一時停止しました。ポモジェムに戻ると続きから再開できます。" : {
-      "comment" : "First notification after leaving the app during a focus. Suggested English: Your timer is paused. Come back to PomoGem to pick up where you left off."
+      "comment" : "First notification after leaving the app during a focus. Suggested English: Your timer is paused. Come back to PomoGem to pick up where you left off.",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマーを一時停止しました。ポモジェムに戻ると続きから再開できます。"
+          }
+        }
+      }
     },
     "一時停止して%@たちました。戻れば続きから再開できます。" : {
-      "comment" : "Later notification after leaving the app during a focus. %@ is how long the timer has been paused, e.g. 5分. Suggested English: Paused for %@. Come back any time to pick up where you left off."
+      "comment" : "Later notification after leaving the app during a focus. %@ is how long the timer has been paused, e.g. 5分. Suggested English: Paused for %@. Come back any time to pick up where you left off.",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一時停止して%@たちました。戻れば続きから再開できます。"
+          }
+        }
+      }
     },
     "集中が切れています" : {
-      "comment" : "Notification title after the person left the app during a focus; the timer is now paused. Suggested English: Focus interrupted"
+      "comment" : "Notification title after the person left the app during a focus; the timer is now paused. Suggested English: Focus interrupted",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中が切れています"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

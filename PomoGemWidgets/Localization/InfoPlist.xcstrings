@@ -5,6 +5,12 @@
       "comment" : "Name of the widget extension shown in the widget gallery and Settings",
       "extractionState" : "manual",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PomoGem"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",

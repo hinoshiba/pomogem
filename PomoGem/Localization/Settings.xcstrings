@@ -2,291 +2,1026 @@
   "sourceLanguage" : "ja",
   "strings" : {
     "App Storeで評価・レビューする" : {
-      "comment" : "Settings row: rate or review the app"
+      "comment" : "Settings row: rate or review the app",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App Storeで評価・レビューする"
+          }
+        }
+      }
     },
     "App Storeを開きます" : {
-      "comment" : "Settings row subtitle: opens the App Store"
+      "comment" : "Settings row subtitle: opens the App Store",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App Storeを開きます"
+          }
+        }
+      }
     },
     "MIT License・GitHub（Webで開く）" : {
-      "comment" : "About page link subtitle"
+      "comment" : "About page link subtitle",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MIT License・GitHub（Webで開く）"
+          }
+        }
+      }
     },
     "Proは1回だけの買い切りです。記録・テーマ・iCloud同期・シェアなど、ほかの機能は無料で使えます。" : {
-      "comment" : "Settings footer under the Pro row for free users"
+      "comment" : "Settings footer under the Pro row for free users",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proは1回だけの買い切りです。記録・テーマ・iCloud同期・シェアなど、ほかの機能は無料で使えます。"
+          }
+        }
+      }
     },
     "Pro：%@" : {
-      "comment" : "Support mail line; the argument is whether Pro is owned"
+      "comment" : "Support mail line; the argument is whether Pro is owned",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pro：%@"
+          }
+        }
+      }
     },
     "SIL Open Font License 1.1を読む" : {
-      "comment" : "About page button: show the typeface's licence"
+      "comment" : "About page button: show the typeface's licence",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SIL Open Font License 1.1を読む"
+          }
+        }
+      }
     },
     "iCloud" : {
-      "comment" : "Support mail: records are kept in iCloud"
+      "comment" : "Support mail: records are kept in iCloud",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud"
+          }
+        }
+      }
     },
     "iCloud（オフラインで利用中）" : {
-      "comment" : "Support mail: iCloud mode, used offline from this iPhone's copy"
+      "comment" : "Support mail: iCloud mode, used offline from this iPhone's copy",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud（オフラインで利用中）"
+          }
+        }
+      }
     },
     "iOS：%@" : {
-      "comment" : "Support mail line; the argument is the iOS version, e.g. 26.5"
+      "comment" : "Support mail line; the argument is the iOS version, e.g. 26.5",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS：%@"
+          }
+        }
+      }
     },
     "「抽選しない」を選択として保存" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「抽選しない」を選択として保存"
+          }
+        }
+      }
     },
     "「毎日のリマインダー」と「先月の瓶のお知らせ」は既定でオフです。赤いバッジや連続記録の警告は使いません。タイマー終了の通知だけは「即時通知」として送るため、iPhoneの集中モード（おやすみモードなど）で即時通知を許可していれば、その間も届きます。" : {
-      "comment" : "Settings footer under the Notifications card. The default-off sentence names only this card's two switches, because the leave-pause notifications in the Focus card are on by default. Suggested English: Daily Reminder and Last Month's Jar are off by default. The app never uses red badges or streak warnings. Only timer-end alerts are sent as Time Sensitive, so they still arrive during a Focus such as Do Not Disturb if Time Sensitive notifications are allowed there."
+      "comment" : "Settings footer under the Notifications card. The default-off sentence names only this card's two switches, because the leave-pause notifications in the Focus card are on by default. Suggested English: Daily Reminder and Last Month's Jar are off by default. The app never uses red badges or streak warnings. Only timer-end alerts are sent as Time Sensitive, so they still arrive during a Focus such as Do Not Disturb if Time Sensitive notifications are allowed there.",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「毎日のリマインダー」と「先月の瓶のお知らせ」は既定でオフです。赤いバッジや連続記録の警告は使いません。タイマー終了の通知だけは「即時通知」として送るため、iPhoneの集中モード（おやすみモードなど）で即時通知を許可していれば、その間も届きます。"
+          }
+        }
+      }
     },
     "「視差効果を減らす」がオンのため、いまは控えめで表示しています。" : {
-      "comment" : "Settings note under Effect intensity while the system Reduce Motion setting is on"
+      "comment" : "Settings note under Effect intensity while the system Reduce Motion setting is on",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「視差効果を減らす」がオンのため、いまは控えめで表示しています。"
+          }
+        }
+      }
     },
     "「集中が切れたらお知らせ」は、タイマーが止まっていることを知らせる通知で、アプリに戻ると残りは届きません。このiPhoneで通知を許可していない場合は届きません。「アプリを離れたら一時停止」がオンのあいだは、「集中に戻るお知らせ」の代わりにこちらを使います。" : {
-      "comment" : "Settings footer under the leave-pause notification switch; it replaces the older Return-to-Focus Reminder while the leave pause is on. The switch is on by default, so the permission sentence is a plain fact with no call to action. Suggested English: These notifications say the timer is paused, and the rest are withdrawn when you come back. They do not arrive unless notifications are allowed on this iPhone. While Pause When You Leave the App is on, they replace the Return-to-Focus Reminder."
+      "comment" : "Settings footer under the leave-pause notification switch; it replaces the older Return-to-Focus Reminder while the leave pause is on. The switch is on by default, so the permission sentence is a plain fact with no call to action. Suggested English: These notifications say the timer is paused, and the rest are withdrawn when you come back. They do not arrive unless notifications are allowed on this iPhone. While Pause When You Leave the App is on, they replace the Return-to-Focus Reminder.",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「集中が切れたらお知らせ」は、タイマーが止まっていることを知らせる通知で、アプリに戻ると残りは届きません。このiPhoneで通知を許可していない場合は届きません。「アプリを離れたら一時停止」がオンのあいだは、「集中に戻るお知らせ」の代わりにこちらを使います。"
+          }
+        }
+      }
     },
     "「集中に戻るお知らせ」は既定でオフです。オンにすると、集中タイマー中にホーム画面や別のアプリへ移ったとき、30秒後に一度通知し、戻ると取り消します。画面をロックしただけなら通知しません（パスコードを使っていないiPhoneなどでは届くことがあります）。一時停止中・休憩中・終了間際も通知しません。" : {
-      "comment" : "Settings caption under the return-to-focus reminder switch"
+      "comment" : "Settings caption under the return-to-focus reminder switch",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「集中に戻るお知らせ」は既定でオフです。オンにすると、集中タイマー中にホーム画面や別のアプリへ移ったとき、30秒後に一度通知し、戻ると取り消します。画面をロックしただけなら通知しません（パスコードを使っていないiPhoneなどでは届くことがあります）。一時停止中・休憩中・終了間際も通知しません。"
+          }
+        }
+      }
     },
     "きらめきと傾けたときの星を止め、光を弱め、着地と融合を短くします" : {
-      "comment" : "Effect intensity detail for Subtle"
+      "comment" : "Effect intensity detail for Subtle",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "きらめきと傾けたときの星を止め、光を弱め、着地と融合を短くします"
+          }
+        }
+      }
     },
     "このiPhoneのみ" : {
-      "comment" : "Support mail: records are kept only on this iPhone"
+      "comment" : "Support mail: records are kept only on this iPhone",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneのみ"
+          }
+        }
+      }
     },
     "このアプリについて" : {
-      "comment" : "About page title\nSettings row: the About page"
+      "comment" : "About page title\nSettings row: the About page",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このアプリについて"
+          }
+        }
+      }
     },
     "その日に集中を始めたり、時間を手動で積んだりした日は、毎日のリマインダーは届きません。7日間アプリを開かなかったときは、次に開くまでお休みします。" : {
-      "comment" : "Settings caption: when the daily reminder is skipped"
+      "comment" : "Settings caption: when the daily reminder is skipped",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "その日に集中を始めたり、時間を手動で積んだりした日は、毎日のリマインダーは届きません。7日間アプリを開かなかったときは、次に開くまでお休みします。"
+          }
+        }
+      }
     },
     "アプリのバージョンなどを自動で記入します" : {
-      "comment" : "Settings row subtitle: the mail draft is pre-filled with versions and settings"
+      "comment" : "Settings row subtitle: the mail draft is pre-filled with versions and settings",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリのバージョンなどを自動で記入します"
+          }
+        }
+      }
     },
     "アプリを離れたら一時停止" : {
-      "comment" : "Settings switch title: pause a running focus when the person goes to the Home Screen or another app. Suggested English: Pause When You Leave the App"
+      "comment" : "Settings switch title: pause a running focus when the person goes to the Home Screen or another app. Suggested English: Pause When You Leave the App",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリを離れたら一時停止"
+          }
+        }
+      }
     },
     "アプリ：ポモジェム %@" : {
-      "comment" : "Support mail line; the argument is the app version, e.g. 1.1.0 (10)"
+      "comment" : "Support mail line; the argument is the app version, e.g. 1.1.0 (10)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリ：ポモジェム %@"
+          }
+        }
+      }
     },
     "オンにしている通知は、このiPhoneではまだ許可されていないため届きません。" : {
-      "comment" : "Settings notice under an enabled notification switch: iOS has not asked for notification permission on this device yet"
+      "comment" : "Settings notice under an enabled notification switch: iOS has not asked for notification permission on this device yet",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オンにしている通知は、このiPhoneではまだ許可されていないため届きません。"
+          }
+        }
+      }
     },
     "オンにしている通知は、このiPhoneの設定でオフになっているため届きません。" : {
-      "comment" : "Settings notice under an enabled notification switch: notifications are turned off for this app in iOS"
+      "comment" : "Settings notice under an enabled notification switch: notifications are turned off for this app in iOS",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オンにしている通知は、このiPhoneの設定でオフになっているため届きません。"
+          }
+        }
+      }
     },
     "オンのとき、集中タイマー中にホーム画面やほかのアプリへ移ると、離れた時点でタイマーを一時停止します。%@以内に戻れば止まりません。パスコードを設定しているiPhoneでは、画面をロックしても、通常はタイマーが進みます。ただし、ロックを解除した直後にまたロックすると一時停止したり、ほかのアプリへ移ってすぐにロックすると止まらなかったりすることがあります。パスコードがないiPhoneでは、ロックとアプリの切り替えを区別できないため、画面ロックでも一時停止します。" : {
-      "comment" : "Settings footer under the leave-pause switch. The argument is the quick-glance grace (20秒). The lock is recognised from a notice iOS sends late right after an unlock, so both lock sentences are hedged; keep them hedged. Suggested English: When on, going Home or to another app during a focus pauses the timer from the moment you left. Coming back within %@ does not pause it. On an iPhone with a passcode, locking the screen usually keeps the timer running. However, locking again right after unlocking can pause it, and locking right after leaving the app can keep it running. Without a passcode, iPhone cannot tell locking from switching apps, so locking also pauses it."
+      "comment" : "Settings footer under the leave-pause switch. The argument is the quick-glance grace (20秒). The lock is recognised from a notice iOS sends late right after an unlock, so both lock sentences are hedged; keep them hedged. Suggested English: When on, going Home or to another app during a focus pauses the timer from the moment you left. Coming back within %@ does not pause it. On an iPhone with a passcode, locking the screen usually keeps the timer running. However, locking again right after unlocking can pause it, and locking right after leaving the app can keep it running. Without a passcode, iPhone cannot tell locking from switching apps, so locking also pauses it.",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オンのとき、集中タイマー中にホーム画面やほかのアプリへ移ると、離れた時点でタイマーを一時停止します。%@以内に戻れば止まりません。パスコードを設定しているiPhoneでは、画面をロックしても、通常はタイマーが進みます。ただし、ロックを解除した直後にまたロックすると一時停止したり、ほかのアプリへ移ってすぐにロックすると止まらなかったりすることがあります。パスコードがないiPhoneでは、ロックとアプリの切り替えを区別できないため、画面ロックでも一時停止します。"
+          }
+        }
+      }
     },
     "オープンソース" : {
-      "comment" : "About page section header: open source"
+      "comment" : "About page section header: open source",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オープンソース"
+          }
+        }
+      }
     },
     "クレジット" : {
-      "comment" : "About page section header: credits"
+      "comment" : "About page section header: credits",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "クレジット"
+          }
+        }
+      }
     },
     "サポートページ" : {
-      "comment" : "Settings row: the support web page"
+      "comment" : "Settings row: the support web page",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サポートページ"
+          }
+        }
+      }
     },
     "スクリーンタイム" : {
-      "comment" : "Settings row title: Screen Time"
+      "comment" : "Settings row title: Screen Time",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイム"
+          }
+        }
+      }
     },
     "スクリーンタイムの黒い石、まだ取り込んでいない勉強アプリの記録、10分に満たない途中の利用時間も消えます。アプリの選択と自動記録の設定は残ります。" : {
-      "comment" : "Reset confirmation: extra paragraph shown only when Screen Time is set up on this iPhone"
+      "comment" : "Reset confirmation: extra paragraph shown only when Screen Time is set up on this iPhone",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイムの黒い石、まだ取り込んでいない勉強アプリの記録、10分に満たない途中の利用時間も消えます。アプリの選択と自動記録の設定は残ります。"
+          }
+        }
+      }
     },
     "ソースコードとライセンス" : {
-      "comment" : "About page link title"
+      "comment" : "About page link title",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ソースコードとライセンス"
+          }
+        }
+      }
     },
     "バージョン" : {
-      "comment" : "About page row: app version"
+      "comment" : "About page row: app version",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "バージョン"
+          }
+        }
+      }
     },
     "バージョン %@・クレジット・ライセンス" : {
-      "comment" : "Settings About row subtitle; the argument is the version, e.g. 1.1.0 (10)"
+      "comment" : "Settings About row subtitle; the argument is the version, e.g. 1.1.0 (10)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "バージョン %@・クレジット・ライセンス"
+          }
+        }
+      }
     },
     "プレビュー" : {
-      "comment" : "Support mail: a Debug preview build that keeps nothing"
+      "comment" : "Support mail: a Debug preview build that keeps nothing",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プレビュー"
+          }
+        }
+      }
     },
     "ホーム画面やほかのアプリへ移ると止めます" : {
-      "comment" : "Settings switch subtitle: what counts as leaving the app. Suggested English: Stops when you go Home or open another app"
+      "comment" : "Settings switch subtitle: what counts as leaving the app. Suggested English: Stops when you go Home or open another app",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ホーム画面やほかのアプリへ移ると止めます"
+          }
+        }
+      }
     },
     "ポモジェムについてのお問い合わせ" : {
-      "comment" : "Support mail subject"
+      "comment" : "Support mail subject",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェムについてのお問い合わせ"
+          }
+        }
+      }
     },
     "ミュージックアプリで再生する集中用の音楽を選べます" : {
-      "comment" : "VoiceOver hint of the Settings focus music row: it opens the Apple Music list"
+      "comment" : "VoiceOver hint of the Settings focus music row: it opens the Apple Music list",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ミュージックアプリで再生する集中用の音楽を選べます"
+          }
+        }
+      }
     },
     "メールで問い合わせる" : {
-      "comment" : "Settings row: write to support by mail"
+      "comment" : "Settings row: write to support by mail",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メールで問い合わせる"
+          }
+        }
+      }
     },
     "ロック画面などに残り時間・進捗を表示" : {
-      "comment" : "Settings row subtitle: where the Live Activity timer appears"
+      "comment" : "Settings row subtitle: where the Live Activity timer appears",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ロック画面などに残り時間・進捗を表示"
+          }
+        }
+      }
     },
     "以下はアプリが自動で記入しました。記録の内容やテーマ名は含まれていません。不要な行は消してから送れます。" : {
-      "comment" : "Support mail body: explains the filled-in lines below it"
+      "comment" : "Support mail body: explains the filled-in lines below it",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以下はアプリが自動で記入しました。記録の内容やテーマ名は含まれていません。不要な行は消してから送れます。"
+          }
+        }
+      }
     },
     "保存先：%@" : {
-      "comment" : "Support mail line; the argument is where records are kept"
+      "comment" : "Support mail line; the argument is where records are kept",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存先：%@"
+          }
+        }
+      }
     },
     "先月の瓶のお知らせ" : {
-      "comment" : "Settings switch title: the opt-in monthly look-back notification"
+      "comment" : "Settings switch title: the opt-in monthly look-back notification",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先月の瓶のお知らせ"
+          }
+        }
+      }
     },
     "先月の瓶のお知らせは、毎月1日のこの時刻に届きます。前の月に記録がなければ届きません。" : {
-      "comment" : "Settings caption: when the monthly look-back notification is sent"
+      "comment" : "Settings caption: when the monthly look-back notification is sent",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先月の瓶のお知らせは、毎月1日のこの時刻に届きます。前の月に記録がなければ届きません。"
+          }
+        }
+      }
     },
     "利用中" : {
-      "comment" : "Support mail: Pro is owned"
+      "comment" : "Support mail: Pro is owned",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "利用中"
+          }
+        }
+      }
     },
     "承認待ち" : {
-      "comment" : "Support mail: a Pro purchase awaits approval"
+      "comment" : "Support mail: a Pro purchase awaits approval",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "承認待ち"
+          }
+        }
+      }
     },
     "承認待ち・承認されると自動で使えます" : {
-      "comment" : "Settings Pro row subtitle while a purchase request awaits approval"
+      "comment" : "Settings Pro row subtitle while a purchase request awaits approval",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "承認待ち・承認されると自動で使えます"
+          }
+        }
+      }
     },
     "控えめ" : {
-      "comment" : "Effect intensity option: calmer light and shorter effects (Subtle)"
+      "comment" : "Effect intensity option: calmer light and shorter effects (Subtle)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控えめ"
+          }
+        }
+      }
     },
     "控えめにしても、粒の重さや数、融合、カットは変わりません。「視差効果を減らす」がオンのときは、常に控えめで表示します。この設定はこのiPhoneだけに保存され、iCloudでは同期しません。" : {
-      "comment" : "Settings footer explaining Effect intensity"
+      "comment" : "Settings footer explaining Effect intensity",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控えめにしても、粒の重さや数、融合、カットは変わりません。「視差効果を減らす」がオンのときは、常に控えめで表示します。この設定はこのiPhoneだけに保存され、iCloudでは同期しません。"
+          }
+        }
+      }
     },
     "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにあるすべての記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このiPhoneのデータはアプリの削除で、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除できます。" : {
-      "comment" : "Settings export footer in iCloud mode"
+      "comment" : "Settings export footer in iCloud mode",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにあるすべての記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このiPhoneのデータはアプリの削除で、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除できます。"
+          }
+        }
+      }
     },
     "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにあるすべての記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このファイルを読み込んで記録を戻したり、iCloudへ移したりすることはできません。リセットしてもテーマと設定は残ります。このiPhoneのデータは、アプリを削除すると消えます。" : {
-      "comment" : "Settings export footer on a local-only iPhone"
+      "comment" : "Settings export footer on a local-only iPhone",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにあるすべての記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このファイルを読み込んで記録を戻したり、iCloudへ移したりすることはできません。リセットしてもテーマと設定は残ります。このiPhoneのデータは、アプリを削除すると消えます。"
+          }
+        }
+      }
     },
     "未購入" : {
-      "comment" : "Support mail: Pro is not owned"
+      "comment" : "Support mail: Pro is not owned",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未購入"
+          }
+        }
+      }
     },
     "未選択" : {
-      "comment" : "Settings focus music row value when no music is chosen yet (English: Not selected)"
+      "comment" : "Settings focus music row value when no music is chosen yet (English: Not selected)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未選択"
+          }
+        }
+      }
     },
     "朱色" : {
-      "comment" : "Theme colour swatch (vermilion)"
+      "comment" : "Theme colour swatch (vermilion)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "朱色"
+          }
+        }
+      }
     },
     "標準" : {
-      "comment" : "Effect intensity option: every light and motion effect (Standard)"
+      "comment" : "Effect intensity option: every light and motion effect (Standard)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "標準"
+          }
+        }
+      }
     },
     "機種：%@" : {
-      "comment" : "Support mail line; the argument is the model identifier, e.g. iPhone13,1"
+      "comment" : "Support mail line; the argument is the model identifier, e.g. iPhone13,1",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "機種：%@"
+          }
+        }
+      }
     },
     "毎日のリマインダー" : {
-      "comment" : "Settings switch title: the opt-in daily reminder"
+      "comment" : "Settings switch title: the opt-in daily reminder",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "毎日のリマインダー"
+          }
+        }
+      }
     },
     "毎日のリマインダー設定を保存できませんでした。\n変更前の状態に戻しました。\n%@" : {
-      "comment" : "Settings error; the argument is the system error description"
+      "comment" : "Settings error; the argument is the system error description",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "毎日のリマインダー設定を保存できませんでした。\n変更前の状態に戻しました。\n%@"
+          }
+        }
+      }
     },
     "毎月1日に一度だけ" : {
-      "comment" : "Settings switch subtitle: the monthly notification is sent on the 1st"
+      "comment" : "Settings switch subtitle: the monthly notification is sent on the 1st",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "毎月1日に一度だけ"
+          }
+        }
+      }
     },
     "演出の強さ" : {
-      "comment" : "Settings row: how much light and motion the jar's rewards use (Effect intensity)"
+      "comment" : "Settings row: how much light and motion the jar's rewards use (Effect intensity)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "演出の強さ"
+          }
+        }
+      }
     },
     "珊瑚" : {
-      "comment" : "Theme colour swatch (coral)"
+      "comment" : "Theme colour swatch (coral)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "珊瑚"
+          }
+        }
+      }
     },
     "現在の色" : {
-      "comment" : "A theme's saved colour that is not one of the palette swatches"
+      "comment" : "A theme's saved colour that is not one of the palette swatches",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "現在の色"
+          }
+        }
+      }
     },
     "琥珀" : {
-      "comment" : "Theme colour swatch (amber)"
+      "comment" : "Theme colour swatch (amber)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "琥珀"
+          }
+        }
+      }
     },
     "瑠璃" : {
-      "comment" : "Theme colour swatch (lapis blue)"
+      "comment" : "Theme colour swatch (lapis blue)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瑠璃"
+          }
+        }
+      }
     },
     "瓶の表示" : {
-      "comment" : "Settings section header: how the jar is shown (Jar display)"
+      "comment" : "Settings section header: how the jar is shown (Jar display)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶の表示"
+          }
+        }
+      }
     },
     "画面を閉じたときの表示は、iPhoneの設定でライブアクティビティを許可している場合に出ます。アプリを離れたときにタイマーを止めるかどうかは、「アプリを離れたら一時停止」の設定に従います。" : {
-      "comment" : "Settings footer: the Live Activity switch. Suggested English: The Lock Screen timer appears when Live Activities are allowed in iPhone Settings. Whether the timer stops when you leave the app follows Pause When You Leave the App."
+      "comment" : "Settings footer: the Live Activity switch. Suggested English: The Lock Screen timer appears when Live Activities are allowed in iPhone Settings. Whether the timer stops when you leave the app follows Pause When You Leave the App.",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面を閉じたときの表示は、iPhoneの設定でライブアクティビティを許可している場合に出ます。アプリを離れたときにタイマーを止めるかどうかは、「アプリを離れたら一時停止」の設定に従います。"
+          }
+        }
+      }
     },
     "空色" : {
-      "comment" : "Theme colour swatch (sky blue)"
+      "comment" : "Theme colour swatch (sky blue)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "空色"
+          }
+        }
+      }
     },
     "紅藤" : {
-      "comment" : "Theme colour swatch (orchid)"
+      "comment" : "Theme colour swatch (orchid)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "紅藤"
+          }
+        }
+      }
     },
     "結晶" : {
-      "comment" : "Export progress: the collection being written (crystals)"
+      "comment" : "Export progress: the collection being written (crystals)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結晶"
+          }
+        }
+      }
     },
     "緑青" : {
-      "comment" : "Theme colour swatch (verdigris green)"
+      "comment" : "Theme colour swatch (verdigris green)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "緑青"
+          }
+        }
+      }
     },
     "自動では再開しません。アプリに戻って「再開する」をタップすると、離れた時点の続きから進みます。休憩中と、終了まで%@以内の集中は止めません。オフのときは、アプリを離れてもタイマーは止まりません。" : {
-      "comment" : "Settings footer under the leave-pause switch: how the timer resumes, what is never paused, and the off state. The argument is the final stretch that is never paused (1分). Suggested English: The timer never resumes by itself. Go back to the app and tap Resume to continue from where you left. Breaks and the last %@ of a focus are never paused. When off, the timer keeps running after you leave the app."
+      "comment" : "Settings footer under the leave-pause switch: how the timer resumes, what is never paused, and the off state. The argument is the final stretch that is never paused (1分). Suggested English: The timer never resumes by itself. Go back to the app and tap Resume to continue from where you left. Breaks and the last %@ of a focus are never paused. When off, the timer keeps running after you leave the app.",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自動では再開しません。アプリに戻って「再開する」をタップすると、離れた時点の続きから進みます。休憩中と、終了まで%@以内の集中は止めません。オフのときは、アプリを離れてもタイマーは止まりません。"
+          }
+        }
+      }
     },
     "自然なきらめきと傾けたときの星、光の広がりをすべて表示します" : {
-      "comment" : "Effect intensity detail for Standard"
+      "comment" : "Effect intensity detail for Standard",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自然なきらめきと傾けたときの星、光の広がりをすべて表示します"
+          }
+        }
+      }
     },
     "自由な集中時間・結晶の月刻印・勉強アプリ数の無制限" : {
-      "comment" : "Settings Pro row subtitle for free users: what Pro adds"
+      "comment" : "Settings Pro row subtitle for free users: what Pro adds",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自由な集中時間・結晶の月刻印・勉強アプリ数の無制限"
+          }
+        }
+      }
     },
     "若草" : {
-      "comment" : "Theme colour swatch (fresh green)"
+      "comment" : "Theme colour swatch (fresh green)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "若草"
+          }
+        }
+      }
     },
     "菫" : {
-      "comment" : "Theme colour swatch (violet)"
+      "comment" : "Theme colour swatch (violet)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "菫"
+          }
+        }
+      }
     },
     "著作権" : {
-      "comment" : "About page row: copyright"
+      "comment" : "About page row: copyright",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "著作権"
+          }
+        }
+      }
     },
     "藍" : {
-      "comment" : "Theme colour swatch (indigo)"
+      "comment" : "Theme colour swatch (indigo)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "藍"
+          }
+        }
+      }
     },
     "見出し書体" : {
-      "comment" : "About page row: the heading typeface"
+      "comment" : "About page row: the heading typeface",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "見出し書体"
+          }
+        }
+      }
     },
     "記念石" : {
-      "comment" : "Export progress: the collection being written (achievement stones)"
+      "comment" : "Export progress: the collection being written (achievement stones)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記念石"
+          }
+        }
+      }
     },
     "記録の書き出しとリセット" : {
-      "comment" : "Settings section header: export and reset"
+      "comment" : "Settings section header: export and reset",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録の書き出しとリセット"
+          }
+        }
+      }
     },
     "記録はあなたのiCloudに保存されます。開発者が記録を受け取ることはありません。" : {
-      "comment" : "Settings privacy footer in iCloud mode"
+      "comment" : "Settings privacy footer in iCloud mode",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録はあなたのiCloudに保存されます。開発者が記録を受け取ることはありません。"
+          }
+        }
+      }
     },
     "記録はこのiPhoneにだけ保存されます。開発者が記録を受け取ることはありません。" : {
-      "comment" : "Settings privacy footer when records stay on this iPhone"
+      "comment" : "Settings privacy footer when records stay on this iPhone",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録はこのiPhoneにだけ保存されます。開発者が記録を受け取ることはありません。"
+          }
+        }
+      }
     },
     "記録をJSONファイルに書き出す（読み込みには非対応）" : {
-      "comment" : "Settings export row subtitle: the file cannot be imported back"
+      "comment" : "Settings export row subtitle: the file cannot be imported back",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録をJSONファイルに書き出す（読み込みには非対応）"
+          }
+        }
+      }
     },
     "設定を開く" : {
-      "comment" : "Alert button: open this app's notification settings in iOS\nButton: open this app's notification settings in iOS"
+      "comment" : "Alert button: open this app's notification settings in iOS\nButton: open this app's notification settings in iOS",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定を開く"
+          }
+        }
+      }
     },
     "許可する" : {
-      "comment" : "Button: show the iOS notification permission prompt"
+      "comment" : "Button: show the iOS notification permission prompt",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "許可する"
+          }
+        }
+      }
     },
     "購入・返金の案内など（Webで開く）" : {
-      "comment" : "Settings row subtitle: what the support web page covers"
+      "comment" : "Settings row subtitle: what the support web page covers",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "購入・返金の案内など（Webで開く）"
+          }
+        }
+      }
     },
     "赤銅" : {
-      "comment" : "Theme colour swatch (copper)"
+      "comment" : "Theme colour swatch (copper)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "赤銅"
+          }
+        }
+      }
     },
     "通知する時刻" : {
-      "comment" : "Settings time picker label for reminders"
+      "comment" : "Settings time picker label for reminders",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通知する時刻"
+          }
+        }
+      }
     },
     "集中が切れたらお知らせ" : {
-      "comment" : "Settings switch title: the notifications sent while a focus is paused because the person left the app. Suggested English: Notify Me When I Drift Away"
+      "comment" : "Settings switch title: the notifications sent while a focus is paused because the person left the app. Suggested English: Notify Me When I Drift Away",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中が切れたらお知らせ"
+          }
+        }
+      }
     },
     "集中の粒・結晶・記念石を表示と集計から外し、0から始めます。テーマと設定は残ります。リセット前の記録はこのiPhoneの中に残り、データの書き出しに含まれることがあります。このiPhoneから完全に消すには、アプリを削除してください。この操作は取り消せません。" : {
-      "comment" : "Reset confirmation on a local-only iPhone"
+      "comment" : "Reset confirmation on a local-only iPhone",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中の粒・結晶・記念石を表示と集計から外し、0から始めます。テーマと設定は残ります。リセット前の記録はこのiPhoneの中に残り、データの書き出しに含まれることがあります。このiPhoneから完全に消すには、アプリを削除してください。この操作は取り消せません。"
+          }
+        }
+      }
     },
     "集中の粒・結晶・記念石を表示と集計から外し、0から始めます。同じiCloudを使うほかのiPhoneにも、接続したときに反映されます。オフラインのiPhoneから古い記録が戻らないよう、リセット前の記録は同期のために残り、データの書き出しにも含まれます。このiPhoneから完全に消すにはアプリを削除し、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除してください。この操作は取り消せません。" : {
-      "comment" : "Reset confirmation in iCloud mode"
+      "comment" : "Reset confirmation in iCloud mode",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中の粒・結晶・記念石を表示と集計から外し、0から始めます。同じiCloudを使うほかのiPhoneにも、接続したときに反映されます。オフラインのiPhoneから古い記録が戻らないよう、リセット前の記録は同期のために残り、データの書き出しにも含まれます。このiPhoneから完全に消すにはアプリを削除し、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除してください。この操作は取り消せません。"
+          }
+        }
+      }
     },
     "集中用の音楽" : {
-      "comment" : "Settings row: opens the focus music (Apple Music) list; same name as the timer's music sheet"
+      "comment" : "Settings row: opens the focus music (Apple Music) list; same name as the timer's music sheet",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中用の音楽"
+          }
+        }
+      }
     },
     "離れてから%@までに最大%lld回" : {
       "comment" : "Settings switch subtitle for the leave-pause notifications. The first argument is when the series stops after leaving (20分), the second how many notifications at most (5). Suggested English: Up to %2$lld times in your first %1$@ away",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "離れてから%1$@までに最大%2$lld回"
+            "state" : "translated",
+            "value" : "離れてから%@までに最大%lld回"
           }
         }
       }
     },
     "青緑" : {
-      "comment" : "Theme colour swatch (teal)"
+      "comment" : "Theme colour swatch (teal)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "青緑"
+          }
+        }
+      }
     },
     "（お問い合わせの内容をお書きください。不具合の場合は、操作の手順と起きたことを教えてください。）" : {
-      "comment" : "Support mail body: where the person writes their message"
+      "comment" : "Support mail body: where the person writes their message",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "（お問い合わせの内容をお書きください。不具合の場合は、操作の手順と起きたことを教えてください。）"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

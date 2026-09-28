@@ -7,9 +7,10 @@
     "development_region: the language iOS falls back to (CFBundleDevelopmentRegion, from DEVELOPMENT_LANGUAGE in project.yml; both must agree). While it is not the source language, every key needs an explicit Japanese value, or Japanese devices read that table in the fallback language: l10n.py sync writes them, and check, verify-bundle and LocalizationEnvironmentTests enforce them."
   ],
   "source_language": "ja",
-  "development_region": "ja",
+  "development_region": "en",
   "shipping_languages": [
-    "ja"
+    "ja",
+    "en"
   ],
   "source_roots": [
     "PomoGem",
@@ -55,6 +56,12 @@
       "package": "l10n-00-infra"
     },
     {
+      "glob": "PomoGem/Core/PomoGemCalendar.swift",
+      "table": "Common",
+      "package": "l10n-00-infra",
+      "note": "the Gregorian calendar DateText labels month and year buckets with; holds no catalog keys"
+    },
+    {
       "glob": "Shared/LocalizedDuration.swift",
       "table": "Common",
       "package": "l10n-00-infra",
@@ -71,6 +78,18 @@
       "glob": "PomoGem/Features/Home/**",
       "table": "Home",
       "package": "l10n-01-home"
+    },
+    {
+      "glob": "PomoGem/App/AchievementNoteField.swift",
+      "table": "Home",
+      "package": "l10n-01-home",
+      "note": "the milestone stone name field shared by Home's 成果を積む sheet and the Log editor"
+    },
+    {
+      "glob": "PomoGem/Core/AchievementNotePolicy.swift",
+      "table": "Home",
+      "package": "l10n-01-home",
+      "note": "the character counter and limit sentences that AchievementNoteField shows"
     },
     {
       "glob": "PomoGem/Features/Focus/**",
@@ -99,6 +118,12 @@
       "note": "F1 leave pause policy and host monitor; its notification copy lives in NotificationManager.swift (Notifications)"
     },
     {
+      "glob": "PomoGem/Core/FocusReturnReminderLockWindow.swift",
+      "table": "Focus",
+      "package": "l10n-02-focus-system",
+      "note": "tells a lock apart from leaving during a focus; the reminder copy lives in NotificationManager.swift (Notifications)"
+    },
+    {
       "glob": "PomoGem/Core/WidgetSnapshotStore.swift",
       "table": "Focus",
       "package": "l10n-02-focus-system"
@@ -111,13 +136,13 @@
     {
       "glob": "PomoGemWidgets/**",
       "table": "Widgets",
-      "package": "l10n-02-focus-system",
+      "package": "l10n-01-home",
       "bundle": "widgets"
     },
     {
       "glob": "Shared/FocusActivityAttributes.swift",
       "table": "Widgets",
-      "package": "l10n-02-focus-system",
+      "package": "l10n-01-home",
       "bundle": "app+widgets",
       "note": "prefer Duration formatting (no catalog entries); if a key is unavoidable the Widgets catalog must be a member of both targets"
     },
@@ -135,9 +160,16 @@
     {
       "glob": "Shared/AppEntryLink.swift",
       "table": "Widgets",
-      "package": "l10n-02-focus-system",
+      "package": "l10n-01-home",
       "bundle": "app+widgets",
       "note": "constant pomogem:// routes behind widget taps; holds no catalog keys"
+    },
+    {
+      "glob": "Shared/RawStoneArtwork.swift",
+      "table": "Widgets",
+      "package": "l10n-01-home",
+      "bundle": "app+widgets",
+      "note": "the code-drawn raw stone of the data-free widget (D19); holds no catalog keys"
     },
     {
       "glob": "PomoGem/Core/ScreenTime/**",
@@ -343,6 +375,38 @@
       "package": "l10n-08-launch"
     },
     {
+      "glob": "PomoGem/App/CloudBackgroundGrace.swift",
+      "table": "Launch",
+      "package": "l10n-08-launch"
+    },
+    {
+      "glob": "PomoGem/App/CloudRemountNavigation.swift",
+      "table": "Launch",
+      "package": "l10n-08-launch"
+    },
+    {
+      "glob": "PomoGem/App/LaunchTimerStatus.swift",
+      "table": "Launch",
+      "package": "l10n-08-launch",
+      "note": "the account-neutral timer line on the launch host's waiting and stop screens"
+    },
+    {
+      "glob": "PomoGem/Core/CloudActivityHistoryMarkerCache.swift",
+      "table": "Launch",
+      "package": "l10n-08-launch"
+    },
+    {
+      "glob": "PomoGem/Core/CloudLaunchInstrumentation.swift",
+      "table": "Launch",
+      "package": "l10n-08-launch"
+    },
+    {
+      "glob": "PomoGem/Core/CloudKitMirroringActivity.swift",
+      "table": "Launch",
+      "package": "l10n-08-launch",
+      "note": "the mounted store's mirroring outcomes (quota, upload failures) shown in Settings' iCloud section; its sentences were written in the Launch table by the fix waves"
+    },
+    {
       "glob": "PomoGem/Core/StorageTransfer/**",
       "table": "Storage",
       "package": "l10n-09-storage-sync"
@@ -359,6 +423,11 @@
     },
     {
       "glob": "PomoGem/Core/SyncMaintenance*.swift",
+      "table": "Storage",
+      "package": "l10n-09-storage-sync"
+    },
+    {
+      "glob": "PomoGem/Core/SyncRemoteChangeHistory.swift",
       "table": "Storage",
       "package": "l10n-09-storage-sync"
     },
@@ -400,7 +469,10 @@
     "Widgets": "PomoGemWidgets/Localization/Widgets.xcstrings"
   },
   "system_tables": {
-    "AppShortcuts": "App Shortcut phrases (PomoGemShortcuts). The App Intents metadata processor writes them to ExtractedAppShortcutsMetadata.stringsdata; Apple reads their translations only from PomoGem/Localization/AppShortcuts.xcstrings, which is created when English is enabled (Docs/Localization.md). sync and check skip this table."
+    "AppShortcuts": "App Shortcut phrases (PomoGemShortcuts). The App Intents metadata processor writes them to ExtractedAppShortcutsMetadata.stringsdata; Apple reads their translations only from the catalog named AppShortcuts.xcstrings (system_catalogs). Each shortcut is one key whose value is a stringSet of phrases. l10n.py sync merges them there (never into a feature catalog) and writes the Japanese phrases while the development region is not Japanese; check requires ${applicationName} in every translated phrase. Owned by l10n-02-focus-system for the English phrases."
+  },
+  "system_catalogs": {
+    "AppShortcuts": "PomoGem/Localization/AppShortcuts.xcstrings"
   },
   "catalog_bundles": {
     "PomoGem.app": [
