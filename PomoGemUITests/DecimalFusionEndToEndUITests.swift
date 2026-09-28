@@ -194,10 +194,13 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         XCTAssertTrue(waitForCondition(timeout: 3) { inspectAggregate.isHittable })
         let jarFrame = app.buttons["瓶"].frame
         let launcherFrame = app.buttons["home.focus-launcher"].frame
+        // The stage can be taller than the bottle (17 Pro); every gem rests
+        // inside the bottle, so the card belongs under its base.
+        let bottle = try XCTUnwrap(probeRect("bottle", from: presentationProbe), "The probe reports the bottle")
         XCTAssertGreaterThanOrEqual(
             inspectAggregate.frame.minY,
-            jarFrame.maxY - 0.5,
-            "Under the jar: card=\(inspectAggregate.frame) jar=\(jarFrame)"
+            bottle.maxY,
+            "Under the bottle: card=\(inspectAggregate.frame) bottle=\(bottle) jar=\(jarFrame)"
         )
         XCTAssertLessThanOrEqual(
             inspectAggregate.frame.maxY,
@@ -618,6 +621,16 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
             }
             return id
         }
+    }
+
+    /// A frame the probe reports as "minX,minY,maxX,maxY" in window points.
+    private func probeRect(_ key: String, from probe: XCUIElement) -> CGRect? {
+        guard let rawValue = probe.value as? String,
+              let field = rawValue.split(separator: ";").first(where: { $0.hasPrefix("\(key)=") })
+        else { return nil }
+        let numbers = field.dropFirst(key.count + 1).split(separator: ",").compactMap { Double($0) }
+        guard numbers.count == 4 else { return nil }
+        return CGRect(x: numbers[0], y: numbers[1], width: numbers[2] - numbers[0], height: numbers[3] - numbers[1])
     }
 
     private func presentationSample(from probe: XCUIElement) throws -> PresentationSample {
