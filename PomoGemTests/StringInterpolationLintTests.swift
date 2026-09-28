@@ -44,6 +44,52 @@ final class StringInterpolationLintTests: XCTestCase {
         )
     }
 
+    /// device-verify-2 P7. A mass built by hand drifts from the app's one
+    /// style (「250 g」 in the menu, 「+1200g」 beside 「+1,200g」). Every
+    /// displayed mass goes through `MassText`, which groups the digits and
+    /// puts the unit where the language wants it.
+    func testShippingSourcesFormatMassesThroughMassText() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        // An interpolated number directly followed by a unit, a number and
+        // a unit with a space, or a printf mass.
+        let handBuilt = try NSRegularExpression(
+            pattern: #"\x{FFFC} ?(g|kg|t)(?![A-Za-z])|%[0-9.]*f ?(g|kg|t)(?![A-Za-z])"#
+        )
+        let exemptions: [String: String] = [
+            // The helpers themselves.
+            "LocalizedFormat.swift": "MassText",
+            // Compiled into the widget extension, which has no MassText, and
+            // unused while widgets are account-neutral (PRIVACY.md).
+            "WidgetSnapshotMetadata.swift": "widget extension",
+            // Rare-gem toasts, off in this release (RareRewardReleasePolicy);
+            // Constants.UIStrings moves to the Common table with the l10n infra.
+            "Constants.swift": "rare-gem toasts",
+        ]
+        var findings: [String] = []
+        for directory in ["PomoGem", "PomoGemWidgets", "PomoGemScreenTimeMonitor", "Shared"] {
+            let url = projectRoot.appendingPathComponent(directory, isDirectory: true)
+            guard let enumerator = FileManager.default.enumerator(
+                at: url,
+                includingPropertiesForKeys: nil
+            ) else { continue }
+            for case let fileURL as URL in enumerator
+            where fileURL.pathExtension == "swift"
+                && exemptions[fileURL.lastPathComponent] == nil
+                && !fileURL.path.contains("/PomoGem/Debug/") {
+                let source = try String(contentsOf: fileURL, encoding: .utf8)
+                for literal in SwiftStringLiteralScanner.literals(in: source) {
+                    let text = literal.text as NSString
+                    if handBuilt.firstMatch(in: literal.text, range: NSRange(location: 0, length: text.length)) != nil {
+                        findings.append("\(fileURL.lastPathComponent):\(literal.line) \(literal.text)")
+                    }
+                }
+            }
+        }
+        XCTAssertEqual(findings, [], "Format these masses with MassText")
+    }
+
     func testScannerFindsTheShippedAchievementSubtitleBug() {
         let source = #"""
         let broken = "記念石(totalAchievementCount.formatted())個以上"

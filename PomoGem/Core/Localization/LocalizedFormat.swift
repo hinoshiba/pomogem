@@ -25,8 +25,10 @@ import Foundation
 // calendar the app buckets months and years with.
 
 enum MassText {
-    /// 「250g」. Pass the number exactly as the screen formats it today (grouping
-    /// and decimals differ between screens); en reads "250 g".
+    /// 「250g」 from a number the caller formatted; prefer `grams(value:)`,
+    /// `addedGrams(_:)`, `kilograms(fromGrams:fractionDigits:)` and
+    /// `tonnes(fromGrams:fractionDigits:)`, which group the digits the same
+    /// way on every screen. en reads "250 g".
     static func grams(_ number: String, bundle: Bundle = .main, locale: Locale = PomoGemLocale.current) -> String {
         String(
             localized: "\(number)g",
@@ -45,6 +47,90 @@ enum MassText {
             bundle: bundle,
             locale: locale,
             comment: "Mass in kilograms. %@ is the number, already formatted. en: '%@ kg'."
+        )
+    }
+
+    // The helpers below take the value and format its number themselves, so
+    // every screen shows a mass the same way (device-verify-2 P7): in
+    // Japanese no space before the unit, digits grouped (「1,200g」 and
+    // 「1,234.5kg」, never 「250 g」 or 「+1200g」). A screen still picks the
+    // unit and the number of decimals. Halves round away from zero, as a
+    // person rounds.
+
+    /// 「250g」「1,200g」; en "1,200 g".
+    static func grams(value grams: Int, bundle: Bundle = .main, locale: Locale = PomoGemLocale.current) -> String {
+        self.grams(PomoGemLocale.grouped(grams, locale: locale), bundle: bundle, locale: locale)
+    }
+
+    /// What one record adds: 「+250g」「+1,200g」; en "+1,200 g".
+    static func addedGrams(_ grams: Int, bundle: Bundle = .main, locale: Locale = PomoGemLocale.current) -> String {
+        self.grams(
+            grams.formatted(.number.grouping(.automatic).sign(strategy: .always()).locale(locale)),
+            bundle: bundle,
+            locale: locale
+        )
+    }
+
+    /// Kilograms from grams with exactly `fractionDigits` decimals: 「2.6kg」
+    /// 「2.50kg」「1,234.5kg」; en "2.6 kg".
+    static func kilograms(
+        fromGrams grams: Int,
+        fractionDigits: Int,
+        bundle: Bundle = .main,
+        locale: Locale = PomoGemLocale.current
+    ) -> String {
+        kilograms(
+            decimal(Double(grams) / 1_000, fractionDigits: fractionDigits, locale: locale),
+            bundle: bundle,
+            locale: locale
+        )
+    }
+
+    /// Kilograms from grams with up to `fractionDigits.upperBound` decimals
+    /// and no trailing zeros: 「2.5kg」「2.53kg」「3kg」; en "2.5 kg".
+    static func kilograms(
+        fromGrams grams: Int,
+        fractionDigits: ClosedRange<Int>,
+        bundle: Bundle = .main,
+        locale: Locale = PomoGemLocale.current
+    ) -> String {
+        kilograms(
+            decimal(Double(grams) / 1_000, fractionDigits: fractionDigits, locale: locale),
+            bundle: bundle,
+            locale: locale
+        )
+    }
+
+    /// Metric tonnes from grams with exactly `fractionDigits` decimals, for
+    /// the long views (年月, the plan): 「2.50t」; en "2.50 t".
+    static func tonnes(
+        fromGrams grams: Int,
+        fractionDigits: Int,
+        bundle: Bundle = .main,
+        locale: Locale = PomoGemLocale.current
+    ) -> String {
+        let number = decimal(Double(grams) / 1_000_000, fractionDigits: fractionDigits, locale: locale)
+        return String(
+            localized: "\(number)t",
+            table: "Common",
+            bundle: bundle,
+            locale: locale,
+            comment: "Mass in metric tonnes. %@ is the number, already formatted. en: '%@ t'."
+        )
+    }
+
+    private static func decimal(_ value: Double, fractionDigits: Int, locale: Locale) -> String {
+        let digits = max(0, fractionDigits)
+        return decimal(value, fractionDigits: digits...digits, locale: locale)
+    }
+
+    private static func decimal(_ value: Double, fractionDigits: ClosedRange<Int>, locale: Locale) -> String {
+        value.formatted(
+            .number
+                .grouping(.automatic)
+                .precision(.fractionLength(max(0, fractionDigits.lowerBound)...max(0, fractionDigits.upperBound)))
+                .rounded(rule: .toNearestOrAwayFromZero)
+                .locale(locale)
         )
     }
 

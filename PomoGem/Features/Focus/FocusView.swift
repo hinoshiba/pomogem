@@ -3138,7 +3138,7 @@ struct FocusView: View {
                     .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                     .multilineTextAlignment(.center)
                     .accessibilityAddTraits(.isHeader)
-                Text("\(subjectSnapshot.name)  +\(result.grams)g")
+                Text(verbatim: "\(subjectSnapshot.name)  \(MassText.addedGrams(result.grams))")
                     .font(.system(.headline, design: .rounded, weight: .bold))
                     // Same ceiling as the title, so the facts never outgrow
                     // the heading at the largest sizes.

@@ -366,7 +366,11 @@ enum EffortProgressPresentation {
     static func formattedDuration(grams rawGrams: Int) -> String {
         let grams = max(0, rawGrams)
         guard grams.isMultiple(of: Constants.Mass.gramsPerMinute) else {
-            return "\(grams.formatted(.number.grouping(.automatic)))g相当"
+            return String(
+                localized: "\(MassText.grams(value: grams))相当",
+                table: "Progress",
+                comment: "A focus time that is not a whole number of minutes, shown as its mass: %@ is the mass (1,234g)"
+            )
         }
         return DurationPresentation.focusLabel(grams: grams)
     }
@@ -386,15 +390,8 @@ enum EffortProgressPresentation {
 
     static func formattedMass(grams rawGrams: Int) -> String {
         let grams = max(0, rawGrams)
-        guard grams >= 1_000 else { return "\(grams)g" }
-        var kilograms = String(
-            format: "%.2f",
-            locale: Locale(identifier: "en_US_POSIX"),
-            Double(grams) / 1_000
-        )
-        while kilograms.hasSuffix("0") { kilograms.removeLast() }
-        if kilograms.hasSuffix(".") { kilograms.removeLast() }
-        return "\(kilograms)kg"
+        guard grams >= 1_000 else { return MassText.grams(value: grams) }
+        return MassText.kilograms(fromGrams: grams, fractionDigits: 0...2)
     }
 }
 

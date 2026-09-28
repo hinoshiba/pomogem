@@ -3025,11 +3025,11 @@ private struct ShareMassBadge: View {
 
 private enum ShareMassFormatter {
     static func visual(_ grams: Int) -> String {
-        "\(max(0, grams).formatted(.number.grouping(.automatic)))g"
+        MassText.grams(value: max(0, grams))
     }
 
     static func spoken(_ grams: Int) -> String {
-        "\(max(0, grams).formatted(.number.grouping(.automatic)))グラム"
+        MassText.spoken(grams: max(0, grams))
     }
 
     /// The focus time a card's mass stands for, or nil when it holds less

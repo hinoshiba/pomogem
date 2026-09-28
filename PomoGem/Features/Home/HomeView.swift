@@ -2327,7 +2327,7 @@ struct HomeView: View {
                     Text(
                         selectedSubject == nil
                             ? "勉強も仕事も、同じ一覧で"
-                            : "\(selectedSubject?.safeDisplayName ?? "選択中のテーマ") ・ 完走で+\(selectedDuration.grams)g"
+                            : "\(selectedSubject?.safeDisplayName ?? "選択中のテーマ") ・ 完走で\(MassText.addedGrams(selectedDuration.grams))"
                     )
                     .font(.system(.caption, design: .rounded, weight: .bold))
                     .lineLimit(2)
@@ -3648,7 +3648,11 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(projectionVerificationTitle)
                     .font(.headline.weight(.black))
-                Text("今回の +\(offer.grams)g は保存済みです。これまでの合計は確認が済むと表示します。")
+                Text(
+                    "今回の \(MassText.addedGrams(offer.grams)) は保存済みです。これまでの合計は確認が済むと表示します。",
+                    tableName: "Home",
+                    comment: "Completion card for an old receipt while iCloud is checked: %@ is the mass this focus added (+250g)"
+                )
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(PomoGemTheme.muted)
             }
@@ -4955,9 +4959,9 @@ struct HomeView: View {
                 .lineLimit(titleLineLimit)
                 .fixedSize(horizontal: false, vertical: true)
             Text(
-                "+\(MassText.grams(pending.duration.grams.formatted())) ・ まもなく瓶に入ります",
+                "\(MassText.addedGrams(pending.duration.grams)) ・ まもなく瓶に入ります",
                 tableName: "Home",
-                comment: "Undo banner subtitle: the mass, and that the entry is saved shortly"
+                comment: "Undo banner subtitle: the mass added (+300g), and that the entry is saved shortly"
             )
                 .font(.caption)
                 .foregroundStyle(PomoGemTheme.muted)
@@ -5192,15 +5196,15 @@ struct HomeView: View {
         case .gold:
             message = rareRewardMode.usesEnhancedPresentation
                 ? Constants.UIStrings.goldToast(grams: descriptor.grams)
-                : "\(descriptor.subjectName) 金の粒 +\(descriptor.grams)g"
+                : "\(descriptor.subjectName) 金の粒 \(MassText.addedGrams(descriptor.grams))"
         case .prism:
             message = rareRewardMode.usesEnhancedPresentation
                 ? Constants.UIStrings.prismToast(grams: descriptor.grams)
-                : "\(descriptor.subjectName) 虹の粒 +\(descriptor.grams)g"
+                : "\(descriptor.subjectName) 虹の粒 \(MassText.addedGrams(descriptor.grams))"
         case .normal:
             message = descriptor.grams == Constants.Mass.measuredPebbleGrams
                 ? Constants.UIStrings.dropToast(subject: descriptor.subjectName)
-                : "\(descriptor.subjectName) +\(descriptor.grams)g 積んだ"
+                : "\(descriptor.subjectName) \(MassText.addedGrams(descriptor.grams)) 積んだ"
         }
         if let batch = descriptor.presentationRewardBatchSummary {
             message += " ・ \(batch)"
@@ -5981,12 +5985,11 @@ struct HomeView: View {
         router.showToast(Constants.UIStrings.processTerminatedNote, symbol: "exclamationmark.circle")
     }
 
+    /// The menu's lifetime mass: 「250g」, 「3kg」, 「2.60kg」 (device-verify-2
+    /// P7: it read 「250 g」 with a space, unlike every other screen).
     private func formattedMass(_ grams: Int) -> String {
-        guard grams >= 1_000 else { return "\(grams) g" }
-        let value = Double(grams) / 1_000
-        return grams.isMultiple(of: 1_000)
-            ? "\(grams / 1_000) kg"
-            : String(format: "%.2f kg", value)
+        guard grams >= 1_000 else { return MassText.grams(value: grams) }
+        return MassText.kilograms(fromGrams: grams, fractionDigits: grams.isMultiple(of: 1_000) ? 0 : 2)
     }
 }
 

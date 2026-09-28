@@ -2323,7 +2323,9 @@ struct LogView: View {
     }
 
     private func formatMass(_ grams: Int) -> String {
-        grams >= 1_000 ? String(format: "%.1fkg", Double(grams) / 1_000) : "\(grams)g"
+        grams >= 1_000
+            ? MassText.kilograms(fromGrams: grams, fractionDigits: 1)
+            : MassText.grams(value: grams)
     }
 
     private func formatMinutes(_ minutes: Int) -> String {
@@ -2482,7 +2484,9 @@ struct LogAggregateArchiveItem: Identifiable, Equatable, Sendable {
     }
 
     var formattedMass: String {
-        grams >= 1_000 ? String(format: "%.1fkg", Double(grams) / 1_000) : "\(grams)g"
+        grams >= 1_000
+            ? MassText.kilograms(fromGrams: grams, fractionDigits: 1)
+            : MassText.grams(value: grams)
     }
 }
 

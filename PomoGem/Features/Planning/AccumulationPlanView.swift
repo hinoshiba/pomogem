@@ -356,7 +356,7 @@ struct AccumulationPlanView: View {
                     }
                 }
 
-                Text("瓶は2.50kg（集中250分相当）ごとに必ず満ち、満杯の光を見届けてから次の1杯へ進みます。累計は消えず、2.50kg → 25kg → 250kg…の長期段階として別に残ります。回数ではなく、集中1分＝\(Constants.Mass.gramsPerMinute)gで両方が進みます。", tableName: "Planning", comment: "Plan: how the jar fills; the argument is grams per minute")
+                Text("瓶は2.50kg（集中250分相当）ごとに必ず満ち、満杯の光を見届けてから次の1杯へ進みます。累計は消えず、2.50kg → 25kg → 250kg…の長期段階として別に残ります。回数ではなく、集中1分＝\(MassText.grams(value: Constants.Mass.gramsPerMinute))で両方が進みます。", tableName: "Planning", comment: "Plan: how the jar fills; the argument is the mass of one minute (10g)")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -480,7 +480,7 @@ struct AccumulationPlanView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Label("試算の前提", systemImage: "info.circle.fill")
                     .font(.subheadline.weight(.bold))
-                Text("1年を平均365.25日として週回数を換算し、1回の完走を1粒、集中1分を\(Constants.Mass.gramsPerMinute)gとして計算します。2.50kgごとの瓶の満杯、長期の質量段階、瓶の光は実画面と同じ計算です。10個ずつまとめるため、長期間でも描画する可動体は\(Constants.Jar.maxPhysicsBodies)体以内です。", tableName: "Planning", comment: "Plan: calculation assumptions; the arguments are grams per minute and the physics body limit")
+                Text("1年を平均365.25日として週回数を換算し、1回の完走を1粒、集中1分を\(MassText.grams(value: Constants.Mass.gramsPerMinute))として計算します。2.50kgごとの瓶の満杯、長期の質量段階、瓶の光は実画面と同じ計算です。10個ずつまとめるため、長期間でも描画する可動体は\(Constants.Jar.maxPhysicsBodies)体以内です。", tableName: "Planning", comment: "Plan: calculation assumptions; the arguments are the mass of one minute (10g) and the physics body limit")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -662,12 +662,12 @@ struct AccumulationPlanView: View {
 
     private func formattedMass(_ grams: Int) -> String {
         if grams >= 1_000_000 {
-            return String(format: "%.2ft", Double(grams) / 1_000_000)
+            return MassText.tonnes(fromGrams: grams, fractionDigits: 2)
         }
         if grams >= 1_000 {
-            return String(format: "%.1fkg", Double(grams) / 1_000)
+            return MassText.kilograms(fromGrams: grams, fractionDigits: 1)
         }
-        return "\(grams)g"
+        return MassText.grams(value: grams)
     }
 
     @MainActor

@@ -197,7 +197,7 @@ struct ManualEntrySheet: View {
                 VStack(spacing: 10) {
                     confirmationRow(title: "テーマ", value: selectedSubject?.safeDisplayName ?? "未選択")
                     confirmationRow(title: "時間", value: durationTitle(duration))
-                    confirmationRow(title: "加算", value: "+\(duration.grams)g")
+                    confirmationRow(title: "加算", value: MassText.addedGrams(duration.grams))
                     confirmationRow(
                         title: "保存後",
                         value: "この端末で本日あと\(availability.remainingEntriesAfterSaving)回"
@@ -406,7 +406,7 @@ private struct ManualButton: View {
         Button(action: action) {
             VStack(spacing: 5) {
                 Text(title).font(.system(.headline, design: .rounded, weight: .bold))
-                Text("+\(grams)g")
+                Text(MassText.addedGrams(grams))
                     .font(.caption)
                     .foregroundStyle(
                         selected

@@ -470,17 +470,11 @@ struct AccumulationTimelineBrowser: View {
     }
 
     private func formattedMass(_ grams: Int64) -> String {
-        if grams >= 1_000_000 {
-            return String(format: "%.1ft", Double(grams) / 1_000_000)
-        }
-        if grams >= 1_000 {
-            return String(format: "%.1fkg", Double(grams) / 1_000)
-        }
-        return "\(grams)g"
+        HistoryMassText.text(grams)
     }
 
     private func spokenMass(_ grams: Int64) -> String {
-        "\(max(0, grams).formatted())グラム"
+        MassText.spoken(grams: Int(clamping: max(0, grams)))
     }
 
     private struct ExtentLoadKey: Hashable {
@@ -860,17 +854,11 @@ private struct AccumulationTimelineMonthSheet: View {
     }
 
     private func formattedMass(_ grams: Int64) -> String {
-        if grams >= 1_000_000 {
-            return String(format: "%.1ft", Double(grams) / 1_000_000)
-        }
-        if grams >= 1_000 {
-            return String(format: "%.1fkg", Double(grams) / 1_000)
-        }
-        return "\(grams)g"
+        HistoryMassText.text(grams)
     }
 
     private func spokenMass(_ grams: Int64) -> String {
-        "\(max(0, grams).formatted())グラム"
+        MassText.spoken(grams: Int(clamping: max(0, grams)))
     }
 }
 
