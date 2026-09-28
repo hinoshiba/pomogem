@@ -93,6 +93,12 @@
       "package": "l10n-02-focus-system"
     },
     {
+      "glob": "PomoGem/Core/FocusLeave*.swift",
+      "table": "Focus",
+      "package": "l10n-02-focus-system",
+      "note": "F1 leave pause policy and host monitor; its notification copy lives in NotificationManager.swift (Notifications)"
+    },
+    {
       "glob": "PomoGem/Core/WidgetSnapshotStore.swift",
       "table": "Focus",
       "package": "l10n-02-focus-system"

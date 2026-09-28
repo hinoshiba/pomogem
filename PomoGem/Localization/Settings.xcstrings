@@ -28,6 +28,12 @@
     "iOS：%@" : {
       "comment" : "Support mail line; the argument is the iOS version, e.g. 26.5"
     },
+    "「毎日のリマインダー」と「先月の瓶のお知らせ」は既定でオフです。赤いバッジや連続記録の警告は使いません。タイマー終了の通知だけは「即時通知」として送るため、iPhoneの集中モード（おやすみモードなど）で即時通知を許可していれば、その間も届きます。" : {
+      "comment" : "Settings footer under the Notifications card. The default-off sentence names only this card's two switches, because the leave-pause notifications in the Focus card are on by default. Suggested English: Daily Reminder and Last Month's Jar are off by default. The app never uses red badges or streak warnings. Only timer-end alerts are sent as Time Sensitive, so they still arrive during a Focus such as Do Not Disturb if Time Sensitive notifications are allowed there."
+    },
+    "「集中が切れたらお知らせ」は、タイマーが止まっていることを知らせる通知で、アプリに戻ると残りは届きません。このiPhoneで通知を許可していない場合は届きません。「アプリを離れたら一時停止」がオンのあいだは、「集中に戻るお知らせ」の代わりにこちらを使います。" : {
+      "comment" : "Settings footer under the leave-pause notification switch; it replaces the older Return-to-Focus Reminder while the leave pause is on. The switch is on by default, so the permission sentence is a plain fact with no call to action. Suggested English: These notifications say the timer is paused, and the rest are withdrawn when you come back. They do not arrive unless notifications are allowed on this iPhone. While Pause When You Leave the App is on, they replace the Return-to-Focus Reminder."
+    },
     "「集中に戻るお知らせ」は既定でオフです。オンにすると、集中タイマー中にホーム画面や別のアプリへ移ったとき、30秒後に一度通知し、戻ると取り消します。画面をロックしただけなら通知しません（パスコードを使っていないiPhoneなどでは届くことがあります）。一時停止中・休憩中・終了間際も通知しません。" : {
       "comment" : "Settings caption under the return-to-focus reminder switch"
     },
@@ -43,6 +49,9 @@
     "アプリのバージョンなどを自動で記入します" : {
       "comment" : "Settings row subtitle: the mail draft is pre-filled with versions and settings"
     },
+    "アプリを離れたら一時停止" : {
+      "comment" : "Settings switch title: pause a running focus when the person goes to the Home Screen or another app. Suggested English: Pause When You Leave the App"
+    },
     "アプリ：ポモジェム %@" : {
       "comment" : "Support mail line; the argument is the app version, e.g. 1.1.0 (10)"
     },
@@ -51,6 +60,9 @@
     },
     "オンにしている通知は、このiPhoneの設定でオフになっているため届きません。" : {
       "comment" : "Settings notice under an enabled notification switch: notifications are turned off for this app in iOS"
+    },
+    "オンのとき、集中タイマー中にホーム画面やほかのアプリへ移ると、離れた時点でタイマーを一時停止します。%@以内に戻れば止まりません。パスコードを設定しているiPhoneでは、画面をロックしても、通常はタイマーが進みます。ただし、ロックを解除した直後にまたロックすると一時停止したり、ほかのアプリへ移ってすぐにロックすると止まらなかったりすることがあります。パスコードがないiPhoneでは、ロックとアプリの切り替えを区別できないため、画面ロックでも一時停止します。" : {
+      "comment" : "Settings footer under the leave-pause switch. The argument is the quick-glance grace (20秒). The lock is recognised from a notice iOS sends late right after an unlock, so both lock sentences are hedged; keep them hedged. Suggested English: When on, going Home or to another app during a focus pauses the timer from the moment you left. Coming back within %@ does not pause it. On an iPhone with a passcode, locking the screen usually keeps the timer running. However, locking again right after unlocking can pause it, and locking right after leaving the app can keep it running. Without a passcode, iPhone cannot tell locking from switching apps, so locking also pauses it."
     },
     "オープンソース" : {
       "comment" : "About page section header: open source"
@@ -70,9 +82,6 @@
     "ソースコードとライセンス" : {
       "comment" : "About page link title"
     },
-    "タイマーはバックグラウンドでも止まりません。画面を閉じたときの表示は、iPhoneの設定でライブアクティビティを許可している場合に出ます。" : {
-      "comment" : "Settings footer: the Live Activity switch"
-    },
     "バージョン" : {
       "comment" : "About page row: app version"
     },
@@ -81,6 +90,9 @@
     },
     "プレビュー" : {
       "comment" : "Support mail: a Debug preview build that keeps nothing"
+    },
+    "ホーム画面やほかのアプリへ移ると止めます" : {
+      "comment" : "Settings switch subtitle: what counts as leaving the app. Suggested English: Stops when you go Home or open another app"
     },
     "ポモジェムについてのお問い合わせ" : {
       "comment" : "Support mail subject"
@@ -154,6 +166,9 @@
     "瑠璃" : {
       "comment" : "Theme colour swatch (lapis blue)"
     },
+    "画面を閉じたときの表示は、iPhoneの設定でライブアクティビティを許可している場合に出ます。アプリを離れたときにタイマーを止めるかどうかは、「アプリを離れたら一時停止」の設定に従います。" : {
+      "comment" : "Settings footer: the Live Activity switch. Suggested English: The Lock Screen timer appears when Live Activities are allowed in iPhone Settings. Whether the timer stops when you leave the app follows Pause When You Leave the App."
+    },
     "空色" : {
       "comment" : "Theme colour swatch (sky blue)"
     },
@@ -162,6 +177,9 @@
     },
     "緑青" : {
       "comment" : "Theme colour swatch (verdigris green)"
+    },
+    "自動では再開しません。アプリに戻って「再開する」をタップすると、離れた時点の続きから進みます。休憩中と、終了まで%@以内の集中は止めません。オフのときは、アプリを離れてもタイマーは止まりません。" : {
+      "comment" : "Settings footer under the leave-pause switch: how the timer resumes, what is never paused, and the off state. The argument is the final stretch that is never paused (1分). Suggested English: The timer never resumes by itself. Go back to the app and tap Resume to continue from where you left. Breaks and the last %@ of a focus are never paused. When off, the timer keeps running after you leave the app."
     },
     "自由な集中時間・結晶の月刻印・勉強アプリ数の無制限" : {
       "comment" : "Settings Pro row subtitle for free users: what Pro adds"
@@ -208,6 +226,9 @@
     "通知する時刻" : {
       "comment" : "Settings time picker label for reminders"
     },
+    "集中が切れたらお知らせ" : {
+      "comment" : "Settings switch title: the notifications sent while a focus is paused because the person left the app. Suggested English: Notify Me When I Drift Away"
+    },
     "集中の粒・結晶・記念石を表示と集計から外し、0から始めます。テーマと設定は残ります。リセット前の記録はこのiPhoneの中に残り、データの書き出しに含まれることがあります。このiPhoneから完全に消すには、アプリを削除してください。この操作は取り消せません。" : {
       "comment" : "Reset confirmation on a local-only iPhone"
     },
@@ -216,6 +237,17 @@
     },
     "集中用の音楽" : {
       "comment" : "Settings row: opens the focus music (Apple Music) list; same name as the timer's music sheet"
+    },
+    "離れてから%@までに最大%lld回" : {
+      "comment" : "Settings switch subtitle for the leave-pause notifications. The first argument is when the series stops after leaving (20分), the second how many notifications at most (5). Suggested English: Up to %2$lld times in your first %1$@ away",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "離れてから%1$@までに最大%2$lld回"
+          }
+        }
+      }
     },
     "青緑" : {
       "comment" : "Theme colour swatch (teal)"

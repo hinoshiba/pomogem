@@ -431,6 +431,17 @@ final class FocusMusicTests: XCTestCase {
         }
     }
 
+    /// The hint can show in a sheet opened from a running focus, where going
+    /// to the Music app pauses the focus while the leave pause is on (F1).
+    /// Every hint that sends the person to the Music app suggests a break.
+    func testHintsThatSendThePersonToTheMusicAppSuggestABreak() {
+        for hint in [FocusMusicHint.openMusicOnce, .signIn] {
+            XCTAssertTrue(hint.message.contains("「ミュージック」アプリ"), "\(hint)")
+            XCTAssertTrue(hint.message.contains("休憩のときなどに"), "\(hint) must not ask to leave a running focus")
+        }
+        XCTAssertFalse(FocusMusicHint.noSourceAvailable.message.contains("「ミュージック」アプリ"))
+    }
+
     // MARK: - Controller: permission and subscription
 
     func testRefreshAndHeaderTapNeverPromptForPermission() async {

@@ -180,6 +180,11 @@ final class SettingsPaywallUITests: XCTestCase {
         if orientation.exists {
             XCTAssertLessThan(orientation.frame.minY, row.frame.minY)
         }
+        // The leave-pause card (F1) follows the 集中 card, above the Live Activity.
+        let leavePause = app.switches["settings.focus-leave-pause"]
+        if leavePause.exists {
+            XCTAssertLessThan(row.frame.maxY, leavePause.frame.minY)
+        }
         let liveActivity = app.switches["settings.live-activity"]
         if liveActivity.exists {
             XCTAssertLessThan(row.frame.maxY, liveActivity.frame.minY)
@@ -248,11 +253,41 @@ final class SettingsPaywallUITests: XCTestCase {
             checkFocusMusicSheetAtAccessibilitySize(from: music)
         }
 
+        // F1. UI-test processes start with the leave pause off (shared
+        // Simulators background many focuses); FocusLeaveSettingsUITests
+        // covers the product default, on.
+        let leavePause = app.switches["settings.focus-leave-pause"]
+        XCTAssertTrue(reveal(leavePause))
+        XCTAssertTrue(leavePause.label.contains("アプリを離れたら一時停止"), leavePause.label)
+        XCTAssertEqual(leavePause.value as? String, "0")
+        XCTAssertFalse(app.switches["settings.focus-leave-nudges"].exists,
+                       "The series exists only while the leave pause is on")
+        XCTAssertTrue(reveal(text(containing: "パスコードがないiPhoneでは、ロックとアプリの切り替えを区別できないため")))
+        XCTAssertTrue(reveal(text(containing: "オフのときは、アプリを離れてもタイマーは止まりません")))
+        attach("\(prefix) — leave pause and its footer")
+        if music.exists, music.isHittable, leavePause.isHittable {
+            XCTAssertLessThan(music.frame.minY, leavePause.frame.minY,
+                              "The 集中 card ends with 集中用の音楽; the leave pause card follows it")
+        }
+
+        // The leave pause sits with the timer, above the Live Activity. Its
+        // card's last footer paragraph and the Live Activity row are
+        // compared while both are on screen, at every text size.
         let liveActivity = app.switches["settings.live-activity"]
+        let resumeFooter = element("settings.focus-leave-footer.resume")
         XCTAssertTrue(reveal(liveActivity))
+        XCTAssertTrue(resumeFooter.exists, "The leave-pause card ends right above the Live Activity card")
+        XCTAssertLessThanOrEqual(resumeFooter.frame.maxY, liveActivity.frame.minY + 1,
+                                 "The leave pause sits with the timer, above the Live Activity")
+        if !accessibility5 {
+            XCTAssertTrue(leavePause.exists)
+            XCTAssertLessThan(leavePause.frame.minY, liveActivity.frame.minY,
+                              "The leave pause sits with the timer, above the Live Activity")
+        }
         let returnReminder = app.switches["settings.focus-return-reminder"]
-        XCTAssertTrue(reveal(returnReminder))
-        XCTAssertTrue(reveal(text(containing: "タイマーはバックグラウンドでも止まりません")))
+        XCTAssertTrue(reveal(returnReminder), "With the leave pause off the return reminder is offered as before")
+        XCTAssertTrue(reveal(text(containing: "「アプリを離れたら一時停止」の設定に従います")))
+        XCTAssertFalse(text(containing: "タイマーはバックグラウンドでも止まりません").exists)
         attach("\(prefix) — timer notices and their footer")
 
         let pro = app.buttons["settings.pro"]
@@ -261,6 +296,15 @@ final class SettingsPaywallUITests: XCTestCase {
         XCTAssertTrue(pro.label.contains("自由な集中時間"), pro.label)
         XCTAssertTrue(reveal(text(containing: "Proは1回だけの買い切りです")))
         attach("\(prefix) — Pro beside the timer")
+
+        // Only this card's switches are off by default: the leave-pause
+        // series in the Focus card is on by default.
+        let notificationsFooter = element("settings.notifications-footer")
+        XCTAssertTrue(reveal(notificationsFooter))
+        XCTAssertTrue(notificationsFooter.label.contains("「毎日のリマインダー」と「先月の瓶のお知らせ」は既定でオフです"),
+                      notificationsFooter.label)
+        XCTAssertFalse(notificationsFooter.label.hasPrefix("既定はオフ。"), notificationsFooter.label)
+        attach("\(prefix) — notifications footer")
 
         let export = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "データを書き出す")).firstMatch
         XCTAssertTrue(reveal(export))
