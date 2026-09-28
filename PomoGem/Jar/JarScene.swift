@@ -446,10 +446,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private var settledGravityVector = Constants.Jar.gravityVector
     /// F3: the reading the awake pile has had the chance to follow — the
     /// settled one when the jar woke, or the one a turn (re)opened the
-    /// interaction window for. A turn past `needsResettle` from it while
-    /// the jar is awake opens the window again from that moment, so
-    /// neither the idle settle nor the hard stop can freeze a pile that
-    /// has not yet followed the phone.
+    /// interaction window for. A turn past `needsRefollow` (15°) from it
+    /// while the jar is awake opens the window again from that moment, so
+    /// neither the idle settle nor the hard stop can freeze a pile in
+    /// mid-flight after a deliberate turn.
     private var followedReading: JarGravityMapping.Reading = .flat
     /// The gravity the bodies rest under: the settled one while the jar
     /// rests (a stopped motion observer resets the live gravity without
@@ -461,11 +461,24 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// Whether the bodies rest on the floor (heaped toward the lower side
     /// at most), not against a wall or the cap:
     /// `JarGravityMapping.restsOnTheFloor` of `pileGravityVector`, within
-    /// 30° of the jar's own down. The share card, the widget and the pile
-    /// light go by it.
+    /// 30° of the jar's own down. An awake pile that has been under a
+    /// gravity off the floor since it last rested (`awakePileLeftTheFloor`)
+    /// does not rest on the floor until it rests again, whatever the live
+    /// gravity says: a sheet covering Home resets the gravity to the jar's
+    /// own down while that pile still lies against a wall or the cap, or is
+    /// falling back from it. The share card goes by it (the pile light by
+    /// `pileGravityVector` alone, so it moves with the gravity, animated).
     var pileRestsOnTheFloor: Bool {
-        JarGravityMapping.restsOnTheFloor(pileGravityVector)
+        if isIdlePaused { return JarGravityMapping.restsOnTheFloor(settledGravityVector) }
+        return !awakePileLeftTheFloor && JarGravityMapping.restsOnTheFloor(appliedGravityVector)
     }
+    /// F3: the awake pile has been under a gravity off the floor (or woke
+    /// from a pose off the floor) since it last rested, so its bodies may
+    /// still lie against a wall or the cap, or be on their way back, even
+    /// after the live gravity returned to the floor. Cleared when the pile
+    /// rests (the settled gravity decides then) and by a restore (its rows
+    /// start on the floor).
+    private var awakePileLeftTheFloor = false
     /// Gems still in their entry ritual, by phase (F3).
     private var enteringPhases: [UUID: EntryPhase] = [:]
     /// Gems that joined the pile at the cap by `clearingTimeout`, still
@@ -1523,6 +1536,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         settledReading = appliedReading ?? .flat
         settledGravityVector = appliedGravityVector
         followedReading = settledReading
+        // The rows start on the floor: they leave it only for a live
+        // gravity off it.
+        awakePileLeftTheFloor = !JarGravityMapping.restsOnTheFloor(appliedGravityVector)
         // The rows just laid out already tell roughly whether the pile
         // clears the core and the HUD: step down now, before the jar is
         // first drawn (the settled pile corrects it when it rests).
@@ -2472,9 +2488,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// (`JarGravityMapping.needsResettle`), wakes through one bounded
     /// interaction window (settle 3 s, hard stop 5 s), so the pile
     /// re-settles under the new gravity. An awake jar whose phone turns
-    /// from the pose its pile has been following opens the window again
-    /// from that moment (`followTurn`), so a turn late in a window never
-    /// freezes the pile in mid-flight. The wake does not depend on Reduce
+    /// more than 15° from the pose its pile has been following opens the
+    /// window again from that moment (`followTurn`), so a turn late in a
+    /// window never freezes the pile in mid-flight, while a swaying hand
+    /// never extends it. The wake does not depend on Reduce
     /// Motion: the gems follow the phone either way. Under Reduce Motion the
     /// re-settle runs calm — raised damping and no friction for its window,
     /// no bounce or tumble, no light or effect (`isCalmResettleActive`) —
@@ -2505,17 +2522,24 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
     /// F3: re-settles the pile for a turn of the phone. A resting pile
-    /// wakes when the reading turned from the pose it settled under; an
-    /// awake one opens its interaction window again when the reading turned
-    /// from the pose it has been following (bounded: once per such turn,
-    /// and each window still settles after 3 s and stops after 5 s).
+    /// wakes when the reading turned from the pose it settled under
+    /// (`needsResettle`, about 6°); an awake one opens its interaction
+    /// window again only when the jar's gravity turned more than 15° from
+    /// the pose it has been following (`needsRefollow`). The awake check
+    /// measures from the last reopening, so with the resting jar's 6° a
+    /// hand swaying a few degrees each way would reopen the window on
+    /// every swing and keep the physics awake indefinitely; at 15° a sway
+    /// never does, and a deliberate turn reopens it about once per 15° it
+    /// turns (each window still settles after 3 s and stops after 5 s).
+    /// Smaller turns while awake move the pile within the open window, as
+    /// any tilt did before F3.
     private func followTurn(to reading: JarGravityMapping.Reading) {
         if isIdlePaused {
             guard JarGravityMapping.needsResettle(from: settledReading, to: reading) else { return }
             beginInteractionMotionWindow(uptime: interactionClock())
             followedReading = reading
             beginCalmResettleUnderReduceMotion()
-        } else if JarGravityMapping.needsResettle(from: followedReading, to: reading) {
+        } else if JarGravityMapping.needsRefollow(from: followedReading, to: reading) {
             followedReading = reading
             // Only the deadlines move: the tapped gem's flight damping and
             // the idle observation stay as they are.
@@ -2600,6 +2624,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     ) {
         appliedGravityVector = next
         physicsWorld.gravity = next
+        // F3: an awake pile under a gravity off the floor may be carried
+        // away from it; it counts as off the floor until it rests again
+        // (`pileRestsOnTheFloor`). A resting pile stays where it settled.
+        if !isIdlePaused, !JarGravityMapping.restsOnTheFloor(next) {
+            awakePileLeftTheFloor = true
+        }
         appliedLightHorizontal = lightHorizontal
         applyOpticalTilt(horizontal: lightHorizontal, uptime: tiltClock())
         // Core Motion delivers up to 30 updates per second. Treating every
@@ -2715,8 +2745,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             onIdlePauseChanged?(false)
             // Samples the idle gate held back are caught up at once.
             updateOpticalTilt(horizontal: appliedLightHorizontal)
-            // F3: the woken pile starts from the pose it settled under.
+            // F3: the woken pile starts from the pose it settled under,
+            // and leaves the floor if it lay off it or the live gravity
+            // now pulls it off.
             followedReading = settledReading
+            awakePileLeftTheFloor = !JarGravityMapping.restsOnTheFloor(settledGravityVector)
+                || !JarGravityMapping.restsOnTheFloor(appliedGravityVector)
         }
         resetIdleObservation()
         // Landing, fusion, tap, shake, content changes: the render loop and
@@ -5061,7 +5095,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             jar: outerJarRect,
             interior: interiorRect,
             bedTop: currentFloorY + (gemBed.map { $0.height(interiorHeight: interiorRect.height) } ?? 0),
-            seatedOnFloor: pileRestsOnTheFloor
+            // The live gravity while awake: a pile returning to the floor
+            // takes the floor band as the gravity turns (animated), not
+            // with a jump when it rests (`pileRestsOnTheFloor` waits).
+            seatedOnFloor: JarGravityMapping.restsOnTheFloor(pileGravityVector)
         )
         // The lit interior (JarStageArtwork) already glows toward the
         // floor, so the pile adds a softer light than before.
@@ -5623,12 +5660,16 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         if enforcePileClearances() { return }
         // F3: the pose this pile settled under. A turn away from it wakes
         // the jar again (`setGravityReading`, `JarIdleTiltFilter`). Any
-        // turn the pile has not followed yet reopened the interaction
-        // window (`followTurn`), so neither stop comes before the pile has
-        // had its settle time under this pose.
+        // deliberate turn (past 15°) the pile has not followed yet reopened
+        // the interaction window (`followTurn`), so neither stop comes
+        // before the pile has had its settle time under that pose; a
+        // smaller turn late in a window may leave the pile partly moved,
+        // as any tilt did before F3.
         settledReading = appliedReading ?? .flat
         settledGravityVector = appliedGravityVector
         followedReading = settledReading
+        // The settled gravity decides whether this pile rests on the floor.
+        awakePileLeftTheFloor = false
         if !isIdlePaused {
             isIdlePaused = true
             onIdlePauseChanged?(true)

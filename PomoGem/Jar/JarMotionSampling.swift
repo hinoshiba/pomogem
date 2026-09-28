@@ -102,6 +102,19 @@ enum JarTiltMath {
     /// the phone down, leaning it back) leaves the pile where it is.
     static let reorientationMinimumTurn: CGFloat = 3 * .pi / 180
 
+    /// F3: the smallest change of the jar's gravity direction (radians, 15°)
+    /// from the pose an awake pile has been following that opens its
+    /// interaction window again (`JarGravityMapping.needsRefollow`). A
+    /// resting pile measures a turn from the fixed pose it settled in; an
+    /// awake one would measure it from the last swing that reopened the
+    /// window, so a hand swaying a few degrees each way while reading (or
+    /// walking) would pass the ~6° wake on every swing and keep the physics
+    /// awake indefinitely. Past 15° a turn is deliberate (a lean, sideways,
+    /// upside down): reopenings are bounded by how far the phone turns.
+    /// Smaller turns while awake move the pile within the open window, as
+    /// any tilt did before F3.
+    static let refollowMinimumTurn: CGFloat = 15 * .pi / 180
+
     /// The jar's gravity for one Core Motion gravity reading (F3,
     /// `JarGravityMapping`): toward the physically lowest screen edge,
     /// sideways and upward included, blended to the default downward

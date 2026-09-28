@@ -728,6 +728,40 @@ final class JarGravityMappingTests: XCTestCase {
         XCTAssertTrue(JarGravityMapping.standsUpright(JarGravityMapping.defaultGravity))
     }
 
+    func testAnAwakePileRefollowsOnlyATurnPastFifteenDegreesFromThePoseItFollows() {
+        // `needsRefollow` measures from the pose the awake pile has been
+        // following (the last reopening), so it must stay above what a
+        // swaying hand turns between two swings. The resting jar's 6° wake
+        // is passed by an 8° swing; the awake reopening is not.
+        func rolled(_ degrees: Double) -> JarGravityMapping.Reading {
+            let angle = degrees * .pi / 180
+            return reading(sin(angle), -cos(angle), 0)
+        }
+        XCTAssertEqual(JarTiltMath.refollowMinimumTurn, 15 * .pi / 180, accuracy: 1e-12)
+        for (from, to) in [(-4.0, 4.0), (-5, 5), (-7, 7), (0, 14.9), (80, 94.9), (178, -168)] {
+            XCTAssertFalse(JarGravityMapping.needsRefollow(from: rolled(from), to: rolled(to)), "\(from)° → \(to)°")
+        }
+        XCTAssertTrue(JarGravityMapping.needsResettle(from: rolled(-4), to: rolled(4)), "An 8° swing passes the resting wake")
+        for (from, to) in [(0.0, 15.2), (-7.6, 7.6), (0, 90), (90, 180), (0, 180), (-90, 90), (170, 190)] {
+            XCTAssertTrue(JarGravityMapping.needsRefollow(from: rolled(from), to: rolled(to)), "\(from)° → \(to)°")
+            XCTAssertTrue(JarGravityMapping.needsResettle(from: rolled(from), to: rolled(to)), "\(from)° → \(to)°")
+        }
+        // Never where the resting rule would not wake: a change of strength
+        // alone (leaning back, putting the phone down) or tremor.
+        let upright = reading(0, -1, 0)
+        XCTAssertFalse(JarGravityMapping.needsRefollow(from: upright, to: reading(0, 0, -1)))
+        XCTAssertFalse(JarGravityMapping.needsRefollow(from: upright, to: reading(0.012, -1, 0.012)))
+        // A pile that followed a gravity too weak to have a direction
+        // refollows any real one; a weak current gravity waits.
+        let weak = reading(0, sin(23.25 * .pi / 180), -cos(23.25 * .pi / 180))
+        XCTAssertLessThan(
+            hypot(JarGravityMapping.gravity(for: weak).dx, JarGravityMapping.gravity(for: weak).dy),
+            JarGravityMapping.weakGravityMagnitude
+        )
+        XCTAssertTrue(JarGravityMapping.needsRefollow(from: weak, to: reading(0, 1, 0)))
+        XCTAssertFalse(JarGravityMapping.needsRefollow(from: upright, to: weak))
+    }
+
     func testOnlyAGravityAboveHorizontalPullsTheGemsTowardTheMouth() {
         XCTAssertTrue(JarGravityMapping.pullsTowardTheMouth(CGVector(dx: 0, dy: 7.2)))
         XCTAssertTrue(JarGravityMapping.pullsTowardTheMouth(CGVector(dx: 7.2 * cos(0.2), dy: 7.2 * sin(0.2))))

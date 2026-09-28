@@ -66,7 +66,8 @@ enum ShareJarSnapshotPolicy {
     /// at the mouth of the card's upright bottle, so the card draws its own
     /// bottle when this is false, whatever a share hides. It
     /// reads the pose the pile settled in, not the live gravity a sheet
-    /// resets (`JarScene.pileGravityVector`).
+    /// resets (`JarScene.pileGravityVector`); an awake pile that left the
+    /// floor counts as off it until it rests again.
     @MainActor
     static func pileRestsOnTheFloor(in scene: SKScene) -> Bool {
         (scene as? JarScene)?.pileRestsOnTheFloor ?? true

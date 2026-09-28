@@ -166,9 +166,6 @@ struct HomeView: View {
     @State private var capacityRemaining: Int?
     @State private var showShareChip = false
     @State private var widgetRefreshTask: Task<Void, Never>?
-    /// F3: a widget snapshot was skipped while the pile rested off the
-    /// floor; it is published once the pile rests on the floor again.
-    @State private var widgetSnapshotAwaitsFloor = false
     @State private var celebrationRecoveryTask: Task<Void, Never>?
     @State private var capacityCelebrationTask: Task<Void, Never>?
     @State private var breakOfferTask: Task<Void, Never>?
@@ -3133,12 +3130,6 @@ struct HomeView: View {
                 handleLanding(event)
             }
         }
-        scene.onIdlePauseChanged = { resting in
-            Task { @MainActor in
-                guard resting, widgetSnapshotAwaitsFloor, scene.pileRestsOnTheFloor else { return }
-                publishWidgetSnapshot()
-            }
-        }
         applySensoryPreferences()
     }
 
@@ -4468,15 +4459,6 @@ struct HomeView: View {
     }
 
     private func publishWidgetSnapshot() {
-        // F3: a pile resting against a wall or the cap (the phone held
-        // sideways or upside down) would hang on the side or at the mouth
-        // of the widget's upright bottle. The widget keeps its last image
-        // and is published when the pile next rests on the floor.
-        guard scene.pileRestsOnTheFloor else {
-            widgetSnapshotAwaitsFloor = true
-            return
-        }
-        widgetSnapshotAwaitsFloor = false
         let acceptedRoots = activeAggregateRoots
         let fullyMeasuredRoots = acceptedRoots.filter {
             $0.manualPebbleCount == 0

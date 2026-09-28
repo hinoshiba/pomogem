@@ -41,7 +41,10 @@ import UIKit
 ///   phone turned by more than `JarTiltMath.reorientationWakeThreshold`
 ///   (`wakeDelta`, about 6°, well above the light's `idleLightThreshold`)
 ///   and the jar's gravity changed direction, through the bounded
-///   interaction window.
+///   interaction window. An awake jar reopens that window only for a
+///   larger turn from the pose its pile has been following
+///   (`needsRefollow(from:to:)`, 15°), so a swaying hand cannot keep it
+///   awake.
 /// - Taps and shakes throw along `launchDirection(for:)` of the applied
 ///   gravity.
 ///
@@ -387,14 +390,36 @@ enum JarGravityMapping {
         guard wakeDelta(from: settled, to: current) > JarTiltMath.reorientationWakeThreshold else {
             return false
         }
-        let old = gravity(for: settled)
-        let new = gravity(for: current)
-        let newMagnitude = hypot(new.dx, new.dy)
+        return gravityTurns(from: settled, to: current, past: JarTiltMath.reorientationMinimumTurn)
+    }
+
+    /// F3: whether an awake pile that has been following the reading
+    /// `followed` must be given its interaction window again for `current`:
+    /// `needsResettle`, and the jar's gravity turned by more than
+    /// `JarTiltMath.refollowMinimumTurn` (15°). A hand swaying the phone a
+    /// few degrees each way never passes it, so motion alone cannot keep an
+    /// awake jar alive; a deliberate turn reopens the window about once per
+    /// 15° it turns. A followed gravity too weak to have a direction
+    /// reopens for any real one, as in `needsResettle`.
+    static func needsRefollow(from followed: Reading, to current: Reading) -> Bool {
+        needsResettle(from: followed, to: current)
+            && gravityTurns(from: followed, to: current, past: JarTiltMath.refollowMinimumTurn)
+    }
+
+    /// Whether the jar's gravity for `new` points more than `angle` away
+    /// from its gravity for `old`. A new gravity too weak to have a
+    /// direction (`weakGravityMagnitude`) does not turn; an old one that
+    /// weak turns for any real new one.
+    private static func gravityTurns(from old: Reading, to new: Reading, past angle: CGFloat) -> Bool {
+        let oldGravity = gravity(for: old)
+        let newGravity = gravity(for: new)
+        let newMagnitude = hypot(newGravity.dx, newGravity.dy)
         guard newMagnitude >= weakGravityMagnitude else { return false }
-        let oldMagnitude = hypot(old.dx, old.dy)
+        let oldMagnitude = hypot(oldGravity.dx, oldGravity.dy)
         guard oldMagnitude >= weakGravityMagnitude else { return true }
-        let cosine = (old.dx * new.dx + old.dy * new.dy) / (oldMagnitude * newMagnitude)
-        return cosine < cos(JarTiltMath.reorientationMinimumTurn)
+        let cosine = (oldGravity.dx * newGravity.dx + oldGravity.dy * newGravity.dy)
+            / (oldMagnitude * newMagnitude)
+        return cosine < cos(angle)
     }
 
     /// How far the phone turned from `old` to `new`, for the resting jar's
