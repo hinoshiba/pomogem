@@ -5,6 +5,12 @@
       "comment" : "Name under the app icon on the Home Screen and in Settings",
       "extractionState" : "manual",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PomoGem"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -17,6 +23,12 @@
       "comment" : "Apple Music permission prompt: why the timer controls the Music app (focus background music)",
       "extractionState" : "manual",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Used to play focus music in the Music app from the timer screen."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -29,6 +41,12 @@
       "comment" : "Motion permission prompt: why the jar reacts to tilting and shaking",
       "extractionState" : "manual",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Used to move the gems in your jar as you tilt or shake your iPhone. Motion readings are never saved or sent."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -41,6 +59,12 @@
       "comment" : "Photos permission prompt: why a share card is saved to Photos",
       "extractionState" : "manual",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saves your share cards to Photos."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",

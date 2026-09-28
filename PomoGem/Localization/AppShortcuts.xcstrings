@@ -1,7 +1,22 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
-
+    "${applicationName}で集中を始める" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "ja" : {
+          "stringSet" : {
+            "state" : "translated",
+            "values" : [
+              "${applicationName}で集中を始める",
+              "${applicationName}で集中する",
+              "${applicationName}で${length}集中する",
+              "${applicationName}でポモドーロを始める"
+            ]
+          }
+        }
+      }
+    }
   },
   "version" : "1.0"
 }

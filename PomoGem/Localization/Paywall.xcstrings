@@ -2,106 +2,378 @@
   "sourceLanguage" : "ja",
   "strings" : {
     "App Storeに接続できませんでした。通信状態を確認して、もう一度お試しください。" : {
-      "comment" : "Paywall error: no connection to the App Store during a purchase or restore"
+      "comment" : "Paywall error: no connection to the App Store during a purchase or restore",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App Storeに接続できませんでした。通信状態を確認して、もう一度お試しください。"
+          }
+        }
+      }
     },
     "App Storeに接続できませんでした。通信状態を確認して、商品情報を再読み込みしてください。" : {
-      "comment" : "Paywall error under 「商品情報を読み込めませんでした」: no connection to the App Store"
+      "comment" : "Paywall error under 「商品情報を読み込めませんでした」: no connection to the App Store",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App Storeに接続できませんでした。通信状態を確認して、商品情報を再読み込みしてください。"
+          }
+        }
+      }
     },
     "App Storeの購入情報を確認できませんでした。時間をおいて、もう一度お試しください。" : {
-      "comment" : "Paywall error: the signed App Store transaction did not verify"
+      "comment" : "Paywall error: the signed App Store transaction did not verify",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App Storeの購入情報を確認できませんでした。時間をおいて、もう一度お試しください。"
+          }
+        }
+      }
     },
     "お使いのApple Accountの国や地域では、この商品を購入できません。" : {
-      "comment" : "Paywall error: the item is not sold in this App Store storefront"
+      "comment" : "Paywall error: the item is not sold in this App Store storefront",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "お使いのApple Accountの国や地域では、この商品を購入できません。"
+          }
+        }
+      }
     },
     "このApple Accountでは、ポモジェムProの購入が見つかりませんでした。購入したときと同じApple Accountでサインインしているか確認してください。" : {
-      "comment" : "Paywall alert: restore found no Pro purchase for the signed-in Apple Account"
+      "comment" : "Paywall alert: restore found no Pro purchase for the signed-in Apple Account",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このApple Accountでは、ポモジェムProの購入が見つかりませんでした。購入したときと同じApple Accountでサインインしているか確認してください。"
+          }
+        }
+      }
     },
     "このiPhoneでは、App内での購入が制限されています。「設定」の「スクリーンタイム」から「コンテンツとプライバシーの制限」を確認してください。" : {
-      "comment" : "Paywall error: In-App Purchases are turned off in Screen Time (Content & Privacy Restrictions)"
+      "comment" : "Paywall error: In-App Purchases are turned off in Screen Time (Content & Privacy Restrictions)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneでは、App内での購入が制限されています。「設定」の「スクリーンタイム」から「コンテンツとプライバシーの制限」を確認してください。"
+          }
+        }
+      }
     },
     "この商品は現在購入できません。時間をおいて、もう一度お試しください。" : {
-      "comment" : "Paywall error: the App Store reports the product as unavailable"
+      "comment" : "Paywall error: the App Store reports the product as unavailable",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この商品は現在購入できません。時間をおいて、もう一度お試しください。"
+          }
+        }
+      }
     },
     "もう一度リクエスト" : {
-      "comment" : "Paywall button while a purchase awaits approval: ask again"
+      "comment" : "Paywall button while a purchase awaits approval: ask again",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "もう一度リクエスト"
+          }
+        }
+      }
     },
     "スクリーンタイムで記録する勉強アプリ。無料は5つまで" : {
-      "comment" : "Paywall feature detail: the free plan records up to five study apps"
+      "comment" : "Paywall feature detail: the free plan records up to five study apps",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイムで記録する勉強アプリ。無料は5つまで"
+          }
+        }
+      }
     },
     "ポモジェムPro" : {
-      "comment" : "Paywall: title of the card shown once Pro is owned"
+      "comment" : "Paywall: title of the card shown once Pro is owned",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェムPro"
+          }
+        }
+      }
     },
     "ポモジェムProが使えるようになりました" : {
-      "comment" : "Toast: an approved (Ask to Buy) Pro purchase arrived"
+      "comment" : "Toast: an approved (Ask to Buy) Pro purchase arrived",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェムProが使えるようになりました"
+          }
+        }
+      }
     },
     "ポモジェムProが使えるようになりました。" : {
-      "comment" : "Paywall alert after a completed purchase"
+      "comment" : "Paywall alert after a completed purchase",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェムProが使えるようになりました。"
+          }
+        }
+      }
     },
     "ポモジェムProが使えるようになりました。勉強アプリを数の制限なく選べます。" : {
-      "comment" : "Paywall alert after buying from Screen Time's study-app limit"
+      "comment" : "Paywall alert after buying from Screen Time's study-app limit",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェムProが使えるようになりました。勉強アプリを数の制限なく選べます。"
+          }
+        }
+      }
     },
     "ポモジェムProが使えるようになりました。結晶に、作った月が表示されます。" : {
-      "comment" : "Paywall alert after buying from the crystal month-label hint"
+      "comment" : "Paywall alert after buying from the crystal month-label hint",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェムProが使えるようになりました。結晶に、作った月が表示されます。"
+          }
+        }
+      }
     },
     "ポモジェムProが使えるようになりました。閉じると、集中時間を選ぶ画面が開きます。" : {
-      "comment" : "Paywall alert after buying from the custom duration control; the editor opens next"
+      "comment" : "Paywall alert after buying from the custom duration control; the editor opens next",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェムProが使えるようになりました。閉じると、集中時間を選ぶ画面が開きます。"
+          }
+        }
+      }
     },
     "勉強アプリ数が無制限" : {
-      "comment" : "Paywall feature title: unlimited Screen Time study apps"
+      "comment" : "Paywall feature title: unlimited Screen Time study apps",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "勉強アプリ数が無制限"
+          }
+        }
+      }
     },
     "復元できる購入がありません" : {
-      "comment" : "Paywall alert title: restore found no purchase"
+      "comment" : "Paywall alert title: restore found no purchase",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "復元できる購入がありません"
+          }
+        }
+      }
     },
     "承認されると、自動でProが使えるようになります。届かないときは、もう一度リクエストできます。" : {
-      "comment" : "Paywall notice under 承認待ち: what happens next"
+      "comment" : "Paywall notice under 承認待ち: what happens next",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "承認されると、自動でProが使えるようになります。届かないときは、もう一度リクエストできます。"
+          }
+        }
+      }
     },
     "承認を待っています" : {
-      "comment" : "Paywall alert title: the purchase awaits approval (Ask to Buy)"
+      "comment" : "Paywall alert title: the purchase awaits approval (Ask to Buy)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "承認を待っています"
+          }
+        }
+      }
     },
     "承認待ち" : {
-      "comment" : "Paywall notice title: a purchase request awaits approval"
+      "comment" : "Paywall notice title: a purchase request awaits approval",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "承認待ち"
+          }
+        }
+      }
     },
     "時間をおいて、もう一度お試しください。" : {
-      "comment" : "Paywall error body under a failure title when the cause is not known"
+      "comment" : "Paywall error body under a failure title when the cause is not known",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間をおいて、もう一度お試しください。"
+          }
+        }
+      }
     },
     "時間をおいて、商品情報を再読み込みしてください。" : {
-      "comment" : "Paywall error under 「商品情報を読み込めませんでした」 when the cause is not known"
+      "comment" : "Paywall error under 「商品情報を読み込めませんでした」 when the cause is not known",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間をおいて、商品情報を再読み込みしてください。"
+          }
+        }
+      }
     },
     "無料の25・45・60・90分のほか、%@を秒単位で選べます" : {
-      "comment" : "Paywall feature detail; the argument is the Pro range, e.g. 1〜360分"
+      "comment" : "Paywall feature detail; the argument is the Pro range, e.g. 1〜360分",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無料の25・45・60・90分のほか、%@を秒単位で選べます"
+          }
+        }
+      }
     },
     "粒が10個集まってできる結晶に、作った月を刻みます" : {
-      "comment" : "Paywall feature detail: what the month label is"
+      "comment" : "Paywall feature detail: what the month label is",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粒が10個集まってできる結晶に、作った月を刻みます"
+          }
+        }
+      }
     },
     "結晶に、作った月を刻めます。" : {
-      "comment" : "Paywall subtitle when opened from the crystal month-label hint"
+      "comment" : "Paywall subtitle when opened from the crystal month-label hint",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結晶に、作った月を刻めます。"
+          }
+        }
+      }
     },
     "結晶に月を刻む" : {
-      "comment" : "Paywall feature title: crystals show the month they were made"
+      "comment" : "Paywall feature title: crystals show the month they were made",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結晶に月を刻む"
+          }
+        }
+      }
     },
     "自由な集中時間" : {
-      "comment" : "Paywall feature title: any focus length"
+      "comment" : "Paywall feature title: any focus length",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自由な集中時間"
+          }
+        }
+      }
     },
     "自由な集中時間を選べます。" : {
-      "comment" : "Paywall subtitle when opened from the custom focus duration control"
+      "comment" : "Paywall subtitle when opened from the custom focus duration control",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自由な集中時間を選べます。"
+          }
+        }
+      }
     },
     "表示の例：%@" : {
-      "comment" : "VoiceOver: an example month label; the argument is a month such as 2026年9月"
+      "comment" : "VoiceOver: an example month label; the argument is a month such as 2026年9月",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表示の例：%@"
+          }
+        }
+      }
     },
     "記録・テーマ・iCloud同期・シェアなど、ほかの機能はすべて無料で使えます。" : {
-      "comment" : "Paywall note under the Pro features: everything else stays free"
+      "comment" : "Paywall note under the Pro features: everything else stays free",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録・テーマ・iCloud同期・シェアなど、ほかの機能はすべて無料で使えます。"
+          }
+        }
+      }
     },
     "購入のリクエストを送りました。承認されると、自動でProが使えるようになります。この画面は閉じても大丈夫です。" : {
-      "comment" : "Paywall alert: the purchase request was sent and Pro turns on by itself once approved"
+      "comment" : "Paywall alert: the purchase request was sent and Pro turns on by itself once approved",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "購入のリクエストを送りました。承認されると、自動でProが使えるようになります。この画面は閉じても大丈夫です。"
+          }
+        }
+      }
     },
     "購入を完了できませんでした" : {
-      "comment" : "Paywall alert title: the purchase failed"
+      "comment" : "Paywall alert title: the purchase failed",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "購入を完了できませんでした"
+          }
+        }
+      }
     },
     "購入を復元しました。Proの機能を使えます。" : {
-      "comment" : "Paywall alert: restore found the Pro purchase"
+      "comment" : "Paywall alert: restore found the Pro purchase",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "購入を復元しました。Proの機能を使えます。"
+          }
+        }
+      }
     },
     "購入を復元できませんでした" : {
-      "comment" : "Paywall alert title: restoring purchases failed"
+      "comment" : "Paywall alert title: restoring purchases failed",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "購入を復元できませんでした"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

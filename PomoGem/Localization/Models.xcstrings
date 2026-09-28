@@ -2,7 +2,15 @@
   "sourceLanguage" : "ja",
   "strings" : {
     "スクリーンタイム" : {
-      "comment" : "Record source label: Screen Time"
+      "comment" : "Record source label: Screen Time",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイム"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

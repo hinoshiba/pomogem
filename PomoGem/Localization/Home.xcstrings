@@ -6,8 +6,8 @@
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ / %2$@"
+            "state" : "translated",
+            "value" : "%@ / %@"
           }
         }
       }
@@ -17,8 +17,8 @@
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@。累計%2$@、集中%3$lld粒、記念石%4$@個"
+            "state" : "translated",
+            "value" : "%@。累計%@、集中%lld粒、記念石%@個"
           }
         }
       }
@@ -28,8 +28,8 @@
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@。累計は確認が済むと表示します。この端末で確認済みの集中%2$lld粒、記念石%3$@個"
+            "state" : "translated",
+            "value" : "%@。累計は確認が済むと表示します。この端末で確認済みの集中%lld粒、記念石%@個"
           }
         }
       }
@@ -39,8 +39,8 @@
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@に%2$@、%3$@を積みます。「元に戻す」で取り消せます"
+            "state" : "translated",
+            "value" : "%@に%@、%@を積みます。「元に戻す」で取り消せます"
           }
         }
       }
@@ -50,171 +50,446 @@
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@に%2$@を積みます"
+            "state" : "translated",
+            "value" : "%@に%@を積みます"
           }
         }
       }
     },
     "%@の自己申告を保存できませんでした。もう一度積んでください" : {
-      "comment" : "Toast when a confirmed manual entry could not be saved; the argument is the theme"
+      "comment" : "Toast when a confirmed manual entry could not be saved; the argument is the theme",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@の自己申告を保存できませんでした。もう一度積んでください"
+          }
+        }
+      }
     },
     "%@まで" : {
-      "comment" : "Jar rail caption; the argument is 最初の時間の核 or 時間の核・N段目"
+      "comment" : "Jar rail caption; the argument is 最初の時間の核 or 時間の核・N段目",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@まで"
+          }
+        }
+      }
     },
     "%lld粒が、ひとつの結晶になった" : {
-      "comment" : "Toast after ten gems fuse; the argument is the gem count"
+      "comment" : "Toast after ten gems fuse; the argument is the gem count",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld粒が、ひとつの結晶になった"
+          }
+        }
+      }
     },
     "%lld粒の結晶、%@" : {
       "comment" : "VoiceOver, crystal inspection card: gems inside, then what its detail shows",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lld粒の結晶、%2$@"
+            "state" : "translated",
+            "value" : "%lld粒の結晶、%@"
           }
         }
       }
     },
     "+%@ ・ まもなく瓶に入ります" : {
-      "comment" : "Undo banner subtitle: the mass, and that the entry is saved shortly"
+      "comment" : "Undo banner subtitle: the mass, and that the entry is saved shortly",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+%@ ・ まもなく瓶に入ります"
+          }
+        }
+      }
     },
     "Proなら、この%@に「%@」と刻めます" : {
       "comment" : "Fusion sheet link for free users; arguments: the crystal's name (結晶…), the month it was made (2026年9月)",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Proなら、この%1$@に「%2$@」と刻めます"
+            "state" : "translated",
+            "value" : "Proなら、この%@に「%@」と刻めます"
           }
         }
       }
     },
     "あと%lld%%で、下の粒がひとつの結晶に" : {
-      "comment" : "Jar capsule before a fusion; the argument is the remaining capacity percent"
+      "comment" : "Jar capsule before a fusion; the argument is the remaining capacity percent",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "あと%lld%%で、下の粒がひとつの結晶に"
+          }
+        }
+      }
     },
     "まだ空っぽ" : {
-      "comment" : "Empty jar at accessibility text sizes: title"
+      "comment" : "Empty jar at accessibility text sizes: title",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "まだ空っぽ"
+          }
+        }
+      }
     },
     "アプリの時間を積む" : {
-      "comment" : "Home menu row: open the Screen Time settings"
+      "comment" : "Home menu row: open the Screen Time settings",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリの時間を積む"
+          }
+        }
+      }
     },
     "テーマを選ぶと、集中を始められます" : {
-      "comment" : "Toast: a widget, link or Siri asked to start a focus before any theme exists"
+      "comment" : "Toast: a widget, link or Siri asked to start a focus before any theme exists",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマを選ぶと、集中を始められます"
+          }
+        }
+      }
     },
     "ポモジェムProの説明を開きます" : {
-      "comment" : "VoiceOver hint on the fusion sheet's Pro month-label link"
+      "comment" : "VoiceOver hint on the fusion sheet's Pro month-label link",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェムProの説明を開きます"
+          }
+        }
+      }
     },
     "下のボタンへ" : {
-      "comment" : "Empty jar at accessibility text sizes: points to the start button below"
+      "comment" : "Empty jar at accessibility text sizes: points to the start button below",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下のボタンへ"
+          }
+        }
+      }
     },
     "今週 %@ ・ 完走%lld回" : {
       "comment" : "Completion card heading line: this week's measured mass, timers completed this week",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "今週 %1$@ ・ 完走%2$lld回"
+            "state" : "translated",
+            "value" : "今週 %@ ・ 完走%lld回"
           }
         }
       }
     },
     "今週の完走%lld回（時間の価値とは別）" : {
-      "comment" : "Completion card heading line for an old receipt without mass: timers completed this week"
+      "comment" : "Completion card heading line for an old receipt without mass: timers completed this week",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今週の完走%lld回（時間の価値とは別）"
+          }
+        }
+      }
     },
     "今週の完走した回数%lld回。回数は時間の価値とは別です" : {
-      "comment" : "VoiceOver, completion card for an old receipt: timers completed this week"
+      "comment" : "VoiceOver, completion card for an old receipt: timers completed this week",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今週の完走した回数%lld回。回数は時間の価値とは別です"
+          }
+        }
+      }
     },
     "今週・時間の核・結晶・年月の瓶" : {
-      "comment" : "Home menu row detail: what 積み上がり holds"
+      "comment" : "Home menu row detail: what 積み上がり holds",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今週・時間の核・結晶・年月の瓶"
+          }
+        }
+      }
     },
     "今週記録した集中時間の質量%@。完走した回数%lld回。回数は時間の価値とは別です" : {
       "comment" : "VoiceOver, completion card: this week's measured mass, timers completed this week",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "今週記録した集中時間の質量%1$@。完走した回数%2$lld回。回数は時間の価値とは別です"
+            "state" : "translated",
+            "value" : "今週記録した集中時間の質量%@。完走した回数%lld回。回数は時間の価値とは別です"
           }
         }
       }
     },
     "休憩の選択を終えると、集中を始められます" : {
-      "comment" : "Toast: a widget, link or Siri asked to start a focus while the reward card waits for the rest choice"
+      "comment" : "Toast: a widget, link or Siri asked to start a focus while the reward card waits for the rest choice",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩の選択を終えると、集中を始められます"
+          }
+        }
+      }
     },
     "元に戻す" : {
-      "comment" : "Undo button for a manual entry that is not saved yet"
+      "comment" : "Undo button for a manual entry that is not saved yet",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "元に戻す"
+          }
+        }
+      }
     },
     "勉強アプリ10分ごとに1粒" : {
-      "comment" : "Home menu row detail: every 10 minutes in the chosen study apps adds one pebble"
+      "comment" : "Home menu row detail: every 10 minutes in the chosen study apps adds one pebble",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "勉強アプリ10分ごとに1粒"
+          }
+        }
+      }
     },
     "取り消しました。瓶には積んでいません" : {
-      "comment" : "Toast after undoing a manual entry"
+      "comment" : "Toast after undoing a manual entry",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り消しました。瓶には積んでいません"
+          }
+        }
+      }
     },
     "小さな粒が%lld段階で結晶になり、瓶に余白ができた" : {
-      "comment" : "Toast after a cascade of fusions; the argument is how many levels formed"
+      "comment" : "Toast after a cascade of fusions; the argument is how many levels formed",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "小さな粒が%lld段階で結晶になり、瓶に余白ができた"
+          }
+        }
+      }
     },
     "成果メモ（任意）" : {
-      "comment" : "Achievement note field title; the same label as the edit sheet in 記録"
+      "comment" : "Achievement note field title; the same label as the edit sheet in 記録",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "成果メモ（任意）"
+          }
+        }
+      }
     },
     "推移・履歴・記念石・月の振り返り" : {
-      "comment" : "Home menu row detail: what 記録 holds"
+      "comment" : "Home menu row detail: what 記録 holds",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "推移・履歴・記念石・月の振り返り"
+          }
+        }
+      }
     },
     "瓶%lld杯ぶん満ちました" : {
-      "comment" : "VoiceOver, jar value: how many times the jar has filled (2.5 kg each)"
+      "comment" : "VoiceOver, jar value: how many times the jar has filled (2.5 kg each)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶%lld杯ぶん満ちました"
+          }
+        }
+      }
     },
     "瓶はまだ空です。下のボタンからテーマを追加できます" : {
-      "comment" : "VoiceOver, empty jar at accessibility text sizes, no theme yet"
+      "comment" : "VoiceOver, empty jar at accessibility text sizes, no theme yet",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶はまだ空です。下のボタンからテーマを追加できます"
+          }
+        }
+      }
     },
     "瓶はまだ空です。下のボタンから最初の集中を始められます" : {
-      "comment" : "VoiceOver, empty jar at accessibility text sizes"
+      "comment" : "VoiceOver, empty jar at accessibility text sizes",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶はまだ空です。下のボタンから最初の集中を始められます"
+          }
+        }
+      }
     },
     "瓶をタップすると粒が跳ねます" : {
-      "comment" : "One-line jar tip in a short jar at accessibility text sizes"
+      "comment" : "One-line jar tip in a short jar at accessibility text sizes",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶をタップすると粒が跳ねます"
+          }
+        }
+      }
     },
     "瓶をダブルタップすると粒が跳ねます" : {
-      "comment" : "One-line jar tip in a short jar at accessibility text sizes, with VoiceOver on"
+      "comment" : "One-line jar tip in a short jar at accessibility text sizes, with VoiceOver on",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶をダブルタップすると粒が跳ねます"
+          }
+        }
+      }
     },
     "積んだ直後は、ホームで数秒のあいだ取り消せます。" : {
-      "comment" : "Manual entry: under the confirm button; the entry can be undone briefly on Home"
+      "comment" : "Manual entry: under the confirm button; the entry can be undone briefly on Home",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "積んだ直後は、ホームで数秒のあいだ取り消せます。"
+          }
+        }
+      }
     },
     "累計%@、集中%lld粒、記念石%@個" : {
       "comment" : "VoiceOver, menu metrics: lifetime mass, focus count, achievement stone count",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "累計%1$@、集中%2$lld粒、記念石%3$@個"
+            "state" : "translated",
+            "value" : "累計%@、集中%lld粒、記念石%@個"
           }
         }
       }
     },
     "結晶の保存を再試行します" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結晶の保存を再試行します"
+          }
+        }
+      }
     },
     "結晶は未保存です" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結晶は未保存です"
+          }
+        }
+      }
     },
     "結晶は未保存です。再試行してください" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結晶は未保存です。再試行してください"
+          }
+        }
+      }
     },
     "結晶をつくっています" : {
-      "comment" : "Jar capsule while ten gems fuse"
+      "comment" : "Jar capsule while ten gems fuse",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結晶をつくっています"
+          }
+        }
+      }
     },
     "結晶をタップすると、内訳を見られます" : {
-      "comment" : "Hint under the jar until a crystal's detail has been opened once"
+      "comment" : "Hint under the jar until a crystal's detail has been opened once",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結晶をタップすると、内訳を見られます"
+          }
+        }
+      }
     },
     "結晶を見つけました" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結晶を見つけました"
+          }
+        }
+      }
     },
     "記念石" : {
-      "comment" : "Home menu metric caption: achievement stone count"
+      "comment" : "Home menu metric caption: achievement stone count",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記念石"
+          }
+        }
+      }
     },
     "記念石は0gで、集中時間・質量・通常の粒数には加わりません。瓶では新しい12個が動き、前の石も記録棚にずっと残ります。" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記念石は0gで、集中時間・質量・通常の粒数には加わりません。瓶では新しい12個が動き、前の石も記録棚にずっと残ります。"
+          }
+        }
+      }
     },
     "進行中の集中があるため、新しい集中は始めませんでした" : {
-      "comment" : "Toast: a widget, link or Siri asked to start a focus while another one still needs attention"
+      "comment" : "Toast: a widget, link or Siri asked to start a focus while another one still needs attention",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "進行中の集中があるため、新しい集中は始めませんでした"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

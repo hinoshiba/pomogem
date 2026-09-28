@@ -18,6 +18,14 @@ settings:
     # Scripts/l10n/l10n.py syncs into the per-feature catalogs and checks in CI.
     LOCALIZATION_PREFERS_STRING_CATALOGS: YES
     SWIFT_EMIT_LOC_STRINGS: YES
+    # The language iOS falls back to when a device prefers neither Japanese
+    # nor English (Korean, Chinese, French ...): English. It becomes
+    # CFBundleDevelopmentRegion in all three bundles. The source language and
+    # the catalog keys stay Japanese (options.developmentLanguage), and
+    # Scripts/l10n/table-map.json's development_region must say the same, so
+    # l10n.py sync gives every key the explicit Japanese value a Japanese
+    # device then needs (Docs/Localization.md).
+    DEVELOPMENT_LANGUAGE: en
 targets:
   PomoGem:
     type: application

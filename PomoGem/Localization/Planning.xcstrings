@@ -2,41 +2,88 @@
   "sourceLanguage" : "ja",
   "strings" : {
     "%@以上" : {
-      "comment" : "Jar total when today's jar is a lower bound; the argument is a mass such as 3.68t"
+      "comment" : "Jar total when today's jar is a lower bound; the argument is a mass such as 3.68t",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@以上"
+          }
+        }
+      }
     },
     "1年を平均365.25日として週回数を換算し、1回の完走を1粒、集中1分を%lldgとして計算します。2.50kgごとの瓶の満杯、長期の質量段階、瓶の光は実画面と同じ計算です。10個ずつまとめるため、長期間でも描画する可動体は%lld体以内です。" : {
       "comment" : "Plan: calculation assumptions; the arguments are grams per minute and the physics body limit",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "1年を平均365.25日として週回数を換算し、1回の完走を1粒、集中1分を%1$lldgとして計算します。2.50kgごとの瓶の満杯、長期の質量段階、瓶の光は実画面と同じ計算です。10個ずつまとめるため、長期間でも描画する可動体は%2$lld体以内です。"
+            "state" : "translated",
+            "value" : "1年を平均365.25日として週回数を換算し、1回の完走を1粒、集中1分を%lldgとして計算します。2.50kgごとの瓶の満杯、長期の質量段階、瓶の光は実画面と同じ計算です。10個ずつまとめるため、長期間でも描画する可動体は%lld体以内です。"
           }
         }
       }
     },
     "あと%@ · 瓶1杯は集中250分相当" : {
-      "comment" : "Plan preview: mass left until the jar fills; the argument is a mass"
+      "comment" : "Plan preview: mass left until the jar fills; the argument is a mass",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "あと%@ · 瓶1杯は集中250分相当"
+          }
+        }
+      }
     },
     "この計画で積む分" : {
-      "comment" : "Title of the card that previews only what the plan adds"
+      "comment" : "Title of the card that previews only what the plan adds",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この計画で積む分"
+          }
+        }
+      }
     },
     "その時点の瓶が満ちるまで" : {
-      "comment" : "VoiceOver: progress of the bottle cycle at the previewed month"
+      "comment" : "VoiceOver: progress of the bottle cycle at the previewed month",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "その時点の瓶が満ちるまで"
+          }
+        }
+      }
     },
     "スライダーを右へ動かすと、この計画で積む分が現れます" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スライダーを右へ動かすと、この計画で積む分が現れます"
+          }
+        }
+      }
     },
     "今日" : {
-      "comment" : "The start of the plan's timeline: today"
+      "comment" : "The start of the plan's timeline: today",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今日"
+          }
+        }
+      }
     },
     "今日の瓶 %@ ＋ この計画 %@" : {
       "comment" : "Breakdown of the jar total: today's jar mass, then the mass the plan adds",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "今日の瓶 %1$@ ＋ この計画 %2$@"
+            "state" : "translated",
+            "value" : "今日の瓶 %@ ＋ この計画 %@"
           }
         }
       }
@@ -46,8 +93,8 @@
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "今日の瓶 %1$@以上 ＋ この計画 %2$@"
+            "state" : "translated",
+            "value" : "今日の瓶 %@以上 ＋ この計画 %@"
           }
         }
       }
@@ -57,8 +104,8 @@
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "今日の瓶 %1$@以上（集計を確認中）＋ この計画 %2$@"
+            "state" : "translated",
+            "value" : "今日の瓶 %@以上（集計を確認中）＋ この計画 %@"
           }
         }
       }
@@ -68,44 +115,129 @@
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "今日の瓶 %1$@（集計を確認中）＋ この計画 %2$@"
+            "state" : "translated",
+            "value" : "今日の瓶 %@（集計を確認中）＋ この計画 %@"
           }
         }
       }
     },
     "今日の瓶の合計を確認しているあいだは、この計画で積む分だけを表示します。" : {
-      "comment" : "Shown while Home re-counts today's jar (iCloud or this iPhone)"
+      "comment" : "Shown while Home re-counts today's jar (iCloud or this iPhone)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今日の瓶の合計を確認しているあいだは、この計画で積む分だけを表示します。"
+          }
+        }
+      }
     },
     "今日の瓶を確認中" : {
-      "comment" : "Bottle-cycle title while Home re-counts today's jar, so the jar's position is not shown"
+      "comment" : "Bottle-cycle title while Home re-counts today's jar, so the jar's position is not shown",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今日の瓶を確認中"
+          }
+        }
+      }
     },
     "増える質量" : {
-      "comment" : "Mass the plan adds, in the results grid"
+      "comment" : "Mass the plan adds, in the results grid",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "増える質量"
+          }
+        }
+      }
     },
     "星図と瓶は、今日からこの計画で積む分の見え方の予測です。今日までの瓶は含めません。粒と結晶は予定した完走リズムを、上の時間・質量は集中時間の累計を表します。記念石・実際の休止日は含めません。" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "星図と瓶は、今日からこの計画で積む分の見え方の予測です。今日までの瓶は含めません。粒と結晶は予定した完走リズムを、上の時間・質量は集中時間の累計を表します。記念石・実際の休止日は含めません。"
+          }
+        }
+      }
     },
     "満杯を確認 · 累計はそのまま次の1杯へ" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "満杯を確認 · 累計はそのまま次の1杯へ"
+          }
+        }
+      }
     },
     "瓶%lld杯目が満ちた" : {
-      "comment" : "Plan preview: the jar filled for the Nth time"
+      "comment" : "Plan preview: the jar filled for the Nth time",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶%lld杯目が満ちた"
+          }
+        }
+      }
     },
     "瓶1杯 2.50kg · 集中250分相当" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶1杯 2.50kg · 集中250分相当"
+          }
+        }
+      }
     },
     "瓶の合計" : {
-      "comment" : "Label: today's jar mass plus the mass the plan adds"
+      "comment" : "Label: today's jar mass plus the mass the plan adds",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶の合計"
+          }
+        }
+      }
     },
     "瓶は2.50kg（集中250分相当）ごとに必ず満ち、満杯の光を見届けてから次の1杯へ進みます。累計は消えず、2.50kg → 25kg → 250kg…の長期段階として別に残ります。回数ではなく、集中1分＝%lldgで両方が進みます。" : {
-      "comment" : "Plan: how the jar fills; the argument is grams per minute"
+      "comment" : "Plan: how the jar fills; the argument is grams per minute",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶は2.50kg（集中250分相当）ごとに必ず満ち、満杯の光を見届けてから次の1杯へ進みます。累計は消えず、2.50kg → 25kg → 250kg…の長期段階として別に残ります。回数ではなく、集中1分＝%lldgで両方が進みます。"
+          }
+        }
+      }
     },
     "確認が済むと、今日の瓶の続きから表示します" : {
-      "comment" : "Bottle-cycle caption while Home re-counts today's jar"
+      "comment" : "Bottle-cycle caption while Home re-counts today's jar",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "確認が済むと、今日の瓶の続きから表示します"
+          }
+        }
+      }
     },
     "確認中" : {
-      "comment" : "Shown instead of the jar total and its long-term milestone while Home re-counts today's jar"
+      "comment" : "Shown instead of the jar total and its long-term milestone while Home re-counts today's jar",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "確認中"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

@@ -1,14 +1,16 @@
 # ローカライズ（多言語化）の決まり
 
-状態: 基盤のみ（2026-09-25）。アプリは今も日本語だけで出荷しています。
-英語は、各画面の翻訳がそろった時点で専用の統合ブランチから有効化します（「英語を有効にする手順」）。
-それまで`main`のどの変更でも、日本語の表示を1文字も変えずに出荷できる状態を保ちます。
+状態: 英語を有効化しました（2026-09-28、統合ブランチ`claude/l10n`の準備（prep）変更）。
+各画面の英語は機能ごとのパッケージが`claude/l10n`へ入れている途中で、すべてそろってから`main`へ統合します
+（「英語を有効にする手順」）。日本語の表示は1文字も変えません。
 
 ## 原則
 
 - 開発言語は日本語です。String Catalog（`.xcstrings`）の`sourceLanguage`は`ja`、キーは日本語の原文そのものです。
-  開発地域（`CFBundleDevelopmentRegion`）が`ja`のあいだは、翻訳がない言語ではキーがそのまま表示されるため、
-  日本語の表示はcatalogの中身に左右されません。開発地域を`en`にすると、この前提は崩れます（「英語を有効にする手順」の3）。
+- 出荷言語は日本語と英語、開発地域（`CFBundleDevelopmentRegion`、iOSが最後に頼る言語）は英語です
+  （「第3の言語」）。そのため日本語の端末が日本語を読めるのは、catalogの全キーに日本語の値があるときだけです。
+  値は`l10n.py sync`がコードの日本語をそのまま書きます。文言を変えたビルドの後は必ず`sync`してください
+  （日本語の値がないキーは`check`が失敗します）。
 - テーブル（catalog）は**文字列を書いたファイル**で決まります。表示される画面では決まりません。
   対応は`Scripts/l10n/table-map.json`の`rules`で、上から順に最初に一致した規則を使います。
   例: `AchievementKind.title`は`Models.swift`にあるので、記録画面に出ても`Models`テーブルです。
@@ -71,9 +73,9 @@
   自分で書式を組み立てず、基盤（infra）の変更で`Shared/`へ移します（`project.yml`を編集できるのは基盤と統合だけです）。
   widgetのbundleには`Common`テーブルがないため、`Shared/`のhelperにはcatalogのキーを置きません。
 - helperは既定で`PomoGemLocale.current`（文字列を表示している言語＋利用者の地域）で書式を決めます。
-  日本語と英語の2言語になると、韓国語のiPhoneでは文字列は日本語（開発地域）なのに`Locale.current`は
-  en_KRになります（iOS 26.5 Simulatorで確認）。`Locale.current`で書式を決めると、日本語の画面に
-  「Sep 2026」「25 min」が混ざります。日本語だけの今は`Locale.current`と同じ結果です（ja_KR、ja_USなど）。
+  文字列の言語と`Locale.current`はずれることがあります。開発地域が日本語だったとき、韓国語のiPhoneでは
+  文字列は日本語なのに`Locale.current`はen_KRでした（iOS 26.5 Simulatorで確認）。英語に倒した今は、
+  韓国語のiPhoneは英語の文字列とen_KRの書式になり、日本語の端末はja_JPのままです。
 - 時間と読み上げ用の質量の日本語は、ICUに頼らずコードで組み立てます。単位の前後の空白はiOSの版で
   変わりうるICUデータに依存し、ここでは最新のSimulatorしか試せないためです。英語はFoundationの書式を使います。
 - `DurationText.Units`で単位を選びます。タイマーの長さは`.minutesSeconds`（90分）、
@@ -98,8 +100,13 @@
   書きます（`PomoGem/App/Intents/**`は`Focus`テーブル）。App Intentsのメタデータはビルド時に取り出されるため、
   引数には文字列リテラルだけを渡します。
 - App Shortcutのフレーズ（`PomoGemShortcuts`）だけは、Appleの決まりで専用のcatalog`AppShortcuts.xcstrings`に
-  訳を置きます。日本語だけの今はコードの日本語フレーズがそのまま使われるので、このcatalogはまだ作りません。
-  英語を有効にするときに作り、英語のフレーズにも必ず`${applicationName}`を入れます（「英語を有効にする手順」の4）。
+  訳を置きます。英語のフレーズにも必ず`${applicationName}`を入れます（「英語を有効にする手順」の4）。
+  このcatalogは準備（prep）の変更で作りました（`table-map.json`の`system_catalogs`）。ショートカット1つが
+  1つのキーで、値はフレーズの組（stringSet）です。`l10n.py sync`がビルドの`ExtractedAppShortcutsMetadata.stringsdata`から
+  取り込み、開発地域が`en`のあいだは日本語のフレーズも明示します。日本語がないまま英語だけが入ると、
+  `ja.lproj/AppShortcuts.strings`が作られず、日本語の端末のSiriが英語のフレーズを読みます。英語は
+  `l10n.py set --table AppShortcuts --from en.json`で、キーにフレーズの配列（`{"${applicationName}で集中を始める": ["Start focus in ${applicationName}", …]}`）を渡します。
+  `check`は、訳したフレーズに`${applicationName}`がないもの、日本語のフレーズにない引数（`${length}`など）を使うものを誤りにします。
 
 ## 意図的な例外: `// l10n-ignore:`
 
@@ -171,16 +178,36 @@ catalogの同期は必ず全テーブルまとめて行います（一部だけ�
 - 英語の期待値は`PomoGemTests/Localization/<パッケージ>LocalizationTests.swift`に書きます。各パッケージは自分の
   ファイルだけを編集します。英語は`LocalizationTestSupport.englishBundle()`と`LocalizationTestSupport.english`で
   明示的に解決し、プロセスの言語は変えません。英語の有効化前は自動でskipします。
+  `Common`とInfoPlist、`AppLinks`、第3の言語の期待値は`PomoGemTests/Localization/CommonLocalizationTests.swift`（準備の変更）にあります。
 
 ## CI
 
 - `Scripts/check-oss-readiness.sh`: `Scripts/l10n/test-l10n.py`（ツール自身のテスト）と`l10n.py check`（静的検査）。
 - unit testの後: `l10n.py check --derived-data DerivedData-CI-Tests`（コンパイラが抽出したキーとcatalogの照合）。
-- Release build: `l10n.py verify-bundle`。今は3つのbundleすべてに`ja.lproj`があり、`en.lproj`がないこと、
-  開発地域が`ja`であることを確認します。
+- Release build: `l10n.py verify-bundle`。3つのbundleすべてに`ja.lproj`と`en.lproj`（`shipping_languages`と同じ）があり、
+  開発地域が`table-map.json`の`development_region`（`en`）と同じで、日本語の端末が全キーを日本語で読めることを確認します。
   `Scripts/verify-release-archive.sh`も同じ検査をarchiveに行います。
 
+## 第3の言語（日本語も英語も持たない端末）
+
+韓国語・中国語・フランス語などの端末には**英語**を出します（オーケストレーターの判断、2026-09-24。
+オーナーが変更できます）。3つのbundleの開発地域（`CFBundleDevelopmentRegion`）を`en`にしてあり、iOSは
+利用者の言語リストに一致する言語がないとき開発地域の言語を使います。
+
+- 設定: `project.yml`の`settings.base.DEVELOPMENT_LANGUAGE: en`と`table-map.json`の`development_region: "en"`。
+  2つは必ず一緒に変えます（`check`、`verify-bundle`、`LocalizationEnvironmentTests`が食い違いを検出します）。
+  `options.developmentLanguage`（catalogの元の言語）は`ja`のままです。
+- 日本語の端末（言語リストのどこかに日本語がある端末）は、これまでどおり日本語です。
+- 確認（2026-09-29、iOS 26.5 Simulator）: Simulator全体を韓国語（ko-KR）にすると、ホーム画面のアイコン名と
+  iOSの確認ダイアログのアプリ名が「PomoGem」になり、アプリ内は英語の文字列（まだ訳していない画面は日本語のキー）に
+  なりました。書式は`PomoGemLocale`が英語と利用者の地域（en_KR）で決めます。日本語（ja-JP）では、変更前のビルドと
+  画面が画素単位で同じでした（アイコン名とダイアログは「ポモジェム」）。`CommonLocalizationTests.testThirdLanguagesFallBackToEnglish`も参照。
+- 英語の訳がまだないキーは、英語や第3の言語の端末でも日本語のキーがそのまま出ます。統合の`check --strict`がすべての
+  テーブルの英語を求めるまでは、翻訳途中の画面に日本語が混ざります。
+
 ## 英語を有効にする手順（統合ブランチ）
+
+準備（prep）の変更で1〜3が済んでいます。各パッケージが4を、統合が5を行います。
 
 1. 3つのInfoPlist catalogへ英語を入れる: `CFBundleDisplayName`（PomoGem／PomoGem Screen Time）、
    `NSMotionUsageDescription`、`NSPhotoLibraryAddUsageDescription`、`NSAppleMusicUsageDescription`。
@@ -215,9 +242,16 @@ catalogの同期は必ず全テーブルまとめて行います（一部だけ�
 英語の用語・大文字小文字・単位・句読点は`Scripts/l10n/glossary.json`にまとめています。
 製品の文体（急かさない、責めない、連続記録を求めない）は`Docs/EngagementArchitecture.md`に従います。
 
+## サイトへのリンク（`AppLinks`）
+
+- サポート・プライバシーポリシー・販売条件は、アプリの文字列が英語のとき英語のページ（`?lang=en`、例:
+  `https://pomogem.hinoshiba.com/?lang=en#privacy`。英語のApp Storeの掲載と同じアドレス）を開きます
+  （`AppLinks.inAppLanguage`）。日本語ではこれまでと同じアドレスです。
+- `POMOGEM_PRIVACY_POLICY_URL`（Info.plist）は日本語の正規のアドレスのままです（3つのスクリプトが固定しています）。
+- シェアカードとキャプションのサイトのアドレス（`AppLinks.marketingWebsite`）はブランドとして言語によらず同じです。
+
 ## 基盤の後に残した作業
 
-- `Theme.swift`、`Constants.swift`、`PomoGemLogo.swift`の文言を`Common`へ移す（機能ごとの作業と同時に行う）。
-- 共有の時間表示`DurationPresentation`ができたら、`DurationText`の上に載せ替える。
-- `AppLinks`に英語版ページ（`?lang=en`）の切り替えを加える。`POMOGEM_PRIVACY_POLICY_URL`は変えません。
-- `table-map.json`の規則にまだ入っていないファイル（`l10n.py check`が「unassigned」と表示）のテーブルを決める。
+準備（prep）の変更で次を済ませました: `Theme.swift`・`Constants.swift`・`PomoGemLogo.swift`の`Common`化と英語、
+`DurationPresentation`の`DurationText`への載せ替え（日本語は同じ）、`AppLinks`の`?lang=en`、
+`table-map.json`の未割り当てファイルの解消、InfoPlistの英語、英語の有効化と第3の言語の英語化。

@@ -1,34 +1,493 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
-    "%@g" : {
-      "comment" : "Mass in grams. %@ is the number, already formatted. en: '%@ g' (with a space; never converted to ounces)."
-    },
-    "%@kg" : {
-      "comment" : "Mass in kilograms. %@ is the number, already formatted. en: '%@ kg'."
-    },
-    "%lld分" : {
-      "comment" : "A duration in whole minutes"
-    },
-    "%lld時間" : {
-      "comment" : "A duration in whole hours"
-    },
-    "%lld時間%lld分" : {
-      "comment" : "A duration in hours and minutes",
+    "%@ +250g 積んだ" : {
+      "comment" : "Toast after a 25-minute focus. %@ is the theme name the gem was added to",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Added 250 g to %@"
+          }
+        },
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lld時間%2$lld分"
+            "state" : "translated",
+            "value" : "%@ +250g 積んだ"
+          }
+        }
+      }
+    },
+    "%@g" : {
+      "comment" : "Mass in grams. %@ is the number, already formatted. en: '%@ g' (with a space; never converted to ounces).",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ g"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@g"
+          }
+        }
+      }
+    },
+    "%@kg" : {
+      "comment" : "Mass in kilograms. %@ is the number, already formatted. en: '%@ kg'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kg"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@kg"
+          }
+        }
+      }
+    },
+    "%lld〜%lld分" : {
+      "comment" : "Range of custom focus lengths. %1$lld is the shortest and %2$lld the longest length in minutes. en: '%1$lld–%2$lld min'",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld–%2$lld min"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld〜%lld分"
           }
         }
       }
     },
     "%lld粒" : {
-      "comment" : "Number of gems. %lld is the count. en needs plural variations: '%lld gem' / '%lld gems'."
+      "comment" : "Number of gems. %lld is the count. en needs plural variations: '%lld gem' / '%lld gems'.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld gem"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld gems"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld粒"
+          }
+        }
+      }
+    },
+    "✦ 金の粒が出た！ +%@" : {
+      "comment" : "Toast for a gold gem (rare reward). %@ is the mass with its unit, e.g. 250g",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "✦ A gold gem! +%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "✦ 金の粒が出た！ +%@"
+          }
+        }
+      }
+    },
+    "❖ 虹の粒！！ +%@" : {
+      "comment" : "Toast for a rainbow gem (rare reward). %@ is the mass with its unit, e.g. 250g",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "❖ A rainbow gem!! +%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "❖ 虹の粒！！ +%@"
+          }
+        }
+      }
+    },
+    "まだ空っぽ。" : {
+      "comment" : "Home: title inside a jar that holds no gems yet",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Still empty."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "まだ空っぽ。"
+          }
+        }
+      }
+    },
+    "アプリが終了したため、この回は積まれませんでした" : {
+      "comment" : "Toast: the app was terminated during a focus, so that session added nothing",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The app was closed, so this session wasn't added."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリが終了したため、この回は積まれませんでした"
+          }
+        }
+      }
+    },
+    "オーロラ" : {
+      "comment" : "Home atmosphere name: the aurora look",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aurora"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オーロラ"
+          }
+        }
+      }
+    },
+    "ポモジェム" : {
+      "comment" : "Brand wordmark beside the jar mark (en: PomoGem)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PomoGem"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェム"
+          }
+        }
+      }
+    },
+    "ポモジェムPro" : {
+      "comment" : "Product name of the one-time Pro purchase",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PomoGem Pro"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェムPro"
+          }
+        }
+      }
     },
     "・" : {
-      "comment" : "Separator between compact stats, as in 通常3・金1. en: ' · ' (middle dot with spaces)."
+      "comment" : "Separator between compact stats, as in 通常3・金1. en: ' · ' (middle dot with spaces).",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : " · "
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "・"
+          }
+        }
+      }
+    },
+    "一時停止" : {
+      "comment" : "Timer button: pause the running focus",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pause"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一時停止"
+          }
+        }
+      }
+    },
+    "今日はここまで" : {
+      "comment" : "Timer button: a gentle stop that ends this focus without completing it (not 'Give Up' or 'Done')",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop for Today"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今日はここまで"
+          }
+        }
+      }
+    },
+    "仕事にも馴染む" : {
+      "comment" : "Home atmosphere subtitle for 書斎 (Den)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suits work, too"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仕事にも馴染む"
+          }
+        }
+      }
+    },
+    "光に包まれる" : {
+      "comment" : "Home atmosphere subtitle for オーロラ (Aurora)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wrapped in light"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "光に包まれる"
+          }
+        }
+      }
+    },
+    "再開する" : {
+      "comment" : "Timer button: resume a paused focus",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resume"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再開する"
+          }
+        }
+      }
+    },
+    "昼にも軽やか" : {
+      "comment" : "Home atmosphere subtitle for 朝凪 (Morning Calm)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Airy, even by day"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "昼にも軽やか"
+          }
+        }
+      }
+    },
+    "書斎" : {
+      "comment" : "Home atmosphere name: the warm den / reading-room look (not 'Study')",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Den"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "書斎"
+          }
+        }
+      }
+    },
+    "朝凪" : {
+      "comment" : "Home atmosphere name: the calm, light morning look",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Morning Calm"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "朝凪"
+          }
+        }
+      }
+    },
+    "深夜" : {
+      "comment" : "Home atmosphere name: the dark night-sky look",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Midnight"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "深夜"
+          }
+        }
+      }
+    },
+    "瓶が待ってる。今日のひと粒、積んでいく？" : {
+      "comment" : "Settings: example text of the opt-in daily reminder (an invitation, never pressure)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your jar is here whenever you're ready. Add a gem today?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶が待ってる。今日のひと粒、積んでいく？"
+          }
+        }
+      }
+    },
+    "画面を離れたので、この回は自己申告あつかいになった" : {
+      "comment" : "Focus: the person left the screen, so the session is counted as self-reported",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You left the screen, so this session counts as self-reported."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面を離れたので、この回は自己申告あつかいになった"
+          }
+        }
+      }
+    },
+    "自己申告の粒は破線つき。総質量には入るが、シェアの既定は実測のみ。" : {
+      "comment" : "Manual entry: how self-reported gems look and count",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Self-reported gems have a dashed outline. They count toward your total mass, but shares include only timed gems by default."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自己申告の粒は破線つき。総質量には入るが、シェアの既定は実測のみ。"
+          }
+        }
+      }
+    },
+    "自己申告はこの端末で1日3回まで" : {
+      "comment" : "Toast: self-reported time can be added at most three times a day on this device",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Up to 3 self-reported entries a day on this device"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自己申告はこの端末で1日3回まで"
+          }
+        }
+      }
+    },
+    "閉じる" : {
+      "comment" : "Sheet close button (also its VoiceOver label unless the sheet names what it closes)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "閉じる"
+          }
+        }
+      }
+    },
+    "静かな定番" : {
+      "comment" : "Home atmosphere subtitle for 深夜 (Midnight)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A quiet classic"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "静かな定番"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

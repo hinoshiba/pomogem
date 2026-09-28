@@ -2,127 +2,366 @@
   "sourceLanguage" : "ja",
   "strings" : {
     "iCloudに保存して同期" : {
-      "comment" : "First-run storage choice: iCloud option (button label)"
+      "comment" : "First-run storage choice: iCloud option (button label)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudに保存して同期"
+          }
+        }
+      }
     },
     "iCloudの空き容量が不足しています" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudの空き容量が不足しています"
+          }
+        }
+      }
     },
     "iCloudへの最終送信：%@" : {
-      "comment" : "Settings: when this iPhone last sent records to iCloud, e.g. 3分前"
+      "comment" : "Settings: when this iPhone last sent records to iCloud, e.g. 3分前",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudへの最終送信：%@"
+          }
+        }
+      }
     },
     "iCloudへの送信がうまくいっていません" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudへの送信がうまくいっていません"
+          }
+        }
+      }
     },
     "iPhoneの「設定」で、いちばん上の自分の名前から「iCloud」に進むと、空き容量を確認できます。下のボタンでポモジェムの画面が開いたときは、左上の「設定」で戻ってください。" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhoneの「設定」で、いちばん上の自分の名前から「iCloud」に進むと、空き容量を確認できます。下のボタンでポモジェムの画面が開いたときは、左上の「設定」で戻ってください。"
+          }
+        }
+      }
     },
     "「設定」アプリを開く" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「設定」アプリを開く"
+          }
+        }
+      }
     },
     "このiPhoneだけに保存" : {
-      "comment" : "First-run storage choice: local-only option (button label)"
+      "comment" : "First-run storage choice: local-only option (button label)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneだけに保存"
+          }
+        }
+      }
     },
     "このiPhoneには、まだiCloudへ送信できていない記録がある可能性があります。" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneには、まだiCloudへ送信できていない記録がある可能性があります。"
+          }
+        }
+      }
     },
     "このiPhoneには、まだiCloudへ送信できていない記録がある可能性があります。続ける前に、下の「%@」で控えを保存しておくと安心です。" : {
-      "comment" : "Refresh-from-iCloud confirmation when recent exports failed; the argument is the export button's title below"
+      "comment" : "Refresh-from-iCloud confirmation when recent exports failed; the argument is the export button's title below",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneには、まだiCloudへ送信できていない記録がある可能性があります。続ける前に、下の「%@」で控えを保存しておくと安心です。"
+          }
+        }
+      }
     },
     "たった今" : {
-      "comment" : "Last iCloud send was less than a minute ago"
+      "comment" : "Last iCloud send was less than a minute ago",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "たった今"
+          }
+        }
+      }
     },
     "どちらを選んでも、タイマーと瓶は同じように使えます。" : {
-      "comment" : "First-run storage choice: one-sentence message under the title"
+      "comment" : "First-run storage choice: one-sentence message under the title",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "どちらを選んでも、タイマーと瓶は同じように使えます。"
+          }
+        }
+      }
     },
     "オンラインで再試行" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オンラインで再試行"
+          }
+        }
+      }
     },
     "テーマ名、成果メモ、集中記録、設定、進行中タイマーをApple AccountのプライベートiCloudへ送信します。オンラインでApple Accountを確認した後に保存方式を確定します。このiPhoneに保存済みの記録があれば、オフラインでも使えます。初回の取得や同期の再開には通信が必要です。後で同期を止めるときは、iCloudの記録をこのiPhoneへコピーし、iCloudの記録も残します。" : {
-      "comment" : "First-run storage choice: iCloud confirmation message (full caveats)"
+      "comment" : "First-run storage choice: iCloud confirmation message (full caveats)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマ名、成果メモ、集中記録、設定、進行中タイマーをApple AccountのプライベートiCloudへ送信します。オンラインでApple Accountを確認した後に保存方式を確定します。このiPhoneに保存済みの記録があれば、オフラインでも使えます。初回の取得や同期の再開には通信が必要です。後で同期を止めるときは、iCloudの記録をこのiPhoneへコピーし、iCloudの記録も残します。"
+          }
+        }
+      }
     },
     "休憩中です" : {
-      "comment" : "Launch waiting screen: a break timer is running"
+      "comment" : "Launch waiting screen: a break timer is running",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩中です"
+          }
+        }
+      }
     },
     "休憩中です。残り%lld分%lld秒" : {
       "comment" : "VoiceOver: running break with remaining minutes and seconds",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "休憩中です。残り%1$lld分%2$lld秒"
+            "state" : "translated",
+            "value" : "休憩中です。残り%lld分%lld秒"
           }
         }
       }
     },
     "同じApple AccountのiPhone間で、記録を同期します。" : {
-      "comment" : "First-run storage choice: the iCloud option's one line"
+      "comment" : "First-run storage choice: the iCloud option's one line",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同じApple AccountのiPhone間で、記録を同期します。"
+          }
+        }
+      }
     },
     "最近の記録をiCloudへ送信できていません。記録はこのiPhoneに保存されています。iCloudに空きができると、自動で送信を再開します。" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近の記録をiCloudへ送信できていません。記録はこのiPhoneに保存されています。iCloudに空きができると、自動で送信を再開します。"
+          }
+        }
+      }
     },
     "残り %@" : {
-      "comment" : "Launch waiting screen: remaining time of the timer, e.g. 残り 12:34"
+      "comment" : "Launch waiting screen: remaining time of the timer, e.g. 残り 12:34",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "残り %@"
+          }
+        }
+      }
     },
     "確認が済むと、この集中を瓶に積みます。" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "確認が済むと、この集中を瓶に積みます。"
+          }
+        }
+      }
     },
     "自動で再試行しています。記録はこのiPhoneに保存されています。" : {
-
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自動で再試行しています。記録はこのiPhoneに保存されています。"
+          }
+        }
+      }
     },
     "記録の保存先を選んでください" : {
-      "comment" : "First-run storage choice: screen title"
+      "comment" : "First-run storage choice: screen title",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録の保存先を選んでください"
+          }
+        }
+      }
     },
     "記録はこのiPhoneだけに保存し、iCloudへは送信しません。" : {
-      "comment" : "First-run storage choice: the local-only option's one line"
+      "comment" : "First-run storage choice: the local-only option's one line",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録はこのiPhoneだけに保存し、iCloudへは送信しません。"
+          }
+        }
+      }
     },
     "記録はこのiPhoneだけに保存し、iCloudへは送信しません。アプリを削除すると、記録は失われます。あとでiCloud同期に切り替えると、このiPhoneの記録はiCloudの記録に置き換わります。このiPhoneの記録をiCloudへ移すことは、現在できません。" : {
-      "comment" : "First-run storage choice: local-only confirmation message (full caveats)"
+      "comment" : "First-run storage choice: local-only confirmation message (full caveats)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録はこのiPhoneだけに保存し、iCloudへは送信しません。アプリを削除すると、記録は失われます。あとでiCloud同期に切り替えると、このiPhoneの記録はiCloudの記録に置き換わります。このiPhoneの記録をiCloudへ移すことは、現在できません。"
+          }
+        }
+      }
     },
     "通信がないまま今すぐ使うには、Appスイッチャーでポモジェムを終了してから開き直してください（アプリは削除しないでください）。" : {
-      "comment" : "Offline launch wall, under the online retry: how to use the phone's copy right away"
+      "comment" : "Offline launch wall, under the online retry: how to use the phone's copy right away",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通信がないまま今すぐ使うには、Appスイッチャーでポモジェムを終了してから開き直してください（アプリは削除しないでください）。"
+          }
+        }
+      }
     },
     "通信が戻ると自動で確認して、いつもの画面に戻ります。記録はこのiPhoneに残っています。" : {
-      "comment" : "Launch wall after an iCloud session was closed in the background and the phone is now offline"
+      "comment" : "Launch wall after an iCloud session was closed in the background and the phone is now offline",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通信が戻ると自動で確認して、いつもの画面に戻ります。記録はこのiPhoneに残っています。"
+          }
+        }
+      }
     },
     "通信が戻るのを待っています" : {
-      "comment" : "Launch wall title: offline after an iCloud session; a restored connection resumes automatically"
+      "comment" : "Launch wall title: offline after an iCloud session; a restored connection resumes automatically",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通信が戻るのを待っています"
+          }
+        }
+      }
     },
     "通信が途切れていた場合は、つながると自動で確認します。通信のない場所で今すぐ使うには、Appスイッチャーでポモジェムを終了してから開き直してください（アプリは削除しないでください）。" : {
-      "comment" : "iCloud check timed-out wall, under the online retry: the automatic check and how to go on offline"
+      "comment" : "iCloud check timed-out wall, under the online retry: the automatic check and how to go on offline",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通信が途切れていた場合は、つながると自動で確認します。通信のない場所で今すぐ使うには、Appスイッチャーでポモジェムを終了してから開き直してください（アプリは削除しないでください）。"
+          }
+        }
+      }
     },
     "集中が終わりました" : {
-      "comment" : "Launch waiting screen: a focus timer reached its end"
+      "comment" : "Launch waiting screen: a focus timer reached its end",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中が終わりました"
+          }
+        }
+      }
     },
     "集中が終わりました。確認が済むと、この集中を瓶に積みます。" : {
-      "comment" : "VoiceOver: the focus timer ended while the app waits for iCloud"
+      "comment" : "VoiceOver: the focus timer ended while the app waits for iCloud",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中が終わりました。確認が済むと、この集中を瓶に積みます。"
+          }
+        }
+      }
     },
     "集中した時間が、粒になって瓶にたまっていきます。" : {
-      "comment" : "First-run storage choice: the app's one-line promise under the logo"
+      "comment" : "First-run storage choice: the app's one-line promise under the logo",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中した時間が、粒になって瓶にたまっていきます。"
+          }
+        }
+      }
     },
     "集中は一時停止中です" : {
-      "comment" : "Launch waiting screen: a focus timer is paused"
+      "comment" : "Launch waiting screen: a focus timer is paused",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中は一時停止中です"
+          }
+        }
+      }
     },
     "集中は一時停止中です。残り%lld分%lld秒" : {
       "comment" : "VoiceOver: paused focus with remaining minutes and seconds",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "集中は一時停止中です。残り%1$lld分%2$lld秒"
+            "state" : "translated",
+            "value" : "集中は一時停止中です。残り%lld分%lld秒"
           }
         }
       }
     },
     "集中は続いています" : {
-      "comment" : "Launch waiting screen: a focus timer is still running"
+      "comment" : "Launch waiting screen: a focus timer is still running",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中は続いています"
+          }
+        }
+      }
     },
     "集中は続いています。残り%lld分%lld秒" : {
       "comment" : "VoiceOver: running focus with remaining minutes and seconds",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "集中は続いています。残り%1$lld分%2$lld秒"
+            "state" : "translated",
+            "value" : "集中は続いています。残り%lld分%lld秒"
           }
         }
       }

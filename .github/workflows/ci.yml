@@ -163,8 +163,9 @@ jobs:
           done
 
           # The app and both extensions carry exactly the shipping
-          # localizations: ja.lproj everywhere, and no en.lproj until English
-          # is activated (Docs/Localization.md).
+          # localizations (ja and en), fall back to the development region
+          # (en), and let Japanese devices read Japanese from every table
+          # (Docs/Localization.md).
           python3 Scripts/l10n/l10n.py verify-bundle "$app_bundle"
 
       - name: Reject UI-test hooks in Release app
