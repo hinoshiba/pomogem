@@ -190,7 +190,7 @@ struct PaywallView: View {
                 Link(destination: Self.purchaseHistoryURL) {
                     Label {
                         Text("Appleの購入履歴を確認", tableName: "Paywall",
-                             comment: "Paywall, Pro owned: link to Apple's purchase history (reportaproblem.apple.com)")
+                             comment: "Paywall, Pro owned: link to Apple's purchase history on reportaproblem.apple.com")
                     } icon: {
                         Image(systemName: "arrow.up.right.square")
                     }
