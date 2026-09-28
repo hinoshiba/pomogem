@@ -139,7 +139,7 @@ final class OverviewLocalizationTests: XCTestCase {
         )
         XCTAssertEqual(
             try english("瓶の中は、粒%lld個・表示中の結晶%lld個・記念石%lld個の代表表示です。", 28, 16, 8),
-            "The jar shows a sample. Gems: 28 · Crystals from this page: 16 · Milestone stones: 8"
+            "The jar shows a sample of gems (28), crystals from this page (16) and milestone stones (8)."
         )
         XCTAssertEqual(try english("%lld段", 1), "1 tier")
         XCTAssertEqual(try english("%lld段", 4), "4 tiers")
@@ -163,6 +163,17 @@ final class OverviewLocalizationTests: XCTestCase {
         XCTAssertEqual(try english("%lld粒・%@", 1, "10%"), "1 gem · 10%")
         XCTAssertEqual(try english("%lld粒・%@", 12, "40%"), "12 gems · 40%")
         XCTAssertEqual(try english("まとめた日：%@ 〜 %@", "Sep 1, 2026", "Sep 24, 2026"), "Combined Sep 1, 2026 – Sep 24, 2026")
+    }
+
+    /// The legend's "=" is glued to the time, so a narrow chip wraps as
+    /// "10 min =" over "100 g" and never splits a unit.
+    func testLegendStepKeepsUnitsWholeInEnglish() throws {
+        let bundle = try LocalizationTestSupport.englishBundle()
+        let time = DurationText.short(seconds: 600, units: .minutesSeconds, locale: en)
+        let mass = MassText.grams("100", bundle: bundle, locale: en)
+        XCTAssertEqual(time, "10 min")
+        XCTAssertEqual(mass, "100 g")
+        XCTAssertEqual(try english("%@ = %@", "10\u{00A0}min", "100\u{00A0}g"), "10\u{00A0}min\u{00A0}= 100\u{00A0}g")
     }
 
     func testTimeCoreVoiceOverInEnglish() throws {

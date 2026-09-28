@@ -1097,9 +1097,12 @@ struct AccumulationOverviewView: View {
                         currentWeekStats
                     }
                 } else {
-                    HStack(spacing: 8) {
+                    // Equal-height tiles, titles on one top line: an English
+                    // title such as "Completed sessions" wraps to two lines.
+                    HStack(alignment: .top, spacing: 8) {
                         currentWeekStats
                     }
+                    .fixedSize(horizontal: false, vertical: true)
                 }
             }
             if currentWeekSummary.cardState == .measured,
@@ -1506,25 +1509,35 @@ struct AccumulationOverviewView: View {
             Text("時間をズームする", tableName: "Overview", comment: "Section title above the Now / Crystals / Years & Months lens picker")
                 .pomogemSectionTitle()
             if layoutPolicy.usesMenuLensPicker {
-                Picker(String(localized: "表示の距離", table: "Overview", comment: "Label of the lens picker (Now / Crystals / Years & Months)"), selection: $selectedLens) {
-                    ForEach(AccumulationLens.allCases) { lens in
-                        Label(lens.title, systemImage: lens.symbol).tag(lens)
+                // A menu with its own label rather than a menu-style Picker:
+                // the system picker button keeps a one-line height, so at
+                // AX5 an English lens name ("Crystals", "Years & Months")
+                // wrapped and was clipped. This label grows with its text.
+                Menu {
+                    lensPicker
+                } label: {
+                    HStack(spacing: 10) {
+                        Label(selectedLens.title, systemImage: selectedLens.symbol)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .accessibilityHidden(true)
                     }
+                    .padding(.vertical, 8)
+                    .contentShape(Rectangle())
                 }
-                .pickerStyle(.menu)
+                .foregroundStyle(PomoGemTheme.amber)
                 .tint(PomoGemTheme.amber)
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 .padding(.horizontal, 12)
                 .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 14))
+                .accessibilityLabel(lensPickerTitle)
+                .accessibilityValue(selectedLens.title)
                 .accessibilityIdentifier("overview.lens")
             } else {
-                Picker(String(localized: "表示の距離", table: "Overview", comment: "Label of the lens picker (Now / Crystals / Years & Months)"), selection: $selectedLens) {
-                    ForEach(AccumulationLens.allCases) { lens in
-                        Label(lens.title, systemImage: lens.symbol).tag(lens)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier("overview.lens")
+                lensPicker
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("overview.lens")
             }
             Text(selectedLens == .timeline
                 ? pageScope.timelineDetail(isCloudOfflineSession: isCloudOfflineSession)
@@ -1542,6 +1555,18 @@ struct AccumulationOverviewView: View {
                     PomoGemTheme.card,
                     in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                 )
+        }
+    }
+
+    private var lensPickerTitle: String {
+        String(localized: "表示の距離", table: "Overview", comment: "Label of the lens picker (Now / Crystals / Years & Months)")
+    }
+
+    private var lensPicker: some View {
+        Picker(lensPickerTitle, selection: $selectedLens) {
+            ForEach(AccumulationLens.allCases) { lens in
+                Label(lens.title, systemImage: lens.symbol).tag(lens)
+            }
         }
     }
 
@@ -1746,10 +1771,22 @@ enum FusionLegendStep: CaseIterable, Hashable {
     }
 
     /// Minutes only (「60分」, not 「1時間」), as the legend has always read.
+    /// Each unit stays whole ("10 min", "100 g"), and the English format
+    /// joins "=" to the time, so a narrow chip always breaks as
+    /// "10 min =" over "100 g" (the Japanese has no spaces to break at).
     private static func equation(minutes: Int) -> String {
         let grams = minutes * Constants.Mass.gramsPerMinute
-        let time = DurationText.short(seconds: minutes * 60, units: .minutesSeconds)
-        return "\(time) = \(MassText.grams("\(grams)"))"
+        let time = nonBreaking(DurationText.short(seconds: minutes * 60, units: .minutesSeconds))
+        let mass = nonBreaking(MassText.grams("\(grams)"))
+        return String(
+            localized: "\(time) = \(mass)",
+            table: "Overview",
+            comment: "Time core legend step: a focus time equals a mass (10分 = 100g). en: '%1$@<no-break space>= %2$@', so a line breaks only after '='."
+        )
+    }
+
+    private static func nonBreaking(_ text: String) -> String {
+        text.replacingOccurrences(of: " ", with: "\u{00A0}")
     }
 }
 
@@ -2178,7 +2215,7 @@ private struct OverviewStat: View {
                 .foregroundStyle(PomoGemTheme.text)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(12)
         .background(PomoGemTheme.raised, in: RoundedRectangle(cornerRadius: 14))
     }

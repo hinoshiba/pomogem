@@ -1,6 +1,23 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "%@ = %@" : {
+      "comment" : "Time core legend step: a focus time equals a mass (10分 = 100g). en: '%1$@<no-break space>= %2$@', so a line breaks only after '='.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ = %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ = %@"
+          }
+        }
+      }
+    },
     "%@ 〜 %@" : {
       "comment" : "Crystal detail: the date range its gems come from (start, end)",
       "localizations" : {
@@ -2730,7 +2747,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The jar shows a sample. Gems: %1$lld · Crystals from this page: %2$lld · Milestone stones: %3$lld"
+            "value" : "The jar shows a sample of gems (%1$lld), crystals from this page (%2$lld) and milestone stones (%3$lld)."
           }
         },
         "ja" : {
