@@ -1902,14 +1902,15 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         (probe.value as? String) ?? probe.label
     }
 
-    /// The probe without `homeBodyEvaluations`. That field counts Home's
-    /// re-renders for HomeIdleRenderUITests, and closing a focus re-renders
-    /// Home, so comparing it made "the jar did not change" fail every time.
-    /// Every field about what the jar holds and shows is still compared.
+    /// The probe without Home's render counters (`homeBodyEvaluations`,
+    /// `homeLandings`, `homeBodyAtLanding`). They count Home's re-renders for
+    /// HomeIdleRenderUITests, and closing a focus re-renders Home, so
+    /// comparing them made "the jar did not change" fail every time. Every
+    /// field about what the jar holds and shows is still compared.
     private func jarPresentation(from probe: XCUIElement) -> String {
         presentationValue(from: probe)
             .split(separator: ";")
-            .filter { !$0.hasPrefix("homeBodyEvaluations=") }
+            .filter { !$0.hasPrefix("homeBody") && !$0.hasPrefix("homeLandings=") }
             .joined(separator: ";")
     }
 
