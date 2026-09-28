@@ -26,7 +26,10 @@ struct CloudOfflineAccessConditions: Equatable, Sendable {
 /// This policy never authenticates the current Apple Account, changes the saved
 /// deployment mode, creates a namespace, or authorizes a mirroring container.
 enum CloudOfflineAccessPolicy {
-    static let accessDescription = "このiPhoneに保存済みのデータを利用しています。現在のiCloudアカウントと最新のデータは未確認です。"
+    static let accessDescription = String(
+        localized: "このiPhoneに保存済みのデータを利用しています。現在のiCloudアカウントと最新のデータは未確認です。",
+        table: "Launch"
+    )
 
     static func blockReason(
         selection: PersistenceDeploymentSelectionState,

@@ -287,7 +287,11 @@ enum CloudOfflineHostPolicy {
     ) -> String? {
         guard hasUnresolvedAccountStateMovement, offlineCopyWouldOtherwiseBeEligible,
               allowsOfflineFallback(after: error) else { return nil }
-        return "Apple Accountの状態が変わったため、どのApple Accountでサインインしているかを確認するまで、この端末に保存したデータは開きません。通信が使える場所で「もう一度試す」をタップしてください。記録は消えていません。"
+        return String(
+            localized: "Apple Accountの状態が変わったため、どのApple Accountでサインインしているかを確認するまで、この端末に保存したデータは開きません。通信が使える場所で「もう一度試す」をタップしてください。記録は消えていません。",
+            table: "Launch",
+            comment: "「もう一度試す」 is the launch screen's Try Again button"
+        )
     }
 
     static func hasEstablishedCloudStore(

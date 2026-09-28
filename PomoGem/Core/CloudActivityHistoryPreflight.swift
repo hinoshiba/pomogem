@@ -61,14 +61,14 @@ enum CloudActivityHistoryPreflightError: Error, LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .timedOut:
-            "iCloudの記録の履歴を確認するのに時間がかかっています。記録を保護するため保存領域をまだ開いていません。通信状態を確認して再試行してください。"
+            String(localized: "iCloudの記録の履歴を確認するのに時間がかかっています。記録を保護するため保存領域をまだ開いていません。通信状態を確認して再試行してください。", table: "Launch")
         case .cloud(let failure): failure.errorDescription
         case .localHistoryUnavailable:
-            "端末に届いたiCloudの履歴を確認できませんでした。再試行してください。"
+            String(localized: "端末に届いたiCloudの履歴を確認できませんでした。再試行してください。", table: "Launch")
         case .offlineHistoryChanged:
-            "別の端末で記録の履歴が変更されています。このiPhoneで保存した記録を守るため、同期を停止しています。端末の記録は保持しています。"
+            String(localized: "別の端末で記録の履歴が変更されています。このiPhoneで保存した記録を守るため、同期を停止しています。端末の記録は保持しています。", table: "Launch")
         case .malformedHistory, .incompleteHistory, .unsupportedZone, .historyLimit:
-            "iCloudの記録の履歴を安全に確認できませんでした。記録を保護するため保存領域をまだ開いていません。アプリを最新版へ更新し、再試行してください。"
+            String(localized: "iCloudの記録の履歴を安全に確認できませんでした。記録を保護するため保存領域をまだ開いていません。アプリを最新版へ更新し、再試行してください。", table: "Launch")
         }
     }
 

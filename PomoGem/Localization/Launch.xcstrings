@@ -1,9 +1,467 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "%@。詳細を表示" : {
+      "comment" : "VoiceOver: offline banner button. %@ is the sync status title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@. Show details"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@。詳細を表示"
+          }
+        }
+      }
+    },
+    "%@・残り約%lld分。" : {
+      "comment" : "Running-timer alert: %1$@ is the theme name, %2$lld the minutes left (rounded up)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · about %2$lld min left."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@・残り約%lld分。"
+          }
+        }
+      }
+    },
+    "%lld分" : {
+      "comment" : "VoiceOver: whole minutes left on the timer. %lld is the count (plural in English)",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld minute"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld minutes"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld分"
+          }
+        }
+      }
+    },
+    "%lld秒" : {
+      "comment" : "VoiceOver: seconds left after the whole minutes. %lld is the count (plural in English)",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld second"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld seconds"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld秒"
+          }
+        }
+      }
+    },
+    "Apple AccountとiCloudを確認できません。確認が済むまで同期を停止します。利用できる端末データがある場合はオフラインで続けられます。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can't verify your Apple Account and iCloud. Sync stays stopped until they're verified. If this device has data you can use, you can continue offline."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple AccountとiCloudを確認できません。確認が済むまで同期を停止します。利用できる端末データがある場合はオフラインで続けられます。"
+          }
+        }
+      }
+    },
+    "Apple Accountの再確認" : {
+      "comment" : "iCloud check failure, the step that failed: identifying the Apple Account again",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Account recheck"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Accountの再確認"
+          }
+        }
+      }
+    },
+    "Apple Accountの変更を確認しています" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking the Apple Account change"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Accountの変更を確認しています"
+          }
+        }
+      }
+    },
+    "Apple Accountの状態" : {
+      "comment" : "iCloud check failure, the step that failed: reading the Apple Account status",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Account status"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Accountの状態"
+          }
+        }
+      }
+    },
+    "Apple Accountの状態が変わったため、どのApple Accountでサインインしているかを確認するまで、この端末に保存したデータは開きません。通信が使える場所で「もう一度試す」をタップしてください。記録は消えていません。" : {
+      "comment" : "「もう一度試す」 is the launch screen's Try Again button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your Apple Account status changed, so the data saved on this device won't open until the app confirms which Apple Account you're signed in with. Somewhere with a connection, tap “Try Again”. Your records have not been lost."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Accountの状態が変わったため、どのApple Accountでサインインしているかを確認するまで、この端末に保存したデータは開きません。通信が使える場所で「もう一度試す」をタップしてください。記録は消えていません。"
+          }
+        }
+      }
+    },
+    "Apple Accountの識別" : {
+      "comment" : "iCloud check failure, the step that failed: identifying the Apple Account",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Account identity"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Accountの識別"
+          }
+        }
+      }
+    },
+    "Apple Accountの識別を一度で確認できませんでした。そのまま再試行してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your Apple Account couldn't be identified on the first try. Just try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Accountの識別を一度で確認できませんでした。そのまま再試行してください。"
+          }
+        }
+      }
+    },
+    "Apple Accountの識別情報を安全に確認できませんでした。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't safely verify your Apple Account's identity."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Accountの識別情報を安全に確認できませんでした。"
+          }
+        }
+      }
+    },
+    "Apple Accountは現在iCloudを利用する準備ができていません。設定でApple Accountの確認を済ませ、しばらく待って再試行してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your Apple Account isn't ready to use iCloud right now. Finish verifying your Apple Account in Settings, wait a moment, and try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Accountは現在iCloudを利用する準備ができていません。設定でApple Accountの確認を済ませ、しばらく待って再試行してください。"
+          }
+        }
+      }
+    },
+    "Apple Accountへのサインインが必要です" : {
+      "comment" : "Settings iCloud status title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Account sign-in required"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Accountへのサインインが必要です"
+          }
+        }
+      }
+    },
+    "Apple Accountへのサインインと、設定のiCloudでポモジェムの利用がオンになっていることを確認してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Make sure you're signed in to your Apple Account and that PomoGem is turned on under iCloud in Settings."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Accountへのサインインと、設定のiCloudでポモジェムの利用がオンになっていることを確認してください。"
+          }
+        }
+      }
+    },
+    "Apple Accountを再確認しています" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rechecking your Apple Account"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Accountを再確認しています"
+          }
+        }
+      }
+    },
+    "Apple Accountを安全に確認しています" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Safely checking your Apple Account"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Accountを安全に確認しています"
+          }
+        }
+      }
+    },
+    "Apple Accountを確認できるまでお待ちください" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Please wait until your Apple Account can be confirmed"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Accountを確認できるまでお待ちください"
+          }
+        }
+      }
+    },
+    "Apple Accountを確認できるまで保存領域を開けません。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The data store can't be opened until your Apple Account is confirmed."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Accountを確認できるまで保存領域を開けません。"
+          }
+        }
+      }
+    },
+    "SimulatorではApple Accountの接続状態を確認できません。iCloud同期はiPhone実機で確認してください。" : {
+      "comment" : "Settings footer in the Simulator (development only)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The Simulator can't check your Apple Account connection. Check iCloud sync on a real iPhone."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SimulatorではApple Accountの接続状態を確認できません。iCloud同期はiPhone実機で確認してください。"
+          }
+        }
+      }
+    },
+    "iCloudからの再取得を準備しています" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preparing to download from iCloud again"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudからの再取得を準備しています"
+          }
+        }
+      }
+    },
+    "iCloudから届いた記録を整理できませんでした" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't process the records received from iCloud"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudから届いた記録を整理できませんでした"
+          }
+        }
+      }
+    },
+    "iCloudが待機を指定しています。時間をおいて再試行してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud has asked the app to wait. Try again a little later."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudが待機を指定しています。時間をおいて再試行してください。"
+          }
+        }
+      }
+    },
+    "iCloudで、ポモジェムの利用をオン" : {
+      "comment" : "Settings: step 2 of continuing on another iPhone",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn on PomoGem in iCloud"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudで、ポモジェムの利用をオン"
+          }
+        }
+      }
+    },
+    "iCloudとの通信を再確認してください。端末への記録は続けられます。この表示は同期完了を示すものではありません" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check your connection to iCloud again. You can keep recording on this device. This status doesn't mean sync is complete"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudとの通信を再確認してください。端末への記録は続けられます。この表示は同期完了を示すものではありません"
+          }
+        }
+      }
+    },
+    "iCloudとデバイス" : {
+      "comment" : "Settings section header",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud & Devices"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudとデバイス"
+          }
+        }
+      }
+    },
     "iCloudに保存して同期" : {
       "comment" : "First-run storage choice: iCloud option (button label)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save to iCloud and Sync"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -12,8 +470,309 @@
         }
       }
     },
+    "iCloudに保存して同期しますか？" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save to iCloud and Sync?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudに保存して同期しますか？"
+          }
+        }
+      }
+    },
+    "iCloudに接続できます" : {
+      "comment" : "Settings iCloud status title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud is available"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudに接続できます"
+          }
+        }
+      }
+    },
+    "iCloudに接続できません。Wi-Fiやモバイル通信、ポモジェムの通信設定を確認して再試行してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can't connect to iCloud. Check Wi-Fi, cellular data and PomoGem's network settings, then try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudに接続できません。Wi-Fiやモバイル通信、ポモジェムの通信設定を確認して再試行してください。"
+          }
+        }
+      }
+    },
+    "iCloudに進行中のタイマーがあります" : {
+      "comment" : "Alert title: a running timer from another device is in iCloud",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Timer Is Running in iCloud"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudに進行中のタイマーがあります"
+          }
+        }
+      }
+    },
+    "iCloudのサービスが一時的に混み合っているか、利用できません。しばらく待って再試行してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The iCloud service is busy or temporarily unavailable. Wait a moment and try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudのサービスが一時的に混み合っているか、利用できません。しばらく待って再試行してください。"
+          }
+        }
+      }
+    },
+    "iCloudのタイマー履歴を安全に確認できません。記録は変更せず保持しています。設定のサポートからお問い合わせください" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can't safely check the timer history in iCloud. Your records are kept unchanged. Please contact us from Support in Settings"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudのタイマー履歴を安全に確認できません。記録は変更せず保持しています。設定のサポートからお問い合わせください"
+          }
+        }
+      }
+    },
+    "iCloudのデータが置き換わりました" : {
+      "comment" : "Launch screen title: another device replaced the iCloud data",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud's Data Has Been Replaced"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudのデータが置き換わりました"
+          }
+        }
+      }
+    },
+    "iCloudのデータを使う" : {
+      "comment" : "Section heading: take iCloud's data (this deletes this device's data)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use iCloud's Data"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudのデータを使う"
+          }
+        }
+      }
+    },
+    "iCloudの切り替え状況を確認しています" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking the status of the iCloud switch"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudの切り替え状況を確認しています"
+          }
+        }
+      }
+    },
+    "iCloudの削除世代を未確認です。次回オンライン時に再照合します（古い記録の再流入を完全には防げません）" : {
+      "comment" : "Notice after a complete deletion when iCloud's deletion marker could not be checked yet",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud's deletion marker hasn't been checked yet. It will be checked again the next time you're online (until then, old records can't be fully kept from coming back)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudの削除世代を未確認です。次回オンライン時に再照合します（古い記録の再流入を完全には防げません）"
+          }
+        }
+      }
+    },
+    "iCloudの削除世代を確認できません。記録を保護するため、サポートへお問い合わせください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can't check iCloud's deletion marker. To protect your records, please contact support."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudの削除世代を確認できません。記録を保護するため、サポートへお問い合わせください。"
+          }
+        }
+      }
+    },
+    "iCloudの削除世代記録が不正です。古い記録を開かずに保護しています。サポートへお問い合わせください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud's deletion marker is invalid. Old records are protected and are not being opened. Please contact support."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudの削除世代記録が不正です。古い記録を開かずに保護しています。サポートへお問い合わせください。"
+          }
+        }
+      }
+    },
+    "iCloudの状態を再確認" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check iCloud Again"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudの状態を再確認"
+          }
+        }
+      }
+    },
+    "iCloudの状態を確認できません" : {
+      "comment" : "Settings iCloud status title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can't check iCloud's status"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudの状態を確認できません"
+          }
+        }
+      }
+    },
+    "iCloudの状態を確認できません。再試行し、解消しない場合はサポートへお問い合わせください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can't check iCloud's status. Try again, and contact support if the problem continues."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudの状態を確認できません。再試行し、解消しない場合はサポートへお問い合わせください。"
+          }
+        }
+      }
+    },
+    "iCloudの確認に時間がかかっています" : {
+      "comment" : "Launch screen title: the iCloud check timed out",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking iCloud Is Taking a While"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudの確認に時間がかかっています"
+          }
+        }
+      }
+    },
+    "iCloudの確認に時間がかかっています。端末内の記録を保護しています。通信状態を確認して再試行してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking iCloud is taking a while. The records on this device are protected. Check your connection and try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudの確認に時間がかかっています。端末内の記録を保護しています。通信状態を確認して再試行してください。"
+          }
+        }
+      }
+    },
+    "iCloudの確認に時間がかかっています。通信状態を確認して再試行してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking iCloud is taking a while. Check your connection and try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudの確認に時間がかかっています。通信状態を確認して再試行してください。"
+          }
+        }
+      }
+    },
     "iCloudの空き容量が不足しています" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not enough iCloud storage"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -22,9 +781,145 @@
         }
       }
     },
+    "iCloudの空き容量を確認し、容量を確保してから再試行してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check your available iCloud storage, free up space, then try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudの空き容量を確認し、容量を確保してから再試行してください。"
+          }
+        }
+      }
+    },
+    "iCloudの記録の履歴を安全に確認できませんでした。記録を保護するため保存領域をまだ開いていません。アプリを最新版へ更新し、再試行してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't safely check the history of your iCloud records. To protect your records, the data store hasn't been opened yet. Update the app to the latest version and try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudの記録の履歴を安全に確認できませんでした。記録を保護するため保存領域をまだ開いていません。アプリを最新版へ更新し、再試行してください。"
+          }
+        }
+      }
+    },
+    "iCloudの記録の履歴を確認しています" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking the history of your iCloud records"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudの記録の履歴を確認しています"
+          }
+        }
+      }
+    },
+    "iCloudの記録の履歴を確認するのに時間がかかっています。記録を保護するため保存領域をまだ開いていません。通信状態を確認して再試行してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking the history of your iCloud records is taking a while. To protect your records, the data store hasn't been opened yet. Check your connection and try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudの記録の履歴を確認するのに時間がかかっています。記録を保護するため保存領域をまだ開いていません。通信状態を確認して再試行してください。"
+          }
+        }
+      }
+    },
+    "iCloudの記録を使う場合は、下の保存先の設定で端末の記録が置き換わることを確認して切り替えられます。端末の記録でiCloudを置き換える操作は現在利用できません。アプリを削除すると、このiPhoneだけに保存した記録は失われます。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To use your iCloud records, you can switch in the storage settings below once you confirm that they will replace this device's records. Replacing iCloud with this device's records isn't available at this time. If you delete the app, records you save on this iPhone only will be lost."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudの記録を使う場合は、下の保存先の設定で端末の記録が置き換わることを確認して切り替えられます。端末の記録でiCloudを置き換える操作は現在利用できません。アプリを削除すると、このiPhoneだけに保存した記録は失われます。"
+          }
+        }
+      }
+    },
+    "iCloudは実機で確認できます" : {
+      "comment" : "Settings iCloud status title in the Simulator (development only)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud can be checked on a real iPhone"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudは実機で確認できます"
+          }
+        }
+      }
+    },
+    "iCloudへのアクセスが許可されませんでした。設定でポモジェムのiCloud利用を確認し、解消しない場合はサポートへお問い合わせください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Access to iCloud wasn't allowed. Check PomoGem's iCloud access in Settings, and contact support if the problem continues."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudへのアクセスが許可されませんでした。設定でポモジェムのiCloud利用を確認し、解消しない場合はサポートへお問い合わせください。"
+          }
+        }
+      }
+    },
+    "iCloudへの接続" : {
+      "comment" : "iCloud check failure, the step that failed: connecting to the private iCloud database",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud connection"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudへの接続"
+          }
+        }
+      }
+    },
     "iCloudへの最終送信：%@" : {
       "comment" : "Settings: when this iPhone last sent records to iCloud, e.g. 3分前",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Last sent to iCloud: %@"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -33,8 +928,30 @@
         }
       }
     },
+    "iCloudへの自動送信・自動切り替えはありません" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing is sent to iCloud or switched automatically"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudへの自動送信・自動切り替えはありません"
+          }
+        }
+      }
+    },
     "iCloudへの送信がうまくいっていません" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sending to iCloud isn't working"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -43,8 +960,80 @@
         }
       }
     },
+    "iCloudへ一時的に接続できません" : {
+      "comment" : "Settings iCloud status title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can't connect to iCloud right now"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudへ一時的に接続できません"
+          }
+        }
+      }
+    },
+    "iCloudへ接続できません。削除処理が始まっているため、接続後に再試行してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can't connect to iCloud. A deletion has already started, so try again once you're connected."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudへ接続できません。削除処理が始まっているため、接続後に再試行してください。"
+          }
+        }
+      }
+    },
+    "iCloudを確認中" : {
+      "comment" : "Settings iCloud status title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking iCloud…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudを確認中"
+          }
+        }
+      }
+    },
+    "iCloud保存を続けるには、スクリーンタイムや管理端末のiCloud設定を確認してください" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To keep using iCloud storage, check the iCloud settings in Screen Time or your device management"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud保存を続けるには、スクリーンタイムや管理端末のiCloud設定を確認してください"
+          }
+        }
+      }
+    },
     "iPhoneの「設定」で、いちばん上の自分の名前から「iCloud」に進むと、空き容量を確認できます。下のボタンでポモジェムの画面が開いたときは、左上の「設定」で戻ってください。" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In the iPhone Settings app, tap your name at the top, then “iCloud” to see how much storage is available. If the button below opens PomoGem's page in Settings, tap “Settings” at the top left to go back."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -53,8 +1042,31 @@
         }
       }
     },
+    "「もう一度試す」で先へ進めない場合は、ここで取り消せます。" : {
+      "comment" : "「もう一度試す」 is the Try Again button on the same screen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "If “Try Again” doesn't get you any further, you can cancel here."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「もう一度試す」で先へ進めない場合は、ここで取り消せます。"
+          }
+        }
+      }
+    },
     "「設定」アプリを開く" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open the Settings App"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -63,9 +1075,81 @@
         }
       }
     },
-    "このiPhoneだけに保存" : {
-      "comment" : "First-run storage choice: local-only option (button label)",
+    "あとで" : {
+      "comment" : "Running-timer alert: decide later",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Later"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "あとで"
+          }
+        }
+      }
+    },
+    "このSimulator専用の保存領域を使い、iPhone実機のiCloudデータとは同期しません" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uses a data store just for this Simulator and doesn't sync with iCloud data on a real iPhone"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このSimulator専用の保存領域を使い、iPhone実機のiCloudデータとは同期しません"
+          }
+        }
+      }
+    },
+    "このiPhone" : {
+      "comment" : "Label of this iPhone's row in the record comparison, as in 「このiPhone: テーマ12・記録480…」",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This iPhone"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhone"
+          }
+        }
+      }
+    },
+    "このiPhoneだけで始める" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start on This iPhone Only"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneだけで始める"
+          }
+        }
+      }
+    },
+    "このiPhoneだけに保存" : {
+      "comment" : "First-run storage choice: local-only option (button label)\nSettings: the current storage mode, named like the first-run option",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save on This iPhone Only"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -74,8 +1158,30 @@
         }
       }
     },
+    "このiPhoneだけに保存しますか？" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save on This iPhone Only?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneだけに保存しますか？"
+          }
+        }
+      }
+    },
     "このiPhoneには、まだiCloudへ送信できていない記録がある可能性があります。" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This iPhone may have records that haven't been sent to iCloud yet."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -87,6 +1193,12 @@
     "このiPhoneには、まだiCloudへ送信できていない記録がある可能性があります。続ける前に、下の「%@」で控えを保存しておくと安心です。" : {
       "comment" : "Refresh-from-iCloud confirmation when recent exports failed; the argument is the export button's title below",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This iPhone may have records that haven't been sent to iCloud yet. Before you continue, it's safer to save a copy with “%@” below."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -95,9 +1207,324 @@
         }
       }
     },
+    "このiPhoneに保存・iCloud同期は停止中" : {
+      "comment" : "Sync status title: saving on this iPhone; iCloud sync is stopped until a decision",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saving to this iPhone · iCloud sync stopped"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneに保存・iCloud同期は停止中"
+          }
+        }
+      }
+    },
+    "このiPhoneに保存・iCloud同期は待機中" : {
+      "comment" : "Sync status title: saving on this iPhone; iCloud sync waits for a connection",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saving to this iPhone · iCloud sync waiting"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneに保存・iCloud同期は待機中"
+          }
+        }
+      }
+    },
+    "このiPhoneに保存済みのデータを利用しています。現在のiCloudアカウントと最新のデータは未確認です。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You're using data already saved on this iPhone. The current iCloud account and the latest data have not been confirmed."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneに保存済みのデータを利用しています。現在のiCloudアカウントと最新のデータは未確認です。"
+          }
+        }
+      }
+    },
+    "このiPhoneのデータでiCloudを使い始める準備をしています" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preparing to start using iCloud with this iPhone's data"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneのデータでiCloudを使い始める準備をしています"
+          }
+        }
+      }
+    },
+    "このiPhoneのデータを使う" : {
+      "comment" : "Section heading: keep this iPhone's data and replace iCloud with it",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use This iPhone's Data"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneのデータを使う"
+          }
+        }
+      }
+    },
+    "このiPhoneの保存領域を準備しています" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preparing this iPhone's data store"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneの保存領域を準備しています"
+          }
+        }
+      }
+    },
+    "このiPhoneへの保存と、iCloudへの送信完了は別です。接続状態だけでは送信完了を確認できません。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saving to this iPhone is not the same as finishing sending to iCloud. Being connected alone doesn't confirm that sending has finished."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneへの保存と、iCloudへの送信完了は別です。接続状態だけでは送信完了を確認できません。"
+          }
+        }
+      }
+    },
+    "このアプリのiCloud接続設定を確認できません。アプリを最新版へ更新し、解消しない場合はサポートへお問い合わせください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This app's iCloud connection settings can't be verified. Update the app to the latest version, and contact support if the problem continues."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このアプリのiCloud接続設定を確認できません。アプリを最新版へ更新し、解消しない場合はサポートへお問い合わせください。"
+          }
+        }
+      }
+    },
+    "このインストールでiCloud保存を選んだApple Accountと一致しません。元のApple Accountへ戻すまで保存領域は開きません。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This Apple Account doesn't match the one iCloud storage was chosen with on this installation. The data store won't open until you switch back to the original Apple Account."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このインストールでiCloud保存を選んだApple Accountと一致しません。元のApple Accountへ戻すまで保存領域は開きません。"
+          }
+        }
+      }
+    },
+    "この端末ではiCloudが制限されています" : {
+      "comment" : "Settings iCloud status title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud is restricted on this device"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末ではiCloudが制限されています"
+          }
+        }
+      }
+    },
+    "この端末ではiCloudの利用が制限されています。スクリーンタイムや管理端末の設定を確認してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud is restricted on this device. Check Screen Time or your device management settings."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末ではiCloudの利用が制限されています。スクリーンタイムや管理端末の設定を確認してください。"
+          }
+        }
+      }
+    },
+    "この端末で続ける" : {
+      "comment" : "Running-timer alert: continue the timer on this device",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue on This Device"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末で続ける"
+          }
+        }
+      }
+    },
+    "この端末のデータでiCloudを置き換える準備をしています" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preparing to replace iCloud with this device's data"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末のデータでiCloudを置き換える準備をしています"
+          }
+        }
+      }
+    },
+    "この端末の切り替えを取り消しています" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Canceling this device's switch"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末の切り替えを取り消しています"
+          }
+        }
+      }
+    },
+    "この端末の切り替えを取り消しますか？" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel This Device's Switch?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末の切り替えを取り消しますか？"
+          }
+        }
+      }
+    },
+    "この端末の切り替えを取り消す" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel This Device's Switch"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末の切り替えを取り消す"
+          }
+        }
+      }
+    },
+    "この端末の削除処理を再開する必要があります。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The deletion on this device needs to be resumed."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末の削除処理を再開する必要があります。"
+          }
+        }
+      }
+    },
+    "この端末の設定を開く" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Settings on This Device"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末の設定を開く"
+          }
+        }
+      }
+    },
+    "この端末へ引き継ぐと、この端末が終了通知を担当します。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "If you continue it here, this device will send the timer-end notification."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末へ引き継ぐと、この端末が終了通知を担当します。"
+          }
+        }
+      }
+    },
     "たった今" : {
       "comment" : "Last iCloud send was less than a minute ago",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "just now"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -109,6 +1536,12 @@
     "どちらを選んでも、タイマーと瓶は同じように使えます。" : {
       "comment" : "First-run storage choice: one-sentence message under the title",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Either way, the timer and your jar work the same."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -117,8 +1550,79 @@
         }
       }
     },
+    "もう一度試す" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try Again"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "もう一度試す"
+          }
+        }
+      }
+    },
+    "アプリを開き直してください" : {
+      "comment" : "Launch screen title: quit and reopen the app",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reopen the App"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリを開き直してください"
+          }
+        }
+      }
+    },
+    "オフラインで利用するための確認済みデータがまだありません。通信が使えるときに一度開いてください。記録や保存先の設定は変更していません。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "There's no verified data for offline use yet. Open the app once while you're online. Your records and storage settings have not been changed."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オフラインで利用するための確認済みデータがまだありません。通信が使えるときに一度開いてください。記録や保存先の設定は変更していません。"
+          }
+        }
+      }
+    },
+    "オンラインで保存領域を再確認しています" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rechecking the data store online"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オンラインで保存領域を再確認しています"
+          }
+        }
+      }
+    },
     "オンラインで再試行" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try Again Online"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -127,9 +1631,81 @@
         }
       }
     },
+    "キャンセル" : {
+      "comment" : "Button: cancels a confirmation",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャンセル"
+          }
+        }
+      }
+    },
+    "サポートを見る" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Get Support"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サポートを見る"
+          }
+        }
+      }
+    },
+    "タイマーや記録を利用できます。接続回復後に同期を再開します。" : {
+      "comment" : "Offline session banner details: the timer and records keep working",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can use the timer and your records. Sync will resume once the connection is back."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマーや記録を利用できます。接続回復後に同期を再開します。"
+          }
+        }
+      }
+    },
+    "タイマーを引き継げませんでした。通信状態を確認して再試行してください" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't take over the timer. Check your connection and try again"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマーを引き継げませんでした。通信状態を確認して再試行してください"
+          }
+        }
+      }
+    },
     "テーマ名、成果メモ、集中記録、設定、進行中タイマーをApple AccountのプライベートiCloudへ送信します。オンラインでApple Accountを確認した後に保存方式を確定します。このiPhoneに保存済みの記録があれば、オフラインでも使えます。初回の取得や同期の再開には通信が必要です。後で同期を止めるときは、iCloudの記録をこのiPhoneへコピーし、iCloudの記録も残します。" : {
       "comment" : "First-run storage choice: iCloud confirmation message (full caveats)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Theme names, achievement notes, focus sessions, settings and any running timer are sent to your Apple Account's private iCloud. Your storage setting is finalized after your Apple Account is checked online. If records are already saved on this iPhone, you can use them offline too. The first download and resuming sync need a connection. If you stop syncing later, your iCloud records are copied to this iPhone and also kept in iCloud."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -138,9 +1714,159 @@
         }
       }
     },
+    "プライバシーポリシー" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Privacy Policy"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プライバシーポリシー"
+          }
+        }
+      }
+    },
+    "ユーザー内容を削除した保存領域を閉じ、空の状態で作り直しています。古い端末からの再流入検知用に、内容を含まない削除世代記録1件だけをiCloudに残します。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Closing the data store your content was deleted from and rebuilding it empty. Only one deletion marker, which contains none of your content, is left in iCloud so old records coming back from older devices can be detected."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ユーザー内容を削除した保存領域を閉じ、空の状態で作り直しています。古い端末からの再流入検知用に、内容を含まない削除世代記録1件だけをiCloudに残します。"
+          }
+        }
+      }
+    },
+    "ユーザー内容を削除中" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deleting Your Content"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ユーザー内容を削除中"
+          }
+        }
+      }
+    },
+    "中断されたiCloudの切り替え取消を再開しています" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resuming the interrupted cancellation of the iCloud switch"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中断されたiCloudの切り替え取消を再開しています"
+          }
+        }
+      }
+    },
+    "中断された削除を安全な位置から再開しています" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resuming the interrupted deletion from a safe point"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中断された削除を安全な位置から再開しています"
+          }
+        }
+      }
+    },
+    "中断された取り込みの取消しを完了しました。元の保存先とiCloudの記録、途中までのコピーを保持しています。アプリを終了して開き直してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finished canceling the interrupted import. The records in your original storage location and in iCloud, and the partial copy, have all been kept. Quit the app and open it again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中断された取り込みの取消しを完了しました。元の保存先とiCloudの記録、途中までのコピーを保持しています。アプリを終了して開き直してください。"
+          }
+        }
+      }
+    },
+    "以前の保存領域がまだ閉じていません。しばらく待って再試行するか、アプリを終了して再起動してください。記録は削除されません。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The previous data store hasn't closed yet. Wait a moment and try again, or quit and restart the app. Your records will not be deleted."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以前の保存領域がまだ閉じていません。しばらく待って再試行するか、アプリを終了して再起動してください。記録は削除されません。"
+          }
+        }
+      }
+    },
+    "以前の保存領域が完全に閉じたことを確認できません。二つの保存領域を同時に開かないため停止しました。解放後に再試行するか、アプリを終了して再起動してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can't confirm that the previous data store has fully closed. The app stopped so two data stores are never open at the same time. Try again once it's released, or quit and restart the app."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以前の保存領域が完全に閉じたことを確認できません。二つの保存領域を同時に開かないため停止しました。解放後に再試行するか、アプリを終了して再起動してください。"
+          }
+        }
+      }
+    },
+    "以前の保存領域はまだ閉じていません。二重に開かないため停止中です。アプリを終了して再起動してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The previous data store hasn't closed yet. The app has stopped so it isn't opened twice. Quit and restart the app."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以前の保存領域はまだ閉じていません。二重に開かないため停止中です。アプリを終了して再起動してください。"
+          }
+        }
+      }
+    },
     "休憩中です" : {
       "comment" : "Launch waiting screen: a break timer is running",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On a break"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -149,13 +1875,751 @@
         }
       }
     },
-    "休憩中です。残り%lld分%lld秒" : {
-      "comment" : "VoiceOver: running break with remaining minutes and seconds",
+    "休憩中です。残り%@%@" : {
+      "comment" : "VoiceOver: running break. %1$@ is the minutes left, %2$@ the seconds left",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On a break. %1$@, %2$@ left"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "休憩中です。残り%lld分%lld秒"
+            "value" : "休憩中です。残り%@%@"
+          }
+        }
+      }
+    },
+    "保存先の切り替えを再開する準備をしています" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Getting ready to resume the storage switch"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存先の切り替えを再開する準備をしています"
+          }
+        }
+      }
+    },
+    "保存先の切り替えを取り消しますか？" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel the Storage Switch?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存先の切り替えを取り消しますか？"
+          }
+        }
+      }
+    },
+    "保存先の切り替えを受け付けました。Appスイッチャーでポモジェムを終了し、もう一度開いてください。元の記録を保護したまま切り替えを続けます。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The storage switch has been accepted. Close PomoGem in the App Switcher and open it again. The switch continues with your original records protected."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存先の切り替えを受け付けました。Appスイッチャーでポモジェムを終了し、もう一度開いてください。元の記録を保護したまま切り替えを続けます。"
+          }
+        }
+      }
+    },
+    "保存先の切り替えを復旧します" : {
+      "comment" : "Launch screen title: recovering an interrupted storage switch",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recovering the Storage Switch"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存先の切り替えを復旧します"
+          }
+        }
+      }
+    },
+    "保存先の切り替えを準備しています" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preparing the storage switch"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存先の切り替えを準備しています"
+          }
+        }
+      }
+    },
+    "保存先は既に選択されています。変更するときは、設定の「iCloudと保存先」から確認してください。" : {
+      "comment" : "「iCloudと保存先」 is the Settings section title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A storage location has already been chosen. To change it, go to “iCloud & Storage” in Settings."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存先は既に選択されています。変更するときは、設定の「iCloudと保存先」から確認してください。"
+          }
+        }
+      }
+    },
+    "保存先は自動で切り替わりません。切り替えには通信と、データの取り扱いの確認が必要です。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your storage location never switches automatically. Switching needs a connection and your confirmation of how your data will be handled."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存先は自動で切り替わりません。切り替えには通信と、データの取り扱いの確認が必要です。"
+          }
+        }
+      }
+    },
+    "保存方式" : {
+      "comment" : "Settings section header: how records are stored",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Storage"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存方式"
+          }
+        }
+      }
+    },
+    "保存方式の設定と端末内の保存ファイルを安全に対応付けられません。新しい保存方式へ切り替えず、記録を保護しています。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your storage setting can't be safely matched with the storage files on this device. The app has not switched to a new storage setting and is protecting your records."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存方式の設定と端末内の保存ファイルを安全に対応付けられません。新しい保存方式へ切り替えず、記録を保護しています。"
+          }
+        }
+      }
+    },
+    "保存方式の設定を安全に確認できません。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your storage setting can't be safely verified."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存方式の設定を安全に確認できません。"
+          }
+        }
+      }
+    },
+    "保存方式を確認しています" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking your storage setting"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存方式を確認しています"
+          }
+        }
+      }
+    },
+    "保存済みのテーマと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへはまだ送信されません。通信回復後、同じアカウントとデータを確認してから同期を再開します。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can keep using the timer and adding records with your saved themes and records. Changes made meanwhile are saved on this device and haven't been sent to iCloud yet. Once you're back online, sync resumes after the same account and data are confirmed."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存済みのテーマと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへはまだ送信されません。通信回復後、同じアカウントとデータを確認してから同期を再開します。"
+          }
+        }
+      }
+    },
+    "保存済みのテーマと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへは送信されません。通信が戻っても同期は自動では再開しません。再開する方法は、画面上部の「復旧手順」から確認できます。" : {
+      "comment" : "「復旧手順」 is the offline banner's button title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can keep using the timer and adding records with your saved themes and records. Changes made meanwhile are saved on this device and are not sent to iCloud. Sync does not resume on its own when the connection comes back. To see how to resume it, tap “Recovery Steps” at the top of the screen."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存済みのテーマと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへは送信されません。通信が戻っても同期は自動では再開しません。再開する方法は、画面上部の「復旧手順」から確認できます。"
+          }
+        }
+      }
+    },
+    "保存済みの削除工程から再開します" : {
+      "comment" : "VoiceOver hint for Retry Deletion",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resumes from the saved deletion step"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存済みの削除工程から再開します"
+          }
+        }
+      }
+    },
+    "保存済みの状態から再開すると、このiPhoneが終了通知を担当します。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "If you resume from the saved state, this iPhone will send the timer-end notification."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存済みの状態から再開すると、このiPhoneが終了通知を担当します。"
+          }
+        }
+      }
+    },
+    "保存済みの進行中タイマーがあります" : {
+      "comment" : "Alert title: a running timer was saved on this iPhone",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Saved Timer Is in Progress"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存済みの進行中タイマーがあります"
+          }
+        }
+      }
+    },
+    "保存領域が完全に閉じたことを確認できません。二重に開かないため停止しました。解放後に再試行するか、アプリを終了して再起動してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can't confirm that the data store has fully closed. The app stopped so it isn't opened twice. Try again once it's released, or quit and restart the app."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存領域が完全に閉じたことを確認できません。二重に開かないため停止しました。解放後に再試行するか、アプリを終了して再起動してください。"
+          }
+        }
+      }
+    },
+    "保存領域の作成が完了していません。既存ファイルを削除せず停止しました。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The data store wasn't fully created. The app stopped without deleting any existing files."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存領域の作成が完了していません。既存ファイルを削除せず停止しました。"
+          }
+        }
+      }
+    },
+    "保存領域の構成が不正です。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The data store's configuration is invalid."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存領域の構成が不正です。"
+          }
+        }
+      }
+    },
+    "保存領域を再確認しています" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rechecking the data store"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存領域を再確認しています"
+          }
+        }
+      }
+    },
+    "保存領域を安全に移行できませんでした。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The data store couldn't be migrated safely."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存領域を安全に移行できませんでした。"
+          }
+        }
+      }
+    },
+    "保存領域を準備できませんでした" : {
+      "comment" : "Launch screen title: the data store could not be prepared",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't Prepare the Data Store"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存領域を準備できませんでした"
+          }
+        }
+      }
+    },
+    "保存領域を確認できません" : {
+      "comment" : "Launch screen title: the data store could not be verified",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can't Verify the Data Store"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存領域を確認できません"
+          }
+        }
+      }
+    },
+    "保存領域を開けませんでした" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't Open the Data Store"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存領域を開けませんでした"
+          }
+        }
+      }
+    },
+    "元のiCloudの記録を残して、この切り替えを取り消します。データの置き換えが始まっている場合は取り消せません。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This cancels the switch and keeps your original iCloud records. Once the app has begun to replace the data, the switch can't be canceled."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "元のiCloudの記録を残して、この切り替えを取り消します。データの置き換えが始まっている場合は取り消せません。"
+          }
+        }
+      }
+    },
+    "元の保存先とiCloudの記録を残して、取り込みを取り消せます。途中までのコピーも保護のため端末に保持します。取り消した後はアプリを終了して開き直し、改めて切り替えを開始してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can cancel the import and keep the records in your original storage location and in iCloud. The partial copy is also kept on this device to protect it. After canceling, quit the app, open it again, and start the switch over."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "元の保存先とiCloudの記録を残して、取り込みを取り消せます。途中までのコピーも保護のため端末に保持します。取り消した後はアプリを終了して開き直し、改めて切り替えを開始してください。"
+          }
+        }
+      }
+    },
+    "元の端末がオフラインまたはロック中の場合は、古い通知が一度届くことがあります。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "If the original device is offline or locked, an outdated notification may arrive from it once."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "元の端末がオフラインまたはロック中の場合は、古い通知が一度届くことがあります。"
+          }
+        }
+      }
+    },
+    "全体確認" : {
+      "comment" : "iCloud check failure, the step that failed: the whole verification",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "overall check"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全体確認"
+          }
+        }
+      }
+    },
+    "再試行まで約%@秒お待ちください。" : {
+      "comment" : "iCloud asked the app to wait. %@ is a number of seconds (1-3600), printed ungrouped",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Please wait about %@ sec before trying again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再試行まで約%@秒お待ちください。"
+          }
+        }
+      }
+    },
+    "切り替えを取り消しました。iCloudの記録を残しています。アプリを終了して開き直してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The switch has been canceled. Your iCloud records have been kept. Quit the app and open it again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切り替えを取り消しました。iCloudの記録を残しています。アプリを終了して開き直してください。"
+          }
+        }
+      }
+    },
+    "切り替えを取り消しました。元の記録を保護したまま、アプリを終了して開き直してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The switch has been canceled, and your original records are protected. Quit the app and open it again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切り替えを取り消しました。元の記録を保護したまま、アプリを終了して開き直してください。"
+          }
+        }
+      }
+    },
+    "切り替えを取り消しました。元の記録を残しています。アプリを終了して開き直してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The switch has been canceled. Your original records have been kept. Quit the app and open it again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切り替えを取り消しました。元の記録を残しています。アプリを終了して開き直してください。"
+          }
+        }
+      }
+    },
+    "切り替えを取り消す" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel Switch"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切り替えを取り消す"
+          }
+        }
+      }
+    },
+    "初期設定を保存できませんでした。もう一度お試しください" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save your initial settings. Please try again"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "初期設定を保存できませんでした。もう一度お試しください"
+          }
+        }
+      }
+    },
+    "別のiPhone・機種変更後に続けるには" : {
+      "comment" : "Settings: disclosure title for the steps to continue on another or a new iPhone",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue on Another or a New iPhone"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "別のiPhone・機種変更後に続けるには"
+          }
+        }
+      }
+    },
+    "別の端末で削除処理が進行中です。完了後に再試行してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A deletion is in progress on another device. Try again after it finishes."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "別の端末で削除処理が進行中です。完了後に再試行してください。"
+          }
+        }
+      }
+    },
+    "別の端末で記録の履歴が変更されています。このiPhoneで保存した記録を守るため、同期を停止しています。端末の記録は保持しています。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The record history was changed on another device. To protect the records saved on this iPhone, sync has been stopped. The records on this device are kept."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "別の端末で記録の履歴が変更されています。このiPhoneで保存した記録を守るため、同期を停止しています。端末の記録は保持しています。"
+          }
+        }
+      }
+    },
+    "別端末でデータが置き換わっている場合は、端末の記録を保持して同期を停止します。保存先の切り替えは、接続と内容を確認できてから行ってください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "If the data has been replaced on another device, this device keeps its records and stops syncing. Only switch your storage location once the connection and the contents can be confirmed."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "別端末でデータが置き換わっている場合は、端末の記録を保持して同期を停止します。保存先の切り替えは、接続と内容を確認できてから行ってください。"
+          }
+        }
+      }
+    },
+    "別端末の削除をこの端末へ反映しています" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Applying a deletion from another device to this device"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "別端末の削除をこの端末へ反映しています"
+          }
+        }
+      }
+    },
+    "削除は完了扱いになっていません。記録の追加は停止したままです。iCloudに接続して再試行してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The deletion has not been completed. Adding records stays stopped. Connect to iCloud and try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "削除は完了扱いになっていません。記録の追加は停止したままです。iCloudに接続して再試行してください。"
+          }
+        }
+      }
+    },
+    "削除を再試行" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retry Deletion"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "削除を再試行"
+          }
+        }
+      }
+    },
+    "削除を完了できませんでした" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't Finish Deleting"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "削除を完了できませんでした"
+          }
+        }
+      }
+    },
+    "削除結果を反映中" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Applying the Deletion"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "削除結果を反映中"
+          }
+        }
+      }
+    },
+    "取り込みを取り消しました。元の保存先とiCloudの記録、途中までのコピーを保持しています。アプリを終了して開き直すと、元の保存先から改めて切り替えを開始できます。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The import has been canceled. The records in your original storage location and in iCloud, and the partial copy, have all been kept. Quit the app and open it again to start the switch over from your original storage location."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り込みを取り消しました。元の保存先とiCloudの記録、途中までのコピーを保持しています。アプリを終了して開き直すと、元の保存先から改めて切り替えを開始できます。"
+          }
+        }
+      }
+    },
+    "同じApple Accountでサインイン" : {
+      "comment" : "Settings: step 1 of continuing on another iPhone",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in with the same Apple Account"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同じApple Accountでサインイン"
           }
         }
       }
@@ -163,6 +2627,12 @@
     "同じApple AccountのiPhone間で、記録を同期します。" : {
       "comment" : "First-run storage choice: the iCloud option's one line",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Syncs your records between iPhones on the same Apple Account."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -171,8 +2641,311 @@
         }
       }
     },
+    "同じアカウントとデータを確認できるまで、iCloudとの同期は始まりません。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sync with iCloud won't start until the same account and data can be confirmed."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同じアカウントとデータを確認できるまで、iCloudとの同期は始まりません。"
+          }
+        }
+      }
+    },
+    "同期の状態" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sync Status"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同期の状態"
+          }
+        }
+      }
+    },
+    "同期は即時でない場合があります。タイマーの通知は最後に引き継いだ端末が担当しますが、元の端末がオフラインの場合は古い通知が一度届くことがあります。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sync may not be instant. Timer notifications come from the device that took over last, but if the original device is offline, an outdated notification may arrive from it once."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同期は即時でない場合があります。タイマーの通知は最後に引き継いだ端末が担当しますが、元の端末がオフラインの場合は古い通知が一度届くことがあります。"
+          }
+        }
+      }
+    },
+    "同期を再開" : {
+      "comment" : "Offline banner button: re-check the connection and resume sync",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resume Sync"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同期を再開"
+          }
+        }
+      }
+    },
+    "同期停止中" : {
+      "comment" : "Offline banner, second line: iCloud sync is stopped until a decision",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sync stopped"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同期停止中"
+          }
+        }
+      }
+    },
+    "同期待ち" : {
+      "comment" : "Offline banner, second line: iCloud sync waits for a connection",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting to sync"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同期待ち"
+          }
+        }
+      }
+    },
+    "変更はこのiPhoneに保存されます。iCloudへの送信はまだ完了していません。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Changes are saved on this iPhone. They haven't finished sending to iCloud yet."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "変更はこのiPhoneに保存されます。iCloudへの送信はまだ完了していません。"
+          }
+        }
+      }
+    },
+    "実績と進行中タイマーの保存先を確認しています" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking where your progress and running timer are saved"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "実績と進行中タイマーの保存先を確認しています"
+          }
+        }
+      }
+    },
+    "実績・瓶・進行中タイマーを同じApple AccountのiPhone間で同期" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Syncs your progress, jar and running timer between iPhones on the same Apple Account"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "実績・瓶・進行中タイマーを同じApple AccountのiPhone間で同期"
+          }
+        }
+      }
+    },
+    "復旧を続ける" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue Recovery"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "復旧を続ける"
+          }
+        }
+      }
+    },
+    "復旧手順" : {
+      "comment" : "Offline banner button: opens the recovery steps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recovery Steps"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "復旧手順"
+          }
+        }
+      }
+    },
+    "復旧手順を確認" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review Recovery Steps"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "復旧手順を確認"
+          }
+        }
+      }
+    },
+    "戻る" : {
+      "comment" : "Button: back without canceling\nToolbar button: back without confirming",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "戻る"
+          }
+        }
+      }
+    },
+    "手順%lld、%@" : {
+      "comment" : "VoiceOver: one numbered step. %1$lld is the step number, %2$@ the step",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Step %1$lld, %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "手順%lld、%@"
+          }
+        }
+      }
+    },
+    "接続を確認できませんでした。端末への記録を続けられます。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't confirm the connection. You can keep recording on this device."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接続を確認できませんでした。端末への記録を続けられます。"
+          }
+        }
+      }
+    },
+    "接続を確認中" : {
+      "comment" : "VoiceOver: the connection is being checked",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking the connection"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接続を確認中"
+          }
+        }
+      }
+    },
+    "新しい端末でアプリを開き、同期を待つ" : {
+      "comment" : "Settings: step 3 of continuing on another iPhone",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open the app on the new device and wait for it to sync"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新しい端末でアプリを開き、同期を待つ"
+          }
+        }
+      }
+    },
+    "書き出せませんでした" : {
+      "comment" : "Alert title: exporting this device's data failed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't Export"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "書き出せませんでした"
+          }
+        }
+      }
+    },
     "最近の記録をiCloudへ送信できていません。記録はこのiPhoneに保存されています。iCloudに空きができると、自動で送信を再開します。" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recent records haven't been sent to iCloud. They're saved on this iPhone. Sending resumes automatically once iCloud has space."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -181,9 +2954,31 @@
         }
       }
     },
+    "本人確認が完了するまで保存領域は開きません。iCloudと通信状態を確認してください" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The data store won't open until your account is verified. Check iCloud and your connection"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本人確認が完了するまで保存領域は開きません。iCloudと通信状態を確認してください"
+          }
+        }
+      }
+    },
     "残り %@" : {
       "comment" : "Launch waiting screen: remaining time of the timer, e.g. 残り 12:34",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ left"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -192,8 +2987,31 @@
         }
       }
     },
+    "準備中" : {
+      "comment" : "Launch screen title while storage is being prepared\nVoiceOver: the app is getting ready at startup",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Getting Ready"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "準備中"
+          }
+        }
+      }
+    },
     "確認が済むと、この集中を瓶に積みます。" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Once the check is done, this focus will be added to your jar."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -202,8 +3020,311 @@
         }
       }
     },
+    "確認して続ける" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Confirm and Continue"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "確認して続ける"
+          }
+        }
+      }
+    },
+    "確認中" : {
+      "comment" : "Offline banner button while the connection is being checked",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "確認中"
+          }
+        }
+      }
+    },
+    "確認箇所: %@" : {
+      "comment" : "iCloud check failure, second line. %@ is the step that failed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Step: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "確認箇所: %@"
+          }
+        }
+      }
+    },
+    "確認箇所: %@・CloudKit %@" : {
+      "comment" : "iCloud check failure, second line. %1$@ is the step that failed, %2$@ the numeric CloudKit error code",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Step: %1$@ · CloudKit %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "確認箇所: %@・CloudKit %@"
+          }
+        }
+      }
+    },
+    "空の保存領域を準備しています" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preparing an empty data store"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "空の保存領域を準備しています"
+          }
+        }
+      }
+    },
+    "空の保存領域を準備中" : {
+      "comment" : "VoiceOver: progress while the emptied store is rebuilt",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preparing an empty data store"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "空の保存領域を準備中"
+          }
+        }
+      }
+    },
+    "端末に保存" : {
+      "comment" : "Offline banner, first line: records are being saved on this device",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saving to device"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "端末に保存"
+          }
+        }
+      }
+    },
+    "端末に届いたiCloudの履歴を確認できませんでした。再試行してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't check the iCloud history received on this device. Please try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "端末に届いたiCloudの履歴を確認できませんでした。再試行してください。"
+          }
+        }
+      }
+    },
+    "端末のデータでオフライン利用" : {
+      "comment" : "Button: keep using this device's saved data without iCloud",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use This Device's Data Offline"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "端末のデータでオフライン利用"
+          }
+        }
+      }
+    },
+    "端末の記録を保持して、この画面を閉じて利用を続けられます。復旧手順へ進むと現在の記録画面を閉じ、iCloudの状態を確認します。データの置き換えや削除には、その後の確認が必要です。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can close this screen and keep using the app. The records on this device are kept. Going on to the recovery steps closes the screens you're using now and checks iCloud. To replace or delete any data, you'll need to confirm again after that."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "端末の記録を保持して、この画面を閉じて利用を続けられます。復旧手順へ進むと現在の記録画面を閉じ、iCloudの状態を確認します。データの置き換えや削除には、その後の確認が必要です。"
+          }
+        }
+      }
+    },
+    "端末の記録を保持して復旧手順を表示" : {
+      "comment" : "VoiceOver: offline banner recovery button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep this device's records and show the recovery steps"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "端末の記録を保持して復旧手順を表示"
+          }
+        }
+      }
+    },
+    "端末データの削除を確認しました" : {
+      "comment" : "Acknowledgement toggle: the user understands this device's data will be deleted",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "I understand this device's data will be deleted"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "端末データの削除を確認しました"
+          }
+        }
+      }
+    },
+    "端末内のApple Account対応情報を安全に検証できません。記録を保護するため保存領域は開きません。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The Apple Account link stored on this device can't be safely verified. To protect your records, the data store won't be opened."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "端末内のApple Account対応情報を安全に検証できません。記録を保護するため保存領域は開きません。"
+          }
+        }
+      }
+    },
+    "端末内のタイマー履歴を安全に確認できません。記録は変更せず保持しています。設定のサポートからお問い合わせください" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can't safely check the timer history on this device. Your records are kept unchanged. Please contact us from Support in Settings"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "端末内のタイマー履歴を安全に確認できません。記録は変更せず保持しています。設定のサポートからお問い合わせください"
+          }
+        }
+      }
+    },
+    "端末内の記録を整理できませんでした" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't process the records on this device"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "端末内の記録を整理できませんでした"
+          }
+        }
+      }
+    },
+    "続けた回は自己申告あつかいになります。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A session you continue counts as self-reported."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "続けた回は自己申告あつかいになります。"
+          }
+        }
+      }
+    },
+    "続けて確認する" : {
+      "comment" : "Cancel-role button: keep the switch and keep reviewing",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep Reviewing"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "続けて確認する"
+          }
+        }
+      }
+    },
+    "置き換えが始まる前なので、この端末の切り替えを取り消して元の保存先へ戻れます。取り消した後はアプリを終了して開き直してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The app hasn't begun to replace anything yet, so you can cancel this device's switch and go back to your original storage location. After canceling, quit the app and open it again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "置き換えが始まる前なので、この端末の切り替えを取り消して元の保存先へ戻れます。取り消した後はアプリを終了して開き直してください。"
+          }
+        }
+      }
+    },
     "自動で再試行しています。記録はこのiPhoneに保存されています。" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retrying automatically. Your records are saved on this iPhone."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -215,6 +3336,12 @@
     "記録の保存先を選んでください" : {
       "comment" : "First-run storage choice: screen title",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose Where to Save Your Records"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -223,9 +3350,32 @@
         }
       }
     },
+    "記録の履歴が異なるため、自動で結合・送信できません。この画面を閉じて端末への記録を続けるか、設定の「データを書き出す」で記録を保存してください。同期の復旧についてはサポートへご相談ください。この操作で端末やiCloudの記録は削除しません。" : {
+      "comment" : "「データを書き出す」 is the export button's title in Settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The record histories differ, so they can't be combined or sent automatically. Close this screen and keep recording on this device, or save your records with “Export Data” in Settings. For help restoring sync, please contact support. None of this deletes any records on this device or in iCloud."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録の履歴が異なるため、自動で結合・送信できません。この画面を閉じて端末への記録を続けるか、設定の「データを書き出す」で記録を保存してください。同期の復旧についてはサポートへご相談ください。この操作で端末やiCloudの記録は削除しません。"
+          }
+        }
+      }
+    },
     "記録はこのiPhoneだけに保存し、iCloudへは送信しません。" : {
       "comment" : "First-run storage choice: the local-only option's one line",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your records save on this iPhone only and are never sent to iCloud."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -237,6 +3387,12 @@
     "記録はこのiPhoneだけに保存し、iCloudへは送信しません。アプリを削除すると、記録は失われます。あとでiCloud同期に切り替えると、このiPhoneの記録はiCloudの記録に置き換わります。このiPhoneの記録をiCloudへ移すことは、現在できません。" : {
       "comment" : "First-run storage choice: local-only confirmation message (full caveats)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your records save on this iPhone only and are never sent to iCloud. If you delete the app, your records will be lost. If you switch to iCloud sync later, this iPhone's records will be replaced with your iCloud records. This iPhone's records cannot be moved to iCloud at this time."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -245,9 +3401,177 @@
         }
       }
     },
+    "記録はリセット済みですが、ウィジェットの更新に失敗しました" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your records were reset, but the widgets couldn't be updated"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録はリセット済みですが、ウィジェットの更新に失敗しました"
+          }
+        }
+      }
+    },
+    "記録は削除していません。ただしこの起動では保存先の準備が途中まで進んでいるため、アプリを終了して開き直すほうが確実です。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your records have not been deleted. However, this launch had already started preparing storage, so quitting the app and opening it again is more reliable."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録は削除していません。ただしこの起動では保存先の準備が途中まで進んでいるため、アプリを終了して開き直すほうが確実です。"
+          }
+        }
+      }
+    },
+    "記録や保存先の設定は変更していません。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your records and storage settings have not been changed."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録や保存先の設定は変更していません。"
+          }
+        }
+      }
+    },
+    "記録を保持したままiCloudの復旧手順を確認しています" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keeping your records and checking iCloud for recovery"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録を保持したままiCloudの復旧手順を確認しています"
+          }
+        }
+      }
+    },
+    "記録を保護するため、別の保存先には切り替えていません。iCloudと空き容量を確認してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To protect your records, the app has not switched to another storage location. Check iCloud and your free space."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録を保護するため、別の保存先には切り替えていません。iCloudと空き容量を確認してください。"
+          }
+        }
+      }
+    },
+    "記録を保護するため、別の保存先には切り替えていません。このiPhoneの空き容量を確認してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To protect your records, the app has not switched to another storage location. Check the free space on this iPhone."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録を保護するため、別の保存先には切り替えていません。このiPhoneの空き容量を確認してください。"
+          }
+        }
+      }
+    },
+    "設定を開く" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Settings"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定を開く"
+          }
+        }
+      }
+    },
+    "診断情報" : {
+      "comment" : "Startup error: disclosure with technical details for support",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diagnostic Info"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "診断情報"
+          }
+        }
+      }
+    },
+    "起動を続けられませんでした。iPhoneの画面にiOSの確認（Apple Accountのサインインなど）が出ている場合は、先にそれを完了するか閉じてから「もう一度試す」を押してください。" : {
+      "comment" : "Launch watchdog: iOS may be showing its own prompt. 「もう一度試す」 is the Try Again button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The app couldn't finish starting up. If iOS is showing a prompt on your iPhone (such as signing in to your Apple Account), finish or close it first, then tap “Try Again”."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "起動を続けられませんでした。iPhoneの画面にiOSの確認（Apple Accountのサインインなど）が出ている場合は、先にそれを完了するか閉じてから「もう一度試す」を押してください。"
+          }
+        }
+      }
+    },
+    "起動処理の状態が変わりました。もう一度お試しください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The app's startup state changed. Please try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "起動処理の状態が変わりました。もう一度お試しください。"
+          }
+        }
+      }
+    },
     "通信がないまま今すぐ使うには、Appスイッチャーでポモジェムを終了してから開き直してください（アプリは削除しないでください）。" : {
       "comment" : "Offline launch wall, under the online retry: how to use the phone's copy right away",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To use the app right now without a connection, close PomoGem in the App Switcher and open it again (don't delete the app)."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -256,9 +3580,48 @@
         }
       }
     },
+    "通信が使えない場合も、前回確認済みの端末データがあれば利用を続けられます。初回の取得・保存先の切り替えには通信が必要です。この接続表示は、すべての記録の同期完了を示すものではありません。あなたのiCloudプライベートデータベースを使います。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Even without a connection, you can keep using the app if this device has data that was verified last time. The first download and switching your storage location need a connection. This connection status doesn't mean all your records have finished syncing. PomoGem uses your private iCloud database."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通信が使えない場合も、前回確認済みの端末データがあれば利用を続けられます。初回の取得・保存先の切り替えには通信が必要です。この接続表示は、すべての記録の同期完了を示すものではありません。あなたのiCloudプライベートデータベースを使います。"
+          }
+        }
+      }
+    },
+    "通信が戻ったら「同期を再開」で接続を確認できます。" : {
+      "comment" : "「同期を再開」 is the banner button's title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "When you're back online, tap “Resume Sync” to check the connection."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通信が戻ったら「同期を再開」で接続を確認できます。"
+          }
+        }
+      }
+    },
     "通信が戻ると自動で確認して、いつもの画面に戻ります。記録はこのiPhoneに残っています。" : {
       "comment" : "Launch wall after an iCloud session was closed in the background and the phone is now offline",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "When the connection comes back, the app checks automatically and returns to the usual screen. Your records are still on this iPhone."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -270,6 +3633,12 @@
     "通信が戻るのを待っています" : {
       "comment" : "Launch wall title: offline after an iCloud session; a restored connection resumes automatically",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting for a Connection"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -281,6 +3650,12 @@
     "通信が途切れていた場合は、つながると自動で確認します。通信のない場所で今すぐ使うには、Appスイッチャーでポモジェムを終了してから開き直してください（アプリは削除しないでください）。" : {
       "comment" : "iCloud check timed-out wall, under the online retry: the automatic check and how to go on offline",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "If the connection dropped, the app checks automatically once it's back. To use the app right now somewhere without a connection, close PomoGem in the App Switcher and open it again (don't delete the app)."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -289,9 +3664,129 @@
         }
       }
     },
+    "通信の回復を待っています。端末への記録は続けられます。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting for the connection to come back. You can keep recording on this device."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通信の回復を待っています。端末への記録は続けられます。"
+          }
+        }
+      }
+    },
+    "通信の回復後、iCloudの同期はシステムが再試行します。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Once you're back online, the system will retry iCloud sync."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通信の回復後、iCloudの同期はシステムが再試行します。"
+          }
+        }
+      }
+    },
+    "通信を確認できないため、端末のデータで利用を続けています。変更は端末に保存されます。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The connection can't be confirmed, so you're continuing with this device's data. Changes are saved on this device."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通信を確認できないため、端末のデータで利用を続けています。変更は端末に保存されます。"
+          }
+        }
+      }
+    },
+    "通知だけ更新できませんでした。通信状態を確認し、設定で通知時刻をもう一度保存してください" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Only the notifications couldn't be updated. Check your connection, then save the notification time again in Settings"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通知だけ更新できませんでした。通信状態を確認し、設定で通知時刻をもう一度保存してください"
+          }
+        }
+      }
+    },
+    "進行中なら「この端末で続ける」を選ぶ" : {
+      "comment" : "Settings: step 4 of continuing on another iPhone. 「この端末で続ける」 is the running-timer alert's button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "If a timer is running, choose “Continue on This Device”"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "進行中なら「この端末で続ける」を選ぶ"
+          }
+        }
+      }
+    },
+    "選択したiCloud保存を続けるには、Apple AccountへのサインインとiCloud接続が必要です" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To keep the iCloud storage you chose, sign in to your Apple Account and connect to iCloud"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択したiCloud保存を続けるには、Apple AccountへのサインインとiCloud接続が必要です"
+          }
+        }
+      }
+    },
+    "閉じる" : {
+      "comment" : "Button: closes an alert\nButton: closes the sync status sheet",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "閉じる"
+          }
+        }
+      }
+    },
     "集中が終わりました" : {
       "comment" : "Launch waiting screen: a focus timer reached its end",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus has ended"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -303,6 +3798,12 @@
     "集中が終わりました。確認が済むと、この集中を瓶に積みます。" : {
       "comment" : "VoiceOver: the focus timer ended while the app waits for iCloud",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus has ended. Once the check is done, this focus will be added to your jar."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -314,6 +3815,12 @@
     "集中した時間が、粒になって瓶にたまっていきます。" : {
       "comment" : "First-run storage choice: the app's one-line promise under the logo",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your focused time turns into gems that fill your jar."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -325,6 +3832,12 @@
     "集中は一時停止中です" : {
       "comment" : "Launch waiting screen: a focus timer is paused",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus is paused"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -333,13 +3846,19 @@
         }
       }
     },
-    "集中は一時停止中です。残り%lld分%lld秒" : {
-      "comment" : "VoiceOver: paused focus with remaining minutes and seconds",
+    "集中は一時停止中です。残り%@%@" : {
+      "comment" : "VoiceOver: paused focus. %1$@ is the minutes left, %2$@ the seconds left",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus is paused. %1$@, %2$@ left"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "集中は一時停止中です。残り%lld分%lld秒"
+            "value" : "集中は一時停止中です。残り%@%@"
           }
         }
       }
@@ -347,6 +3866,12 @@
     "集中は続いています" : {
       "comment" : "Launch waiting screen: a focus timer is still running",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus is still running"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -355,13 +3880,19 @@
         }
       }
     },
-    "集中は続いています。残り%lld分%lld秒" : {
-      "comment" : "VoiceOver: running focus with remaining minutes and seconds",
+    "集中は続いています。残り%@%@" : {
+      "comment" : "VoiceOver: running focus. %1$@ is the minutes left, %2$@ the seconds left",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus is still running. %1$@, %2$@ left"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "集中は続いています。残り%lld分%lld秒"
+            "value" : "集中は続いています。残り%@%@"
           }
         }
       }

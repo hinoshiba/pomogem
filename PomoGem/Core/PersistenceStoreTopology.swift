@@ -207,9 +207,10 @@ enum PersistenceDeploymentStateError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .selectionAlreadyMade:
-            "保存先は既に選択されています。変更するときは、設定の「iCloudと保存先」から確認してください。"
+            String(localized: "保存先は既に選択されています。変更するときは、設定の「iCloudと保存先」から確認してください。", table: "Launch",
+                   comment: "「iCloudと保存先」 is the Settings section title")
         case .invalidPersistedSelection:
-            "保存方式の設定を安全に確認できません。"
+            String(localized: "保存方式の設定を安全に確認できません。", table: "Launch")
         }
     }
 }
@@ -1248,13 +1249,13 @@ enum PersistenceStoreTopologyError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidConfiguration:
-            "保存領域の構成が不正です。"
+            String(localized: "保存領域の構成が不正です。", table: "Launch")
         case .unsafeLegacyProjectionMigration:
-            "保存領域を安全に移行できませんでした。"
+            String(localized: "保存領域を安全に移行できませんでした。", table: "Launch")
         case .missingVerifiedAccountNamespace:
-            "Apple Accountを確認できるまで保存領域を開けません。"
+            String(localized: "Apple Accountを確認できるまで保存領域を開けません。", table: "Launch")
         case .incompleteStorePairAfterMount:
-            "保存領域の作成が完了していません。既存ファイルを削除せず停止しました。"
+            String(localized: "保存領域の作成が完了していません。既存ファイルを削除せず停止しました。", table: "Launch")
         }
     }
 }
