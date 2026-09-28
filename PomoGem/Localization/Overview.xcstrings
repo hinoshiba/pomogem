@@ -1,9 +1,78 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "%@ 〜 %@" : {
+      "comment" : "Crystal detail: the date range its gems come from (start, end)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ – %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 〜 %@"
+          }
+        }
+      }
+    },
+    "%@t" : {
+      "comment" : "Mass in metric tons. %@ is the number, already formatted. en: '%@ t' (with a space; never converted).",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ t"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@t"
+          }
+        }
+      }
+    },
+    "%@、%@" : {
+      "comment" : "VoiceOver, one color of a crystal: color or theme name, spoken percentage",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@、%@"
+          }
+        }
+      }
+    },
     "%@、%@、%lld粒" : {
       "comment" : "VoiceOver day row: date with weekday, focus time, gem count",
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@, %2$@, %3$lld gem"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@, %2$@, %3$lld gems"
+                }
+              }
+            }
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -15,6 +84,12 @@
     "%@、%@の記念石、%@" : {
       "comment" : "VoiceOver, one achievement stone card: theme, kind, date",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%2$@ milestone stone for %1$@, %3$@"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -23,9 +98,56 @@
         }
       }
     },
+    "%@、%lld粒、%@" : {
+      "comment" : "VoiceOver, one theme of a crystal: theme name, gem count, spoken percentage",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@, %2$lld gem, %3$@"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@, %2$lld gems, %3$@"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@、%lld粒、%@"
+          }
+        }
+      }
+    },
     "%@、この端末に届いている%lld粒、%@" : {
       "comment" : "VoiceOver month card: month, gem count on this iPhone, spoken mass",
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@, %2$lld gem on this device, %3$@"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@, %2$lld gems on this device, %3$@"
+                }
+              }
+            }
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -37,6 +159,24 @@
     "%@、集中%@。%@、%lld粒分" : {
       "comment" : "VoiceOver, one crystal on the star map: mass, focus time, crystal name such as 結晶, gems it holds",
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@, %2$@ of focus. %3$@ holding %4$lld gem"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@, %2$@ of focus. %3$@ holding %4$lld gems"
+                }
+              }
+            }
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -45,9 +185,107 @@
         }
       }
     },
+    "%@の%@、%lld個、%lld粒を保持、%@" : {
+      "comment" : "VoiceOver, one crystal tier: scale such as ×10, form name such as 結晶, how many there are, gems held, spoken mass",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ %2$@, count %3$lld, holding %4$lld gems, %5$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@の%@、%lld個、%lld粒を保持、%@"
+          }
+        }
+      }
+    },
+    "%@の%@、%lld粒、%lld粒を保持、%@" : {
+      "comment" : "VoiceOver, loose gems in the tier list: scale (×1), form name, gem count, gems held, spoken mass",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ %2$@, count %3$lld, gems held: %4$lld, %5$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@の%@、%lld粒、%lld粒を保持、%@"
+          }
+        }
+      }
+    },
+    "%@の瓶、%lld粒、%@" : {
+      "comment" : "VoiceOver, month jar: month, gem count, mass",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@ jar, %2$lld gem, %3$@"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@ jar, %2$lld gems, %3$@"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@の瓶、%lld粒、%@"
+          }
+        }
+      }
+    },
+    "%@の瓶、読み込み範囲内、%lld粒、%@" : {
+      "comment" : "VoiceOver, month jar with only its loaded part: month, gem count, mass",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@ jar, loaded part only, %2$lld gem, %3$@"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@ jar, loaded part only, %2$lld gems, %3$@"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@の瓶、読み込み範囲内、%lld粒、%@"
+          }
+        }
+      }
+    },
     "%@の結晶" : {
       "comment" : "Crystal card title; the argument is a scale such as ×10",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ crystal"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -59,6 +297,24 @@
     "%@の結晶、%lld粒、%@" : {
       "comment" : "VoiceOver, crystal card: scale such as ×10, gems inside, mass",
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@ crystal, %2$lld gem, %3$@"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@ crystal, %2$lld gems, %3$@"
+                }
+              }
+            }
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -70,6 +326,24 @@
     "%@・%lld粒" : {
       "comment" : "Day row: focus time, then gem count",
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@ · %2$lld gem"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@ · %2$lld gems"
+                }
+              }
+            }
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -78,9 +352,66 @@
         }
       }
     },
+    "%lldパーセント" : {
+      "comment" : "VoiceOver: a share, such as 40 percent",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld percent"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lldパーセント"
+          }
+        }
+      }
+    },
+    "%lld件以上のうち直近%lld件から" : {
+      "comment" : "Month shelf scope: at least %1$lld records in total, drawn from the latest %2$lld",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "From the latest %2$lld of %1$lld+ records"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld件以上のうち直近%lld件から"
+          }
+        }
+      }
+    },
+    "%lld個" : {
+      "comment" : "How many crystals of one tier (×10, ×100 …) there are",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld個"
+          }
+        }
+      }
+    },
     "%lld回" : {
       "comment" : "Weekly card tile value: a count of times",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -89,13 +420,60 @@
         }
       }
     },
-    "%lld粒" : {
-      "comment" : "VoiceOver, time core: gems stacked so far",
+    "%lld段" : {
+      "comment" : "Number of crystal tiers (×10, ×100 …) in the jar",
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld tier"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld tiers"
+                }
+              }
+            }
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld粒"
+            "value" : "%lld段"
+          }
+        }
+      }
+    },
+    "%lld粒・%@" : {
+      "comment" : "Crystal detail, one theme: gem count, then its share such as 40%",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld gem · %2$@"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld gems · %2$@"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld粒・%@"
           }
         }
       }
@@ -103,6 +481,24 @@
     "%lld粒以上" : {
       "comment" : "VoiceOver, time core: at least this many gems (still being checked)",
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "at least %lld gem"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "at least %lld gems"
+                }
+              }
+            }
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -111,9 +507,61 @@
         }
       }
     },
+    "%lld粒分の積み重ね" : {
+      "comment" : "Crystal detail title: how many gems this crystal holds",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Gem of Focus"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Gems of Focus"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld粒分の積み重ね"
+          }
+        }
+      }
+    },
+    "1%未満" : {
+      "comment" : "A share below one percent",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Under 1%"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1%未満"
+          }
+        }
+      }
+    },
     "10粒がひとつの結晶になるのは、瓶を整理するためです。時間の価値は変わりません。" : {
       "comment" : "Overview crystal section: why 10 gems become one crystal",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "10 gems become one crystal to keep your jar tidy. The value of your time stays the same."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -122,8 +570,31 @@
         }
       }
     },
+    "10粒ごとに生まれます" : {
+      "comment" : "Empty crystal section: one crystal forms from every 10 gems",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "One forms for every 10 gems"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "10粒ごとに生まれます"
+          }
+        }
+      }
+    },
     "10粒をひとつの結晶にまとめます。価値の段階ではなく、記録と質量をそのまま残して瓶に余白をつくる仕組みです。" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "10 gems combine into one crystal. It isn't a ladder of value: it makes room in the jar while keeping every record and all the mass."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -132,9 +603,468 @@
         }
       }
     },
+    "1パーセント未満" : {
+      "comment" : "VoiceOver: a share below one percent",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Under 1 percent"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1パーセント未満"
+          }
+        }
+      }
+    },
+    "iCloudの確認が終わるまで、古い階層は表示しません。この端末で確認できた記録だけを年月の棚に表示します。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Older tiers stay hidden until iCloud is checked. Only records confirmed on this device appear on the year and month shelf."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudの確認が終わるまで、古い階層は表示しません。この端末で確認できた記録だけを年月の棚に表示します。"
+          }
+        }
+      }
+    },
+    "iCloudを確認中" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking iCloud"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudを確認中"
+          }
+        }
+      }
+    },
+    "iCloudを確認中。この端末で確認済みの記録は%lld粒。古い結晶は表示していません。%@" : {
+      "comment" : "VoiceOver, lifetime jar while iCloud is checked: confirmed gem count, then the milestone stone summary",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Checking iCloud. %1$lld gem confirmed on this device. Older crystals aren't shown. %2$@"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Checking iCloud. %1$lld gems confirmed on this device. Older crystals aren't shown. %2$@"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudを確認中。この端末で確認済みの記録は%lld粒。古い結晶は表示していません。%@"
+          }
+        }
+      }
+    },
+    "iCloudを確認中です" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking iCloud…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudを確認中です"
+          }
+        }
+      }
+    },
+    "iCloudを確認中です。この端末で確認できた月別記録だけを表示しています。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking iCloud. Showing only monthly records confirmed on this device."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudを確認中です。この端末で確認できた月別記録だけを表示しています。"
+          }
+        }
+      }
+    },
+    "iCloudを確認中です。年と月の表示には、この端末で確認できた記録だけを使います。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking iCloud. Years and months only use records confirmed on this device."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudを確認中です。年と月の表示には、この端末で確認できた記録だけを使います。"
+          }
+        }
+      }
+    },
+    "iCloudを確認中です。確認が終わるまで古い階層は表示しません。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking iCloud. Older tiers stay hidden until the check is finished."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudを確認中です。確認が終わるまで古い階層は表示しません。"
+          }
+        }
+      }
+    },
+    "iCloudを確認中・この端末で確認済みの直近%lld件" : {
+      "comment" : "Month shelf scope while iCloud is checked; the argument is the number of recent records",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Checking iCloud · %lld recent record confirmed on this device"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Checking iCloud · %lld recent records confirmed on this device"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudを確認中・この端末で確認済みの直近%lld件"
+          }
+        }
+      }
+    },
+    "iCloudを確認中・確認済み記録なし" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking iCloud · No confirmed records"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudを確認中・確認済み記録なし"
+          }
+        }
+      }
+    },
+    "、" : {
+      "comment" : "Separator between the spoken phrases of one VoiceOver label. en: ', ' (comma and space).",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ", "
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "、"
+          }
+        }
+      }
+    },
+    "いま" : {
+      "comment" : "Lens: this week and the loose gems, seen up close",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Now"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "いま"
+          }
+        }
+      }
+    },
+    "いま、瓶で動く粒" : {
+      "comment" : "Card title: the loose gems moving in the jar now",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gems in Your Jar Now"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "いま、瓶で動く粒"
+          }
+        }
+      }
+    },
+    "いま瓶で動く粒、%lld粒" : {
+      "comment" : "VoiceOver: the number of loose gems moving in the jar now",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld gem moving in your jar now"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld gems moving in your jar now"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "いま瓶で動く粒、%lld粒"
+          }
+        }
+      }
+    },
+    "このiPhoneの集計の確認が終わるまで、古い階層は表示しません。確認できた記録だけを年月の棚に表示します。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Older tiers stay hidden until this iPhone's totals are checked. Only confirmed records appear on the year and month shelf."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneの集計の確認が終わるまで、古い階層は表示しません。確認できた記録だけを年月の棚に表示します。"
+          }
+        }
+      }
+    },
+    "このiPhoneの集計を確認中" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking this iPhone's totals"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneの集計を確認中"
+          }
+        }
+      }
+    },
+    "このiPhoneの集計を確認中。この端末で確認済みの記録は%lld粒。古い結晶は表示していません。%@" : {
+      "comment" : "VoiceOver, lifetime jar while this iPhone's totals are checked: confirmed gem count, then the milestone stone summary",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Checking this iPhone's totals. %1$lld gem confirmed on this device. Older crystals aren't shown. %2$@"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Checking this iPhone's totals. %1$lld gems confirmed on this device. Older crystals aren't shown. %2$@"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneの集計を確認中。この端末で確認済みの記録は%lld粒。古い結晶は表示していません。%@"
+          }
+        }
+      }
+    },
+    "このiPhoneの集計を確認中です" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking this iPhone's totals…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneの集計を確認中です"
+          }
+        }
+      }
+    },
+    "このiPhoneの集計を確認中です。この端末で確認できた月別記録だけを表示しています。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking this iPhone's totals. Showing only monthly records confirmed on this device."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneの集計を確認中です。この端末で確認できた月別記録だけを表示しています。"
+          }
+        }
+      }
+    },
+    "このiPhoneの集計を確認中です。年と月の表示には、この端末で確認できた記録だけを使います。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking this iPhone's totals. Years and months only use records confirmed on this device."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneの集計を確認中です。年と月の表示には、この端末で確認できた記録だけを使います。"
+          }
+        }
+      }
+    },
+    "このiPhoneの集計を確認中です。確認が終わるまで古い階層は表示しません。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking this iPhone's totals. Older tiers stay hidden until the check is finished."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneの集計を確認中です。確認が終わるまで古い階層は表示しません。"
+          }
+        }
+      }
+    },
+    "このiPhoneの集計を確認中です。確認できた記録だけを表示しています。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking this iPhone's totals. Showing only the records that could be confirmed."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneの集計を確認中です。確認できた記録だけを表示しています。"
+          }
+        }
+      }
+    },
+    "このiPhoneの集計を確認中・この端末で確認済みの直近%lld件" : {
+      "comment" : "Month shelf scope while this iPhone's totals are checked; the argument is the number of recent records",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Checking this iPhone's totals · %lld recent record confirmed on this device"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Checking this iPhone's totals · %lld recent records confirmed on this device"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneの集計を確認中・この端末で確認済みの直近%lld件"
+          }
+        }
+      }
+    },
+    "このiPhoneの集計を確認中・確認済み記録なし" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking this iPhone's totals · No confirmed records"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneの集計を確認中・確認済み記録なし"
+          }
+        }
+      }
+    },
     "このほか自己申告 %@" : {
       "comment" : "Weekly card: self-reported mass outside the measured tiles; the argument is a mass",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plus %@ self-reported"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -145,6 +1075,12 @@
     },
     "この日の記録を開きます" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opens this day's records."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -153,8 +1089,31 @@
         }
       }
     },
+    "この月の代表瓶" : {
+      "comment" : "Section title: a jar drawn from this month's latest gems",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This Month's Sample Jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この月の代表瓶"
+          }
+        }
+      }
+    },
     "この月の記録を、ひとつの瓶とカードで振り返ります" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Looks back on this month's records as one jar and a card."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -163,9 +1122,32 @@
         }
       }
     },
+    "この月を再読み込み" : {
+      "comment" : "VoiceOver: reloads this month",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reload this month"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この月を再読み込み"
+          }
+        }
+      }
+    },
     "この月を振り返る" : {
       "comment" : "Opens the month's monthly wrap-up (Wrapped), which can become a share card",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review This Month"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -174,9 +1156,150 @@
         }
       }
     },
+    "この端末で確認済み" : {
+      "comment" : "Lifetime stat title: gems confirmed on this device while sync is checked",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Confirmed on this device"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末で確認済み"
+          }
+        }
+      }
+    },
+    "この端末には、この年の記録がまだ届いていません。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No records from this year have reached this device yet."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末には、この年の記録がまだ届いていません。"
+          }
+        }
+      }
+    },
+    "この端末に届いた最新の記録で集計し直します" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recounts with the latest records on this device."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末に届いた最新の記録で集計し直します"
+          }
+        }
+      }
+    },
+    "この端末に届いた月別合計を読み込みます" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loads the monthly totals on this device."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末に届いた月別合計を読み込みます"
+          }
+        }
+      }
+    },
+    "この端末に届いている%@の記録、%lld粒、%@" : {
+      "comment" : "VoiceOver year summary: the year (such as 2026), gem count on this iPhone, spoken mass",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Records from %1$@ on this device, %2$lld gem, %3$@"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Records from %1$@ on this device, %2$lld gems, %3$@"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末に届いている%@の記録、%lld粒、%@"
+          }
+        }
+      }
+    },
+    "この端末に届いている%lld粒、%@" : {
+      "comment" : "VoiceOver month summary before its time loads: gem count on this iPhone, spoken mass",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld gem on this device, %2$@"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld gems on this device, %2$@"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末に届いている%lld粒、%@"
+          }
+        }
+      }
+    },
     "この端末に届いている%lld粒、%@、%@" : {
       "comment" : "VoiceOver month summary: gem count on this iPhone, spoken mass, focus time",
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld gem on this device, %2$@, %3$@ of focus"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld gems on this device, %2$@, %3$@ of focus"
+                }
+              }
+            }
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -185,9 +1308,190 @@
         }
       }
     },
+    "この端末に届いている全%lld粒・%@を表示しています。" : {
+      "comment" : "Month jar disclosure: every gem of the month on this iPhone and their mass",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Showing the %1$lld gem on this device (%2$@)."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Showing all %1$lld gems on this device (%2$@)."
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末に届いている全%lld粒・%@を表示しています。"
+          }
+        }
+      }
+    },
+    "この端末に届いている範囲です。保存領域の反映中は合計が増えることがあります。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This is what has reached this device. Totals may grow while your storage is still updating."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末に届いている範囲です。保存領域の反映中は合計が増えることがあります。"
+          }
+        }
+      }
+    },
+    "この端末に届いている範囲を表示しています。保存領域の反映中は年や合計が増えることがあります。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Showing what has reached this device. Years and totals may grow while your storage is still updating."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末に届いている範囲を表示しています。保存領域の反映中は年や合計が増えることがあります。"
+          }
+        }
+      }
+    },
+    "この端末に最初の一粒が届くと、ここから年と月をたどれます。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Once your first gem reaches this device, you can browse years and months from here."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末に最初の一粒が届くと、ここから年と月をたどれます。"
+          }
+        }
+      }
+    },
+    "この端末の年月を確認中" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking this device's years and months…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末の年月を確認中"
+          }
+        }
+      }
+    },
+    "この端末の粒" : {
+      "comment" : "Metric title: the gems on this iPhone",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gems on this device"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末の粒"
+          }
+        }
+      }
+    },
+    "この端末の質量" : {
+      "comment" : "Metric title: the mass of the records on this iPhone",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mass on this device"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末の質量"
+          }
+        }
+      }
+    },
+    "この粒には元記録への参照が保存されていません。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This gem has no stored links to the original records."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この粒には元記録への参照が保存されていません。"
+          }
+        }
+      }
+    },
+    "この粒に残っている情報" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What this gem still holds"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この粒に残っている情報"
+          }
+        }
+      }
+    },
+    "すべての積み重ねを、一歩引いて見る" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Step back and see everything you've built up"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すべての積み重ねを、一歩引いて見る"
+          }
+        }
+      }
+    },
     "ひと月の瓶とテーマ別の時間を見て、カードにして残せます。" : {
       "comment" : "Caption under 「この月を振り返る」",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "See the month's jar and your time by theme, and keep it as a card."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -196,9 +1500,83 @@
         }
       }
     },
+    "ほか%lld件を表示" : {
+      "comment" : "Crystal detail: show the remaining themes; the argument is how many",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show %lld More"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ほか%lld件を表示"
+          }
+        }
+      }
+    },
+    "まとめた日：%@" : {
+      "comment" : "Old-format crystal: the date its gems were combined",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Combined on %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "まとめた日：%@"
+          }
+        }
+      }
+    },
+    "まとめた日：%@ 〜 %@" : {
+      "comment" : "Old-format crystal: the first and last dates its gems were combined",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Combined %1$@ – %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "まとめた日：%@ 〜 %@"
+          }
+        }
+      }
+    },
+    "タイマー" : {
+      "comment" : "Crystal detail stat title: gems from timed sessions",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Timer"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマー"
+          }
+        }
+      }
+    },
     "タイマーの完走はまだありません。自己申告の%@も、瓶とこれまでの記録に入っています。" : {
       "comment" : "Weekly card caption when the week has only self-reported mass; the argument is a mass",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No completed timer sessions yet. The %@ you self-reported is in your jar and your records, too."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -207,9 +1585,49 @@
         }
       }
     },
+    "ダブルタップで内訳を表示します" : {
+      "comment" : "VoiceOver hint on a crystal: opens its details",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opens its details."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ダブルタップで内訳を表示します"
+          }
+        }
+      }
+    },
+    "テーマの内訳" : {
+      "comment" : "Crystal detail: heading of the per-theme breakdown",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "By theme"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマの内訳"
+          }
+        }
+      }
+    },
     "テーマ別" : {
       "comment" : "Heading of the per-theme time breakdown of a month",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "By Theme"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -220,6 +1638,12 @@
     },
     "テーマ別・日ごとの記録と、この月の代表瓶を開きます" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opens this month's records by theme and by day, and a sample jar."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -228,9 +1652,81 @@
         }
       }
     },
+    "レア粒の光も内側に保持" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Also holds the glow of rare gems"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "レア粒の光も内側に保持"
+          }
+        }
+      }
+    },
+    "一回ずつの手触りと、今週積み上げた時間を見ます。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "See each session up close, and the time you've built up this week."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一回ずつの手触りと、今週積み上げた時間を見ます。"
+          }
+        }
+      }
+    },
+    "一粒" : {
+      "comment" : "Scale or form name of a single gem, as opposed to a crystal (×10 …)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Single gem"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一粒"
+          }
+        }
+      }
+    },
+    "一粒は消えず、\n時間の景色に変わる。" : {
+      "comment" : "Progress screen headline; keep the line break",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No gem disappears.\nIt becomes a landscape of time."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一粒は消えず、\n時間の景色に変わる。"
+          }
+        }
+      }
+    },
     "今週の実測" : {
       "comment" : "Weekly card tile: measured mass this week",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Timed this week"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -241,6 +1737,12 @@
     },
     "今週の時間が積み上がっている。" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your time is building up this week."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -252,6 +1754,24 @@
     "今週の積み上げ、%@、実測%@、完走した回数%lld回。このほか自己申告%@。回数は時間の価値とは別に数えています" : {
       "comment" : "VoiceOver weekly card: focus time, measured mass, timer completions, self-reported mass",
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "This week: %1$@ of focus, %2$@ timed, %3$lld completed session. Plus %4$@ self-reported. Sessions are counted separately from the value of your time"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "This week: %1$@ of focus, %2$@ timed, %3$lld completed sessions. Plus %4$@ self-reported. Sessions are counted separately from the value of your time"
+                }
+              }
+            }
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -263,6 +1783,24 @@
     "今週の積み上げ、%@、実測%@、完走した回数%lld回。回数は時間の価値とは別に数えています" : {
       "comment" : "VoiceOver weekly card: focus time, measured mass, timer completions",
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "This week: %1$@ of focus, %2$@ timed, %3$lld completed session. Sessions are counted separately from the value of your time"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "This week: %1$@ of focus, %2$@ timed, %3$lld completed sessions. Sessions are counted separately from the value of your time"
+                }
+              }
+            }
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -273,6 +1811,12 @@
     },
     "今週の積み上げ、瓶で動く結晶、年月の棚。距離を変えても、一回ごとの集中と質量はそのまま残ります。" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This week's progress, the crystals moving in your jar and your shelf of years and months. Whatever the distance, every focus session and its mass stay exactly as they are."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -283,6 +1827,12 @@
     },
     "今週の積み上げ、瓶で動く結晶、直近の年月。古い一回ごとの記録も消えず、必要な範囲だけ読み込みます。" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This week's progress, the crystals moving in your jar and your recent years and months. Older individual records aren't lost; only what's needed is loaded."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -294,6 +1844,12 @@
     "今週の積み上げ。タイマーの完走はまだありません。自己申告の%@は、瓶とこれまでの記録に入っています" : {
       "comment" : "VoiceOver weekly card when the week has only self-reported mass",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This week so far. No completed timer sessions yet. The %@ you self-reported is in your jar and your records"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -305,6 +1861,12 @@
     "今週の積み上げ。今週のタイマー完走はまだありません。休んでも、以前の記録は減りません" : {
       "comment" : "VoiceOver weekly card for an empty week",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This week so far. No completed timer sessions this week yet. Taking a break never shrinks your earlier records"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -315,6 +1877,12 @@
     },
     "今週は、まだ透明。" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This week is still clear."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -325,6 +1893,12 @@
     },
     "今週は、自己申告で積んでいる。" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This week, you're adding self-reported time."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -333,8 +1907,46 @@
         }
       }
     },
+    "代表瓶を読み込めませんでした" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't Load the Sample Jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代表瓶を読み込めませんでした"
+          }
+        }
+      }
+    },
+    "以前の形式から引き継いだ粒です。保存済みの粒数・質量と、記録されている内訳を表示します。元記録への参照や一部の内訳がない場合があります。記念石は別の石として残します。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This gem was carried over from an earlier format. It shows the saved gem count and mass, and whatever breakdown was recorded. Links to the original records or parts of the breakdown may be missing. Milestone stones stay as separate stones."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以前の形式から引き継いだ粒です。保存済みの粒数・質量と、記録されている内訳を表示します。元記録への参照や一部の内訳がない場合があります。記念石は別の石として残します。"
+          }
+        }
+      }
+    },
     "以前の形式で保存された結晶です。" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This crystal was saved in an earlier format."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -343,9 +1955,182 @@
         }
       }
     },
+    "価値は集中時間、粒の階層は瓶を整理する形として見る" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Its value is your focus time; gem tiers just keep the jar organized"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "価値は集中時間、粒の階層は瓶を整理する形として見る"
+          }
+        }
+      }
+    },
+    "保存されている色の内訳" : {
+      "comment" : "Crystal detail: the color breakdown that was saved",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved color breakdown"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存されている色の内訳"
+          }
+        }
+      }
+    },
+    "保存領域から確認できた範囲の階層です。整理が終わるまで、生涯値は減らさず「以上」で扱います。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "These are the tiers that could be confirmed from storage. Until tidying finishes, lifetime totals are shown as minimums and never go down."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存領域から確認できた範囲の階層です。整理が終わるまで、生涯値は減らさず「以上」で扱います。"
+          }
+        }
+      }
+    },
+    "保持する粒" : {
+      "comment" : "Tier metric title: the gems this tier holds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gems held"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保持する粒"
+          }
+        }
+      }
+    },
+    "保持する質量" : {
+      "comment" : "Tier metric title: the mass this tier holds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mass held"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保持する質量"
+          }
+        }
+      }
+    },
+    "元記録への参照は残っています。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Links to the original records are kept."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "元記録への参照は残っています。"
+          }
+        }
+      }
+    },
+    "全%lld件のうち直近%lld件から" : {
+      "comment" : "Month shelf scope: %1$lld records in total, drawn from the latest %2$lld",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "From the latest %2$lld of %1$lld records"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全%lld件のうち直近%lld件から"
+          }
+        }
+      }
+    },
+    "全%lld個のうち最新%lld個を表示" : {
+      "comment" : "Milestone stone section subtitle: the latest %2$lld of %1$lld stones shown",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Latest %2$lld of %1$lld shown"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全%lld個のうち最新%lld個を表示"
+          }
+        }
+      }
+    },
+    "全%lld粒・%@。瓶は最新%lld粒の代表表示です。" : {
+      "comment" : "Month jar disclosure: all gems of the month and their mass; the jar draws only the latest %3$lld",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld gems in all · %2$@. The jar shows only the latest %3$lld as a sample."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全%lld粒・%@。瓶は最新%lld粒の代表表示です。"
+          }
+        }
+      }
+    },
+    "再読み込み" : {
+      "comment" : "Reload button (icon only in the browser, text in the month sheet)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reload"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再読み込み"
+          }
+        }
+      }
+    },
     "完走した回数" : {
       "comment" : "Weekly card tile: timers that ran to their end this week",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Completed sessions"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -354,9 +2139,165 @@
         }
       }
     },
+    "年を選ぶ" : {
+      "comment" : "Caption above the row of year buttons",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a year"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "年を選ぶ"
+          }
+        }
+      }
+    },
+    "年月" : {
+      "comment" : "Lens: the years and months of the timeline",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Years & Months"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "年月"
+          }
+        }
+      }
+    },
+    "年月の範囲を確認できませんでした。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't determine the range of years and months."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "年月の範囲を確認できませんでした。"
+          }
+        }
+      }
+    },
+    "年月の記録はまだありません" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No years or months yet"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "年月の記録はまだありません"
+          }
+        }
+      }
+    },
+    "年月をたどる" : {
+      "comment" : "Section title of the Years & Months browser",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Browse Years & Months"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "年月をたどる"
+          }
+        }
+      }
+    },
+    "年月を再読み込み" : {
+      "comment" : "VoiceOver: reloads the Years & Months browser",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reload years and months"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "年月を再読み込み"
+          }
+        }
+      }
+    },
+    "年月を読み込めませんでした" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't Load Years & Months"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "年月を読み込めませんでした"
+          }
+        }
+      }
+    },
+    "手動" : {
+      "comment" : "Crystal detail stat title: gems added manually (self-reported)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manual"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "手動"
+          }
+        }
+      }
+    },
+    "整理中" : {
+      "comment" : "Time core label value while progress is still being tallied",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tallying…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "整理中"
+          }
+        }
+      }
+    },
     "日ごとの記録" : {
       "comment" : "Heading of a month's list of days",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Day by Day"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -367,6 +2308,12 @@
     },
     "日付を選ぶと、その日の記録を一件ずつ見られます。" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a date to see that day's records one by one."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -375,9 +2322,31 @@
         }
       }
     },
+    "旧形式のため、テーマ・入力方法・レアの内訳はこの粒自体には保存されていません。記念石は別の石として残します。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Because it uses an older format, the gem itself doesn't store a breakdown by theme, entry method or rare gems. Milestone stones stay as separate stones."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "旧形式のため、テーマ・入力方法・レアの内訳はこの粒自体には保存されていません。記念石は別の石として残します。"
+          }
+        }
+      }
+    },
     "時間" : {
       "comment" : "This week's focus time stat title",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Time"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -386,8 +2355,48 @@
         }
       }
     },
+    "時間の核" : {
+      "comment" : "The time core, the lifetime focus-time milestone (title, label and VoiceOver)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Time Core"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間の核"
+          }
+        }
+      }
+    },
+    "時間の核の器" : {
+      "comment" : "Label of the empty vessel the first time core will fill",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Time Core Vessel"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間の核の器"
+          }
+        }
+      }
+    },
     "時間の核は集中した時間で進みます。10分で100グラム、25分で250グラム、60分で600グラムです" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The time core grows with your focus time: 10 minutes is 100 grams, 25 minutes is 250 grams, and 60 minutes is 600 grams"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -396,8 +2405,268 @@
         }
       }
     },
+    "時間をズームする" : {
+      "comment" : "Section title above the Now / Crystals / Years & Months lens picker",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zoom Through Time"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間をズームする"
+          }
+        }
+      }
+    },
+    "更新前の履歴ページは再利用せず、確認後に読み込み直します。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The history page from before won't be reused. It reloads once the check is finished."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新前の履歴ページは再利用せず、確認後に読み込み直します。"
+          }
+        }
+      }
+    },
+    "最初の一粒から、ここに結晶の階段が育ちます。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Starting with your first gem, a staircase of crystals grows here."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最初の一粒から、ここに結晶の階段が育ちます。"
+          }
+        }
+      }
+    },
+    "最初の一粒を積むと、ここに今月の瓶が現れます。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add your first gem and this month's jar appears here."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最初の一粒を積むと、ここに今月の瓶が現れます。"
+          }
+        }
+      }
+    },
+    "最初の時間の核" : {
+      "comment" : "VoiceOver: the first time core, not formed yet",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "First time core"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最初の時間の核"
+          }
+        }
+      }
+    },
+    "最初の結晶までの進捗を整理しています" : {
+      "comment" : "VoiceOver, empty time-core vessel while progress is still being tallied",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tallying progress toward the first crystal"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最初の結晶までの進捗を整理しています"
+          }
+        }
+      }
+    },
+    "最新%lld粒の代表瓶" : {
+      "comment" : "VoiceOver: a jar drawn from this many of the month's latest gems",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Sample jar of the latest %lld gem"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Sample jar of the latest %lld gems"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最新%lld粒の代表瓶"
+          }
+        }
+      }
+    },
+    "最新の代表粒を読み込み中" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading the latest gems…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最新の代表粒を読み込み中"
+          }
+        }
+      }
+    },
+    "最新の粒を近くで見る" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A close look at your latest gems"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最新の粒を近くで見る"
+          }
+        }
+      }
+    },
+    "月ごとの合計を集計中" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adding up monthly totals…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "月ごとの合計を集計中"
+          }
+        }
+      }
+    },
+    "月ごとの瓶で、離れていた時期も含む歩みを見ます。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "See your journey in monthly jars, including the times you were away."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "月ごとの瓶で、離れていた時期も含む歩みを見ます。"
+          }
+        }
+      }
+    },
+    "月ごと・全%lld件" : {
+      "comment" : "Month shelf scope: by month, the argument is the total number of records",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "By month · %lld record"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "By month · %lld records"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "月ごと・全%lld件"
+          }
+        }
+      }
+    },
+    "月別履歴は未読み込み" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Monthly history not loaded"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "月別履歴は未読み込み"
+          }
+        }
+      }
+    },
+    "朱色" : {
+      "comment" : "Color name (vermilion, #E85D4A), for a crystal without stored themes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vermilion"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "朱色"
+          }
+        }
+      }
+    },
     "次の完走から時間と質量を加えます。休んでも、これまでの瓶は減りません。" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your next completed session adds time and mass. Taking a break never shrinks your jar."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -408,6 +2677,12 @@
     },
     "段は瓶を整理するための形です。10個そろうと次の段にまとまりますが、時間の核は集中した時間だけで進みます。" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tiers are just a way to keep the jar tidy. Every 10 combine into the next tier, but the time core grows only with your focus time."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -416,9 +2691,48 @@
         }
       }
     },
+    "瑠璃" : {
+      "comment" : "Color name (lapis blue, #4D7CDE), for a crystal without stored themes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lapis"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瑠璃"
+          }
+        }
+      }
+    },
+    "瓶の中では、ひとつの粒で表しています。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In the jar, it appears as a single gem."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶の中では、ひとつの粒で表しています。"
+          }
+        }
+      }
+    },
     "瓶の中は、粒%lld個・表示中の結晶%lld個・記念石%lld個の代表表示です。" : {
       "comment" : "Lifetime bottle disclosure: gems, crystals and achievement stones drawn as representatives",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The jar shows a sample. Gems: %1$lld · Crystals from this page: %2$lld · Milestone stones: %3$lld"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -427,8 +2741,31 @@
         }
       }
     },
+    "瓶の棚" : {
+      "comment" : "Title of the shelf of monthly jars",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jar Shelf"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶の棚"
+          }
+        }
+      }
+    },
     "生涯の時間と、瓶を整理する結晶を見ます。" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "See all your time so far, and the crystals that keep your jar tidy."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -437,8 +2774,63 @@
         }
       }
     },
+    "生涯の瓶" : {
+      "comment" : "Card title: the jar of everything so far",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lifetime Jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "生涯の瓶"
+          }
+        }
+      }
+    },
+    "生涯瓶は代表表示のまま、年と月を選ぶと、この端末に届いた範囲を正確に集計します。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The lifetime jar shows a sample. Choose a year and a month for exact totals of the records on this device."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "生涯瓶は代表表示のまま、年と月を選ぶと、この端末に届いた範囲を正確に集計します。"
+          }
+        }
+      }
+    },
+    "生涯記録は保存されていますが、この表示では月別履歴を読み込んでいません。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your lifetime records are saved, but this view hasn't loaded the monthly history."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "生涯記録は保存されていますが、この表示では月別履歴を読み込んでいません。"
+          }
+        }
+      }
+    },
     "確認が終わるまで古い結晶は表示しません。" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Older crystals stay hidden until the check is finished."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -447,8 +2839,96 @@
         }
       }
     },
+    "確認できる色の内訳はありません" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No color breakdown could be confirmed"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "確認できる色の内訳はありません"
+          }
+        }
+      }
+    },
+    "積み上がり" : {
+      "comment" : "Navigation title of the Progress screen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Progress"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "積み上がり"
+          }
+        }
+      }
+    },
+    "積み上がりを読み込み中" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading your progress…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "積み上がりを読み込み中"
+          }
+        }
+      }
+    },
+    "積み上がりを読み込めませんでした" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't Load Progress"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "積み上がりを読み込めませんでした"
+          }
+        }
+      }
+    },
+    "積み上がりを閉じる" : {
+      "comment" : "VoiceOver: closes the Progress screen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close Progress"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "積み上がりを閉じる"
+          }
+        }
+      }
+    },
     "積み上がるのは集中した時間です。完走した回数は、時間とは別に数えています。" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What builds up is your focus time. Completed sessions are counted separately from time."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -460,6 +2940,12 @@
     "積んだ粒" : {
       "comment" : "Lifetime stat title: gems stacked so far",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gems added"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -468,9 +2954,81 @@
         }
       }
     },
-    "結晶" : {
-      "comment" : "Overview section title: the jar's crystals (10 gems -> 1)",
+    "粒の色と数を内側に残したまま、大きな一粒になります。" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The gems become one larger gem that keeps their colors and count inside."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粒の色と数を内側に残したまま、大きな一粒になります。"
+          }
+        }
+      }
+    },
+    "粒数による色の内訳" : {
+      "comment" : "Crystal detail: colors, by the number of gems of each",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Colors by gem count"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粒数による色の内訳"
+          }
+        }
+      }
+    },
+    "粒数・質量と、まとめた日は残っています。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The gem count, the mass and the date they were combined are kept."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粒数・質量と、まとめた日は残っています。"
+          }
+        }
+      }
+    },
+    "紅藤" : {
+      "comment" : "Color name (orchid pink-purple, #C25FA3), for a crystal without stored themes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orchid"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "紅藤"
+          }
+        }
+      }
+    },
+    "結晶" : {
+      "comment" : "Lens and section title: the jar's crystals (10 gems -> 1)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crystals"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -481,6 +3039,12 @@
     },
     "結晶になっても元の記録は削除しません。この粒には元記録への参照と、確認できる色・粒数・質量を保存しています。合計が一致しない内訳は表示していません。記念石は別の石として残します。" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Becoming a crystal doesn't delete the original records. This gem stores links to the original records, plus the colors, gem count and mass that can be confirmed. Breakdowns whose totals don't match aren't shown. Milestone stones stay as separate stones."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -491,6 +3055,12 @@
     },
     "結晶になっても元の記録は削除せず、この粒にも色・テーマ・質量の内訳と元記録への参照を保存します。記念石は結晶に含めず、別の石として残します。" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Becoming a crystal doesn't delete the original records. This gem also stores its breakdown by color, theme and mass, and links to the original records. Milestone stones aren't part of the crystal; they stay as separate stones."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -501,6 +3071,12 @@
     },
     "結晶になっても情報は削除されません" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing is deleted when gems become a crystal"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -512,6 +3088,12 @@
     "結晶の内訳" : {
       "comment" : "Navigation title of one crystal's detail",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crystal Details"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -523,6 +3105,12 @@
     "結晶の段" : {
       "comment" : "Overview section title: the ×10, ×100 … crystal steps",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crystal Tiers"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -534,6 +3122,12 @@
     "結晶は、表示中の%lld個のうち代表%lld個を配置しています。" : {
       "comment" : "Star map disclosure: crystals shown, how many are drawn",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The constellation places %2$lld of the crystals on this page (%1$lld in all)."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -545,6 +3139,12 @@
     "結晶をタップすると、内訳を見られます。" : {
       "comment" : "Overview crystal section: tapping a crystal opens its details",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap a crystal to see what's inside."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -553,9 +3153,183 @@
         }
       }
     },
+    "緑青" : {
+      "comment" : "Color name (verdigris green, #3FA57C), for a crystal without stored themes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verdigris"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "緑青"
+          }
+        }
+      }
+    },
+    "縮尺" : {
+      "comment" : "Crystal detail stat title: its scale, such as ×10",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scale"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "縮尺"
+          }
+        }
+      }
+    },
+    "色%lld" : {
+      "comment" : "Fallback color name: Color 1, Color 2 …",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Color %lld"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "色%lld"
+          }
+        }
+      }
+    },
+    "色の内訳は保存されていません" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No color breakdown was saved"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "色の内訳は保存されていません"
+          }
+        }
+      }
+    },
+    "色・粒数・質量と、まとめた日は残っています。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The colors, gem count, mass and the date they were combined are kept."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "色・粒数・質量と、まとめた日は残っています。"
+          }
+        }
+      }
+    },
+    "菫" : {
+      "comment" : "Color name (violet, #8A6FD1), for a crystal without stored themes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Violet"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "菫"
+          }
+        }
+      }
+    },
+    "虹の粒" : {
+      "comment" : "Crystal detail stat title: rainbow gems inside",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rainbow gems"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "虹の粒"
+          }
+        }
+      }
+    },
+    "表示の距離" : {
+      "comment" : "Label of the lens picker (Now / Crystals / Years & Months)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Viewing Distance"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表示の距離"
+          }
+        }
+      }
+    },
+    "表示を5件に戻す" : {
+      "comment" : "Crystal detail: collapse the theme list back to five",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show Only 5"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表示を5件に戻す"
+          }
+        }
+      }
+    },
+    "表示中 %lld個" : {
+      "comment" : "Crystal section: how many crystals this page shows",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld shown"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表示中 %lld個"
+          }
+        }
+      }
+    },
     "表示中の結晶" : {
       "comment" : "Lifetime stat title: crystals on this page",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crystals shown"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -567,6 +3341,12 @@
     "表示中の結晶%lld個のうち代表%lld個を配置" : {
       "comment" : "VoiceOver, time core: crystals on the page, how many are drawn",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "showing %2$lld of the crystals on this page (%1$lld in all)"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -576,8 +3356,14 @@
       }
     },
     "記念石" : {
-      "comment" : "Overview section title: achievement stones",
+      "comment" : "Overview section title: milestone stones",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Milestone Stones"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -586,9 +3372,325 @@
         }
       }
     },
+    "記念石%lld個" : {
+      "comment" : "VoiceOver: number of milestone stones",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld milestone stone"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld milestone stones"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記念石%lld個"
+          }
+        }
+      }
+    },
+    "記念石%lld個、最新%lld個を表示" : {
+      "comment" : "VoiceOver: %1$lld milestone stones, the latest %2$lld shown",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld milestone stones, latest %2$lld shown"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記念石%lld個、最新%lld個を表示"
+          }
+        }
+      }
+    },
+    "記念石%lld個以上、最新%lld個を表示" : {
+      "comment" : "VoiceOver: at least %1$lld milestone stones, the latest %2$lld shown",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "At least %1$lld milestone stones, latest %2$lld shown"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記念石%lld個以上、最新%lld個を表示"
+          }
+        }
+      }
+    },
+    "記念石%lld個以上・最新%lld個を表示" : {
+      "comment" : "Milestone stone section subtitle: at least %1$lld stones, the latest %2$lld shown",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld+ milestone stones · latest %2$lld shown"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記念石%lld個以上・最新%lld個を表示"
+          }
+        }
+      }
+    },
+    "記録の日付範囲を安全に表示できませんでした。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The date range of your records couldn't be shown safely."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録の日付範囲を安全に表示できませんでした。"
+          }
+        }
+      }
+    },
+    "読み込み中にこの端末の記録が変わりました。再読み込みで確かめられます。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The records on this device changed while loading. Reload to check."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "読み込み中にこの端末の記録が変わりました。再読み込みで確かめられます。"
+          }
+        }
+      }
+    },
+    "読み込み中にこの端末の記録が変わりました。表示値は再確認できます。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The records on this device changed while loading. You can reload to check the numbers."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "読み込み中にこの端末の記録が変わりました。表示値は再確認できます。"
+          }
+        }
+      }
+    },
+    "読み込み範囲内" : {
+      "comment" : "Month jar badge: only the loaded part of this month",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loaded part only"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "読み込み範囲内"
+          }
+        }
+      }
+    },
+    "質量" : {
+      "comment" : "Crystal detail stat title: its mass",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mass"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "質量"
+          }
+        }
+      }
+    },
+    "質量とは別の記念・全%lld個" : {
+      "comment" : "Milestone stone section subtitle: kept apart from mass, %lld stones in all",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Separate from mass · %lld in all"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "質量とは別の記念・全%lld個"
+          }
+        }
+      }
+    },
+    "進捗を整理中" : {
+      "comment" : "VoiceOver, time core: progress is still being tallied",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "progress still being tallied"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "進捗を整理中"
+          }
+        }
+      }
+    },
+    "選択中" : {
+      "comment" : "VoiceOver value of the selected year button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selected"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択中"
+          }
+        }
+      }
+    },
+    "金の粒" : {
+      "comment" : "Crystal detail stat title: gold gems inside",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gold gems"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "金の粒"
+          }
+        }
+      }
+    },
+    "金色" : {
+      "comment" : "Color name (gold, #F5C542), for a crystal without stored themes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gold"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "金色"
+          }
+        }
+      }
+    },
+    "集中" : {
+      "comment" : "Lifetime stat title: total focus, shown as mass",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中"
+          }
+        }
+      }
+    },
+    "集中%@" : {
+      "comment" : "VoiceOver, time core: the focus mass so far",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ of focus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中%@"
+          }
+        }
+      }
+    },
+    "集中%@、%@、%lld粒、表示中の結晶%lld個、%@。%@" : {
+      "comment" : "VoiceOver, lifetime jar: focus mass, focus time, gems, crystals on the page, milestone stone summary, then the jar disclosure sentence",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ of focus, %2$@, gems: %3$lld, crystals on this page: %4$lld, %5$@. %6$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中%@、%@、%lld粒、表示中の結晶%lld個、%@。%@"
+          }
+        }
+      }
+    },
     "集中%@。最初の結晶まで、あと%lld粒です" : {
       "comment" : "VoiceOver, empty time-core vessel: focus time so far, gems left until the first crystal",
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@ of focus. %2$lld more gem until the first crystal"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@ of focus. %2$lld more gems until the first crystal"
+                }
+              }
+            }
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -597,9 +3699,49 @@
         }
       }
     },
+    "集中%@以上" : {
+      "comment" : "VoiceOver, time core: at least this focus mass (still being checked)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "at least %@ of focus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中%@以上"
+          }
+        }
+      }
+    },
+    "集中%@以上、%@、%lld粒、表示中の結晶%lld個、%@。%@" : {
+      "comment" : "VoiceOver, lifetime jar still being tallied: at least this focus mass, focus time, gems, crystals on the page, milestone stone summary, then the jar disclosure sentence",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "At least %1$@ of focus, %2$@, gems: %3$lld, crystals on this page: %4$lld, %5$@. %6$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中%@以上、%@、%lld粒、表示中の結晶%lld個、%@。%@"
+          }
+        }
+      }
+    },
     "集中した時間" : {
       "comment" : "Month summary tile: total focus time",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus time"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -611,10 +3753,67 @@
     "集中時間" : {
       "comment" : "Lifetime stat title: total focus time",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus time"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "集中時間"
+          }
+        }
+      }
+    },
+    "集中（iCloudを確認中）" : {
+      "comment" : "Lifetime stat title: focus mass while iCloud is checked",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus (checking iCloud)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中（iCloudを確認中）"
+          }
+        }
+      }
+    },
+    "集中（端末の集計を確認中）" : {
+      "comment" : "Lifetime stat title: focus mass while this device's totals are checked",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus (checking this device's totals)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中（端末の集計を確認中）"
+          }
+        }
+      }
+    },
+    "集中（集計整理中）" : {
+      "comment" : "Lifetime stat title: focus mass, still being tallied (a lower bound)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus (still being tallied)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中（集計整理中）"
           }
         }
       }

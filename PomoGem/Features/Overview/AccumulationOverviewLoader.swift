@@ -159,22 +159,23 @@ struct AccumulationOverviewLoader: View {
                 )
             } else if let loadError {
                 ContentUnavailableView(
-                    "積み上がりを読み込めませんでした",
+                    String(localized: "積み上がりを読み込めませんでした", table: "Overview"),
                     systemImage: "exclamationmark.triangle",
                     description: Text(loadError)
                 )
             } else if lifetimeIsCloudUnverified {
                 ContentUnavailableView(
-                    "iCloudを確認中",
+                    String(localized: "iCloudを確認中", table: "Overview"),
                     systemImage: "icloud.and.arrow.down",
                     description: Text(
-                        "更新前の履歴ページは再利用せず、確認後に読み込み直します。"
+                        "更新前の履歴ページは再利用せず、確認後に読み込み直します。",
+                        tableName: "Overview"
                     )
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(NightBackground())
             } else {
-                ProgressView("積み上がりを読み込み中")
+                ProgressView(String(localized: "積み上がりを読み込み中", table: "Overview"))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(NightBackground())
             }

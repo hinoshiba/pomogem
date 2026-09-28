@@ -134,14 +134,14 @@ struct AccumulationTimelineBrowser: View {
                     text: "TIME ARCHIVE",
                     foreground: PomoGemTheme.text
                 )
-                Text("年月をたどる")
+                Text("年月をたどる", tableName: "Overview", comment: "Section title of the Years & Months browser")
                     .pomogemSectionTitle()
             }
             Spacer(minLength: 8)
             Button {
                 refreshGeneration = UUID()
             } label: {
-                Label("再読み込み", systemImage: "arrow.clockwise")
+                Label(String(localized: "再読み込み", table: "Overview", comment: "Reload button (icon only in the browser, text in the month sheet)"), systemImage: "arrow.clockwise")
                     .labelStyle(.iconOnly)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
@@ -149,8 +149,8 @@ struct AccumulationTimelineBrowser: View {
             .buttonStyle(PomoGemBareButtonStyle())
             .foregroundStyle(PomoGemTheme.amber)
             .accessibilityIdentifier(AccumulationTimelineAccessibilityID.refresh)
-            .accessibilityLabel("年月を再読み込み")
-            .accessibilityHint("この端末に届いた最新の記録で集計し直します")
+            .accessibilityLabel(Text("年月を再読み込み", tableName: "Overview", comment: "VoiceOver: reloads the Years & Months browser"))
+            .accessibilityHint(Text("この端末に届いた最新の記録で集計し直します", tableName: "Overview"))
         }
     }
 
@@ -158,7 +158,7 @@ struct AccumulationTimelineBrowser: View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "icloud.and.arrow.down")
                 .accessibilityHidden(true)
-            Text("この端末に届いている範囲を表示しています。保存領域の反映中は年や合計が増えることがあります。")
+            Text("この端末に届いている範囲を表示しています。保存領域の反映中は年や合計が増えることがあります。", tableName: "Overview")
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier(
                     AccumulationTimelineAccessibilityID.coverageNotice
@@ -175,7 +175,7 @@ struct AccumulationTimelineBrowser: View {
     private var extentContents: some View {
         if isLoadingExtent, extent == nil {
             PomoGemCard {
-                ProgressView("この端末の年月を確認中")
+                ProgressView(String(localized: "この端末の年月を確認中", table: "Overview"))
                     .frame(maxWidth: .infinity, minHeight: 112)
                     .accessibilityIdentifier(AccumulationTimelineAccessibilityID.loadingExtent)
             }
@@ -184,9 +184,9 @@ struct AccumulationTimelineBrowser: View {
         } else if years.isEmpty {
             PomoGemCard {
                 VStack(alignment: .leading, spacing: 8) {
-                    Label("年月の記録はまだありません", systemImage: "calendar.badge.plus")
+                    Label(String(localized: "年月の記録はまだありません", table: "Overview"), systemImage: "calendar.badge.plus")
                         .font(.subheadline.weight(.bold))
-                    Text("この端末に最初の一粒が届くと、ここから年と月をたどれます。")
+                    Text("この端末に最初の一粒が届くと、ここから年と月をたどれます。", tableName: "Overview")
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -201,7 +201,7 @@ struct AccumulationTimelineBrowser: View {
 
     private var yearPicker: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Text("年を選ぶ")
+            Text("年を選ぶ", tableName: "Overview", comment: "Caption above the row of year buttons")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(PomoGemTheme.muted)
             ScrollView(.horizontal) {
@@ -233,9 +233,13 @@ struct AccumulationTimelineBrowser: View {
                         .accessibilityIdentifier(
                             AccumulationTimelineAccessibilityID.year(year.year)
                         )
-                        .accessibilityLabel(Text(verbatim: "\(year.year)年"))
-                        .accessibilityValue(isSelected ? "選択中" : "")
-                        .accessibilityHint("この端末に届いた月別合計を読み込みます")
+                        .accessibilityLabel(year.title)
+                        .accessibilityValue(
+                            isSelected
+                                ? String(localized: "選択中", table: "Overview", comment: "VoiceOver value of the selected year button")
+                                : ""
+                        )
+                        .accessibilityHint(Text("この端末に届いた月別合計を読み込みます", tableName: "Overview"))
                     }
                 }
                 .padding(.vertical, 1)
@@ -249,7 +253,7 @@ struct AccumulationTimelineBrowser: View {
     private var selectedYearContents: some View {
         if isLoadingYear, yearSummary == nil {
             PomoGemCard {
-                ProgressView("月ごとの合計を集計中")
+                ProgressView(String(localized: "月ごとの合計を集計中", table: "Overview"))
                     .frame(maxWidth: .infinity, minHeight: 112)
                     .accessibilityIdentifier(AccumulationTimelineAccessibilityID.yearLoading)
             }
@@ -262,7 +266,7 @@ struct AccumulationTimelineBrowser: View {
             yearSummaryHeader(yearSummary)
             if yearSummary.months.isEmpty {
                 PomoGemCard {
-                    Text("この端末には、この年の記録がまだ届いていません。")
+                    Text("この端末には、この年の記録がまだ届いていません。", tableName: "Overview")
                         .font(.subheadline)
                         .foregroundStyle(PomoGemTheme.muted)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -279,7 +283,7 @@ struct AccumulationTimelineBrowser: View {
 
     private var changedDuringLoadNotice: some View {
         Label(
-            "読み込み中にこの端末の記録が変わりました。表示値は再確認できます。",
+            String(localized: "読み込み中にこの端末の記録が変わりました。表示値は再確認できます。", table: "Overview"),
             systemImage: "arrow.triangle.2.circlepath.icloud"
         )
         .font(.caption.weight(.semibold))
@@ -292,21 +296,24 @@ struct AccumulationTimelineBrowser: View {
         _ summary: AccumulationTimelineYearSummary
     ) -> some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: 10) {
-                timelineMetric(title: "\(summary.year.year)年", value: "\(summary.exactLocalCount.formatted())粒")
-                timelineMetric(title: "この端末の質量", value: formattedMass(summary.exactLocalGrams))
-            }
-            VStack(spacing: 10) {
-                timelineMetric(title: "\(summary.year.year)年", value: "\(summary.exactLocalCount.formatted())粒")
-                timelineMetric(title: "この端末の質量", value: formattedMass(summary.exactLocalGrams))
-            }
+            HStack(spacing: 10) { yearSummaryMetrics(summary) }
+            VStack(spacing: 10) { yearSummaryMetrics(summary) }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityIdentifier(AccumulationTimelineAccessibilityID.yearSummary)
-        .accessibilityLabel(
-            Text(
-                verbatim: "この端末に届いている\(summary.year.year)年の記録、\(summary.exactLocalCount)粒、\(spokenMass(summary.exactLocalGrams))"
-            )
+        .accessibilityLabel(String(
+            localized: "この端末に届いている\(summary.year.title)の記録、\(summary.exactLocalCount)粒、\(spokenMass(summary.exactLocalGrams))",
+            table: "Overview",
+            comment: "VoiceOver year summary: the year (such as 2026), gem count on this iPhone, spoken mass"
+        ))
+    }
+
+    @ViewBuilder
+    private func yearSummaryMetrics(_ summary: AccumulationTimelineYearSummary) -> some View {
+        timelineMetric(title: summary.year.title, value: CountText.gems(summary.exactLocalCount))
+        timelineMetric(
+            title: String(localized: "この端末の質量", table: "Overview", comment: "Metric title: the mass of the records on this iPhone"),
+            value: formattedMass(summary.exactLocalGrams)
         )
     }
 
@@ -329,7 +336,7 @@ struct AccumulationTimelineBrowser: View {
                     .font(PomoGemTheme.brand(18))
                     .foregroundStyle(PomoGemTheme.text)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("\(month.exactLocalCount.formatted())粒")
+                    Text(CountText.gems(month.exactLocalCount))
                     Text(formattedMass(month.exactLocalGrams))
                 }
                 .font(.caption.monospacedDigit())
@@ -374,7 +381,7 @@ struct AccumulationTimelineBrowser: View {
     private func timelineErrorCard(message: String) -> some View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 8) {
-                Label("年月を読み込めませんでした", systemImage: "exclamationmark.triangle.fill")
+                Label(String(localized: "年月を読み込めませんでした", table: "Overview"), systemImage: "exclamationmark.triangle.fill")
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(PomoGemTheme.amber)
                 Text(message)
@@ -470,17 +477,11 @@ struct AccumulationTimelineBrowser: View {
     }
 
     private func formattedMass(_ grams: Int64) -> String {
-        if grams >= 1_000_000 {
-            return String(format: "%.1ft", Double(grams) / 1_000_000)
-        }
-        if grams >= 1_000 {
-            return String(format: "%.1fkg", Double(grams) / 1_000)
-        }
-        return "\(grams)g"
+        AccumulationTimelineMassText.short(grams)
     }
 
     private func spokenMass(_ grams: Int64) -> String {
-        "\(max(0, grams).formatted())グラム"
+        AccumulationTimelineMassText.spoken(grams)
     }
 
     private struct ExtentLoadKey: Hashable {
@@ -496,6 +497,24 @@ struct AccumulationTimelineBrowser: View {
         let refreshGeneration: UUID
         let isSceneActive: Bool
         let timeZoneIdentifier: String
+    }
+}
+
+/// The 年月 browser's masses: 「12.3kg」「1.5t」 on screen, grouped grams
+/// (「12,345グラム」) for VoiceOver; en "12.3 kg", "12,345 grams".
+private enum AccumulationTimelineMassText {
+    static func short(_ grams: Int64) -> String {
+        if grams >= 1_000_000 {
+            return EffortConstellationPresentation.metricTons(String(format: "%.1f", Double(grams) / 1_000_000))
+        }
+        if grams >= 1_000 {
+            return MassText.kilograms(String(format: "%.1f", Double(grams) / 1_000))
+        }
+        return MassText.grams("\(grams)")
+    }
+
+    static func spoken(_ grams: Int64) -> String {
+        MassText.spoken(grams: Int(clamping: max(0, grams)))
     }
 }
 
@@ -520,7 +539,7 @@ private struct AccumulationTimelineMonthSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     Label(
-                        "この端末に届いている範囲です。保存領域の反映中は合計が増えることがあります。",
+                        String(localized: "この端末に届いている範囲です。保存領域の反映中は合計が増えることがあります。", table: "Overview"),
                         systemImage: "icloud.and.arrow.down"
                     )
                     .font(.caption)
@@ -534,21 +553,21 @@ private struct AccumulationTimelineMonthSheet: View {
                     wrappedButton
 
                     if isLoading, detail == nil {
-                        ProgressView("最新の代表粒を読み込み中")
+                        ProgressView(String(localized: "最新の代表粒を読み込み中", table: "Overview"))
                             .frame(maxWidth: .infinity, minHeight: 210)
                             .accessibilityIdentifier(
                                 AccumulationTimelineAccessibilityID.monthLoading
                             )
                     } else if let loadError, detail == nil {
                         ContentUnavailableView(
-                            "代表瓶を読み込めませんでした",
+                            String(localized: "代表瓶を読み込めませんでした", table: "Overview"),
                             systemImage: "exclamationmark.triangle",
                             description: Text(loadError)
                         )
                     } else if let detail {
                         if !detail.coverage.isLocallyStable {
                             Label(
-                                "読み込み中にこの端末の記録が変わりました。再読み込みで確かめられます。",
+                                String(localized: "読み込み中にこの端末の記録が変わりました。再読み込みで確かめられます。", table: "Overview"),
                                 systemImage: "arrow.triangle.2.circlepath.icloud"
                             )
                             .font(.caption.weight(.semibold))
@@ -582,9 +601,9 @@ private struct AccumulationTimelineMonthSheet: View {
                     Button {
                         refreshGeneration = UUID()
                     } label: {
-                        Label("再読み込み", systemImage: "arrow.clockwise")
+                        Label(String(localized: "再読み込み", table: "Overview", comment: "Reload button (icon only in the browser, text in the month sheet)"), systemImage: "arrow.clockwise")
                     }
-                    .accessibilityLabel("この月を再読み込み")
+                    .accessibilityLabel(Text("この月を再読み込み", tableName: "Overview", comment: "VoiceOver: reloads this month"))
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     PomoGemSheetCloseButton(
@@ -753,7 +772,11 @@ private struct AccumulationTimelineMonthSheet: View {
 
     private var monthSummaryAccessibilityLabel: String {
         guard let detail else {
-            return "この端末に届いている\(displayedSummary.exactLocalCount)粒、\(spokenMass(displayedSummary.exactLocalGrams))"
+            return String(
+                localized: "この端末に届いている\(displayedSummary.exactLocalCount)粒、\(spokenMass(displayedSummary.exactLocalGrams))",
+                table: "Overview",
+                comment: "VoiceOver month summary before its time loads: gem count on this iPhone, spoken mass"
+            )
         }
         return String(
             localized: "この端末に届いている\(displayedSummary.exactLocalCount)粒、\(spokenMass(displayedSummary.exactLocalGrams))、\(DurationPresentation.focusLabel(grams: detail.summary.exactLocalGrams))",
@@ -764,8 +787,14 @@ private struct AccumulationTimelineMonthSheet: View {
 
     @ViewBuilder
     private var exactCountMetrics: some View {
-        monthMetric(title: "この端末の粒", value: "\(displayedSummary.exactLocalCount.formatted())粒")
-        monthMetric(title: "この端末の質量", value: formattedMass(displayedSummary.exactLocalGrams))
+        monthMetric(
+            title: String(localized: "この端末の粒", table: "Overview", comment: "Metric title: the gems on this iPhone"),
+            value: CountText.gems(displayedSummary.exactLocalCount)
+        )
+        monthMetric(
+            title: String(localized: "この端末の質量", table: "Overview", comment: "Metric title: the mass of the records on this iPhone"),
+            value: formattedMass(displayedSummary.exactLocalGrams)
+        )
     }
 
     @ViewBuilder
@@ -798,7 +827,7 @@ private struct AccumulationTimelineMonthSheet: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 13) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("この月の代表瓶")
+                Text("この月の代表瓶", tableName: "Overview", comment: "Section title: a jar drawn from this month's latest gems")
                     .pomogemSectionTitle()
                 Text(representativeDisclosure(detail))
                     .font(.caption)
@@ -810,9 +839,11 @@ private struct AccumulationTimelineMonthSheet: View {
             )
             .frame(height: 260)
             .accessibilityIdentifier(AccumulationTimelineAccessibilityID.monthPreview)
-            .accessibilityLabel(
-                "最新\(detail.representativeRecords.count)粒の代表瓶"
-            )
+            .accessibilityLabel(Text(
+                "最新\(detail.representativeRecords.count)粒の代表瓶",
+                tableName: "Overview",
+                comment: "VoiceOver: a jar drawn from this many of the month's latest gems"
+            ))
         }
         .padding(16)
         .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 20))
@@ -821,10 +852,19 @@ private struct AccumulationTimelineMonthSheet: View {
     private func representativeDisclosure(
         _ detail: AccumulationTimelineMonthDetail
     ) -> String {
+        let mass = formattedMass(detail.summary.exactLocalGrams)
         if detail.previewIsRepresentative {
-            return "全\(detail.summary.exactLocalCount.formatted())粒・\(formattedMass(detail.summary.exactLocalGrams))。瓶は最新\(detail.representativeRecords.count.formatted())粒の代表表示です。"
+            return String(
+                localized: "全\(detail.summary.exactLocalCount)粒・\(mass)。瓶は最新\(detail.representativeRecords.count)粒の代表表示です。",
+                table: "Overview",
+                comment: "Month jar disclosure: all gems of the month and their mass; the jar draws only the latest %3$lld"
+            )
         }
-        return "この端末に届いている全\(detail.summary.exactLocalCount.formatted())粒・\(formattedMass(detail.summary.exactLocalGrams))を表示しています。"
+        return String(
+            localized: "この端末に届いている全\(detail.summary.exactLocalCount)粒・\(mass)を表示しています。",
+            table: "Overview",
+            comment: "Month jar disclosure: every gem of the month on this iPhone and their mass"
+        )
     }
 
     @MainActor
@@ -860,17 +900,11 @@ private struct AccumulationTimelineMonthSheet: View {
     }
 
     private func formattedMass(_ grams: Int64) -> String {
-        if grams >= 1_000_000 {
-            return String(format: "%.1ft", Double(grams) / 1_000_000)
-        }
-        if grams >= 1_000 {
-            return String(format: "%.1fkg", Double(grams) / 1_000)
-        }
-        return "\(grams)g"
+        AccumulationTimelineMassText.short(grams)
     }
 
     private func spokenMass(_ grams: Int64) -> String {
-        "\(max(0, grams).formatted())グラム"
+        AccumulationTimelineMassText.spoken(grams)
     }
 }
 
