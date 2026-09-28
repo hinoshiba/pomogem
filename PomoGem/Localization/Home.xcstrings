@@ -182,8 +182,17 @@
     "しくみ。%@" : {
       "comment" : "VoiceOver label of the 「しくみ」 disclosure; %@ is its full accounting, read whether it is open or not"
     },
+    "はじめての1時間" : {
+      "comment" : "Weight Journey (重さの旅) landmark (名所) at 1 hour. Suggested en: 'Your First Hour'."
+    },
     "まだ空っぽ" : {
       "comment" : "Empty jar at accessibility text sizes: title"
+    },
+    "りんご1個ほど" : {
+      "comment" : "Weight Journey comparison for 250g (名所 at 25 minutes). Suggested en: 'About an apple'."
+    },
+    "アフリカゾウ（オス）%lld頭ほど" : {
+      "comment" : "Weight Journey comparison every 10,000 hours (6t per elephant). %lld is the number of adult male African elephants. Suggested en: 'About one bull African elephant' / 'About %lld bull African elephants' (plural variation)."
     },
     "アプリの時間を積む" : {
       "comment" : "Home menu row: open the Screen Time settings"
@@ -193,6 +202,36 @@
     },
     "オンにする" : {
       "comment" : "First completion card: the pill that turns the offered daily reminder on. en: 'Turn on'"
+    },
+    "キャベツ1玉ほど" : {
+      "comment" : "Weight Journey comparison for 1.2kg (名所 at 2 hours). Suggested en: 'About a head of cabbage'."
+    },
+    "キリン1頭ほど" : {
+      "comment" : "Weight Journey comparison for 1.2t (名所 at 2,000 hours). Suggested en: 'About a giraffe'."
+    },
+    "コウテイペンギン1羽ほど" : {
+      "comment" : "Weight Journey comparison for 30kg (名所 at 50 hours). Suggested en: 'About an emperor penguin'."
+    },
+    "コーギー1頭ほど" : {
+      "comment" : "Weight Journey comparison for 12kg (名所 at 20 hours). Suggested en: 'About a corgi'."
+    },
+    "サケ1尾ほど" : {
+      "comment" : "Weight Journey comparison for 3kg (名所 at 5 hours): one chum salmon. Suggested en: 'About a salmon'."
+    },
+    "ザトウクジラ1頭ほど" : {
+      "comment" : "Weight Journey sub-comparison under 'five elephants' (30t, 50,000 hours). Suggested en: 'About a humpback whale'."
+    },
+    "シマウマ1頭ほど" : {
+      "comment" : "Weight Journey comparison for 300kg (名所 at 500 hours). Suggested en: 'About a zebra'."
+    },
+    "シロナガスクジラの赤ちゃん1頭ほど" : {
+      "comment" : "Weight Journey comparison for 3t (名所 at 5,000 hours): a newborn blue whale calf. Suggested en: 'About a newborn blue whale'."
+    },
+    "ジャイアントパンダ1頭ほど" : {
+      "comment" : "Weight Journey comparison for 120kg (名所 at 200 hours). Suggested en: 'About a giant panda'."
+    },
+    "ゾウ%lld頭ぶん" : {
+      "comment" : "Weight Journey (重さの旅) landmark (名所) every 10,000 hours (6t each). %lld is the number of elephants (1, 2, 3…). Suggested en: 'One Elephant' / '%lld Elephants' (plural variation)."
     },
     "タップすると、毎日のリマインダーをこの時刻でオンにします。通知の許可を求めることがあります" : {
       "comment" : "VoiceOver hint on the first completion card's reminder offer"
@@ -214,6 +253,9 @@
     },
     "下のボタンへ" : {
       "comment" : "Empty jar at accessibility text sizes: points to the start button below"
+    },
+    "乳牛1頭ほど" : {
+      "comment" : "Weight Journey comparison for 600kg (名所 at 1,000 hours): a Holstein cow. Suggested en: 'About a dairy cow'."
     },
     "今の瓶をカードにして共有できます。" : {
       "comment" : "VoiceOver announcement: the completion card's share button is available"
@@ -273,8 +315,14 @@
     "勉強アプリ10分ごとに1粒" : {
       "comment" : "Home menu row detail: every 10 minutes in the chosen study apps adds one pebble"
     },
+    "卵10個ほど" : {
+      "comment" : "Weight Journey comparison for 600g (名所 at 1 hour): ten M-size hen's eggs. Suggested en: 'About 10 eggs'."
+    },
     "取り消しました。瓶には積んでいません" : {
       "comment" : "Toast after undoing a manual entry"
+    },
+    "大玉スイカ1玉ほど" : {
+      "comment" : "Weight Journey comparison for 6kg (名所 at 10 hours). Suggested en: 'About a large watermelon'."
     },
     "小さな粒が%lld段階で結晶になり、瓶に余白ができた" : {
       "comment" : "Toast after a cascade of fusions; the argument is how many levels formed"
@@ -334,6 +382,9 @@
     "時間の核まで あと%@" : {
       "comment" : "Completion card 「しくみ」: focus time left until the first time core. %@ is a duration"
     },
+    "最初の一粒" : {
+      "comment" : "Weight Journey (重さの旅) landmark (名所) at 25 minutes. Suggested en: 'First Gem'."
+    },
     "毎日 %@ にお知らせします。設定でいつでも変えられます。" : {
       "comment" : "First completion card after the reminder was turned on. %@ is a time of day. en: 'I'll remind you daily at %@. You can change this in Settings.'"
     },
@@ -363,6 +414,9 @@
     },
     "積んだ直後は、ホームで数秒のあいだ取り消せます。" : {
       "comment" : "Manual entry: under the confirm button; the entry can be undone briefly on Home"
+    },
+    "米俵1俵" : {
+      "comment" : "Weight Journey comparison for 60kg (名所 at 100 hours). Exactly 60kg by definition, so no 'about'. Needs a different object in English (see Docs/WeightJourneyComparisons.md); literal en: 'One rice bale'."
     },
     "粒" : {
       "comment" : "Fusion sheet tile title: how many gems the crystal holds. en: 'Gems'"
