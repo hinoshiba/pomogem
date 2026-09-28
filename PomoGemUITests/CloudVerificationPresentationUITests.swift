@@ -18,7 +18,8 @@ final class CloudVerificationPresentationUITests: XCTestCase {
         executionTimeAllowance = 240
     }
 
-    private func launch(verification: String, accessibility5: Bool = false, history: Int? = nil) {
+    private func launch(verification: String, accessibility5: Bool = false, history: Int? = nil,
+                        rereadDelay: Int? = nil) {
         app = XCUIApplication()
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
@@ -26,6 +27,9 @@ final class CloudVerificationPresentationUITests: XCTestCase {
         app.launchEnvironment["POMOGEM_UI_TEST_CLOUD_VERIFICATION"] = verification
         if let history {
             app.launchEnvironment["POMOGEM_UI_TEST_CLOUD_VERIFICATION_HISTORY"] = String(history)
+        }
+        if let rereadDelay {
+            app.launchEnvironment["POMOGEM_UI_TEST_CLOUD_VERIFICATION_REREAD_DELAY"] = String(rereadDelay)
         }
         app.launchArguments += ["-review.requested-version", "1.0"]
         PomoGemUITestLanguage.configureJapanese(app)
@@ -182,6 +186,50 @@ final class CloudVerificationPresentationUITests: XCTestCase {
         saveScreenshot("long-absence-pending")
     }
 
+    /// device-verify-2 P2. Whenever the presentation changes generation —
+    /// iCloud checked again after an import, the app's own save or the
+    /// rolling check, or verification completing — Home re-reads its page.
+    /// On the phone that read took about a second, and meanwhile the jar said
+    /// 「再集計中」 over 「この端末で確認済み 0粒」 with no time core. The fixture
+    /// slows each read to two seconds: the jar keeps what it showed.
+    func testTheJarKeepsItsTotalWhileHomeReReadsItsPage() {
+        launch(verification: "cycle-12", history: 200, rereadDelay: 2)
+        let jar = app.descendants(matching: .any)["瓶"]
+        XCTAssertTrue(jar.waitForExistence(timeout: 10))
+        // Pending without a verified total, then verified (after a re-read),
+        // then pending again (a re-read again).
+        var timeline = sampledValues(of: jar, until: { !$0.contains("iCloudを確認中") && $0.contains("質量：") },
+                                     timeout: 30)
+        XCTAssertEqual(timeline.last?.contains("iCloudを確認中"), false, "Never verified: \(timeline)")
+        timeline += sampledValues(of: jar, until: { $0.contains("iCloudを確認中") }, timeout: 25)
+        XCTAssertEqual(timeline.last?.contains("iCloudを確認中"), true, "Never pending again: \(timeline)")
+        saveScreenshot("reread-pending-again")
+        timeline += sampledValues(of: jar, for: 4)
+        saveScreenshot("reread-pending-settled")
+
+        guard let firstVerified = timeline.firstIndex(where: { !$0.contains("iCloudを確認中") }),
+              let pendingAgain = timeline[firstVerified...].firstIndex(where: { $0.contains("iCloudを確認中") }) else {
+            return XCTFail("No verified phase followed by a pending one: \(timeline)")
+        }
+        // Before its first read Home has nothing to show; from verification
+        // on, every re-read keeps what was on screen.
+        let sinceVerified = timeline[firstVerified...]
+        XCTAssertFalse(sinceVerified.contains { $0.contains("質量：0グラム") || $0.contains("瓶の整理：0粒") },
+                       "The jar never reads empty while Home re-reads its page: \(sinceVerified)")
+        // The total on screen when iCloud is checked again.
+        let verifiedText = timeline[pendingAgain - 1]
+        guard let massRange = verifiedText.range(of: "質量："),
+              let end = verifiedText[massRange.upperBound...].range(of: "グラム") else {
+            return XCTFail("No verified mass in \(verifiedText)")
+        }
+        let mass = String(verifiedText[massRange.upperBound..<end.upperBound])
+        let afterVerified = timeline[pendingAgain...]
+        XCTAssertFalse(afterVerified.contains { $0.contains("これまでの合計は確認が済むと表示します") },
+                       "A verified total exists: never 「再集計中」 while Home re-reads: \(afterVerified)")
+        XCTAssertTrue(afterVerified.allSatisfy { $0.contains("iCloudを確認中。この端末で確認済みの集中時間の質量：\(mass)") },
+                      "Pending again, the jar keeps the verified \(mass): \(afterVerified)")
+    }
+
     func testAX5PendingHomeStaysReadable() {
         launch(verification: "pending", accessibility5: true)
         let jar = app.descendants(matching: .any)["瓶"]
@@ -214,6 +262,22 @@ final class CloudVerificationPresentationUITests: XCTestCase {
         stopCompletionAlertIfPresented(in: app)
         XCTAssertTrue(app.buttons["休憩の提案を閉じる"].waitForExistence(timeout: 25),
                       "The demo focus commits, lands and offers its reward")
+    }
+
+    /// Every accessibility value `element` reports until one satisfies
+    /// `condition` (inclusive) or `timeout` passes, in order.
+    private func sampledValues(of element: XCUIElement, until condition: (String) -> Bool,
+                               timeout: TimeInterval) -> [String] {
+        var values: [String] = []
+        let end = Date().addingTimeInterval(timeout)
+        while Date() < end {
+            if let value = element.value as? String, values.last != value {
+                values.append(value)
+                if condition(value) { break }
+            }
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        return values
     }
 
     /// Every accessibility value `element` reports over `seconds`, in order.

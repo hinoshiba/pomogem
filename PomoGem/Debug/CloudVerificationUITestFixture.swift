@@ -15,6 +15,11 @@ enum CloudVerificationUITestFixture {
     /// Home materialises (review of PR #40).
     static let historyEnvironmentKey = "POMOGEM_UI_TEST_CLOUD_VERIFICATION_HISTORY"
     static let maximumSeededSessions = 1_000
+    /// Seconds Home waits before each read of its session page, as the
+    /// phone's busy main thread did right after a return to the app
+    /// (device-verify-2 P2). The in-memory read is otherwise too fast for a
+    /// UI test to see what Home shows while it re-derives.
+    static let rereadDelayEnvironmentKey = "POMOGEM_UI_TEST_CLOUD_VERIFICATION_REREAD_DELAY"
 
     enum Mode: Equatable {
         /// Stays pending for the whole process.
@@ -48,6 +53,18 @@ enum CloudVerificationUITestFixture {
               let value = environment[historyEnvironmentKey], let count = Int(value),
               (1...maximumSeededSessions).contains(count) else { return nil }
         return count
+    }
+
+    static func sessionRereadDelay(environment: [String: String]) -> TimeInterval? {
+        guard mode(environment: environment) != nil,
+              let value = environment[rereadDelayEnvironmentKey],
+              let seconds = TimeInterval(value),
+              seconds.isFinite, seconds > 0, seconds <= 10 else { return nil }
+        return seconds
+    }
+
+    static var sessionRereadDelay: TimeInterval? {
+        sessionRereadDelay(environment: ProcessInfo.processInfo.environment)
     }
 
     /// Inserts the requested history once, hourly, ending an hour ago, under

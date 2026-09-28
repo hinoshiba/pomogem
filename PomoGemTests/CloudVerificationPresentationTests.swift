@@ -140,6 +140,70 @@ final class CloudVerificationPresentationTests: XCTestCase {
         XCTAssertEqual(VerifiedMassRecordStore.load(defaults: defaults), made)
     }
 
+    // MARK: While Home re-derives (device-verify-2 P2)
+
+    private typealias Continuity = LifetimeReadoutContinuityPolicy
+
+    private func readout(grams: Int?, pebbles: Int, loose: Int, lowerBound: Bool = false) -> Continuity.Readout {
+        Continuity.Readout(jarGrams: grams, jarCoreGrams: grams ?? 0, jarPebbles: pebbles, jarLoosePebbles: loose,
+                           menuGrams: grams, menuPebbles: pebbles, isLowerBound: lowerBound, jarIsEmpty: false,
+                           coreColorHex: "#C8553D", coreColorShares: [GemColorShare(hex: "#C8553D", fraction: 1)])
+    }
+
+    /// On the phone, after a return to the app, Home said 「再集計中」 over
+    /// 「この端末で確認済み 0粒」 for about a second and the time core
+    /// vanished. Each change of the presentation generation withholds Home's
+    /// page until it is read again, and the headline was derived from that
+    /// empty page — with the old page's coverage flag, even as an exact zero.
+    func testAWithheldPageNeverBecomesAnEmptyTotal() {
+        let held = sessions(128)
+        let lastVerified = record(grams: 1_000_000, pebbles: 4_000, epochID: epoch, frontier: held[0])
+        let empty = HomeProjectionPolicy.Totals(grams: 0, pebbleCount: 0)
+        // What the headline made of the withheld page before this fix.
+        XCTAssertEqual(Mass.headline(lastVerified: lastVerified, currentEpochID: epoch, deviceSessions: [],
+                                     deviceTotals: empty, deviceCoversEverySession: true),
+                       .device(grams: 0, pebbleCount: 0), "The earlier page's coverage flag: an exact 0 g")
+        XCTAssertEqual(Mass.headline(lastVerified: lastVerified, currentEpochID: epoch, deviceSessions: [],
+                                     deviceTotals: empty, deviceCoversEverySession: false),
+                       .hidden, "Its frontier is not on an empty page: 「再集計中」 despite a verified total")
+
+        // A page of an earlier generation proves no coverage...
+        XCTAssertFalse(Mass.deviceCoversEverySession(pageIsCurrent: false, pageIsComplete: true,
+                                                     membershipIsComplete: true, acceptedAggregateCount: 0,
+                                                     candidateCount: 0, presentedCount: 0))
+        XCTAssertTrue(Mass.deviceCoversEverySession(pageIsCurrent: true, pageIsComplete: true,
+                                                    membershipIsComplete: true, acceptedAggregateCount: 0,
+                                                    candidateCount: 3, presentedCount: 3))
+        for (complete, membership, aggregates, candidates) in [(false, true, 0, 3), (true, false, 0, 3),
+                                                               (true, true, 1, 3), (true, true, 0, 200)] {
+            XCTAssertFalse(Mass.deviceCoversEverySession(pageIsCurrent: true, pageIsComplete: complete,
+                                                         membershipIsComplete: membership,
+                                                         acceptedAggregateCount: aggregates,
+                                                         candidateCount: candidates, presentedCount: 3))
+        }
+
+        // ...and until the new page is read, the jar keeps what it showed.
+        let shown = readout(grams: 1_000_500, pebbles: 4_002, loose: 128)
+        let settled = Continuity.Settled(readout: shown, epochID: epoch)
+        XCTAssertEqual(Continuity.heldReadout(inputsAreSettled: false, lastSettled: settled, currentEpochID: epoch),
+                       shown)
+        XCTAssertNil(Continuity.heldReadout(inputsAreSettled: true, lastSettled: settled, currentEpochID: epoch),
+                     "Once the page is read, the live readout replaces the held one")
+    }
+
+    /// A held readout is presentation only, and only for the same data.
+    func testAHeldReadoutNeverOutlivesItsData() {
+        let settled = Continuity.Settled(readout: readout(grams: 750, pebbles: 3, loose: 3), epochID: epoch)
+        XCTAssertNil(Continuity.heldReadout(inputsAreSettled: false, lastSettled: settled, currentEpochID: UUID()),
+                     "Records were reset since: the new epoch's value is re-derived, never carried over")
+        XCTAssertNil(Continuity.heldReadout(inputsAreSettled: false, lastSettled: nil, currentEpochID: epoch),
+                     "Nothing was presented from settled inputs yet")
+        let hidden = Continuity.Settled(readout: readout(grams: nil, pebbles: 128, loose: 128), epochID: nil)
+        XCTAssertEqual(Continuity.heldReadout(inputsAreSettled: false, lastSettled: hidden, currentEpochID: nil)?
+                        .jarPebbles, 128,
+                       "A settled 「再集計中」 keeps its count, not the empty page's 0粒")
+    }
+
     // MARK: History filter — policy
 
     private typealias Summary = SyncHistoryTransactionSummary

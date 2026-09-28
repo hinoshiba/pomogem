@@ -56,6 +56,27 @@ enum PendingMassPresentationPolicy {
         }
     }
 
+    /// Whether Home's own sum is the whole lifetime while pending: no
+    /// aggregate is accepted then, so only a complete candidate page that
+    /// fits in the jar's cap covers every session. A page of an earlier
+    /// presentation generation proves nothing about the current one (Home
+    /// withholds its sessions), and claiming coverage for it presented
+    /// 「この端末で確認済み 0粒」 as an exact total (device-verify-2 P2).
+    static func deviceCoversEverySession(
+        pageIsCurrent: Bool,
+        pageIsComplete: Bool,
+        membershipIsComplete: Bool,
+        acceptedAggregateCount: Int,
+        candidateCount: Int,
+        presentedCount: Int
+    ) -> Bool {
+        pageIsCurrent
+            && pageIsComplete
+            && membershipIsComplete
+            && acceptedAggregateCount == 0
+            && candidateCount == presentedCount
+    }
+
     static func headline(
         lastVerified: VerifiedMassRecord?,
         currentEpochID: UUID?,
@@ -105,6 +126,73 @@ enum PendingMassPresentationPolicy {
                                   isLowerBound: isLowerBound, epochID: epochID,
                                   frontierSessionID: frontier.id, frontierEndAt: frontier.endAt)
     }
+}
+
+/// device-verify-2 P2. What the jar's lifetime readout, its time core and the
+/// menu keep showing while Home re-derives them.
+///
+/// Home reads its session page asynchronously, and every change of the
+/// presentation generation — trust revoked for an import or the app's own
+/// save, the rolling check, verification completing — retires the page it
+/// holds until the new one is read. The jar keeps its gems through that gap
+/// (`HomeView.syncScene`), but the readout was computed from the empty page:
+/// for about a second after a return to the app the phone said 「再集計中」
+/// over 「この端末で確認済み 0粒」 and the time core vanished, which is what
+/// sync-03 decided must never replace a value this device can show.
+///
+/// While Home re-derives, the readout therefore stays at the last one it
+/// presented from settled inputs, under the current caption, and is replaced
+/// as soon as the new page is read. It never crosses into another reset
+/// epoch, and nothing is written, exported or shared from it: the reward
+/// receipt and the verified-mass record still read settled inputs only.
+enum LifetimeReadoutContinuityPolicy {
+    /// Everything the jar and the menu say about the lifetime total.
+    struct Readout: Equatable, Sendable {
+        /// The jar's headline and VoiceOver mass; nil says 「再集計中」.
+        var jarGrams: Int?
+        /// The mass the jar's time core is drawn from.
+        var jarCoreGrams: Int
+        var jarPebbles: Int
+        /// The gems the jar's VoiceOver value counts as loose (瓶の整理).
+        var jarLoosePebbles: Int
+        /// The menu's mass and count, which count saved sessions at once.
+        var menuGrams: Int?
+        var menuPebbles: Int
+        var isLowerBound: Bool
+        var jarIsEmpty: Bool
+        var coreColorHex: String
+        var coreColorShares: [GemColorShare]
+    }
+
+    /// A readout presented from settled inputs, and the reset epoch it
+    /// describes.
+    struct Settled: Equatable, Sendable {
+        let readout: Readout
+        let epochID: UUID?
+    }
+
+    /// The readout to keep on screen instead of re-deriving it from inputs
+    /// that are not settled, or nil to present the live one.
+    static func heldReadout(
+        inputsAreSettled: Bool,
+        lastSettled: Settled?,
+        currentEpochID: UUID?
+    ) -> Readout? {
+        guard !inputsAreSettled, let lastSettled,
+              lastSettled.epochID == currentEpochID else { return nil }
+        return lastSettled.readout
+    }
+}
+
+/// Keeps `LifetimeReadoutContinuityPolicy.Settled` for Home without observing
+/// it. Home records the readout after every settled pass; storing it in
+/// observed state would re-evaluate the whole of Home once more each time,
+/// on top of the pass that changed it (device-verify-2 P4 measured that pass
+/// at about 100 ms on an iPhone 12 mini). The value is only read by a later
+/// pass that something else already invalidated.
+@MainActor
+final class SettledLifetimeReadoutBox {
+    var value: LifetimeReadoutContinuityPolicy.Settled?
 }
 
 /// The last lifetime total Home presented as verified, kept per account on
