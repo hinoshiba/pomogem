@@ -468,6 +468,11 @@ struct FocusView: View {
     )
     @State private var viewLifecycleGeneration: UInt64 = 0
     @State private var isViewActive = false
+    /// F1. Set while this focus is paused because the person left the app;
+    /// the paused row then says so.
+    @State private var leavePause: FocusLeavePauseMarker?
+    /// F1. What the running row may promise about leaving and locking.
+    @State private var runningNotice: FocusLeavePolicy.RunningNotice = .keepsRunning
     @AccessibilityFocusState private var completionSaveRetryFocused: Bool
     @AccessibilityFocusState private var completionAlertStopFocused: Bool
 
@@ -1042,6 +1047,20 @@ struct FocusView: View {
         .onChange(of: resetSnapshots) { _, _ in
             enforceActivityReset()
         }
+        .onReceive(
+            NotificationCenter.default.publisher(for: FocusLeaveMonitor.didAutoPause)
+        ) { notification in
+            // The host paused the saved timer because the person left. Adopt
+            // it in the same turn, before this screen could write its stale
+            // running state back. The host already removed the end alert and
+            // updated the Live Activity.
+            guard isViewActive,
+                  let sessionID = notification.userInfo?[
+                    FocusLeaveMonitor.sessionIDUserInfoKey
+                  ] as? UUID,
+                  sessionID == engine.currentSessionID else { return }
+            reconcileLeaveAbsence(at: .now, isReturn: false)
+        }
         .onDisappear {
             UIApplication.shared.isIdleTimerDisabled = false
             // RootView may be torn down solely to revalidate the CloudKit
@@ -1343,7 +1362,22 @@ struct FocusView: View {
     /// ring never moves between running and paused.
     @ViewBuilder
     private var pausedNotificationStatus: some View {
-        if notifications.authorizationStatus == .notDetermined {
+        if let leavePause, leavePause.sessionID == engine.currentSessionID {
+            // F1: the one line that explains a pause the person did not tap;
+            // 再開 below continues from the moment they left.
+            Label {
+                Text(
+                    "アプリを離れていたので一時停止しました",
+                    tableName: "Focus",
+                    comment: "Paused timer notice after the person left the app during a focus. Suggested English: Paused because you left the app"
+                )
+            } icon: {
+                Image(systemName: "pause.circle")
+            }
+            .font(.caption)
+            .foregroundStyle(PomoGemTheme.muted)
+            .accessibilityIdentifier("focus.leave-paused-notice")
+        } else if notifications.authorizationStatus == .notDetermined {
             Button {
                 Task { await enableCompletionNotification() }
             } label: {
@@ -1378,7 +1412,7 @@ struct FocusView: View {
     private var focusingNotificationStatus: some View {
         switch notificationScheduleState {
         case .scheduled where notifications.isAuthorized:
-            Label("画面を閉じてもタイマーは進み、終了時に通知します", systemImage: "bell.badge.fill")
+            scheduledRunningNotice
                 .font(.caption)
                 .foregroundStyle(PomoGemTheme.muted)
         case .scheduling:
@@ -1411,14 +1445,104 @@ struct FocusView: View {
         }
     }
 
+    /// The running row's promise must stay true (F1): with the leave pause on,
+    /// the timer runs while locked only when a passcode lets the app tell a
+    /// lock from leaving.
+    @ViewBuilder
+    private var scheduledRunningNotice: some View {
+        switch runningNotice {
+        case .keepsRunning:
+            Label("画面を閉じてもタイマーは進み、終了時に通知します", systemImage: "bell.badge.fill")
+        case .pausesWhenLeavingButNotWhenLocked:
+            Label {
+                Text(
+                    "画面ロック中も通常は進みます。ほかのアプリに移ると一時停止します。",
+                    tableName: "Focus",
+                    comment: "Running focus with a passcode: locking usually keeps the timer running (a lock right after an unlock can still pause it, so keep the hedge), switching apps pauses it. Suggested English: Usually keeps running while locked. Switching apps pauses it."
+                )
+            } icon: {
+                Image(systemName: "bell.badge.fill")
+            }
+        case .pausesWhenLeavingOrLocking:
+            Label {
+                Text(
+                    "画面を消したり、ほかのアプリに移ると一時停止します。",
+                    tableName: "Focus",
+                    comment: "Running focus on an iPhone without a passcode: locking or switching apps pauses the timer. Suggested English: Locking the screen or switching apps pauses the timer."
+                )
+            } icon: {
+                Image(systemName: "bell.badge.fill")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var deniedNotificationLabel: some View {
+        switch runningNotice {
+        case .keepsRunning:
+            Label("画面を閉じても進みます。終了通知は端末の設定から", systemImage: "bell.slash")
+        case .pausesWhenLeavingButNotWhenLocked:
+            Label {
+                Text(
+                    "画面ロック中も通常は進みます。終了通知は端末の設定から",
+                    tableName: "Focus",
+                    comment: "Button opening iOS Settings when end notifications are denied; the timer usually keeps running while locked (keep the hedge). Suggested English: Usually keeps running while locked. Turn on end alerts in Settings"
+                )
+            } icon: {
+                Image(systemName: "bell.slash")
+            }
+        case .pausesWhenLeavingOrLocking:
+            Label {
+                Text(
+                    "終了通知は端末の設定から",
+                    tableName: "Focus",
+                    comment: "Button opening iOS Settings when end notifications are denied (no passcode, so no promise about locking). Suggested English: Turn on end alerts in Settings"
+                )
+            } icon: {
+                Image(systemName: "bell.slash")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var askNotificationLabel: some View {
+        switch runningNotice {
+        case .keepsRunning:
+            Label("画面を閉じても進みます。終了通知を許可", systemImage: "bell")
+        case .pausesWhenLeavingButNotWhenLocked:
+            Label {
+                Text(
+                    "画面ロック中も通常は進みます。終了通知を許可",
+                    tableName: "Focus",
+                    comment: "Button asking for notification permission; the timer usually keeps running while locked (keep the hedge). Suggested English: Usually keeps running while locked. Allow end alerts"
+                )
+            } icon: {
+                Image(systemName: "bell")
+            }
+        case .pausesWhenLeavingOrLocking:
+            Label {
+                Text(
+                    "終了通知を許可",
+                    tableName: "Focus",
+                    comment: "Button asking for notification permission (no passcode, so no promise about locking). Suggested English: Allow end alerts"
+                )
+            } icon: {
+                Image(systemName: "bell")
+            }
+        }
+    }
+
     @ViewBuilder
     private var notificationPermissionAction: some View {
         if notifications.authorizationStatus == .denied {
             Button {
                 guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                // F1: going where this running row sends the person is not
+                // leaving the focus, so the timer keeps the promise above.
+                FocusLeaveAppInitiatedDeparture.mark()
                 UIApplication.shared.open(url)
             } label: {
-                Label("画面を閉じても進みます。終了通知は端末の設定から", systemImage: "bell.slash")
+                deniedNotificationLabel
                     .font(.caption.weight(.semibold))
             }
             .buttonStyle(PomoGemBareButtonStyle())
@@ -1438,7 +1562,7 @@ struct FocusView: View {
             Button {
                 Task { await enableCompletionNotification() }
             } label: {
-                Label("画面を閉じても進みます。終了通知を許可", systemImage: "bell")
+                askNotificationLabel
                     .font(.caption.weight(.semibold))
             }
             .buttonStyle(PomoGemBareButtonStyle())
@@ -1497,6 +1621,15 @@ struct FocusView: View {
                 return
             }
 
+            // F1: settle an absence from this focus before it can be resumed
+            // or finished (critic A3). After the `await` above, this task's
+            // `scenePhase` is a stale copy; the gate holds the latest phase
+            // delivered to the view (`TimerForegroundResolutionGate`).
+            refreshRunningNotice()
+            reconcileLeaveAbsence(
+                at: now,
+                isReturn: foregroundResolution.gate.sceneIsActive
+            )
             saveRecoveryState()
             let cue: TimerCompletionForegroundFeedbackPolicy.Cue
             switch foregroundResolution.prepared(
@@ -1569,6 +1702,7 @@ struct FocusView: View {
             )
             saveRecoveryState()
             updateIdleTimer(at: now)
+            refreshRunningNotice()
 
             let offersCompletionNotification = completionNotificationOfferIsAllowed
                 && FocusCompletionNotificationOfferPolicy.shouldOffer(
@@ -1852,7 +1986,12 @@ struct FocusView: View {
                 endDate: endDate
             )
         case .paused:
-            NotificationManager.shared.cancelFocusCompletion(sessionID: sessionID)
+            // Away from the screen, a series saying the timer is paused is
+            // still true; only a return (or the end of the focus) withdraws it.
+            NotificationManager.shared.cancelFocusCompletion(
+                sessionID: sessionID,
+                withdrawingLeaveNudges: scenePhase == .active
+            )
             scheduledCompletionNotificationDeliveryDate = nil
             notificationScheduleState = .idle
             await FocusActivityManager.shared.pause(
@@ -1917,8 +2056,11 @@ struct FocusView: View {
     }
 
     /// Backgrounding is not a fairness event. Wall time continues against the
-    /// saved absolute end date. The continuous clock is consulted separately
-    /// only to catch a clear wall-clock jump while preserving normal lock,
+    /// saved absolute end date while locked; leaving the app pauses the focus
+    /// instead when the leave pause is on (F1, `FocusLeaveMonitor`), which
+    /// changes the end date, never the source. The continuous clock is
+    /// consulted separately only to catch a clear wall-clock jump while
+    /// preserving normal lock,
     private func reconcileClockIntegrity(
         at now: Date,
         uptime: TimeInterval
@@ -2808,7 +2950,66 @@ struct FocusView: View {
         NotificationManager.shared.registerFocusReturnReminder(
             sessionID: sessionID,
             endDate: endDate,
-            playsSound: sensoryPreferences.soundOn
+            playsSound: sensoryPreferences.soundOn,
+            completionSound: sensoryPreferences.timerCompletionSound
+        )
+    }
+
+    /// F1. Brings this screen in line with the saved timer after an absence.
+    /// The saved copy is authoritative: `FocusPersistence.load` has already
+    /// applied an absence whose lock window certainly ended, and the host may
+    /// have paused it while this screen was away. `isReturn` (the app is on
+    /// screen again) also settles an absence still inside its window: a quick
+    /// glance changes nothing, a longer one pauses at the moment of leaving.
+    /// Returns true when this screen adopted such a pause just now.
+    @discardableResult
+    private func reconcileLeaveAbsence(at now: Date, isReturn: Bool) -> Bool {
+        guard pendingCompletion == nil,
+              completion == nil,
+              engine.containsRecoverableFocus,
+              let sessionID = engine.currentSessionID,
+              var saved = FocusPersistence.load(at: now),
+              saved.pendingCompletion == nil,
+              saved.engine.currentSessionID == sessionID
+        else { return false }
+        if isReturn,
+           UIApplication.shared.applicationState == .active,
+           saved.leaveExcursion != nil {
+            let resolved = FocusLeaveTransition.resolvingOnReturn(saved, at: now)
+            if resolved != saved {
+                FocusPersistence.replace(resolved, key: FocusPersistence.key)
+                saved = resolved
+            }
+        }
+        guard let marker = saved.currentLeavePause else {
+            if engine.phase == .paused { leavePause = nil }
+            return false
+        }
+        // Only the exact running state from before leaving is stale; a focus
+        // resumed since then is newer than the saved pause.
+        let isStaleRunningCopy = engine.phase == .focusing
+            && engine.endDate == marker.plannedEndDate
+        guard isStaleRunningCopy || engine.phase == .paused else { return false }
+        leavePause = marker
+        guard isStaleRunningCopy else { return false }
+        engine = saved.engine
+        scheduledCompletionNotificationDeliveryDate = nil
+        notificationScheduleState = .idle
+        // Results of an end-alert add still in flight describe the old end.
+        notificationScheduleGeneration &+= 1
+        displayNow = now
+        updateIdleTimer(at: now)
+        // The normal save path: the paused row carries this write's time,
+        // and only the remaining time derives from the moment of leaving.
+        saveRecoveryState()
+        return true
+    }
+
+    private func refreshRunningNotice() {
+        let enabled = FocusLeavePreferences.isEnabled()
+        runningNotice = FocusLeavePolicy.runningNotice(
+            featureEnabled: enabled,
+            deviceHasPasscode: enabled && FocusLeaveDeviceSecurity.deviceHasPasscode()
         )
     }
 
@@ -3056,6 +3257,8 @@ struct FocusView: View {
         do {
             if snapshot.phase == .paused {
                 try engine.resume(at: now)
+                // The saved marker is dropped with this running write.
+                leavePause = nil
                 if let sessionID = engine.currentSessionID, let endDate = engine.endDate {
                     Task {
                         if notifications.isAuthorized {
@@ -3279,6 +3482,13 @@ struct FocusView: View {
 
         let returnDate = Date.now
         let returnUptime = ContinuousUptime.now()
+        // F1: an absence is settled before an elapsed end can be resolved
+        // (critic A3). Time away never counts, and a focus paused because the
+        // person left is shown paused, never finished.
+        refreshRunningNotice()
+        if reconcileLeaveAbsence(at: returnDate, isReturn: true) {
+            Task { await refreshExternalTimerPresentation(synchronizesCompletionNotification: false) }
+        }
         let cue: TimerCompletionForegroundFeedbackPolicy.Cue
         switch foregroundResolution.activated(
             isElapsed: (engine.endDate ?? .distantFuture) <= returnDate,

@@ -599,6 +599,10 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         }
         retainScreenshot(named: "First focus — one-time end-notification permission")
         allow.tap()
+        // UI-test processes run with F1's leave pause off (shared Simulators
+        // background many focuses), so this is the feature-off promise. The
+        // product default's copy and notice are pinned and audited by
+        // FocusLeavePauseUITests.
         let scheduled = app.staticTexts["画面を閉じてもタイマーは進み、終了時に通知します"]
         XCTAssertTrue(
             scheduled.waitForExistence(timeout: 5),
@@ -2006,7 +2010,31 @@ final class RuntimeFlowAuditUITests: XCTestCase {
     }
 
     private func tapSwitch(_ element: XCUIElement) {
+        bringFullyOnScreen(element)
         element.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+    }
+
+    /// `scrollUntilHittable` stops as soon as part of a row is on screen, but
+    /// `tapSwitch` taps the middle of the switch's whole frame, which can
+    /// still lie below the screen's bottom edge. That tap is lost and the
+    /// switch keeps its value. Since the leave-pause rows (F1) sit above it,
+    /// Settings' return reminder lands there after one fling. Move the row
+    /// fully on screen with short drags, which do not glide, and let it come
+    /// to rest before the tap.
+    private func bringFullyOnScreen(_ element: XCUIElement) {
+        for _ in 0 ..< 6 {
+            guard element.exists, waitUntilFrameSettles(element, timeout: 3) else { return }
+            let top = app.navigationBars.allElementsBoundByIndex
+                .filter(\.isHittable).map(\.frame.maxY).max() ?? 0
+            let bottom = app.windows.firstMatch.frame.maxY - 36
+            let frame = element.frame
+            if frame.minY >= top, frame.maxY <= bottom { return }
+            if frame.height > bottom - top { return }
+            let correction = frame.minY < top ? top - frame.minY + 12 : bottom - frame.maxY - 12
+            let distance = min(220, max(60, abs(correction))) * (correction < 0 ? -1 : 1)
+            let start = app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: distance)))
+        }
     }
 
     private func waitForSwitch(

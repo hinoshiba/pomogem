@@ -64,6 +64,40 @@ enum AccumulationWeeklyPolicy {
             dominantColorHex: dominantColor
         )
     }
+
+    /// This week's measured grams by theme colour, as the shares a crystal
+    /// holding them would paint (up to four, largest first).
+    static func colorShares(records: [AccumulationRecord]) -> [GemColorShare] {
+        let measured = records.filter(\.isMeasured)
+        let total = Double(HomeProjectionPolicy.saturatingNonnegativeSum(measured.map(\.grams)))
+        guard total > 0 else { return [] }
+        let mix = Dictionary(grouping: measured, by: \.colorHex).map {
+            StratumColorFraction(
+                hex: $0.key,
+                fraction: Double(HomeProjectionPolicy.saturatingNonnegativeSum($0.value.map(\.grams))) / total
+            )
+        }
+        return GemArtworkSpec.aggregateColors(mix, fallbackHex: Constants.Color.amberLamp)
+    }
+
+    /// The Overview's "いま" gem: the Home jar's own art for this week's
+    /// measured grams (the rung a crystal of those grams would take, D8, in
+    /// the week's theme colours); an empty week is the clear glass of the
+    /// first-run gem (「今週は、まだ透明。」).
+    static func gemSpec(records: [AccumulationRecord]) -> GemArtworkSpec {
+        let shares = colorShares(records: records)
+        let grams = HomeProjectionPolicy.saturatingNonnegativeSum(records.filter(\.isMeasured).map(\.grams))
+        guard grams > 0, !shares.isEmpty else {
+            return GemArtworkSpec(
+                rung: GemCutLadder.standard.tutorial,
+                colors: [GemColorShare(hex: "#DCEBFF", fraction: 1)],
+                variant: 0,
+                isMuted: false,
+                showsDashedRing: false
+            )
+        }
+        return GemArtworkStone.aggregateSpec(grams: grams, colors: shares)
+    }
 }
 
 enum AccumulationClusterStorage: Equatable, Sendable {
@@ -747,6 +781,28 @@ struct AccumulationOverviewView: View {
         }
     }
 
+    /// The time core's theme fan, computed as Home computes it (the same
+    /// root crystals and loose gems), so the core is the same colours here
+    /// as in the jar.
+    private var lifetimeCoreColorShares: [GemColorShare] {
+        JarLifetimeCorePresentation.colorShares(
+            clusters.map { cluster in
+                JarLifetimeCorePresentation.ColorContribution(
+                    grams: cluster.grams,
+                    colorMix: cluster.colorMix.isEmpty
+                        ? [StratumColorFraction(
+                            hex: cluster.subjectMix.first?.colorHex ?? Constants.Color.amberLamp,
+                            fraction: 1
+                        )]
+                        : cluster.colorMix
+                )
+            }
+            + currentRecords.map {
+                JarLifetimeCorePresentation.ColorContribution(grams: $0.grams, hex: $0.colorHex)
+            }
+        )
+    }
+
     /// Active decimal roots rendered without another bottle metaphor. Each
     /// aggregate is a digit in a base-ten hierarchy: ten roots at one level
     /// become one root at the next level, while their exact particles and mass
@@ -925,12 +981,18 @@ struct AccumulationOverviewView: View {
             Circle()
                 .stroke(Color(hex: currentWeekColorHex).opacity(0.34), lineWidth: 1)
             VStack(spacing: 4) {
-                // The same time as the 時間 stat beside it; 標準単位 here gave
-                // the one week a second unit (history-08). At accessibility
-                // sizes the time would break mid-number inside the 112 pt
-                // crystal, and the stat under it already says it.
-                Image(systemName: "hourglass")
-                    .font(.title2.weight(.black))
+                // This week's grams as the jar's own gem art (the same
+                // baked stone as Home), above the same time as the 時間 stat
+                // beside it; 標準単位 here gave the one week a second unit
+                // (history-08). At accessibility sizes the time would break
+                // mid-number inside the 112 pt crystal, and the stat under it
+                // already says it.
+                GemArtworkStone(
+                    spec: AccumulationWeeklyPolicy.gemSpec(records: currentWeekRecords),
+                    glowHex: currentWeekSummary.cardState == .measured ? currentWeekColorHex : nil,
+                    glowOpacity: 0.36
+                )
+                .frame(width: 50, height: 50)
                 if !dynamicTypeSize.isAccessibilitySize {
                     Text(DurationPresentation.focusLabel(grams: currentWeekGrams))
                         .font(.caption2.weight(.black))
@@ -1119,7 +1181,8 @@ struct AccumulationOverviewView: View {
                         nodes: constellationNodes,
                         totalGrams: lifetimeGrams,
                         totalPebbleCount: lifetimePebbleCount,
-                        projectionIsLowerBound: lifetimeIsLowerBound
+                        projectionIsLowerBound: lifetimeIsLowerBound,
+                        coreColorShares: lifetimeCoreColorShares
                     ) { id in
                         selectedCluster = clusters.first { $0.id == id }
                     }
@@ -1555,10 +1618,12 @@ private struct FusionHierarchyLevelSummary: Identifiable, Equatable {
         level == 0 ? "\(unitCount.formatted())粒" : "\(unitCount.formatted())個"
     }
 
+    /// One accent per decimal form. No gold: a ×10 must not read as a
+    /// medal or a coin (Docs/GemExperienceDesign.md §7.14).
     var accentHex: String {
         let palette = [
             Constants.Color.auroraWarm,
-            Constants.Color.amberLamp,
+            "#D56B82",
             Constants.Color.auroraCool,
             Constants.Color.auroraViolet,
             "#E96DDB",
@@ -1737,9 +1802,10 @@ private struct FusionHierarchyGlyph: View {
             }
 
             ProgressCrystalGlyph(
-                completionCount: 12,
+                completionCount: max(1, summary.unitPebbleCount),
                 colorHex: summary.accentHex,
-                level: max(1, summary.level)
+                level: max(1, summary.level),
+                grams: summary.grams / max(1, summary.unitCount)
             )
             .padding(CGFloat(ringCount) * 3 + 5)
 
@@ -1842,6 +1908,7 @@ private struct MilestoneSummaryCard: View {
     let milestone: AccumulationMilestoneSummary
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
     var body: some View {
         Group {
@@ -1874,18 +1941,28 @@ private struct MilestoneSummaryCard: View {
         )
     }
 
+    private var engraving: (surface: GemColor, groove: GemColor) {
+        GemArtwork.achievementEngravingColors(
+            hex: milestone.colorHex,
+            increasedContrast: colorSchemeContrast == .increased
+        )
+    }
+
     private var cardContents: some View {
         VStack(alignment: .leading, spacing: 11) {
             ZStack {
                 ProgressCrystalGlyph(
                     completionCount: 12,
                     colorHex: milestone.colorHex,
-                    level: 4
+                    level: 4,
+                    isAchievement: true
                 )
+                // Round 13: engraved in the moonstone, as in the jar (a
+                // pale lip under a groove), not white type on a badge.
                 Text(milestone.mark)
-                    .font(.system(size: 18, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-                    .shadow(color: .black.opacity(0.56), radius: 2, y: 1)
+                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color(uiColor: engraving.groove.withAlpha(1)))
+                    .shadow(color: .white.opacity(0.62), radius: 0, x: 0.3, y: 0.8)
             }
             .frame(width: 72, height: 72)
 
@@ -2368,7 +2445,9 @@ private struct AggregateGlyph: View {
                 completionCount: cluster.pebbleCount,
                 colorHex: dominantColorHex,
                 level: cluster.level,
-                showsCount: true
+                showsCount: true,
+                grams: cluster.grams,
+                colorShares: GemArtworkSpec.aggregateColors(cluster.colorMix, fallbackHex: dominantColorHex)
             )
             HStack(spacing: 2) {
                 ForEach(Array(palette.prefix(5).enumerated()), id: \.offset) { _, item in

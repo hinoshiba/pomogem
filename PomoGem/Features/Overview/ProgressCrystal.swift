@@ -562,28 +562,94 @@ enum FusionOrbitStageScale: Sendable {
 }
 
 /// A single, finite success beat: the newest source appears, and a completed
-/// set briefly converges before returning to a readable 10-around-1 diagram.
+/// set briefly converges before returning to a readable ten-under-one
+/// diagram.
 /// There is no idle roulette, near miss, or endless chase animation. Reduce
 /// Motion renders the same final meaning without interpolation.
 struct FusionOrbitStage: View {
     let state: FusionOrbitStageState
     let colorHex: String
     var scale: FusionOrbitStageScale = .compact
+    /// Grams the destination crystal holds (its rung follows grams, D8);
+    /// defaults to its pebble count of 25-minute gems.
+    var destinationGrams: Int? = nil
+    /// The destination's own colours, as Home shows the same object: the
+    /// lifetime fan for the time core (`JarLifetimeCorePresentation`), the
+    /// crystal's colour mix for a ×N. Empty falls back to `colorHex`.
+    var colorShares: [GemColorShare] = []
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private var destinationShares: [GemColorShare] {
+        colorShares.isEmpty ? [GemColorShare(hex: colorHex, fraction: 1)] : colorShares
+    }
+
+    /// The source slots take the destination's colours in proportion (a
+    /// ×10 of six coral and four blue gems shows six coral and four blue
+    /// sources), laid out in share order from 12 o'clock.
+    static func sourceHexes(shares: [GemColorShare], count: Int) -> [String] {
+        let valid = shares.filter { $0.fraction > 0 }
+        guard count > 0, !valid.isEmpty else { return [] }
+        let total = valid.reduce(0) { $0 + $1.fraction }
+        var counts = valid.map { Int(($0.fraction / total * Double(count)).rounded(.down)) }
+        let order = valid.indices.sorted {
+            let a = valid[$0].fraction / total * Double(count) - Double(counts[$0])
+            let b = valid[$1].fraction / total * Double(count) - Double(counts[$1])
+            return a == b ? $0 < $1 : a > b
+        }
+        var remaining = count - counts.reduce(0, +)
+        var cursor = 0
+        while remaining > 0 {
+            counts[order[cursor % order.count]] += 1
+            remaining -= 1
+            cursor += 1
+        }
+        return zip(valid, counts).flatMap { Array(repeating: $0.0.hex, count: $0.1) }
+    }
+
+    private var sourceHexes: [String] {
+        Self.sourceHexes(shares: destinationShares, count: state.slotCount)
+    }
+
+    /// Where source `index` of `count` rests (round 12): a loose bowl from
+    /// the left, under the crystal, to the right (y down, degrees; 192° is
+    /// a little above 9 o'clock, −12° a little above 3 o'clock), each gem a
+    /// few degrees and a few percent off the even curve, so the set reads
+    /// as a handful of gems, never as a wheel.
+    static func sourceSlot(index: Int, count: Int) -> (degrees: Double, reach: CGFloat) {
+        let angleJitter: [Double] = [2, -3, 1.5, -2, 3, -1.5, 2.5, -3, 1, -2]
+        let reachJitter: [CGFloat] = [1.0, 0.93, 0.98, 0.91, 0.97, 0.92, 0.99, 0.9, 0.96, 1.0]
+        let slots = max(1, count)
+        let step = slots > 1 ? 204 / Double(slots - 1) : 0
+        let degrees = 192 - Double(index) * step + angleJitter[index % angleJitter.count]
+        return (degrees, reachJitter[index % reachJitter.count])
+    }
+
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    /// UI tests force Reduce Motion through this seam (as Home and the jar do).
+    @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
+    private var reduceMotion: Bool { reduceMotionOverride ?? systemReduceMotion }
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @AppStorage(JarEffectsIntensity.defaultsKey) private var effectsIntensity: JarEffectsIntensity = .standard
     @State private var latestSourceIsVisible = false
     @State private var convergencePulse = false
     @State private var completionFlareIsVisible = false
+
+    /// 演出の強さ in effect (D17): Reduce Motion implies 控えめ, which pulls
+    /// the ten in less, swells the crystal less, draws no rays and dims the
+    /// glow (`JarEffectsIntensity.fusionSheet`).
+    private var effects: JarEffectsIntensity {
+        .resolved(preference: effectsIntensity, reduceMotion: reduceMotion)
+    }
 
     var body: some View {
         GeometryReader { proxy in
             let dimension = min(proxy.size.width, proxy.size.height)
             let fraction = CGFloat(state.progressFraction ?? 0)
             let baseRadius = dimension * 0.405
+            let beat = effects.fusionSheet
+            let halo = Double(effects.haloScale)
             let orbitRadius = state.isFusionComplete && convergencePulse
-                ? dimension * 0.285
+                ? dimension * beat.convergedOrbit
                 : baseRadius
             let sourceDiameter = max(8, dimension * scale.sourceDiameterFactor)
             let coreFactor = state.isFusionComplete
@@ -596,9 +662,9 @@ struct FusionOrbitStage: View {
                     .fill(
                         RadialGradient(
                             colors: [
-                                Color.white.opacity(completionFlareIsVisible ? 0.18 : 0.04),
-                                Color(hex: colorHex).opacity(reduceTransparency ? 0.10 : 0.30),
-                                PomoGemTheme.auroraViolet.opacity(reduceTransparency ? 0.03 : 0.13),
+                                Color.white.opacity((completionFlareIsVisible ? 0.18 : 0.04) * halo),
+                                Color(hex: colorHex).opacity((reduceTransparency ? 0.10 : 0.30) * halo),
+                                PomoGemTheme.auroraViolet.opacity((reduceTransparency ? 0.03 : 0.13) * halo),
                                 .clear
                             ],
                             center: .center,
@@ -609,46 +675,21 @@ struct FusionOrbitStage: View {
                     .frame(width: dimension * 1.12, height: dimension * 1.12)
                     .blur(radius: reduceTransparency ? 1 : 8)
 
-                Circle()
-                    .stroke(
-                        Color(hex: colorHex).opacity(colorSchemeContrast == .increased ? 0.56 : 0.24),
-                        style: StrokeStyle(lineWidth: 0.9, dash: [2.5, 5.5])
-                    )
-                    .frame(width: baseRadius * 2, height: baseRadius * 2)
-
-                Circle()
-                    .trim(from: 0, to: CGFloat(state.progressFraction ?? 0))
-                    .stroke(
-                        LinearGradient(
-                            colors: [
-                                Color(hex: colorHex).opacity(0.30),
-                                .white.opacity(0.90),
-                                PomoGemTheme.auroraViolet.opacity(0.70)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        style: StrokeStyle(lineWidth: max(1.4, dimension * 0.012), lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
-                    .frame(width: baseRadius * 2, height: baseRadius * 2)
-                    .shadow(color: Color(hex: colorHex).opacity(0.55), radius: 4)
-
-                sourceConnections(
-                    dimension: dimension,
-                    orbitRadius: orbitRadius
-                )
-
+                // Round 12 (casino review): no ring line and no progress arc
+                // (the lit gems carry the progress), and the ten rest in a
+                // loose bowl under the crystal, like the jar's pile under the
+                // core, instead of a wheel of ten evenly spaced around it
+                // (Docs/GemExperienceDesign.md §7.14).
                 ForEach(0 ..< state.slotCount, id: \.self) { index in
-                    let angle = Angle.degrees(
-                        -90 + Double(index) * 360 / Double(max(1, state.slotCount))
-                    )
+                    let slot = Self.sourceSlot(index: index, count: state.slotCount)
+                    let angle = Angle.degrees(slot.degrees)
                     let isLit = state.litSlotCount.map { index < $0 } ?? false
                     let isLatest = state.emphasizesLatestSource
                         && index == state.latestLitSlotIndex
 
-                    FusionOrbitSourceShard(
-                        colorHex: colorHex,
+                    FusionOrbitSourceGem(
+                        colorHex: index < sourceHexes.count ? sourceHexes[index] : colorHex,
+                        variant: index,
                         isLit: isLit,
                         isLatest: isLatest && !state.isFusionComplete,
                         highContrast: colorSchemeContrast == .increased
@@ -665,18 +706,29 @@ struct FusionOrbitStage: View {
                             : (isLit ? 1 : (state.litSlotCount == nil ? 0.28 : 0.46))
                     )
                     .offset(
-                        x: CGFloat(cos(angle.radians)) * orbitRadius,
-                        y: CGFloat(sin(angle.radians)) * orbitRadius
+                        x: CGFloat(cos(angle.radians)) * orbitRadius * slot.reach,
+                        y: CGFloat(sin(angle.radians)) * orbitRadius * slot.reach
                     )
                 }
 
                 completionFlare(dimension: dimension)
 
                 Group {
-                    if state.destinationMaterialized {
+                    if state.destinationMaterialized, scale == .chronicle {
+                        // The Overview's lifetime camera: the time core.
                         LifetimeCorePrism(
-                            colorHex: colorHex,
+                            colorShares: destinationShares,
                             level: state.destinationLevel
+                        )
+                    } else if state.destinationMaterialized {
+                        // A formed crystal: the Home jar's ×N art.
+                        GemArtworkStone(
+                            spec: GemArtworkStone.aggregateSpec(
+                                grams: destinationGrams
+                                    ?? state.destinationPebbleCount * Constants.Mass.measuredPebbleGrams,
+                                colors: destinationShares,
+                                variant: state.destinationLevel
+                            )
                         )
                     } else {
                         FusionDestinationVessel(
@@ -687,20 +739,23 @@ struct FusionOrbitStage: View {
                     }
                 }
                 .frame(width: coreDiameter, height: coreDiameter)
-                .scaleEffect(state.isFusionComplete && convergencePulse ? 1.16 : 1)
+                .scaleEffect(state.isFusionComplete && convergencePulse ? beat.coreSwell : 1)
                 .opacity(state.litSlotCount == nil ? 0.66 : 1)
                 .shadow(
                     color: Color(hex: colorHex).opacity(
-                        state.destinationMaterialized
+                        (state.destinationMaterialized
                             ? (state.isFusionComplete ? 0.86 : 0.50)
-                            : 0.22
+                            : 0.22) * halo
                     ),
-                    radius: state.destinationMaterialized
+                    radius: (state.destinationMaterialized
                         ? (state.isFusionComplete ? 16 : 9)
-                        : 4
+                        : 4) * (0.5 + 0.5 * CGFloat(halo))
                 )
             }
             .frame(width: dimension, height: dimension)
+            // The bowl hangs below the crystal: lift the pair so the set,
+            // not the crystal alone, sits in the middle of the stage.
+            .offset(y: -dimension * 0.1)
             .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
         }
         .accessibilityHidden(true)
@@ -713,43 +768,9 @@ struct FusionOrbitStage: View {
         }
     }
 
-    private func sourceConnections(
-        dimension: CGFloat,
-        orbitRadius: CGFloat
-    ) -> some View {
-        Canvas { context, size in
-            guard let lit = state.litSlotCount else { return }
-            let center = CGPoint(x: size.width / 2, y: size.height / 2)
-            for index in 0 ..< min(state.slotCount, max(0, lit)) {
-                let angle = -Double.pi / 2
-                    + Double(index) / Double(max(1, state.slotCount)) * Double.pi * 2
-                let source = CGPoint(
-                    x: center.x + CGFloat(cos(angle)) * orbitRadius,
-                    y: center.y + CGFloat(sin(angle)) * orbitRadius
-                )
-                var ray = Path()
-                ray.move(to: source)
-                ray.addLine(to: center)
-                context.stroke(
-                    ray,
-                    with: .linearGradient(
-                        Gradient(colors: [
-                            Color(hex: colorHex).opacity(0.42),
-                            .white.opacity(state.isFusionComplete ? 0.26 : 0.08)
-                        ]),
-                        startPoint: source,
-                        endPoint: center
-                    ),
-                    lineWidth: state.isFusionComplete ? 0.9 : 0.55
-                )
-            }
-        }
-        .frame(width: dimension, height: dimension)
-    }
-
     @ViewBuilder
     private func completionFlare(dimension: CGFloat) -> some View {
-        if state.isFusionComplete {
+        if state.isFusionComplete, effects.fusionSheet.showsRays {
             ForEach(0 ..< 4, id: \.self) { index in
                 Capsule()
                     .fill(
@@ -774,25 +795,28 @@ struct FusionOrbitStage: View {
         completionFlareIsVisible = reduceMotion && state.isFusionComplete
         guard !reduceMotion else { return }
 
-        withAnimation(.spring(response: 0.34, dampingFraction: 0.66)) {
+        // 標準 springs; 控えめ uses short eases and holds (D17).
+        let beat = effects.fusionSheet
+        let springs = beat.usesSprings
+        withAnimation(springs ? .spring(response: 0.34, dampingFraction: 0.66) : .easeOut(duration: 0.18)) {
             latestSourceIsVisible = true
         }
         guard state.isFusionComplete else { return }
 
-        try? await Task.sleep(for: .milliseconds(220))
+        try? await Task.sleep(for: .seconds(beat.convergenceDelay))
         guard !Task.isCancelled else { return }
-        withAnimation(.spring(response: 0.42, dampingFraction: 0.72)) {
+        withAnimation(springs ? .spring(response: 0.42, dampingFraction: 0.72) : .easeInOut(duration: 0.22)) {
             convergencePulse = true
             completionFlareIsVisible = true
         }
-        try? await Task.sleep(for: .milliseconds(430))
+        try? await Task.sleep(for: .seconds(beat.convergenceHold))
         guard !Task.isCancelled else { return }
-        withAnimation(.spring(response: 0.52, dampingFraction: 0.78)) {
+        withAnimation(springs ? .spring(response: 0.52, dampingFraction: 0.78) : .easeOut(duration: 0.22)) {
             convergencePulse = false
         }
-        try? await Task.sleep(for: .milliseconds(260))
+        try? await Task.sleep(for: .seconds(beat.releaseHold))
         guard !Task.isCancelled else { return }
-        withAnimation(.easeOut(duration: 0.36)) {
+        withAnimation(.easeOut(duration: springs ? 0.36 : 0.2)) {
             completionFlareIsVisible = false
         }
     }
@@ -870,51 +894,26 @@ private struct FusionDestinationVessel: View {
     }
 }
 
-private struct FusionOrbitSourceShard: View {
+/// One source gem of a ten-to-one carry: the Home jar's own loose-gem art.
+/// A waiting slot is the same stone, colourless and faint.
+private struct FusionOrbitSourceGem: View {
     let colorHex: String
+    let variant: Int
     let isLit: Bool
     let isLatest: Bool
     let highContrast: Bool
 
     var body: some View {
         ZStack {
-            DiamondSlot()
-                .fill(
-                    isLit
-                        ? AnyShapeStyle(
-                            AngularGradient(
-                                colors: [
-                                    Color(hex: colorHex),
-                                    .white,
-                                    PomoGemTheme.auroraBlue,
-                                    PomoGemTheme.auroraViolet,
-                                    Color(hex: colorHex)
-                                ],
-                                center: .center
-                            )
-                        )
-                        : AnyShapeStyle(PomoGemTheme.raised.opacity(highContrast ? 0.96 : 0.78))
-                )
-                .overlay {
-                    DiamondSlot()
-                        .stroke(
-                            isLit
-                                ? Color.white.opacity(0.90)
-                                : Color.white.opacity(highContrast ? 0.70 : 0.18),
-                            lineWidth: highContrast ? 1.4 : 0.85
-                        )
-                }
-                .shadow(
-                    color: isLit ? Color(hex: colorHex).opacity(0.80) : .clear,
-                    radius: isLit ? 5 : 0
-                )
-
-            if isLit {
-                Circle()
-                    .fill(.white.opacity(0.78))
-                    .frame(width: 2.5, height: 2.5)
-                    .offset(x: -2, y: -2)
-            }
+            GemArtworkStone(
+                spec: GemArtworkStone.looseSpec(hex: colorHex, variant: variant),
+                glowHex: isLit ? colorHex : nil,
+                glowOpacity: 0.36,
+                // A waiting slot is colourless: it belongs to no theme yet.
+                themeMarks: isLit ? nil : false
+            )
+            .saturation(isLit ? 1 : 0)
+            .opacity(isLit ? 1 : (highContrast ? 0.70 : 0.45))
 
             if isLatest {
                 Circle()
@@ -922,7 +921,84 @@ private struct FusionOrbitSourceShard: View {
                     .padding(-4)
             }
         }
-        .saturation(isLit ? 1.34 : 0.76)
+    }
+}
+
+/// 「積み上がりの光」 drawn as a gem bed: small faceted crystal chips that
+/// lie behind the physics bodies (Docs/EngagementArchitecture.md §3.2).
+///
+/// The only inputs are lifetime study grams and the lifetime mass-weighted
+/// theme mix (the same fan as the time core). Body count, decimal digits,
+/// rarity and fusion timing cannot reach it, so ten bodies fusing into one
+/// leave the bed exactly as it was, and Screen Time obstacles (no study
+/// mass, no theme) never feed it. Growth is logarithmic and capped.
+struct JarGemBedState: Equatable, Sendable {
+    let totalGrams: Int
+    /// 0…1 share of the capped height (0 at or below 250 g).
+    let growthFraction: Double
+    /// 0…`JarGemBedPresentation.heightBucketCount`; one baked texture each.
+    let heightBucket: Int
+    /// The twenty 5 % colour slots of the lifetime fan (chip colours).
+    let slotHexes: [String]
+
+    var isVisible: Bool { heightBucket > 0 }
+
+    /// Bed height inside a jar interior of `interiorHeight` points. Nothing
+    /// ever rises above `JarGemBedPresentation.capFraction` of it, so the
+    /// foreground keeps its free space.
+    func height(interiorHeight: CGFloat) -> CGFloat {
+        let cap = max(0, interiorHeight) * JarGemBedPresentation.capFraction
+        return (cap * CGFloat(heightBucket) / CGFloat(JarGemBedPresentation.heightBucketCount)).rounded()
+    }
+}
+
+enum JarGemBedPresentation {
+    /// Up to 250 g (one ordinary focus) the jar keeps its ordinary glow.
+    static let baselineGrams = JarAccumulationPresencePresentation.baselineGrams
+    /// The same distant ceiling as the accumulation presence: a million
+    /// ordinary focuses fill the bed to its cap.
+    static let saturationGrams = JarAccumulationPresencePresentation.saturationGrams
+    /// Highest share of the jar interior the bed may cover.
+    static let capFraction: CGFloat = 0.18
+    static let heightBucketCount = 24
+
+    static func state(totalGrams rawTotalGrams: Int, colorShares: [GemColorShare]) -> JarGemBedState {
+        let totalGrams = max(0, rawTotalGrams)
+        let slots = GemArtwork.coreSlotHexes(shares: colorShares)
+        guard totalGrams > baselineGrams else {
+            return JarGemBedState(totalGrams: totalGrams, growthFraction: 0, heightBucket: 0, slotHexes: slots)
+        }
+        // Six decades from one focus to the cap, then a square root so the
+        // first kilograms already read as a bed (3.75 kg ≈ 44 %, 250 kg ≈
+        // 71 %, 2.5 t ≈ 82 %). Monotone, and never above 1.
+        let decades = log10(Double(saturationGrams) / Double(baselineGrams))
+        let progress = min(1, max(0, log10(Double(totalGrams) / Double(baselineGrams)) / decades))
+        let growth = progress.squareRoot()
+        let bucket = min(heightBucketCount, max(1, Int((growth * Double(heightBucketCount)).rounded(.up))))
+        return JarGemBedState(
+            totalGrams: totalGrams,
+            growthFraction: growth,
+            heightBucket: bucket,
+            slotHexes: slots
+        )
+    }
+
+    /// The bed to show while the projection may still be incomplete. A
+    /// provisional projection (CloudKit verification pending, or a local
+    /// page that is only a lower bound) counts fewer grams than the store
+    /// holds, so it may only ever raise the bed: the bed that is already on
+    /// screen stays until a verified projection says otherwise. Once the
+    /// projection is verified the bed follows it exactly (it is lower only
+    /// when the person really deleted records, §9.1).
+    static func displayed(
+        current: JarGemBedState,
+        shown: JarGemBedState?,
+        isProvisional: Bool
+    ) -> JarGemBedState {
+        guard isProvisional, let shown, shown.heightBucket > current.heightBucket else {
+            return current
+        }
+        return shown
     }
 }
 
@@ -1287,8 +1363,15 @@ struct JarAccumulationPresenceBackdrop: View {
     let colorHex: String
     let showsLifetimeCore: Bool
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    /// The app's toast (optional: previews and share renders have none).
+    @Environment(AppRouter.self) private var router: AppRouter?
+
+    private var reduceMotion: Bool {
+        reduceMotionOverride ?? systemReduceMotion
+    }
     @State private var lastObservedTotalGrams: Int?
     @State private var highestObservedCompletedCycleCount: Int?
     @State private var highestObservedCompletedMilestoneGrams: Int?
@@ -1347,22 +1430,18 @@ struct JarAccumulationPresenceBackdrop: View {
                     .position(x: proxy.size.width / 2, y: proxy.size.height * 0.54)
 
                 if state.completedCycleCount > 0 {
-                    HStack(spacing: 4) {
+                    // "N巡" reads at a glance; the long-term milestone traces
+                    // moved to the engraved marks on the jar's copper collar.
+                    HStack(spacing: 5) {
                         Text(compactCycleCount)
-                            .font(.system(size: 8, weight: .black, design: .rounded))
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
                             .monospacedDigit()
-                            .foregroundStyle(.white.opacity(0.82))
-
-                        ForEach(0 ..< state.visibleMajorMilestoneTraceCount, id: \.self) { _ in
-                            Circle()
-                                .fill(Color(hex: colorHex).opacity(0.86))
-                                .overlay {
-                                    Circle().stroke(.white.opacity(0.72), lineWidth: 0.6)
-                                }
-                                .frame(width: 5, height: 5)
-                        }
+                            .foregroundStyle(.white.opacity(0.9))
+                        Circle()
+                            .fill(Color(hex: colorHex))
+                            .frame(width: 6, height: 6)
                     }
-                    .padding(.horizontal, 6)
+                    .padding(.horizontal, 9)
                     .padding(.vertical, 4)
                     .background(
                         PomoGemTheme.raised.opacity(
@@ -1379,6 +1458,11 @@ struct JarAccumulationPresenceBackdrop: View {
                         y: lightFieldTop
                             + lightFieldHeight * CGFloat(layout.traceBandYFraction)
                     )
+                    // Round 14: a landing or manual-entry toast rests over
+                    // the collar for about 3 s; the pill steps back under
+                    // it instead of showing through.
+                    .opacity(router?.toast == nil ? 1 : 0)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: router?.toast == nil)
                 }
             }
         }
@@ -1544,8 +1628,14 @@ private struct JarAccumulationLightParticleField: View {
         }
     }
 
+    /// #FFC27A / #FF9E6B / #FFE3B0 and a cool #8ACBFF accent.
+    private static let bokehGold = Color(red: 1, green: 0.761, blue: 0.478)
+    private static let bokehAmber = Color(red: 1, green: 0.620, blue: 0.420)
+    private static let bokehPeach = Color(red: 1, green: 0.890, blue: 0.690)
+    private static let bokehCool = Color(red: 0.541, green: 0.796, blue: 1)
+
     private var memoryParticleCount: Int {
-        min(54, max(12, Int((12 + state.presenceFraction * 42).rounded())))
+        min(40, max(12, Int((12 + state.presenceFraction * 28).rounded())))
     }
 
     private func activeFill(
@@ -1573,15 +1663,23 @@ private struct JarAccumulationLightParticleField: View {
                         endPoint: .bottom
                     )
                 )
+            // Denser than the lifetime memory layer: the current cycle is
+            // the warm, lit volume the gems rest in.
             particleCanvas(
-                count: 64,
+                count: 40,
                 opacityScale: opacityScale,
                 whiteSparkInterval: 7
             )
         }
+        // A feathered (24 pt) top edge: the cycle rises like light, never as
+        // a hard seam across the core or the numbers.
         .mask(alignment: .bottom) {
-            Rectangle()
-                .frame(height: size.height * CGFloat(fraction))
+            VStack(spacing: 0) {
+                LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                    .frame(height: fraction > 0 ? 24 : 0)
+                Rectangle()
+                    .frame(height: max(0, size.height * CGFloat(fraction) - 12))
+            }
         }
     }
 
@@ -1593,33 +1691,63 @@ private struct JarAccumulationLightParticleField: View {
         Canvas { context, size in
             guard count > 0 else { return }
             for index in 0 ..< count {
-                // Coprime strides spread points reproducibly without storing a
-                // random seed or changing positions between renders.
-                let xUnit = (Double((index * 37 + 17) % 101) + 0.5) / 102
-                let yUnit = (Double((index * 53 + 29) % 103) + 0.5) / 104
-                let diameter = CGFloat(1.8 + Double((index * 7) % 5) * 0.58)
-                let alpha = (0.42 + Double((index * 11) % 7) * 0.075) * opacityScale
+                // Coprime strides (moduli larger than any count, so no two
+                // specks share a position) spread points reproducibly without
+                // a random seed or changing positions between renders.
+                let xUnit = (Double((index * 37 + 17) % 107) + 0.5) / 108
+                let heightUnit = (Double((index * 53 + 29) % 109) + 0.5) / 110
+                // Gold dust rises from the pile: 60 % in the lowest 35 % of
+                // the field, 30 % in the middle band, 10 % above.
+                let heightFromBottom: Double
+                if heightUnit < 0.6 {
+                    heightFromBottom = heightUnit / 0.6 * 0.35
+                } else if heightUnit < 0.9 {
+                    heightFromBottom = 0.35 + (heightUnit - 0.6) / 0.3 * 0.35
+                } else {
+                    heightFromBottom = 0.70 + (heightUnit - 0.9) / 0.1 * 0.30
+                }
+                let yUnit = 1 - heightFromBottom
+                // Out-of-focus bokeh: 2–7 pt soft discs, warm with one in ten
+                // cool, as in a lit showcase.
+                let diameter = CGFloat(2 + (index * 7) % 6)
+                let alpha = (0.25 + Double((index * 11) % 12) / 11 * 0.55) * opacityScale
                 let rect = CGRect(
                     x: size.width * CGFloat(xUnit) - diameter / 2,
                     y: size.height * CGFloat(yUnit) - diameter / 2,
                     width: diameter,
                     height: diameter
                 )
+                let tone: Color
+                switch index % 10 {
+                case 0: tone = Self.bokehCool
+                case 2, 5, 8: tone = Self.bokehAmber
+                case 3, 7: tone = Self.bokehPeach
+                default: tone = Self.bokehGold
+                }
+                let center = CGPoint(x: rect.midX, y: rect.midY)
                 context.fill(
                     Path(ellipseIn: rect),
-                    with: .color(Color(hex: colorHex).opacity(alpha))
+                    with: .radialGradient(
+                        Gradient(stops: [
+                            .init(color: tone.opacity(min(1, alpha * 1.25)), location: 0),
+                            .init(color: tone.opacity(alpha * 0.75), location: 0.45),
+                            .init(color: tone.opacity(0), location: 1)
+                        ]),
+                        center: center,
+                        startRadius: 0,
+                        endRadius: diameter / 2
+                    )
                 )
 
                 if index.isMultiple(of: whiteSparkInterval) {
-                    let spark = rect.insetBy(dx: diameter * 0.28, dy: diameter * 0.28)
+                    let spark = rect.insetBy(dx: diameter * 0.34, dy: diameter * 0.34)
                     context.fill(
                         Path(ellipseIn: spark),
-                        with: .color(Color.white.opacity(min(0.88, alpha + 0.20)))
+                        with: .color(Color.white.opacity(min(0.92, alpha + 0.26)))
                     )
                 }
             }
         }
-        .blur(radius: reduceTransparency ? 0 : 0.45)
     }
 }
 
@@ -1648,6 +1776,54 @@ struct JarLifetimeCoreState: Equatable, Sendable {
 
 enum JarLifetimeCorePresentation {
     static let orbitSlotCount = FusionHierarchyPresentation.fanIn
+
+    /// Grams under their colours: a root crystal (its colour mix) or a
+    /// loose gem (one colour).
+    struct ColorContribution: Equatable, Sendable {
+        let grams: Int
+        let colorMix: [StratumColorFraction]
+
+        init(grams: Int, colorMix: [StratumColorFraction]) {
+            self.grams = grams
+            self.colorMix = colorMix
+        }
+
+        init(grams: Int, hex: String) {
+            self.init(grams: grams, colorMix: [StratumColorFraction(hex: hex, fraction: 1)])
+        }
+    }
+
+    /// The lifetime core's colour weights: every root's grams split by its
+    /// colour mix plus every loose gem's grams. Home, the Overview and the
+    /// share cards all read the core's fan from here, so the same core is
+    /// the same colours everywhere. Aggregate mixes are count-weighted, so
+    /// the fan is "おおよそ", never a mass breakdown.
+    static func colorWeights(_ contributions: [ColorContribution]) -> [String: Double] {
+        var weights: [String: Double] = [:]
+        for contribution in contributions {
+            let grams = Double(max(0, contribution.grams))
+            for share in contribution.colorMix {
+                weights[share.hex, default: 0] += grams * max(0, share.fraction)
+            }
+        }
+        return weights
+    }
+
+    /// The weights as shares, largest first (ties by hex).
+    static func colorShares(weights: [String: Double]) -> [GemColorShare] {
+        let total = weights.values.reduce(0, +)
+        guard total > 0 else { return [] }
+        return weights
+            .sorted { lhs, rhs in
+                if lhs.value == rhs.value { return lhs.key < rhs.key }
+                return lhs.value > rhs.value
+            }
+            .map { GemColorShare(hex: $0.key, fraction: $0.value / total) }
+    }
+
+    static func colorShares(_ contributions: [ColorContribution]) -> [GemColorShare] {
+        colorShares(weights: colorWeights(contributions))
+    }
 
     /// Current projections materialize the optical core at 250 minutes / 2.5kg,
     /// independent of how many timer completions produced that mass. The
@@ -1801,313 +1977,900 @@ enum JarLifetimeCorePresentation {
     }
 }
 
+/// Where the time core, its orbit and its labels sit on the jar stage.
+///
+/// Pure geometry (stage coordinates, y down). The Home HUD's measured bottom
+/// edge bounds the top. The orbit column (stone, rings, markers) is drawn
+/// behind the scene, so it stays above the gem bed's top edge; the label
+/// block is drawn in front of the scene, so it has to stay above the gem
+/// bed and the resting gems under it. Round 12 (as in the reference image):
+/// the labels hang right under the stone, in front of the orbit's lower
+/// arc, so a wide orbit never pushes them down into the pile. Neither the
+/// orbit nor its diamond markers can cross the HUD or the stone. When the
+/// band is short (large text, a short stage, a tall bed) the extra orbits
+/// close up first, then the orbit tightens toward the stone, then the stone
+/// gives way a little so the markers stay, then the markers hide (the stone
+/// may give way again so the ring stays), and last the orbit itself; a band
+/// too short for even the bare stone shrinks it, and below that the core is
+/// buried. With `minimumStoneDiameter` (Home, round 12) the stone never
+/// gives way below that size: the core is the jar's protagonist, so its
+/// markers and orbit yield first. The column sits at most
+/// `maximumTopSlack` below the HUD (10 pt under the count pill), so a
+/// growing pile meets empty glass before it meets the core.
+struct JarLifetimeCoreLayout: Equatable {
+    let centerY: CGFloat
+    let orbitRadius: CGFloat
+    let extraOrbitSpacing: CGFloat
+    let showsOrbit: Bool
+    let showsMarkers: Bool
+    /// Highest and lowest drawn points of the stone, rings and markers.
+    let columnTop: CGFloat
+    let columnBottom: CGFloat
+    /// Top of the label block (name plate and progress card).
+    let labelTop: CGFloat
+    /// Scale of the stone (and its halo) when even the bare stone does not
+    /// fit the band: 1 normally, never below `minimumStoneScale`.
+    var stoneScale: CGFloat = 1
+    /// True when the column cannot fit even at `minimumStoneScale`: the
+    /// core is buried, and its labels step behind the scene with it.
+    var overflows = false
+
+    /// Double-diamond orbit slot (outer square side).
+    static let markerSize: CGFloat = 12
+    static let hudGap: CGFloat = 10
+    static let labelGap: CGFloat = 6
+    /// Spare band height above the column, at most (the rest stays below
+    /// the labels, between them and the gems).
+    static let maximumTopSlack: CGFloat = 12
+    /// Stone radius as a share of the core frame (the bake keeps a margin).
+    static let stoneRadiusFactor: CGFloat = 0.46
+    /// Without an overlaid HUD the column starts below the neck and 巡 pill.
+    static let topFractionWithoutHUD: CGFloat = 0.16
+    /// The stone shrinks to fit a band too short for it, down to this.
+    static let minimumStoneScale: CGFloat = 0.65
+    /// How far the stone may shrink to keep its orbit (and markers).
+    static let orbitStoneScale: CGFloat = 0.72
+
+    /// - Parameters:
+    ///   - bottomLimit: lowest y of the orbit column (the gem bed's top).
+    ///   - labelBottomLimit: lowest y of the label block; `nil` keeps the
+    ///     labels above `bottomLimit` as well.
+    ///   - minimumStoneDiameter: the drawn stone's smallest diameter; `nil`
+    ///     keeps the former floors (0.72 for the orbit, 0.65 bare).
+    static func resolve(
+        stageHeight: CGFloat,
+        core: CGFloat,
+        orbitCount: Int,
+        topClearance: CGFloat?,
+        bottomLimit: CGFloat?,
+        labelBottomLimit: CGFloat? = nil,
+        labelHeight: CGFloat,
+        minimumStoneDiameter: CGFloat? = nil
+    ) -> JarLifetimeCoreLayout {
+        let top = topClearance.map { $0 + hudGap } ?? stageHeight * topFractionWithoutHUD
+        let bottom = min(bottomLimit ?? stageHeight - 16, stageHeight)
+        let labelBottom = min(labelBottomLimit ?? bottom, stageHeight)
+        let stone = core * stoneRadiusFactor
+        // Round 12 (as in the reference): the labels hang right under the
+        // stone, in front of the orbit's lower arc, instead of under the
+        // whole orbit. From the column's top to the labels' end there must
+        // be room for the upper half of the orbit, the stone's lower half
+        // and the labels; the whole orbit only has to clear the bed.
+        let labelReach = labelBottom - top - labelGap - max(0, labelHeight)
+        // The stone's own floor, as a share of its nominal size.
+        let stoneFloor = minimumStoneDiameter.map {
+            min(1, max(minimumStoneScale, $0 / max(stone * 2, 1)))
+        }
+        let orbitFloor = stoneFloor ?? orbitStoneScale
+        let bareFloor = stoneFloor ?? minimumStoneScale
+        let rings = CGFloat(max(1, orbitCount) - 1)
+        let markerHalf = markerSize / 2
+        let nominalRadius = core * 1.075
+        let nominalSpacing = core * 0.17
+
+        func halfHeight(radius: CGFloat, spacing: CGFloat, markers: Bool) -> CGFloat {
+            radius + rings * spacing + (markers ? markerHalf : 1)
+        }
+
+        struct Fit {
+            var radius: CGFloat
+            var spacing: CGFloat
+            var markers: Bool
+            var orbit: Bool
+            var stoneScale: CGFloat
+            var overflows: Bool
+        }
+
+        /// The orbit and stone for a column of `columnBudget` (the orbit's
+        /// full height).
+        func fit(columnBudget: CGFloat) -> Fit {
+            var radius = nominalRadius
+            var spacing = nominalSpacing
+            var markers = true
+            var orbit = true
+            var stoneScale: CGFloat = 1
+            if 2 * halfHeight(radius: radius, spacing: spacing, markers: true) > columnBudget {
+                // 1. Close up the extra orbits, 2. tighten the main orbit
+                // while its markers stay clear of the stone.
+                spacing = min(nominalSpacing, 5)
+                radius = min(nominalRadius, columnBudget / 2 - markerHalf - rings * spacing)
+                if radius < stone + markerHalf + 3 {
+                    // 2b. The stone gives way a little (down to its floor)
+                    // so the progress markers stay.
+                    let fitting = (radius - markerHalf - 3) / max(stone, 1)
+                    if fitting >= orbitFloor {
+                        stoneScale = min(1, fitting)
+                    } else {
+                        // 3. Hide the markers at the same radius (the ring
+                        // and its lit arc remain), so the orbit never jumps
+                        // outward.
+                        markers = false
+                        let ringFitting = (radius - 3) / max(stone, 1)
+                        if ringFitting >= 1 {
+                            stoneScale = 1
+                        } else if ringFitting >= orbitFloor {
+                            stoneScale = ringFitting
+                        } else {
+                            // 4. No room for any orbit: the stone alone.
+                            orbit = false
+                            stoneScale = 1
+                        }
+                    }
+                }
+            }
+            // 5. Not even the bare stone fits: it shrinks to the band (never
+            // below its floor); below that the core is buried.
+            let bareBudget = min(bottom - top, labelReach)
+            var overflows = false
+            if !orbit, 2 * stone > bareBudget {
+                let fitting = bareBudget / max(2 * stone, 1)
+                stoneScale = max(bareFloor, fitting)
+                overflows = fitting < bareFloor
+            }
+            return Fit(radius: radius, spacing: spacing, markers: markers, orbit: orbit, stoneScale: stoneScale, overflows: overflows)
+        }
+
+        func half(of fit: Fit) -> CGFloat {
+            fit.orbit ? halfHeight(radius: fit.radius, spacing: fit.spacing, markers: fit.markers) : stone * fit.stoneScale
+        }
+
+        // The orbit must clear the bed; its upper half, the stone's lower
+        // half and the labels must fit above the labels' limit. A stone that
+        // gave way leaves the orbit a little more room: one more pass with
+        // it, kept only when it still fits.
+        var chosen = fit(columnBudget: min(bottom - top, 2 * (labelReach - stone)))
+        if chosen.stoneScale < 1 {
+            let retry = fit(columnBudget: min(bottom - top, 2 * (labelReach - stone * chosen.stoneScale)))
+            let retryHalf = half(of: retry)
+            if !retry.overflows,
+               retryHalf + stone * retry.stoneScale <= labelReach + 0.01,
+               2 * retryHalf <= bottom - top + 0.01,
+               retry.orbit || !chosen.orbit {
+                chosen = retry
+            }
+        }
+        let radius = chosen.radius
+        let spacing = chosen.spacing
+        let markers = chosen.markers
+        let orbit = chosen.orbit
+        let stoneScale = chosen.stoneScale
+        let overflows = chosen.overflows
+        let shownStone = stone * stoneScale
+        let columnHalf = half(of: chosen)
+        let effectiveBudget = orbit
+            ? min(bottom - top, 2 * (labelReach - shownStone))
+            : min(bottom - top, labelReach)
+        let slack = max(0, effectiveBudget - 2 * columnHalf)
+        let columnTop = top + min(slack / 2, maximumTopSlack)
+        let centerY = columnTop + columnHalf
+        return JarLifetimeCoreLayout(
+            centerY: centerY,
+            orbitRadius: orbit ? radius : 0,
+            extraOrbitSpacing: orbit ? spacing : 0,
+            showsOrbit: orbit,
+            showsMarkers: orbit && markers,
+            columnTop: columnTop,
+            columnBottom: centerY + columnHalf,
+            labelTop: centerY + shownStone + labelGap,
+            stoneScale: stoneScale,
+            overflows: overflows
+        )
+    }
+}
+
+/// Lowest stage y (SwiftUI, y down) of the time core's label block, which
+/// is drawn in front of the scene. The block never covers the gem bed (its
+/// chips would show through the card and dim 11 pt text) nor the resting
+/// gems under it:
+/// - `floor`: one floor row of gems above the floor (25-minute gems at the
+///   jar's largest scale, so a young jar's first row fits under the
+///   labels), and 6 pt above the bed's top edge, whichever is higher on
+///   screen;
+/// - `abovePile`: also 6 pt above the highest settled body under the
+///   labels (`JarScene.settledPileTop`, 0 when that span is clear).
+struct JarLifetimeCoreLabelLimits: Equatable {
+    let floor: CGFloat
+    let abovePile: CGFloat
+
+    static let clearance: CGFloat = 6
+    /// One row of 25-minute gems at the largest jar scale (D4).
+    static let floorRowHeight: CGFloat = Constants.Jar.measuredRadius * 2 * JarScalePolicy.maximumScale
+
+    static func resolve(
+        stageHeight: CGFloat,
+        floorY: CGFloat,
+        bedTop: CGFloat,
+        pileTop: CGFloat
+    ) -> JarLifetimeCoreLabelLimits {
+        let floorRow = stageHeight - floorY - floorRowHeight - 7
+        let floor = min(floorRow, bedTop - clearance)
+        let pile = pileTop > 0 ? stageHeight - pileTop - clearance : floor
+        return JarLifetimeCoreLabelLimits(floor: floor, abovePile: min(floor, pile))
+    }
+}
+
 /// A noninteractive optical layer behind the SpriteKit bottle. The recent
 /// physical stones remain touchable in front; this centre makes compressed
 /// lifetime effort legible instead of letting higher tiers become a pile of
 /// similarly weighted discs.
+///
+/// Time core v3 (Docs/GemExperienceDesign.md §7.9): a luminous radial
+/// brilliant painted by the approximate theme shares, a soft bloom that
+/// hugs its girdle, a copper dashed orbit with double-diamond slots (their
+/// meaning is unchanged: `litOrbitSlotCount`), and the name plate with the
+/// progress card below the orbit (`JarLifetimeCoreLayout`). Growth never
+/// stalls: the stone grows to 0.26 of the jar width, then a second orbit
+/// (250 kg), a crown of lights (2.5 t) and a third orbit (25 t) appear.
 struct JarLifetimeCoreBackdrop: View {
     let state: JarLifetimeCoreState
     let colorHex: String
+    var colorShares: [GemColorShare] = []
+    /// Measured bottom edge of an overlaid HUD at the top of the stage
+    /// (Home); the orbit column stays below it.
+    var topClearance: CGFloat?
+    /// Stage y the orbit column stays above: the gem bed's top edge, which
+    /// the scene draws in front of this layer.
+    var bottomLimit: CGFloat?
+    /// Stage y the label block (`JarLifetimeCoreLabels`, drawn in front of
+    /// the scene) stays above; `nil` keeps it above `bottomLimit`.
+    var labelBottomLimit: CGFloat?
+    /// Measured height of the label block.
+    var labelHeight: CGFloat = JarLifetimeCoreBackdrop.estimatedLabelHeight
+    /// 演出の強さ as the jar resolved it (its Reduce Motion includes the
+    /// test override); nil resolves it here.
+    var effectsInEffect: JarEffectsIntensity?
+    /// Which part this copy draws. A pile that reaches the core (round 12)
+    /// splits it: the broad bloom and the orbit stay behind the gems, the
+    /// stone and its own light step in front of them.
+    var parts: Parts = .whole
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    enum Parts {
+        case whole
+        case behindThePile
+        case inFrontOfThePile
+
+        var drawsOrbit: Bool { self != .inFrontOfThePile }
+        var drawsStone: Bool { self != .behindThePile }
+    }
+
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    /// UI tests force Reduce Motion through this seam (as Home and the jar do).
+    @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
+    private var reduceMotion: Bool { reduceMotionOverride ?? systemReduceMotion }
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @AppStorage(JarEffectsIntensity.defaultsKey) private var effectsIntensity: JarEffectsIntensity = .standard
     @State private var breathing = false
+
+    /// 演出の強さ in effect (D17): Reduce Motion implies 控えめ.
+    private var effects: JarEffectsIntensity {
+        effectsInEffect ?? .resolved(preference: effectsIntensity, reduceMotion: reduceMotion)
+    }
+
+    /// Name plate + two-line card before the first measurement.
+    static let estimatedLabelHeight: CGFloat = 56
+
+    /// Rose-gold orbit tone (#D9967A) from the reference mood (not a reward colour).
+    static let orbitCopper = Color(red: 0.851, green: 0.588, blue: 0.478)
+
+    private var shares: [GemColorShare] {
+        GemArtwork.quantizedCoreShares(
+            colorShares.isEmpty ? [GemColorShare(hex: colorHex, fraction: 1)] : colorShares
+        )
+    }
+
+    /// Core diameter as a share of the jar width: 0.24 at birth, 0.25 at the
+    /// second stage, 0.26 from the third; never above 96 pt (EA: the core
+    /// never covers the bodies that really move).
+    static func coreDiameter(jarWidth: CGFloat, level: Int) -> CGFloat {
+        let factor: CGFloat = level >= 3 ? 0.26 : (level == 2 ? 0.25 : 0.24)
+        return min(96, max(1, jarWidth) * factor)
+    }
+
+    /// The drawn stone's smallest diameter on Home (round 12): 1.25 × a
+    /// 25-minute gem at the jar's largest scale or 0.21 of the jar width,
+    /// whichever is larger, never above 0.24 of the jar width. About 78 pt
+    /// on an iPhone 17 Pro and 72 pt on a 12 mini, so the core always reads
+    /// larger than the loose gems around it.
+    static func minimumStoneDiameter(jarWidth: CGFloat) -> CGFloat {
+        let width = max(1, jarWidth)
+        let looseGem = Constants.Jar.measuredRadius * 2 * JarScalePolicy.maximumScale
+        return min(width * 0.24, max(looseGem * 1.25, width * 0.21))
+    }
+
+    /// Orbits drawn around the core: one at birth, two from 250 kg (level
+    /// 3), three from 25 t (level 5).
+    static func orbitCount(level: Int) -> Int {
+        level >= 5 ? 3 : (level >= 3 ? 2 : 1)
+    }
 
     var body: some View {
         GeometryReader { proxy in
-            let dimension = min(190, max(150, proxy.size.width * 0.48))
-            let prismFactor = CGFloat(state.prismDiameterFactor)
-            // Place the label plate outside the prism with an optical 8–12 pt
-            // gap on the iPhone 15+ stage. It must never read as a sticker
-            // painted across the crystal.
-            let labelOffset = prismFactor / 2 + 0.17
-            let progressOffset = min(0.65, labelOffset + 0.19)
+            let jarWidth = max(1, proxy.size.width - Constants.Jar.horizontalMargin * 2)
+            let core = Self.coreDiameter(jarWidth: jarWidth, level: state.coreLevel)
+            let orbitCount = Self.orbitCount(level: state.coreLevel)
+            let layout = JarLifetimeCoreLayout.resolve(
+                stageHeight: proxy.size.height,
+                core: core,
+                orbitCount: orbitCount,
+                topClearance: topClearance,
+                bottomLimit: bottomLimit,
+                labelBottomLimit: labelBottomLimit,
+                labelHeight: labelHeight,
+                minimumStoneDiameter: Self.minimumStoneDiameter(jarWidth: jarWidth)
+            )
+            let orbitDiameter = layout.orbitRadius * 2
+            // The stone (and its light) shrinks only when even the bare
+            // stone does not fit the band; the orbit keeps its own radius.
+            let stone = core * layout.stoneScale
+            let haloColor = Color(uiColor: GemArtwork.coreHaloColor(shares: shares))
+            let lobes = GemArtwork.coreHaloLobeColors(shares: shares)
+            let rimColor = Color(uiColor: GemArtwork.coreRimGlowColor(shares: shares))
+            let quantized = shares
+            // 控えめ (D17): the bloom, the lobes and the girdle bloom at the
+            // halo scale (the stone itself is unchanged).
+            let halo = Double(effects.haloScale)
 
             ZStack {
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                Color(hex: colorHex).opacity(reduceTransparency ? 0.12 : 0.28),
-                                PomoGemTheme.auroraViolet.opacity(reduceTransparency ? 0.04 : 0.13),
-                                .clear
-                            ],
-                            center: .center,
-                            startRadius: 3,
-                            endRadius: dimension * 0.58
-                        )
-                    )
-                    .frame(width: dimension * 1.34, height: dimension * 1.34)
-                    .blur(radius: reduceTransparency ? 2 : 9)
-                    .scaleEffect(breathing ? 1.06 : 0.96)
-
-                lifetimeRings(dimension: dimension)
-
-                orbitSlots(dimension: dimension)
-
-                LifetimeCorePrism(
-                    colorHex: colorHex,
-                    level: state.coreLevel
-                )
-                .frame(width: dimension * prismFactor, height: dimension * prismFactor)
-                .shadow(
-                    color: Color(hex: colorHex).opacity(reduceTransparency ? 0.24 : 0.74),
-                    radius: 18
-                )
-
-                VStack(spacing: 2) {
-                    Text(state.title)
-                        .font(.system(size: 10, weight: .black, design: .rounded))
-                        .tracking(1.1)
-                    Text(state.countLabel)
-                        .font(.system(size: 13, weight: .black, design: .rounded))
-                        .monospacedDigit()
-                }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 9)
-                .padding(.vertical, 5)
-                .background(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(colorSchemeContrast == .increased ? 0.10 : 0.16),
-                            PomoGemTheme.raised.opacity(
-                                reduceTransparency || colorSchemeContrast == .increased ? 0.98 : 0.82
+                // Broad, soft bloom that seats the core in the jar's light.
+                if parts.drawsOrbit {
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    haloColor.opacity((reduceTransparency ? 0.10 : 0.24) * halo),
+                                    PomoGemTheme.auroraViolet.opacity((reduceTransparency ? 0.02 : 0.05) * halo),
+                                    .clear
+                                ],
+                                center: .center,
+                                startRadius: 3,
+                                endRadius: stone * 1.25
                             )
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(
-                            .white.opacity(colorSchemeContrast == .increased ? 0.72 : 0.24),
-                            lineWidth: colorSchemeContrast == .increased ? 1.2 : 0.7
                         )
-                }
-                .offset(y: dimension * labelOffset)
+                        .frame(width: stone * 2.5, height: stone * 2.5)
 
-                VStack(spacing: 2) {
-                    Text(state.progressLabel)
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                    if let nextFusionLabel = state.nextFusionLabel {
-                        Text(nextFusionLabel)
-                            .font(.system(size: 9, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.72))
+                    if layout.showsOrbit {
+                        ForEach(1 ..< orbitCount, id: \.self) { index in
+                            let diameter = orbitDiameter + CGFloat(index) * layout.extraOrbitSpacing * 2
+                            Circle()
+                                .stroke(
+                                    Self.orbitCopper.opacity(colorSchemeContrast == .increased ? 0.62 : 0.30),
+                                    style: StrokeStyle(lineWidth: 0.8, dash: [2, 6])
+                                )
+                                .frame(width: diameter, height: diameter)
+                        }
+
+                        orbit(diameter: orbitDiameter, shares: quantized, showsMarkers: layout.showsMarkers)
                     }
                 }
-                .lineLimit(1)
-                .foregroundStyle(.white.opacity(0.86))
-                .padding(.horizontal, 9)
-                .padding(.vertical, 5)
-                .background(PomoGemTheme.raised.opacity(0.72), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(Color(hex: colorHex).opacity(0.28), lineWidth: 0.7)
+
+                if parts.drawsStone {
+                    // Halo in two lobes: the left half's colour leaves the left
+                    // side, the right half's the right (10 % aurora violet),
+                    // α0.45 out to about 1.35R — light, not a neon ring.
+                    ForEach(Array([(lobes.left, CGFloat(-1)), (lobes.right, CGFloat(1))].enumerated()), id: \.offset) { _, lobe in
+                        Ellipse()
+                            .fill(
+                                RadialGradient(
+                                    colors: [
+                                        Color(uiColor: lobe.0).opacity((reduceTransparency ? 0.20 : 0.45) * halo),
+                                        Color(uiColor: lobe.0).opacity((reduceTransparency ? 0.08 : 0.20) * halo),
+                                        .clear
+                                    ],
+                                    center: .center,
+                                    startRadius: stone * 0.30,
+                                    endRadius: stone * 0.70
+                                )
+                            )
+                            .frame(width: stone * 1.15, height: stone * 1.40)
+                            .offset(x: lobe.1 * stone * 0.16)
+                    }
+
+                    // Girdle bloom: pale light hugging the stone's edge.
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    rimColor.opacity((reduceTransparency ? 0.34 : 0.95) * halo),
+                                    rimColor.opacity((reduceTransparency ? 0.12 : 0.34) * halo),
+                                    .clear
+                                ],
+                                center: .center,
+                                startRadius: stone * 0.44,
+                                endRadius: stone * 0.62
+                            )
+                        )
+                        .frame(width: stone * 1.24, height: stone * 1.24)
+
+                    // The unquantised fan: the core's marks (Differentiate
+                    // Without Color) tell theme arcs from the mixed その他.
+                    LifetimeCorePrism(
+                        colorShares: colorShares.isEmpty ? [GemColorShare(hex: colorHex, fraction: 1)] : colorShares,
+                        level: state.coreLevel
+                    )
+                        .frame(width: stone, height: stone)
+                        .scaleEffect(breathing ? 1.02 : 1)
                 }
-                .offset(y: dimension * progressOffset)
             }
-            .frame(width: dimension * 1.42, height: dimension * 1.42)
-            .position(x: proxy.size.width / 2, y: proxy.size.height * 0.51)
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .position(x: proxy.size.width / 2, y: layout.centerY)
         }
         // Reduce Transparency must make the summary more solid, not fainter.
-        // Blur/glow are already reduced above, so keep the essential core,
-        // orbit and labels fully opaque in that accessibility mode.
-        .opacity(reduceTransparency ? 1 : 0.92)
+        .opacity(reduceTransparency ? 1 : 0.96)
         .accessibilityHidden(true)
         .allowsHitTesting(false)
         .onAppear { updateMotion() }
-        .onChange(of: reduceMotion) { _, _ in updateMotion() }
+        .onChange(of: effects) { _, _ in updateMotion() }
     }
 
-    @ViewBuilder
-    private func lifetimeRings(dimension: CGFloat) -> some View {
-        ForEach(0 ..< state.visibleHaloRingCount, id: \.self) { index in
-            let inset = CGFloat(index) * 8
+    /// Copper dashed orbit (α0.55, 1 pt, [3, 5]) with double-diamond slots
+    /// (outer 12 pt, inner 5 pt). Lit slots take the share colour of their
+    /// position and a white rim; the lit arc is drawn solid. Without room
+    /// for the markers the ring and its lit arc still show the progress.
+    private func orbit(diameter: CGFloat, shares: [GemColorShare], showsMarkers: Bool) -> some View {
+        let lit = state.litOrbitSlotCount
+        let slotCount = JarLifetimeCorePresentation.orbitSlotCount
+        let radius = diameter / 2
+        let litFraction = CGFloat(min(max(lit ?? 0, 0), slotCount)) / CGFloat(max(slotCount, 1))
+        return ZStack {
             Circle()
                 .stroke(
-                    Color(hex: colorHex).opacity(
-                        (colorSchemeContrast == .increased ? 0.50 : 0.13)
-                            + CGFloat(index) * (colorSchemeContrast == .increased ? 0.025 : 0.018)
-                    ),
-                    style: StrokeStyle(
-                        lineWidth: index == state.visibleHaloRingCount - 1 ? 1.2 : 0.7,
-                        dash: index.isMultiple(of: 2) ? [2.5, 6] : [1, 8]
-                    )
+                    Self.orbitCopper.opacity(colorSchemeContrast == .increased ? 0.85 : 0.55),
+                    style: StrokeStyle(lineWidth: 1, dash: [3, 5])
                 )
-                .frame(
-                    width: max(80, dimension - inset),
-                    height: max(80, dimension - inset)
-                )
-        }
-    }
-
-    private func orbitSlots(dimension: CGFloat) -> some View {
-        let lit = state.litOrbitSlotCount
-        let radius = dimension * 0.50
-        return ZStack {
-            ForEach(0 ..< JarLifetimeCorePresentation.orbitSlotCount, id: \.self) { index in
-                let angle = Angle.degrees(-90 + Double(index) * 36)
-                let isLit = lit.map { index < $0 } ?? false
-                DiamondSlot()
-                    .fill(
-                        isLit
-                            ? Color(hex: colorHex)
-                            : PomoGemTheme.raised.opacity(
-                                colorSchemeContrast == .increased
-                                    ? 0.90
-                                    : (lit == nil ? 0.26 : 0.58)
-                            )
-                    )
-                    .overlay {
+                .frame(width: diameter, height: diameter)
+            if litFraction > 0 {
+                Circle()
+                    .trim(from: 0, to: max(0, litFraction - 0.5 / CGFloat(slotCount)))
+                    .stroke(Self.orbitCopper.opacity(0.8), style: StrokeStyle(lineWidth: 1, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .frame(width: diameter, height: diameter)
+            }
+            if showsMarkers {
+                ForEach(0 ..< slotCount, id: \.self) { index in
+                    let angle = Angle.degrees(-90 + Double(index) * 360 / Double(max(slotCount, 1)))
+                    let isLit = lit.map { index < $0 } ?? false
+                    let slotColor = Color(hex: Self.shareColorHex(
+                        shares: shares,
+                        position: (Double(index) + 0.5) / Double(max(slotCount, 1))
+                    ))
+                    // Lit slots keep the full double diamond; the waiting
+                    // ones recede (outer 8 pt, α0.25) so the ring reads as
+                    // progress, not as a dial of equal marks. Meaning and
+                    // count are unchanged (`litOrbitSlotCount`).
+                    let increased = colorSchemeContrast == .increased
+                    let outer: CGFloat = isLit || increased ? 12 : 8
+                    ZStack {
+                        DiamondSlot()
+                            .fill(PomoGemTheme.background.opacity(isLit ? 0.55 : 0.30))
+                            .frame(width: outer, height: outer)
                         DiamondSlot()
                             .stroke(
                                 isLit
-                                    ? Color.white.opacity(0.82)
-                                    : Color.white.opacity(colorSchemeContrast == .increased ? 0.62 : 0.13),
-                                lineWidth: colorSchemeContrast == .increased
-                                    ? 1.2
-                                    : (isLit ? 0.9 : 0.55)
+                                    ? Color.white.opacity(0.85)
+                                    : Self.orbitCopper.opacity(increased ? 0.95 : 0.25),
+                                lineWidth: increased ? 1.3 : 1
                             )
+                            .frame(width: outer, height: outer)
+                        DiamondSlot()
+                            .fill(isLit ? slotColor : Self.orbitCopper.opacity(increased ? 0.30 : 0.16))
+                            .overlay {
+                                DiamondSlot()
+                                    .stroke(
+                                        isLit ? Color.white.opacity(0.9) : Self.orbitCopper.opacity(increased ? 0.6 : 0.25),
+                                        lineWidth: 0.6
+                                    )
+                            }
+                            .frame(width: isLit || increased ? 5 : 3.5, height: isLit || increased ? 5 : 3.5)
                     }
-                    .shadow(
-                        color: isLit ? Color(hex: colorHex).opacity(0.72) : .clear,
-                        radius: 5
-                    )
-                    .frame(width: isLit ? 9 : 7, height: isLit ? 9 : 7)
+                    .shadow(color: isLit ? slotColor.opacity(0.85) : .clear, radius: isLit ? 5 : 0)
+                    .frame(width: JarLifetimeCoreLayout.markerSize, height: JarLifetimeCoreLayout.markerSize)
                     .offset(
                         x: CGFloat(cos(angle.radians)) * radius,
                         y: CGFloat(sin(angle.radians)) * radius
                     )
+                }
             }
         }
     }
 
+    /// The share colour at a clockwise position (0…1) of the 20-slot fan.
+    static func shareColorHex(shares: [GemColorShare], position: Double) -> String {
+        var cursor = 0.0
+        for share in shares {
+            cursor += share.fraction
+            if position < cursor { return share.hex }
+        }
+        return shares.last?.hex ?? Constants.Color.textMute
+    }
+
+    /// Breathing is 1.0 ↔ 1.02 over 4 s on the sharp stone only (no blurred
+    /// layer animates). Off at 控えめ, with Reduce Motion and in UI-test mode.
     private func updateMotion() {
         breathing = false
-        guard !reduceMotion,
+        guard effects.allowsBreathing,
               !LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess
         else { return }
-        withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) {
+        withAnimation(.easeInOut(duration: 4).repeatForever(autoreverses: true)) {
             breathing = true
         }
     }
 }
 
-/// A more dimensional material for the one compressed lifetime core. Subject
-/// colour remains the anchor, while cool and violet refractions stop a large
-/// aggregate from reading as a flat enlarged version of a loose particle.
-private struct LifetimeCorePrism: View {
-    let colorHex: String
-    let level: Int
+/// The time core's name plate and progress card. Normally drawn in front of
+/// the SpriteKit scene (like the Home HUD), so the gem bed cannot hide them;
+/// when a settled pile reaches them the owner draws them behind the scene
+/// instead, as the core itself is buried. Placed by the same
+/// `JarLifetimeCoreLayout` as the core: directly under the orbit column,
+/// never inside it.
+/// Measured label block of the time core (`JarLifetimeCoreLabels`).
+struct JarLifetimeCoreLabelMetrics: Equatable {
+    /// The whole block, second line included.
+    var size: CGSize
+    /// Height the progress card's second line adds (with its spacing).
+    var secondLine: CGFloat
+    /// Size of the name plate alone (「時間の核」): what shows when the pile
+    /// leaves room for the plate but not for the progress card
+    /// (`JarLifetimeCoreLabelFit`, round 12).
+    var namePlate: CGFloat = 20
+    var namePlateWidth: CGFloat = 72
+
+    static let estimated = JarLifetimeCoreLabelMetrics(
+        size: CGSize(width: 220, height: JarLifetimeCoreBackdrop.estimatedLabelHeight),
+        secondLine: 12,
+        namePlate: 20,
+        namePlateWidth: 72
+    )
+}
+
+/// How much of the time core's label block Home draws in front of the
+/// scene. The block never sits behind the gem bed or the settled gems, on
+/// the full stage or on one the completion card has shortened: all of it
+/// when it fits above them; without the progress card's second line
+/// (「核まであと…」) when only that line would reach the pile; the name
+/// plate alone (round 12: the core is never buried now, so it keeps its
+/// name) when only the plate fits; and nothing when even the plate would
+/// reach the pile (VoiceOver still reads the jar as a whole).
+enum JarLifetimeCoreLabelFit: Equatable {
+    case full
+    case withoutSecondLine
+    case nameOnly
+    case hidden
+
+    /// - Parameters:
+    ///   - fullHeight: the block with its second line.
+    ///   - secondLineHeight: what that line adds (0 without one).
+    ///   - nameHeight: the name plate alone (0 skips the name-only step).
+    ///   - abovePileLimit: lowest y the block may reach (above the bed and
+    ///     the settled gems under it).
+    ///   - nameAbovePileLimit: the same for the narrower name plate (the
+    ///     gems under it alone); nil uses `abovePileLimit`.
+    ///   - layout: the shared core layout for a block of a given height.
+    static func resolve(
+        fullHeight: CGFloat,
+        secondLineHeight: CGFloat,
+        nameHeight: CGFloat = 0,
+        abovePileLimit: CGFloat,
+        nameAbovePileLimit: CGFloat? = nil,
+        layout: (CGFloat) -> JarLifetimeCoreLayout
+    ) -> JarLifetimeCoreLabelFit {
+        func fits(_ height: CGFloat, limit: CGFloat = abovePileLimit) -> Bool {
+            let resolved = layout(height)
+            return !resolved.overflows && resolved.labelTop + height <= limit + 0.5
+        }
+        if fits(fullHeight) { return .full }
+        if secondLineHeight > 0, fits(max(0, fullHeight - secondLineHeight)) { return .withoutSecondLine }
+        if nameHeight > 0, nameHeight < fullHeight,
+           fits(nameHeight, limit: max(abovePileLimit, nameAbovePileLimit ?? abovePileLimit)) {
+            return .nameOnly
+        }
+        return .hidden
+    }
+
+    /// Height of the block as drawn with this fit.
+    func labelHeight(full: CGFloat, secondLine: CGFloat, name: CGFloat = 0) -> CGFloat {
+        switch self {
+        case .full, .hidden: full
+        case .withoutSecondLine: max(0, full - max(0, secondLine))
+        case .nameOnly: max(0, name)
+        }
+    }
+}
+
+struct JarLifetimeCoreLabels: View {
+    let state: JarLifetimeCoreState
+    var topClearance: CGFloat?
+    var bottomLimit: CGFloat?
+    var labelBottomLimit: CGFloat?
+    /// How much of the block shows (`JarLifetimeCoreLabelFit`; `.hidden`
+    /// lays out like `.full`).
+    var fit: JarLifetimeCoreLabelFit = .full
+    /// Whether this copy reports `metrics`. The owner keeps one whole copy
+    /// at opacity 0 that measures, so a shorter fit never changes them.
+    var measures = true
+    /// Measured size of the whole block with its second line (the height
+    /// feeds the layout, the width tells the owner which part of the pile
+    /// could cover it), the height that line adds and the name plate's.
+    /// Reported the same whatever shows, so the fit never flips back and
+    /// forth.
+    @Binding var metrics: JarLifetimeCoreLabelMetrics
+
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    /// Dynamic Type factor for the small label text, capped at 1.3 so the
+    /// block stays inside the jar (larger sizes fold the orbit first).
+    @ScaledMetric(relativeTo: .caption2) private var dynamicTextScale: CGFloat = 1
+
+    private var textScale: CGFloat { min(max(dynamicTextScale, 1), 1.3) }
+
+    /// The layout the core and its labels share on a stage of `stageSize`.
+    static func layout(
+        stageSize: CGSize,
+        state: JarLifetimeCoreState,
+        topClearance: CGFloat?,
+        bottomLimit: CGFloat?,
+        labelBottomLimit: CGFloat?,
+        labelHeight: CGFloat
+    ) -> JarLifetimeCoreLayout {
+        let jarWidth = max(1, stageSize.width - Constants.Jar.horizontalMargin * 2)
+        return JarLifetimeCoreLayout.resolve(
+            stageHeight: stageSize.height,
+            core: JarLifetimeCoreBackdrop.coreDiameter(jarWidth: jarWidth, level: state.coreLevel),
+            orbitCount: JarLifetimeCoreBackdrop.orbitCount(level: state.coreLevel),
+            topClearance: topClearance,
+            bottomLimit: bottomLimit,
+            labelBottomLimit: labelBottomLimit,
+            labelHeight: labelHeight,
+            minimumStoneDiameter: JarLifetimeCoreBackdrop.minimumStoneDiameter(jarWidth: jarWidth)
+        )
+    }
 
     var body: some View {
         GeometryReader { proxy in
-            let size = min(proxy.size.width, proxy.size.height)
-            ZStack {
-                LifetimeCoreShape(pointCount: max(8, min(14, 8 + level)))
-                    .fill(
-                        AngularGradient(
-                            colors: [
-                                Color(hex: colorHex),
-                                PomoGemTheme.auroraWarm,
-                                .white,
-                                PomoGemTheme.auroraBlue,
-                                PomoGemTheme.auroraViolet,
-                                Color(hex: colorHex)
-                            ],
-                            center: .center,
-                            angle: .degrees(-32)
-                        )
-                    )
-                    .overlay {
-                        LifetimeCoreShape(pointCount: max(8, min(14, 8 + level)))
-                            .fill(
-                                RadialGradient(
-                                    colors: [
-                                        .white.opacity(0.54),
-                                        .clear,
-                                        Color.black.opacity(0.24)
-                                    ],
-                                    center: UnitPoint(x: 0.30, y: 0.23),
-                                    startRadius: 0,
-                                    endRadius: size * 0.70
-                                )
-                            )
-                            .blendMode(.screen)
-                    }
-                    .overlay {
-                        LifetimeCoreShape(pointCount: max(8, min(14, 8 + level)))
-                            .stroke(
-                                LinearGradient(
-                                    colors: [.white.opacity(0.95), Color(hex: colorHex).opacity(0.86)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: max(1.8, size * 0.035)
-                            )
-                    }
+            // The whole block's height places the column (the core behind
+            // uses the same), so whatever of the block shows never moves it.
+            let layout = Self.layout(
+                stageSize: proxy.size,
+                state: state,
+                topClearance: topClearance,
+                bottomLimit: bottomLimit,
+                labelBottomLimit: labelBottomLimit,
+                labelHeight: metrics.size.height
+            )
+            labels
+                .onGeometryChange(for: CGSize.self) { geometry in
+                    geometry.size
+                } action: { size in
+                    guard measures, fit == .full || fit == .hidden else { return }
+                    metrics.size = size
+                }
+                .position(x: proxy.size.width / 2, y: layout.labelTop + shownHeight / 2)
+        }
+        .accessibilityHidden(true)
+        .allowsHitTesting(false)
+    }
 
-                Canvas { context, canvasSize in
-                    let center = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
-                    let radius = min(canvasSize.width, canvasSize.height) * 0.43
-                    let facets = max(8, min(14, 8 + level))
-                    for index in 0 ..< facets {
-                        let angle = -Double.pi / 2 + Double(index) / Double(facets) * Double.pi * 2
-                        let next = -Double.pi / 2 + Double(index + 1) / Double(facets) * Double.pi * 2
-                        var facet = Path()
-                        facet.move(to: center)
-                        facet.addLine(to: CGPoint(
-                            x: center.x + CGFloat(cos(angle)) * radius,
-                            y: center.y + CGFloat(sin(angle)) * radius
-                        ))
-                        facet.addLine(to: CGPoint(
-                            x: center.x + CGFloat(cos(next)) * radius,
-                            y: center.y + CGFloat(sin(next)) * radius
-                        ))
-                        facet.closeSubpath()
-                        context.fill(
-                            facet,
-                            with: .color(
-                                index.isMultiple(of: 3)
-                                    ? .white.opacity(0.12)
-                                    : Color.black.opacity(index.isMultiple(of: 2) ? 0.08 : 0.02)
-                            )
-                        )
-                        context.stroke(facet, with: .color(.white.opacity(0.16)), lineWidth: 0.55)
-                    }
+    /// Height of the block as drawn now.
+    private var shownHeight: CGFloat {
+        fit.labelHeight(
+            full: metrics.size.height,
+            secondLine: state.nextFusionLabel == nil ? 0 : metrics.secondLine,
+            name: metrics.namePlate
+        )
+    }
 
-                    let coreRadius = radius * min(0.24, 0.12 + CGFloat(level) * 0.018)
-                    context.fill(
-                        Path(ellipseIn: CGRect(
-                            x: center.x - coreRadius,
-                            y: center.y - coreRadius,
-                            width: coreRadius * 2,
-                            height: coreRadius * 2
-                        )),
-                        with: .radialGradient(
-                            Gradient(colors: [.white.opacity(0.94), .white.opacity(0)]),
-                            center: center,
-                            startRadius: 0,
-                            endRadius: coreRadius
+    private var showsProgress: Bool { fit != .nameOnly }
+    private var showsSecondLine: Bool { fit == .full || fit == .hidden }
+
+    private var labels: some View {
+        VStack(spacing: 4) {
+            Text(state.title)
+                .font(.system(size: 11 * textScale, weight: .bold, design: .rounded))
+                .tracking(1)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(
+                    PomoGemTheme.raised.opacity(
+                        reduceTransparency || colorSchemeContrast == .increased ? 0.98 : 0.94
+                    ),
+                    in: Capsule()
+                )
+                .overlay {
+                    Capsule()
+                        .stroke(
+                            .white.opacity(colorSchemeContrast == .increased ? 0.72 : 0.20),
+                            lineWidth: colorSchemeContrast == .increased ? 1.2 : 0.7
                         )
-                    )
+                }
+                .onGeometryChange(for: CGSize.self) { geometry in
+                    geometry.size
+                } action: { size in
+                    guard measures else { return }
+                    metrics.namePlate = size.height
+                    metrics.namePlateWidth = size.width
                 }
 
-                Capsule()
-                    .fill(.white.opacity(0.72))
-                    .frame(width: size * 0.24, height: size * 0.075)
-                    .blur(radius: size * 0.014)
-                    .rotationEffect(.degrees(-18))
-                    .offset(x: -size * 0.18, y: -size * 0.22)
+            if showsProgress {
+                VStack(spacing: 1) {
+                    Text(state.progressLabel)
+                        .font(.system(size: 9.5 * textScale, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                    if let nextFusionLabel = state.nextFusionLabel, showsSecondLine {
+                        Text(nextFusionLabel)
+                            .font(.system(size: 8.5 * textScale, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.66))
+                            .onGeometryChange(for: CGFloat.self) { geometry in
+                                geometry.size.height
+                            } action: { height in
+                                // The line plus the stack's 1 pt spacing.
+                                if measures { metrics.secondLine = height + 1 }
+                            }
+                    }
+                }
+                .lineLimit(1)
+                .foregroundStyle(.white.opacity(0.80))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(
+                    PomoGemTheme.raised.opacity(reduceTransparency || colorSchemeContrast == .increased ? 0.98 : 0.94),
+                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                )
             }
-            .frame(width: size, height: size)
-            .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
-            .saturation(1.22)
         }
+        .fixedSize()
+    }
+}
+
+/// The one compressed lifetime core, drawn as a radial brilliant. Facets
+/// are baked once by `GemArtwork` (Core Graphics) at a fixed size and cached
+/// per (quantised shares, level, display scale); SwiftUI only scales the
+/// image, so an animated frame never re-renders on the main thread.
+private struct LifetimeCorePrism: View {
+    let colorShares: [GemColorShare]
+    let level: Int
+
+    @Environment(\.displayScale) private var displayScale
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
+
+    init(colorShares: [GemColorShare], level: Int) {
+        self.colorShares = colorShares
+        self.level = level
+    }
+
+    var body: some View {
+        let shares = colorShares
+        let level = level
+        let scale = displayScale
+        // Differentiate Without Color: each theme arc carries its mark.
+        let marks = GemThemeMark.isEnabled(environment: differentiateWithoutColor)
+        HeroArtworkImage(key: GemArtwork.coreImageKey(shares: shares, level: level, scale: scale, themeMarks: marks)) {
+            GemArtwork.coreImage(shares: shares, level: level, scale: scale, themeMarks: marks)
+        }
+    }
+}
+
+/// A baked core or vessel image. A cached bake shows at once; a miss bakes
+/// off the main thread (576 px of gradients) while the previous image, if
+/// any, stays on screen, so a new share fan or level never stalls a frame.
+struct HeroArtworkImage: View {
+    let key: String
+    let bake: @Sendable () -> UIImage
+
+    @State private var baked: UIImage?
+
+    var body: some View {
+        Group {
+            if let image = GemArtwork.cachedHeroImage(key: key) ?? baked {
+                Image(uiImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .antialiased(true)
+                    .aspectRatio(1, contentMode: .fit)
+            } else {
+                Color.clear
+            }
+        }
+        .accessibilityHidden(true)
+        .task(id: key) {
+            if let cached = GemArtwork.cachedHeroImage(key: key) {
+                baked = cached
+                return
+            }
+            let bake = bake
+            baked = await Task.detached(priority: .userInitiated) { bake() }.value
+        }
+    }
+}
+
+/// Before the first 2.5 kg: a colourless vessel where the core will be
+/// born. Its ten sectors light up one per 250 g; no colour enters until
+/// the core exists. Static (no animation), decorative.
+struct JarLifetimeCoreVessel: View {
+    let totalGrams: Int
+    var topClearance: CGFloat?
+    var bottomLimit: CGFloat?
+    var labelBottomLimit: CGFloat?
+    /// 演出の強さ as the jar resolved it; nil resolves it here.
+    var effectsInEffect: JarEffectsIntensity?
+
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    /// UI tests force Reduce Motion through this seam (as Home and the jar do).
+    @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
+    private var reduceMotion: Bool { reduceMotionOverride ?? systemReduceMotion }
+    @Environment(\.displayScale) private var displayScale
+    @AppStorage(JarEffectsIntensity.defaultsKey) private var effectsIntensity: JarEffectsIntensity = .standard
+
+    var body: some View {
+        GeometryReader { proxy in
+            let jarWidth = max(1, proxy.size.width - Constants.Jar.horizontalMargin * 2)
+            let core = JarLifetimeCoreBackdrop.coreDiameter(jarWidth: jarWidth, level: 1)
+            let lit = min(10, max(0, totalGrams / max(1, Constants.Mass.measuredPebbleGrams)))
+            // 控えめ (D17): the vessel's light at the inner-glow scale.
+            let effects = effectsInEffect ?? .resolved(preference: effectsIntensity, reduceMotion: reduceMotion)
+            let inner = Double(effects.innerGlowScale)
+            ZStack {
+                // A clear crystal from the first day: white light (α0.3 out
+                // to 1.3R) around an ice-white stone. Still no theme colour.
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color.white.opacity((reduceTransparency ? 0.16 : 0.30) * inner),
+                                Color.white.opacity((reduceTransparency ? 0.06 : 0.10) * inner),
+                                .clear
+                            ],
+                            center: .center,
+                            startRadius: core * 0.30,
+                            endRadius: core * 0.65
+                        )
+                    )
+                    .frame(width: core * 1.3, height: core * 1.3)
+                let scale = displayScale
+                HeroArtworkImage(key: GemArtwork.vesselImageKey(litFacets: lit, scale: scale)) {
+                    GemArtwork.vesselImage(litFacets: lit, scale: scale)
+                }
+                .frame(width: core * 0.92, height: core * 0.92)
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .position(
+                x: proxy.size.width / 2,
+                // Where the core will be born: the same column as the core.
+                y: JarLifetimeCoreLayout.resolve(
+                    stageHeight: proxy.size.height,
+                    core: core,
+                    orbitCount: 1,
+                    topClearance: topClearance,
+                    bottomLimit: bottomLimit,
+                    labelBottomLimit: labelBottomLimit,
+                    labelHeight: JarLifetimeCoreBackdrop.estimatedLabelHeight,
+                    minimumStoneDiameter: JarLifetimeCoreBackdrop.minimumStoneDiameter(jarWidth: jarWidth)
+                ).centerY
+            )
+        }
+        .accessibilityHidden(true)
+        .allowsHitTesting(false)
     }
 }
 
@@ -2145,210 +2908,169 @@ private struct DiamondSlot: Shape {
     }
 }
 
-/// A lightweight, code-native crystal shared by the completion card,
-/// aggregation celebration, and the three-scale overview. It grows facets
-/// from real completed sessions and remains static when Reduce Motion is on.
+/// The jar's baked gem art as a SwiftUI view (Docs/GemExperienceDesign.md
+/// §7.2–7.3): the same body image the Home jar shows, with the
+/// screen-fixed light rig (pavilion shade, key light) laid over it and an
+/// optional soft halo. One source of art for the fusion sheet, the
+/// Overview and the share cards, so a ×10 looks the same everywhere.
+struct GemArtworkStone: View {
+    let spec: GemArtworkSpec
+    var glowHex: String?
+    var glowOpacity: Double = 0.42
+    /// Differentiate Without Color marks; nil follows the setting (a
+    /// colourless waiting slot or an achievement passes false).
+    var themeMarks: Bool?
+
+    @Environment(\.displayScale) private var displayScale
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
+
+    var body: some View {
+        GeometryReader { proxy in
+            let side = min(proxy.size.width, proxy.size.height)
+            let radius = side / 2
+            let sprite = GemArtwork.bodySpriteSize(radius: radius)
+            let spec = spec.withThemeMarks(
+                themeMarks ?? GemThemeMark.isEnabled(environment: differentiateWithoutColor)
+            )
+            ZStack {
+                if let glowHex {
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    Color(hex: glowHex).opacity(reduceTransparency ? glowOpacity * 0.45 : glowOpacity),
+                                    Color(hex: glowHex).opacity(reduceTransparency ? glowOpacity * 0.15 : glowOpacity * 0.32),
+                                    .clear
+                                ],
+                                center: .center,
+                                startRadius: radius * 0.55,
+                                endRadius: radius * 1.35
+                            )
+                        )
+                        .frame(width: side * 1.4, height: side * 1.4)
+                }
+                Image(uiImage: GemArtwork.bodyImage(for: spec, radius: radius, scale: displayScale))
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: sprite.width, height: sprite.height)
+                Image(uiImage: GemArtwork.lightRigShadeImage)
+                    .resizable()
+                    .frame(width: side, height: side)
+                Image(uiImage: GemArtwork.lightRigAddImage)
+                    .resizable()
+                    .frame(width: side, height: side)
+                    .blendMode(.plusLighter)
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+        .accessibilityHidden(true)
+    }
+
+    /// The Home art of a crystal holding `grams` (rung by contained grams,
+    /// never by level: D8).
+    static func aggregateSpec(grams: Int, colors: [GemColorShare], variant: Int = 0) -> GemArtworkSpec {
+        GemArtworkSpec(
+            rung: GemCutLadder.standard.rung(aggregateGrams: grams),
+            colors: colors,
+            variant: variant % GemArtworkSpec.variantCount,
+            isMuted: false,
+            showsDashedRing: false
+        )
+    }
+
+    /// The Home art of one measured loose gem.
+    static func looseSpec(hex: String, variant: Int = 0) -> GemArtworkSpec {
+        GemArtworkSpec(
+            rung: GemCutLadder.standard.loose,
+            colors: [GemColorShare(hex: hex, fraction: 1)],
+            variant: variant % GemArtworkSpec.variantCount,
+            isMuted: false,
+            showsDashedRing: false
+        )
+    }
+}
+
+/// The Overview's crystal: the Home jar's own gem art at the rung of the
+/// grams it holds (an achievement shows the copper-set step cut), with the
+/// "×N" count on the same dark plate as in the jar. It breathes gently and
+/// stays still with Reduce Motion.
 struct ProgressCrystalGlyph: View {
     let completionCount: Int
     let colorHex: String
     var level = 1
     var showsCount = false
+    /// Grams the crystal holds; defaults to `completionCount` 25-minute
+    /// gems when unknown.
+    var grams: Int? = nil
+    var colorShares: [GemColorShare]? = nil
+    var isAchievement = false
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    /// UI tests force Reduce Motion through this seam (as Home and the jar do).
+    @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
+    private var reduceMotion: Bool { reduceMotionOverride ?? systemReduceMotion }
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
+    @Environment(\.displayScale) private var displayScale
+    @AppStorage(JarEffectsIntensity.defaultsKey) private var effectsIntensity: JarEffectsIntensity = .standard
     @State private var breath = false
 
-    private let facetMaximum = 12
+    /// 演出の強さ in effect (D17): Reduce Motion implies 控えめ.
+    private var effects: JarEffectsIntensity {
+        .resolved(preference: effectsIntensity, reduceMotion: reduceMotion)
+    }
+
+    private var spec: GemArtworkSpec {
+        let colors = colorShares.flatMap { $0.isEmpty ? nil : $0 } ?? [GemColorShare(hex: colorHex, fraction: 1)]
+        if isAchievement {
+            return GemArtworkSpec(
+                rung: GemCutLadder.standard.achievement,
+                colors: colors,
+                variant: 0,
+                isMuted: false,
+                showsDashedRing: false
+            )
+        }
+        let contained = grams ?? max(1, completionCount) * Constants.Mass.measuredPebbleGrams
+        return GemArtworkStone.aggregateSpec(grams: contained, colors: colors, variant: level)
+    }
 
     var body: some View {
-        ZStack {
-            Canvas { context, size in
-                drawCrystal(context: &context, size: size)
-            }
-            .scaleEffect(breath ? 1.018 : 0.99)
-            .shadow(
-                color: Color(hex: colorHex).opacity(0.48),
-                radius: 9 + CGFloat(min(max(level, 1), 4)) * 2
-            )
+        GeometryReader { proxy in
+            let side = min(proxy.size.width, proxy.size.height)
+            ZStack {
+                GemArtworkStone(spec: spec, glowHex: colorHex, glowOpacity: 0.40 * Double(effects.haloScale), themeMarks: isAchievement ? false : nil)
+                    .frame(width: side * 0.80, height: side * 0.80)
+                    .scaleEffect(breath ? 1.018 : 0.99)
 
-            if showsCount {
-                Text(AggregatePresentation.countLabel(completionCount))
-                    .font(.system(size: 13, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-                    .shadow(color: .black.opacity(0.55), radius: 2, y: 1)
-                    .minimumScaleFactor(0.65)
-                    .padding(5)
+                if showsCount {
+                    // The jar's own count tag (D26): a small engraved copper
+                    // tag below the table, the same text as Home.
+                    let text = AggregatePresentation.countLabel(completionCount)
+                    let fontSize = GemArtwork.countTagFontSize(sceneRadius: side * 0.40)
+                    let tag = GemArtwork.countEngravingSize(text: text, fontSize: fontSize, style: .copperTag)
+                    // Below the theme marks when they show (round 14).
+                    let drop = GemArtwork.countTagDrop(
+                        colors: spec.colors,
+                        radius: side * 0.40,
+                        countLineHeight: tag.height,
+                        showsThemeMarks: !isAchievement && GemThemeMark.isEnabled(environment: differentiateWithoutColor)
+                    )
+                    Image(uiImage: GemArtwork.countEngravingImage(text: text, fontSize: fontSize, style: .copperTag, scale: displayScale))
+                        .resizable()
+                        .frame(width: tag.width, height: tag.height)
+                        .offset(y: side * 0.40 * drop)
+                }
             }
+            .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .onAppear { updateMotion() }
-        .onChange(of: reduceMotion) { _, _ in updateMotion() }
+        .onChange(of: effects) { _, _ in updateMotion() }
         .accessibilityHidden(true)
     }
 
-    private func drawCrystal(context: inout GraphicsContext, size: CGSize) {
-        let diameter = min(size.width, size.height)
-        guard diameter > 2 else { return }
-        let center = CGPoint(x: size.width / 2, y: size.height / 2)
-        let radius = diameter * 0.43
-        let base = Color(hex: colorHex)
-        let vertices = (0..<facetMaximum).map { index -> CGPoint in
-            let angle = -Double.pi / 2 + Double(index) / Double(facetMaximum) * Double.pi * 2
-            let modulation = index.isMultiple(of: 2) ? 1.0 : 0.87
-            return CGPoint(
-                x: center.x + CGFloat(cos(angle)) * radius * modulation,
-                y: center.y + CGFloat(sin(angle)) * radius * modulation
-            )
-        }
-
-        let auraRect = CGRect(
-            x: center.x - radius * 1.12,
-            y: center.y - radius * 1.12,
-            width: radius * 2.24,
-            height: radius * 2.24
-        )
-        context.fill(
-            Path(ellipseIn: auraRect),
-            with: .radialGradient(
-                Gradient(colors: [base.opacity(0.30), base.opacity(0)]),
-                center: center,
-                startRadius: 0,
-                endRadius: radius * 1.12
-            )
-        )
-
-        let growth = WeeklyProgressPolicy.growthState(
-            for: completionCount,
-            maximum: facetMaximum
-        )
-        let lit = growth.outerLitFacetCount
-        for index in vertices.indices {
-            var facet = Path()
-            facet.move(to: center)
-            facet.addLine(to: vertices[index])
-            facet.addLine(to: vertices[(index + 1) % vertices.count])
-            facet.closeSubpath()
-
-            let isLit = index < lit
-            let highlight = index.isMultiple(of: 3)
-            let color: Color = if isLit {
-                highlight ? base.mix(with: .white, by: 0.34) : base
-            } else {
-                base.mix(with: Color(hex: Constants.Color.inkRaised), by: 0.64)
-            }
-            context.fill(facet, with: .color(color.opacity(isLit ? 0.96 : 0.72)))
-            context.stroke(facet, with: .color(.white.opacity(isLit ? 0.22 : 0.09)), lineWidth: 0.7)
-        }
-
-        var outline = Path()
-        if let first = vertices.first {
-            outline.move(to: first)
-            vertices.dropFirst().forEach { outline.addLine(to: $0) }
-            outline.closeSubpath()
-        }
-        context.stroke(
-            outline,
-            with: .linearGradient(
-                Gradient(colors: [.white.opacity(0.82), base.opacity(0.82)]),
-                startPoint: CGPoint(x: center.x - radius, y: center.y - radius),
-                endPoint: CGPoint(x: center.x + radius, y: center.y + radius)
-            ),
-            lineWidth: max(1.2, diameter * 0.025)
-        )
-
-        drawGrowthLayers(
-            context: &context,
-            center: center,
-            radius: radius,
-            base: base,
-            state: growth
-        )
-
-        let flare = Path(ellipseIn: CGRect(
-            x: center.x - radius * 0.35,
-            y: center.y - radius * 0.52,
-            width: radius * 0.28,
-            height: radius * 0.16
-        ))
-        context.fill(flare, with: .color(.white.opacity(lit > 0 ? 0.62 : 0.18)))
-    }
-
-    private func drawGrowthLayers(
-        context: inout GraphicsContext,
-        center: CGPoint,
-        radius: CGFloat,
-        base: Color,
-        state: WeeklyProgressPolicy.GrowthState
-    ) {
-        guard state.completedLayerCount > 0 else { return }
-
-        for index in 0 ..< state.visibleRingCount {
-            let inset = radius * (0.18 + CGFloat(index) * 0.105)
-            let ringRadius = max(radius * 0.28, radius - inset)
-            let ring = Path(ellipseIn: CGRect(
-                x: center.x - ringRadius,
-                y: center.y - ringRadius,
-                width: ringRadius * 2,
-                height: ringRadius * 2
-            ))
-            let dash: [CGFloat] = index.isMultiple(of: 2) ? [] : [2.5, 3.5]
-            context.stroke(
-                ring,
-                with: .color(base.mix(with: .white, by: 0.32).opacity(0.36 + Double(index) * 0.07)),
-                style: StrokeStyle(lineWidth: 0.9 + CGFloat(index) * 0.18, dash: dash)
-            )
-        }
-
-        let innerRadius = radius * 0.34
-        let activeLit = state.activeLayerLitFacetCount
-        let innerVertices = (0 ..< facetMaximum).map { index -> CGPoint in
-            let angle = -Double.pi / 2
-                + Double(index) / Double(facetMaximum) * Double.pi * 2
-                + Double(state.completedLayerCount) * 0.11
-            return CGPoint(
-                x: center.x + CGFloat(cos(angle)) * innerRadius,
-                y: center.y + CGFloat(sin(angle)) * innerRadius
-            )
-        }
-        for index in innerVertices.indices {
-            var facet = Path()
-            facet.move(to: center)
-            facet.addLine(to: innerVertices[index])
-            facet.addLine(to: innerVertices[(index + 1) % innerVertices.count])
-            facet.closeSubpath()
-            let isLit = index < activeLit
-            context.fill(
-                facet,
-                with: .color(
-                    isLit
-                        ? base.mix(with: .white, by: 0.46).opacity(0.98)
-                        : Color(hex: Constants.Color.inkRaised).opacity(0.74)
-                )
-            )
-            context.stroke(
-                facet,
-                with: .color(.white.opacity(isLit ? 0.34 : 0.08)),
-                lineWidth: 0.55
-            )
-        }
-
-        let coreRadius = radius * min(0.17, 0.09 + CGFloat(state.completedLayerCount) * 0.012)
-        context.fill(
-            Path(ellipseIn: CGRect(
-                x: center.x - coreRadius,
-                y: center.y - coreRadius,
-                width: coreRadius * 2,
-                height: coreRadius * 2
-            )),
-            with: .radialGradient(
-                Gradient(colors: [.white.opacity(0.92), base.opacity(0.72)]),
-                center: center,
-                startRadius: 0,
-                endRadius: coreRadius
-            )
-        )
-    }
-
     private func updateMotion() {
-        guard !reduceMotion,
+        guard effects.allowsBreathing,
               !LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess
         else {
             breath = false
@@ -2358,31 +3080,5 @@ struct ProgressCrystalGlyph: View {
         withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) {
             breath = true
         }
-    }
-}
-
-private extension Color {
-    func mix(with other: Color, by amount: CGFloat) -> Color {
-        let fraction = min(max(amount, 0), 1)
-        return Color(uiColor: UIColor(self).progressMixed(
-            with: UIColor(other),
-            amount: fraction
-        ))
-    }
-}
-
-private extension UIColor {
-    func progressMixed(with other: UIColor, amount: CGFloat) -> UIColor {
-        let value = min(max(amount, 0), 1)
-        var lhs: (CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0)
-        var rhs: (CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0)
-        getRed(&lhs.0, green: &lhs.1, blue: &lhs.2, alpha: &lhs.3)
-        other.getRed(&rhs.0, green: &rhs.1, blue: &rhs.2, alpha: &rhs.3)
-        return UIColor(
-            red: lhs.0 + (rhs.0 - lhs.0) * value,
-            green: lhs.1 + (rhs.1 - lhs.1) * value,
-            blue: lhs.2 + (rhs.2 - lhs.2) * value,
-            alpha: lhs.3 + (rhs.3 - lhs.3) * value
-        )
     }
 }

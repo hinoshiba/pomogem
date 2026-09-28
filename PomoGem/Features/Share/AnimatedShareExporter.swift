@@ -239,7 +239,11 @@ enum AnimatedShareExporter {
 
             let fileProperties: [CFString: Any] = [
                 kCGImagePropertyGIFDictionary: [
-                    kCGImagePropertyGIFLoopCount: max(0, loopCount)
+                    kCGImagePropertyGIFLoopCount: max(0, loopCount),
+                    // Round 12: every frame gets its own 256-colour table
+                    // (one global table left the gems matte and the bed
+                    // dithered: most of it went to the dark card).
+                    kCGImagePropertyGIFHasGlobalColorMap: false
                 ],
                 kCGImageMetadataShouldExcludeGPS: true,
                 kCGImageMetadataShouldExcludeXMP: true

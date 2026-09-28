@@ -313,10 +313,13 @@ enum FocusMusicCatalogRoutePolicy {
 /// A gentle, factual line under the controls. Never urgent, never blaming.
 enum FocusMusicHint: Equatable, Sendable {
     /// iOS 26.4-era Music updates can block third-party playback until the
-    /// Music app is opened once. Leaving PomoGem mid-focus may pause the
-    /// timer, so the copy suggests a break.
+    /// Music app is opened once. Leaving PomoGem mid-focus pauses the timer
+    /// while the leave pause is on (F1), and a break is never paused, so the
+    /// copy suggests a break.
     case openMusicOnce
     case noSourceAvailable
+    /// Signing in happens in the Music app, so, as with `openMusicOnce`, the
+    /// copy suggests a break rather than leaving a running focus (F1).
     case signIn
 
     var message: String {
@@ -333,7 +336,7 @@ enum FocusMusicHint: Equatable, Sendable {
             )
         case .signIn:
             String(
-                localized: "「ミュージック」アプリでApple Musicにサインインすると再生できます。",
+                localized: "休憩のときなどに「ミュージック」アプリでApple Musicにサインインすると、再生できるようになります。",
                 table: "Focus"
             )
         }

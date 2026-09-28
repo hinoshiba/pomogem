@@ -394,6 +394,7 @@ struct RootView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.displayScale) private var displayScale
     /// quality-01. The tab to reopen after the host remounted this account's
     /// data (see `CloudRemountNavigationMemory`). nil outside iCloud mode.
     @Environment(\.cloudRemountNavigation) private var remountNavigation
@@ -822,6 +823,14 @@ struct RootView: View {
         }
         .task {
             installCompleteDeletionOperation()
+        }
+        .task {
+            // The common gem textures bake off the main thread while the
+            // stores open, so the jar's first frame rarely has to bake.
+#if DEBUG && targetEnvironment(simulator)
+            guard !JarFrameProbe.disablesPrebake else { return }
+#endif
+            GemTextureAtlas.shared.prewarm(PebbleNode.commonBakeRequests(scale: displayScale))
         }
 #if DEBUG
         .task {
@@ -1275,6 +1284,9 @@ struct RootView: View {
 #endif
         }
         if modelContext.hasChanges { try modelContext.save() }
+#if DEBUG && targetEnvironment(simulator)
+        try GemShowcaseUITestFixture.seedIfNeeded(context: modelContext)
+#endif
     }
 
     /// Called by the actual Home/Onboarding subtree rather than the outer root
