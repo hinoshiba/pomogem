@@ -193,7 +193,7 @@ struct SettingsView: View {
         }
         .scrollContentBackground(.hidden)
         .background(NightBackground())
-        .pomogemNavigationTitle("設定")
+        .pomogemNavigationTitle(String(localized: "設定", table: "Settings", comment: "Navigation title of the Settings screen"))
         .toolbarTitleDisplayMode(.large)
         .sheet(isPresented: $isSubjectEditorPresented, onDismiss: {
             editingSubjectID = nil
@@ -246,7 +246,11 @@ struct SettingsView: View {
             if let dataExportFileURL {
                 PomoGemDataExportShareSheet(fileURL: dataExportFileURL) { error in
                     if let error {
-                        dataExportError = "書き出したファイルを共有できませんでした。\n\(error.localizedDescription)"
+                        dataExportError = String(
+                            localized: "書き出したファイルを共有できませんでした。\n\(error.localizedDescription)",
+                            table: "Settings",
+                            comment: "Settings export error; the argument is the system error description"
+                        )
                     }
                     showDataExportShareSheet = false
                 }
@@ -260,7 +264,7 @@ struct SettingsView: View {
             }
         }
         .alert(
-            "テーマを削除",
+            String(localized: "テーマを削除", table: "Settings", comment: "Alert title: delete a theme"),
             isPresented: Binding(
                 get: { subjectPendingDeletion != nil },
                 set: {
@@ -272,12 +276,16 @@ struct SettingsView: View {
             ),
             presenting: subjectPendingDeletion
         ) { subject in
-            Button("「\(subject.safeDisplayName)」を削除", role: .destructive) {
+            Button(String(
+                localized: "「\(subject.safeDisplayName)」を削除",
+                table: "Settings",
+                comment: "Theme deletion alert button; the argument is the theme name"
+            ), role: .destructive) {
                 subjectPendingDeletion = nil
                 subjectPendingDeletionRecordCount = nil
                 deleteSubject(subject)
             }
-            Button("キャンセル", role: .cancel) {
+            Button(String(localized: "キャンセル", table: "Settings", comment: "Alert button"), role: .cancel) {
                 subjectPendingDeletion = nil
                 subjectPendingDeletionRecordCount = nil
             }
@@ -287,51 +295,75 @@ struct SettingsView: View {
                 recordCount: subjectPendingDeletionRecordCount ?? 0
             ))
         }
-        .alert("表示中の記録をリセット", isPresented: $showResetData) {
-            Button("キャンセル", role: .cancel) {}
-            Button("リセット", role: .destructive) { resetStudyData() }
+        .alert(String(
+            localized: "表示中の記録をリセット",
+            table: "Settings",
+            comment: "Alert title and Settings button: reset the records shown now (earlier records stay stored)"
+        ), isPresented: $showResetData) {
+            Button(String(localized: "キャンセル", table: "Settings", comment: "Alert button"), role: .cancel) {}
+            Button(String(
+                localized: "リセット",
+                table: "Settings",
+                comment: "Reset confirmation button"
+            ), role: .destructive) { resetStudyData() }
         } message: {
             Text(resetDataMessage)
         }
-        .alert("通知を設定できませんでした", isPresented: Binding(
+        .alert(String(
+            localized: "通知を設定できませんでした",
+            table: "Settings",
+            comment: "Alert title: a notification setting could not be applied"
+        ), isPresented: Binding(
             get: { notificationError != nil },
             set: { if !$0 { notificationError = nil } }
         )) {
             // iOS never asks twice. Once denied, only its Settings can allow it.
             if NotificationManager.shared.authorizationStatus == .denied {
-                Button(String(localized: "設定を開く", table: "Settings", comment: "Alert button: open this app's notification settings in iOS")) {
+                Button(String(
+                    localized: "設定を開く",
+                    table: "Settings",
+                    comment: "Alert button: open this app's notification settings in iOS"
+                )) {
                     openNotificationSettings()
                 }
             }
-            Button("閉じる", role: .cancel) {}
+            Button(String(localized: "閉じる", table: "Settings", comment: "Alert button"), role: .cancel) {}
         } message: {
             Text(notificationError ?? "")
         }
-        .alert("設定を完了できませんでした", isPresented: Binding(
+        .alert(String(
+            localized: "設定を完了できませんでした",
+            table: "Settings",
+            comment: "Alert title: a setting could not be saved"
+        ), isPresented: Binding(
             get: { settingsError != nil },
             set: { if !$0 { settingsError = nil } }
         )) {
-            Button("閉じる", role: .cancel) {}
+            Button(String(localized: "閉じる", table: "Settings", comment: "Alert button"), role: .cancel) {}
         } message: {
             Text(settingsError ?? "")
         }
-        .alert("データを書き出せませんでした", isPresented: Binding(
+        .alert(String(
+            localized: "データを書き出せませんでした",
+            table: "Settings",
+            comment: "Alert title and VoiceOver announcement: the data export failed"
+        ), isPresented: Binding(
             get: { dataExportError != nil },
             set: { if !$0 { dataExportError = nil } }
         )) {
-            Button("閉じる", role: .cancel) {}
+            Button(String(localized: "閉じる", table: "Settings", comment: "Alert button"), role: .cancel) {}
         } message: {
             Text(dataExportError ?? "")
         }
 #if DEBUG
         .overlay(alignment: .topLeading) {
             if LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess {
-                Text("Settings render audit probe")
+                Text(verbatim: "Settings render audit probe")
                     .font(.system(size: 1))
                     .foregroundStyle(Color.clear)
                     .frame(width: 1, height: 1)
                     .accessibilityIdentifier("settings.render-audit.probe")
-                    .accessibilityLabel("Settings render audit probe")
+                    .accessibilityLabel(Text(verbatim: "Settings render audit probe"))
                     .accessibilityValue(Text(verbatim:
                         (router.settingsRenderAuditValue ?? "state=waiting")
                             + ";commitGeneration=\(booleanSettingsCommitGeneration)"
@@ -407,7 +439,11 @@ struct SettingsView: View {
     private func updateRareRewardMode(_ mode: RareRewardMode) {
         guard mode != rareRewardMode || !hasExplicitRareRewardSelection else { return }
         guard resolvedPreferences != nil else {
-            settingsError = "ランダムなレア粒の設定を\(storageDestination)へ保存できませんでした。しばらく待ってから、もう一度お試しください。"
+            settingsError = String(
+                localized: "ランダムなレア粒の設定を\(storageDestination)へ保存できませんでした。しばらく待ってから、もう一度お試しください。",
+                table: "Settings",
+                comment: "Settings error; the argument is where settings are saved (this iPhone or iCloud)"
+            )
             return
         }
 
@@ -424,7 +460,11 @@ struct SettingsView: View {
             try modelContext.save()
         } catch {
             modelContext.rollback()
-            settingsError = "ランダムなレア粒の設定を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
+            settingsError = String(
+                localized: "ランダムなレア粒の設定を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)",
+                table: "Settings",
+                comment: "Settings error; the argument is the system error description"
+            )
         }
     }
 
@@ -446,7 +486,11 @@ struct SettingsView: View {
                             .foregroundStyle(subject.isArchived ? PomoGemTheme.muted : PomoGemTheme.text)
                         Spacer()
                         if subject.isArchived {
-                            Text("非表示").font(.caption).foregroundStyle(PomoGemTheme.muted)
+                            Text(
+                                "非表示",
+                                tableName: "Settings",
+                                comment: "Badge on a theme row: the theme is hidden from Home (English: Hidden)"
+                            ).font(.caption).foregroundStyle(PomoGemTheme.muted)
                         }
                         Image(systemName: "chevron.right").font(.caption).foregroundStyle(PomoGemTheme.muted)
                     }
@@ -456,8 +500,12 @@ struct SettingsView: View {
                 .buttonStyle(PomoGemRowButtonStyle())
                 .accessibilityHint(
                     subjects.count > 1
-                        ? "ダブルタップで編集。アクションで順番を変更できます"
-                        : "ダブルタップで編集できます"
+                        ? String(
+                            localized: "ダブルタップで編集。アクションで順番を変更できます",
+                            table: "Settings",
+                            comment: "VoiceOver hint of a theme row when it can be reordered with the Move Up/Move Down actions"
+                        )
+                        : String(localized: "ダブルタップで編集できます", table: "Settings", comment: "VoiceOver hint of a theme row")
                 )
                 .modifier(
                     SubjectReorderAccessibilityModifier(
@@ -468,7 +516,18 @@ struct SettingsView: View {
                     )
                 )
                 .swipeActions(edge: .leading) {
-                    Button(subject.isArchived ? "表示" : "非表示") {
+                    Button(subject.isArchived
+                        ? String(
+                            localized: "表示",
+                            table: "Settings",
+                            comment: "Swipe action on a hidden theme: show it on Home again (English: Show)"
+                        )
+                        : String(
+                            localized: "settings.themes.swipe.hide",
+                            defaultValue: "非表示",
+                            table: "Settings",
+                            comment: "Swipe action on a theme: hide it from Home (English: Hide). Same Japanese as the Hidden badge, different English."
+                        )) {
                         do {
                             subject.isArchived.toggle()
                             try SubjectSyncPolicy.recordUserMutation(
@@ -478,13 +537,17 @@ struct SettingsView: View {
                             try modelContext.save()
                         } catch {
                             modelContext.rollback()
-                            settingsError = "テーマの表示設定を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
+                            settingsError = String(
+                                localized: "テーマの表示設定を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)",
+                                table: "Settings",
+                                comment: "Settings error; the argument is the system error description"
+                            )
                         }
                     }
                     .tint(PomoGemTheme.raised)
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button("削除", role: .destructive) {
+                    Button(String(localized: "削除", table: "Settings", comment: "Swipe action on a theme: delete it"), role: .destructive) {
                         prepareSubjectDeletion(subject)
                     }
                 }
@@ -495,23 +558,31 @@ struct SettingsView: View {
                 editingSubjectID = nil
                 isSubjectEditorPresented = true
             } label: {
-                Label("テーマを追加", systemImage: "plus")
+                Label(String(localized: "テーマを追加", table: "Settings", comment: "Button and editor title: add a theme"), systemImage: "plus")
             }
             .disabled(subjects.count >= Constants.App.maximumSubjects)
             .accessibilityHint(
                 subjects.count >= Constants.App.maximumSubjects
-                    ? "最大12件です。不要な項目を削除すると追加できます"
-                    : "新しいテーマを追加します"
+                    ? String(
+                        localized: "最大12件です。不要な項目を削除すると追加できます",
+                        table: "Settings",
+                        comment: "VoiceOver hint of the disabled Add Theme button: the 12-theme limit is reached"
+                    )
+                    : String(localized: "新しいテーマを追加します", table: "Settings", comment: "VoiceOver hint of the Add Theme button")
             )
         } header: {
-            Text("テーマ")
+            Text("テーマ", tableName: "Settings", comment: "Settings section header: the person's themes")
         } footer: {
-            Text("勉強も仕事も同じ一覧です。最大12件。追加画面には名前のヒントがあります。削除しても過去の質量と記録は残ります。長押しで順番を変更できます。")
+            Text(
+                "勉強も仕事も同じ一覧です。最大12件。追加画面には名前のヒントがあります。削除しても過去の質量と記録は残ります。長押しで順番を変更できます。",
+                tableName: "Settings",
+                comment: "Settings footer under the theme list"
+            )
         }
     }
 
     private var focusSection: some View {
-        Section("集中") {
+        Section(String(localized: "集中", table: "Settings", comment: "Settings section header: timer settings (English: Focus)")) {
             if let resolvedPreferences {
                 PreferredFocusDurationPicker(
                     preferredSeconds: resolvedPreferences.preferredFocusSeconds,
@@ -537,13 +608,17 @@ struct SettingsView: View {
                     TimerDisplayModeSelectionView(selection: timerDisplayModeBinding)
                 } label: {
                     SettingLabel(
-                        title: "集中タイマーの表示",
+                        title: String(
+                            localized: "集中タイマーの表示",
+                            table: "Settings",
+                            comment: "Settings row: how the focus timer shows the time left"
+                        ),
                         subtitle: resolvedPreferences.timerDisplayMode.title,
                         symbol: "circle.dotted"
                     )
                 }
                 .accessibilityIdentifier("settings.timer-display-mode")
-                .accessibilityHint("4つの見本から、タイマーの見た目を選べます")
+                .accessibilityHint(Text("4つの見本から、タイマーの見た目を選べます", tableName: "Settings", comment: "VoiceOver hint of the timer display row"))
             }
             NavigationLink {
                 TimerDefaultOrientationSettingsView(selection: Binding(
@@ -552,13 +627,21 @@ struct SettingsView: View {
                 ))
             } label: {
                 SettingLabel(
-                    title: "タイマーの既定の向き",
+                    title: String(
+                        localized: "タイマーの既定の向き",
+                        table: "Settings",
+                        comment: "Settings row and page title: the orientation new timers open in"
+                    ),
                     subtitle: (TimerDefaultOrientation(rawValue: defaultTimerOrientationRawValue) ?? .automatic).title,
                     symbol: "rotate.right"
                 )
             }
             .accessibilityIdentifier("settings.timer-default-orientation")
-            .accessibilityHint("新しい集中・休憩タイマーを開く向きを選べます")
+            .accessibilityHint(Text(
+                "新しい集中・休憩タイマーを開く向きを選べます",
+                tableName: "Settings",
+                comment: "VoiceOver hint of the default timer orientation row"
+            ))
 
             if let resolvedPreferences {
                 Toggle(isOn: settingBinding(
@@ -567,8 +650,12 @@ struct SettingsView: View {
                     update: { $0.keepScreenAwake = $1 }
                 )) {
                     SettingLabel(
-                        title: "タイマー中は画面をロックしない",
-                        subtitle: "集中・休憩のタイマー画面を開いている間だけ有効",
+                        title: String(
+                            localized: "タイマー中は画面をロックしない",
+                            table: "Settings",
+                            comment: "Settings switch: keep the screen from auto-locking while a timer is on screen"
+                        ),
+                        subtitle: String(localized: "集中・休憩のタイマー画面を開いている間だけ有効", table: "Settings", comment: "Settings switch subtitle"),
                         symbol: "sun.max"
                     )
                 }
@@ -724,11 +811,18 @@ struct SettingsView: View {
             seconds: Int(offsets.last ?? 0),
             units: .minutesSeconds
         )
-        let count = offsets.count
-        return String(
-            localized: "離れてから\(lastOffset)までに最大\(count)回",
+        // The count is its own phrase so English can pluralize it: a
+        // two-argument sentence would need a plural substitution.
+        let count = String(
+            localized: "settings.focus-leave.nudge-count",
+            defaultValue: "\(offsets.count)回",
             table: "Settings",
-            comment: "Settings switch subtitle for the leave-pause notifications. The first argument is when the series stops after leaving (20分), the second how many notifications at most (5). Suggested English: Up to %2$lld times in your first %1$@ away"
+            comment: "How many leave-pause notifications at most (5), inside the switch subtitle. English: '%lld notification' / '%lld notifications'."
+        )
+        return String(
+            localized: "離れてから\(lastOffset)までに最大\(count)",
+            table: "Settings",
+            comment: "Settings switch subtitle for the leave-pause notifications. The first argument is when the series stops after leaving (20分), the second how many notifications at most (5回). Suggested English: Up to %2$@ within %1$@ of leaving"
         )
     }
 
@@ -756,7 +850,11 @@ struct SettingsView: View {
         Section {
             Toggle(isOn: $liveActivityEnabled) {
                 SettingLabel(
-                    title: "画面を閉じてもタイマーを表示",
+                    title: String(
+                        localized: "画面を閉じてもタイマーを表示",
+                        table: "Settings",
+                        comment: "Settings switch: show the timer as a Live Activity outside the app"
+                    ),
                     // Neutral on purpose: most supported iPhones have no Dynamic
                     // Island, and the Live Activity appears there too when one exists.
                     subtitle: String(
@@ -784,8 +882,12 @@ struct SettingsView: View {
                     set: { updateFocusReturnReminder(enabled: $0) }
                 )) {
                     SettingLabel(
-                        title: "集中に戻るお知らせ",
-                        subtitle: "アプリを離れて30秒後に一度通知",
+                        title: String(
+                            localized: "集中に戻るお知らせ",
+                            table: "Settings",
+                            comment: "Settings switch: one notification after leaving the app during a focus (glossary: Return-to-Focus Reminder)"
+                        ),
+                        subtitle: String(localized: "アプリを離れて30秒後に一度通知", table: "Settings", comment: "Settings switch subtitle"),
                         symbol: "bell.badge"
                     )
                 }
@@ -828,21 +930,33 @@ struct SettingsView: View {
                     synchronizeNotifications()
                 }
             )) {
-                SettingLabel(title: "音", subtitle: "サイレントスイッチに従います", symbol: "speaker.wave.2")
+                SettingLabel(
+                    title: String(localized: "音", table: "Settings", comment: "Settings switch: sound effects"),
+                    subtitle: String(
+                        localized: "サイレントスイッチに従います",
+                        table: "Settings",
+                        comment: "Settings switch subtitle: sound follows the Ring/Silent switch"
+                    ),
+                    symbol: "speaker.wave.2"
+                )
             }
 
             Picker(selection: timerCompletionSoundBinding) {
                 ForEach(TimerCompletionSound.allCases) { style in
                     Text(style.title)
                         .tag(style)
-                        .accessibilityLabel("\(style.title)。\(style.detail)")
+                        .accessibilityLabel(String(
+                            localized: "\(style.title)。\(style.detail)",
+                            table: "Settings",
+                            comment: "VoiceOver label of a picker option: its name, then its description"
+                        ))
                         .accessibilityIdentifier(
                             "settings.completion-sound.\(style.rawValue)"
                         )
                 }
             } label: {
                 SettingLabel(
-                    title: "タイマー終了音",
+                    title: String(localized: "タイマー終了音", table: "Settings", comment: "Settings picker: the sound played when a timer ends"),
                     subtitle: sensoryPreferences.timerCompletionSound.detail,
                     symbol: sensoryPreferences.timerCompletionSound.systemImage
                 )
@@ -861,10 +975,14 @@ struct SettingsView: View {
                 }
             )) {
                 SettingLabel(
-                    title: "触覚",
+                    title: String(localized: "触覚", table: "Settings", comment: "Settings switch: haptics"),
                     subtitle: RareRewardReleasePolicy.isEnabled
-                        ? "アプリ内の完了・着地・瓶操作。レア専用は標準モードのみ"
-                        : "アプリ内の完了・着地・瓶操作に使います",
+                        ? String(
+                            localized: "アプリ内の完了・着地・瓶操作。レア専用は標準モードのみ",
+                            table: "Settings",
+                            comment: "Haptics subtitle while rare gems exist"
+                        )
+                        : String(localized: "アプリ内の完了・着地・瓶操作に使います", table: "Settings", comment: "Haptics subtitle"),
                     symbol: "waveform"
                 )
             }
@@ -873,14 +991,22 @@ struct SettingsView: View {
                 ForEach(TimerCompletionHaptic.allCases) { style in
                     Text(style.title)
                         .tag(style)
-                        .accessibilityLabel("\(style.title)。\(style.detail)")
+                        .accessibilityLabel(String(
+                            localized: "\(style.title)。\(style.detail)",
+                            table: "Settings",
+                            comment: "VoiceOver label of a picker option: its name, then its description"
+                        ))
                         .accessibilityIdentifier(
                             "settings.completion-haptic.\(style.rawValue)"
                         )
                 }
             } label: {
                 SettingLabel(
-                    title: "タイマー終了時の触覚",
+                    title: String(
+                        localized: "タイマー終了時の触覚",
+                        table: "Settings",
+                        comment: "Settings picker: the haptic played when a timer ends"
+                    ),
                     subtitle: sensoryPreferences.timerCompletionHaptic.detail,
                     symbol: sensoryPreferences.timerCompletionHaptic.systemImage
                 )
@@ -895,15 +1021,33 @@ struct SettingsView: View {
             )
             .disabled(completionPreviewConfiguration.isSilent)
         } header: {
-            Text("音と触覚")
+            Text("音と触覚", tableName: "Settings", comment: "Settings section header")
         } footer: {
-            Text("アプリを開いている間にタイマーが終わったときは、終了音と触覚を停止操作まで繰り返します。通知で知らせたあとや、あとからアプリに戻ったときは繰り返さず、そのまま記録を表示します。音はサイレントモードに従います。通知を許可している場合、ロック中は1回の通知となり、音と触覚はiPhoneの通知設定に従います。")
+            Text(
+                "アプリを開いている間にタイマーが終わったときは、終了音と触覚を停止操作まで繰り返します。通知で知らせたあとや、あとからアプリに戻ったときは繰り返さず、そのまま記録を表示します。音はサイレントモードに従います。通知を許可している場合、ロック中は1回の通知となり、音と触覚はiPhoneの通知設定に従います。",
+                tableName: "Settings",
+                comment: "Settings footer under Sound & Haptics"
+            )
         }
+    }
+
+    /// 「20回続けて」: its own phrase so English can pluralize the count.
+    private var goldPityMisses: String {
+        String(
+            localized: "settings.rare.pity-misses",
+            defaultValue: "\(Constants.Gacha.pityMissCount)回続けて",
+            table: "Settings",
+            comment: "How many draws in a row without gold guarantee the next one (20), inside the gold gem detail. English: '%lld miss in a row' / '%lld misses in a row'."
+        )
     }
 
     private var rarePebbleSection: some View {
         Section {
-            Text("粒のバリエーション")
+            Text(
+                "粒のバリエーション",
+                tableName: "Settings",
+                comment: "Settings section header: rare gem kinds (feature disabled in shipping builds)"
+            )
                 .font(.headline.weight(.black))
                 .foregroundStyle(Color.white)
                 .textCase(nil)
@@ -925,24 +1069,36 @@ struct SettingsView: View {
                 }
             } label: {
                 SettingLabel(
-                    title: "ランダムなレア粒",
+                    title: String(localized: "ランダムなレア粒", table: "Settings", comment: "Settings picker: random rare gems"),
                     subtitle: hasExplicitRareRewardSelection
                         ? rareRewardMode.settingsDescription
-                        : "未選択のため抽選しません。最初の実測タイマー前にも選べます",
+                        : String(
+                            localized: "未選択のため抽選しません。最初の実測タイマー前にも選べます",
+                            table: "Settings",
+                            comment: "Rare gem picker subtitle before a choice is saved"
+                        ),
                     symbol: rareRewardMode.systemImage
                 )
             }
             .pickerStyle(.navigationLink)
             .disabled(resolvedPreferences == nil)
             .accessibilityIdentifier("settings.rare-reward-mode")
-            .accessibilityHint("質量、融合、結晶、成果、機能は変わりません。オフでは抽選用の端数と金の保証カウントを停止します")
+            .accessibilityHint(Text(
+                "質量、融合、結晶、成果、機能は変わりません。オフでは抽選用の端数と金の保証カウントを停止します",
+                tableName: "Settings",
+                comment: "VoiceOver hint of the rare gem picker"
+            ))
 
             if !hasExplicitRareRewardSelection {
                 Button {
                     updateRareRewardMode(.off)
                 } label: {
                     Label {
-                        Text("「抽選しない」を選択として保存", tableName: "Settings")
+                        Text(
+                            "「\(RareRewardMode.off.title)」を選択として保存",
+                            tableName: "Settings",
+                            comment: "Button: save the rare gem picker's off option as an explicit choice; the argument is that option's name"
+                        )
                     } icon: {
                         Image(systemName: "checkmark.shield.fill")
                             .accessibilityHidden(true)
@@ -953,32 +1109,46 @@ struct SettingsView: View {
                 .buttonStyle(PomoGemBareButtonStyle())
                 .foregroundStyle(PomoGemTheme.amber)
                 .disabled(resolvedPreferences == nil)
-                .accessibilityHint("乱数、抽選用の端数、金の保証カウントを動かさない選択を\(storageDestination)へ保存します")
+                .accessibilityHint(String(
+                    localized: "乱数、抽選用の端数、金の保証カウントを動かさない選択を\(storageDestination)へ保存します",
+                    table: "Settings",
+                    comment: "VoiceOver hint; the argument is where settings are saved (this iPhone or iCloud)"
+                ))
                 .accessibilityIdentifier("settings.rare-reward-confirm-off")
             }
 
             RarePebbleGuideRow(
                 kind: .normal,
-                title: "いつもの粒",
-                detail: "全モードで同じ質量・結晶進捗"
+                title: String(localized: "いつもの粒", table: "Settings", comment: "Rare gem guide row: the regular gem"),
+                detail: String(localized: "全モードで同じ質量・結晶進捗", table: "Settings", comment: "Rare gem guide row detail")
             )
             RarePebbleGuideRow(
                 kind: .gold,
-                title: "金の粒",
+                title: String(localized: "金の粒", table: "Settings", comment: "Rare gem guide row: the gold gem"),
                 detail: rareRewardMode == .off
-                    ? "オフ中は新しく抽選しません"
-                    : "自然抽選 \(GachaEngine.probabilityLabel(for: .gold))。\(Constants.Gacha.pityMissCount)回続けて出なければ、次の抽選で保証"
+                    ? String(localized: "オフ中は新しく抽選しません", table: "Settings", comment: "Rare gem guide row detail while draws are off")
+                    : String(
+                        localized: "自然抽選 \(GachaEngine.probabilityLabel(for: .gold))。\(goldPityMisses)出なければ、次の抽選で保証",
+                        table: "Settings",
+                        comment: "Gold gem guide row detail. The first argument is the natural odds (5%), the second how many misses in a row guarantee gold (20回続けて)"
+                    )
             )
             RarePebbleGuideRow(
                 kind: .prism,
-                title: "虹の粒",
+                title: String(localized: "虹の粒", table: "Settings", comment: "Rare gem guide row: the rainbow gem"),
                 detail: rareRewardMode == .off
-                    ? "オフ中は新しく抽選しません"
-                    : "自然抽選 \(GachaEngine.probabilityLabel(for: .prism))"
+                    ? String(localized: "オフ中は新しく抽選しません", table: "Settings", comment: "Rare gem guide row detail while draws are off")
+                    : String(
+                        localized: "自然抽選 \(GachaEngine.probabilityLabel(for: .prism))",
+                        table: "Settings",
+                        comment: "Rainbow gem guide row detail; the argument is the natural odds (1%)"
+                    )
             )
         } footer: {
             Text(
-                "自然確率は、いつもの粒 \(GachaEngine.probabilityLabel(for: .normal))、金 \(GachaEngine.probabilityLabel(for: .gold))、虹 \(GachaEngine.probabilityLabel(for: .prism))。標準と控えめでは、実測タイマーで250g積むごとに1回抽選し、250g未満の端数は次回へ繰り越します。10分を6回、25分を2回と10分を1回、60分を1回はいずれも600gなので、抽選2回と100gの端数で同じです。\(GachaEngine.goldGuaranteeDisclosure) 控えめは種類を履歴に残しますが、追加の発光・専用音・専用触覚を使いません。抽選しない間は乱数を使わず、その間の質量を抽選用に貯めません。既存の端数と金の保証は同じ位置で停止し、標準または控えめに戻すとそこから再開します。どのモードでも質量・融合・結晶・成果・機能は同じで、既に獲得した金・虹、記録、シェアも変わりません。端末の「視差効果を減らす」は抽選を止めず、動きだけを抑えます。"
+                "自然確率は、いつもの粒 \(GachaEngine.probabilityLabel(for: .normal))、金 \(GachaEngine.probabilityLabel(for: .gold))、虹 \(GachaEngine.probabilityLabel(for: .prism))。標準と控えめでは、実測タイマーで250g積むごとに1回抽選し、250g未満の端数は次回へ繰り越します。10分を6回、25分を2回と10分を1回、60分を1回はいずれも600gなので、抽選2回と100gの端数で同じです。\(GachaEngine.goldGuaranteeDisclosure) 控えめは種類を履歴に残しますが、追加の発光・専用音・専用触覚を使いません。抽選しない間は乱数を使わず、その間の質量を抽選用に貯めません。既存の端数と金の保証は同じ位置で停止し、標準または控えめに戻すとそこから再開します。どのモードでも質量・融合・結晶・成果・機能は同じで、既に獲得した金・虹、記録、シェアも変わりません。端末の「視差効果を減らす」は抽選を止めず、動きだけを抑えます。",
+                tableName: "Settings",
+                comment: "Rare gem section footer. Arguments 1-3 are the natural odds of the regular, gold and rainbow gem; argument 4 is the gold guarantee sentence (Models table)"
             )
         }
     }
@@ -1067,7 +1237,7 @@ struct SettingsView: View {
                 }
             }
         } header: {
-            Text("通知")
+            Text("通知", tableName: "Settings", comment: "Settings section header: notifications")
         } footer: {
             // Scoped to this card's switches: 「集中が切れたらお知らせ」
             // (F1, above) is on by default.
@@ -1081,21 +1251,21 @@ struct SettingsView: View {
     }
 
     private var shareSection: some View {
-        Section("シェア") {
+        Section(String(localized: "シェア", table: "Settings", comment: "Settings section header: sharing")) {
             if let resolvedPreferences {
                 Toggle(isOn: settingBinding(
                     .shareIncludesManual,
                     currentValue: resolvedPreferences.shareIncludesManual,
                     update: { $0.shareIncludesManual = $1 }
                 )) {
-                    SettingLabel(title: "自己申告を含める", subtitle: "既定は実測のみ", symbol: "square.and.arrow.up")
+                    SettingLabel(title: String(localized: "自己申告を含める", table: "Settings", comment: "Settings switch: include self-reported gems in shares"), subtitle: String(localized: "既定は実測のみ", table: "Settings", comment: "Settings switch subtitle: shares include only timed gems by default"), symbol: "square.and.arrow.up")
                 }
             }
         }
     }
 
     private var screenTimeSection: some View {
-        Section("アプリの利用時間") {
+        Section(String(localized: "アプリの利用時間", table: "Settings", comment: "Settings section header above the Screen Time row")) {
             NavigationLink {
                 ScreenTimeSettingsView()
             } label: {
@@ -1144,7 +1314,11 @@ struct SettingsView: View {
     }
 
     private var proRowSubtitle: String {
-        if purchase.isPro { return "利用中" }
+        if purchase.isPro { return String(
+            localized: "利用中",
+            table: "Settings",
+            comment: "Pro row subtitle and support mail value: Pro is owned"
+        ) }
         // settings-05. A request out for approval (Ask to Buy) is visible
         // here too, not only inside the paywall.
         if purchase.isAwaitingApproval() {
@@ -1205,10 +1379,14 @@ struct SettingsView: View {
             }
             .accessibilityIdentifier("settings.write-review")
             Link(destination: AppLinks.privacyPolicy) {
-                SettingLabel(title: "プライバシーポリシー", subtitle: "Webで開く", symbol: "doc.text")
+                SettingLabel(
+                    title: String(localized: "プライバシーポリシー", table: "Settings", comment: "Settings row: the privacy policy web page"),
+                    subtitle: String(localized: "Webで開く", table: "Settings", comment: "Settings row subtitle: opens a web page"),
+                    symbol: "doc.text"
+                )
             }
         } header: {
-            Text("サポートとプライバシー")
+            Text("サポートとプライバシー", tableName: "Settings", comment: "Settings section header")
         } footer: {
             Text(persistenceMode == .localOnly
                  ? String(
@@ -1278,7 +1456,7 @@ struct SettingsView: View {
                         .foregroundStyle(PomoGemTheme.specular)
                         .frame(width: 28)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("データを書き出す")
+                        Text("データを書き出す", tableName: "Settings", comment: "Settings row and VoiceOver label: export all records as a file")
                             .font(.headline)
                         Text(dataExportSubtitle)
                             .font(.caption)
@@ -1298,11 +1476,19 @@ struct SettingsView: View {
             }
             .buttonStyle(PomoGemBareButtonStyle())
             .disabled(isExportingData)
-            .accessibilityLabel("データを書き出す")
+            .accessibilityLabel(Text(
+                "データを書き出す",
+                tableName: "Settings",
+                comment: "Settings row and VoiceOver label: export all records as a file"
+            ))
             // The fixed label hides the subtitle from VoiceOver; say it as
             // the value so the no-import fact is heard too (settings-09).
             .accessibilityValue(dataExportSubtitle)
-            .accessibilityHint("この端末で利用可能な記録、テーマ、設定をJSONファイルにして、保存先を選びます")
+            .accessibilityHint(Text(
+                "この端末で利用可能な記録、テーマ、設定をJSONファイルにして、保存先を選びます",
+                tableName: "Settings",
+                comment: "VoiceOver hint of the export row"
+            ))
 
             if isExportingData, let dataExportProgress {
                 VStack(alignment: .leading, spacing: 8) {
@@ -1315,12 +1501,16 @@ struct SettingsView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(dataExportProgress.accessibilityDescription)
 
-                Button("書き出しをキャンセル", role: .cancel) {
+                Button(String(localized: "書き出しをキャンセル", table: "Settings", comment: "Button: cancel a running data export"), role: .cancel) {
                     cancelDataExport(announce: true)
                 }
             }
 
-            Button("表示中の記録をリセット", role: .destructive) { showResetData = true }
+            Button(String(
+                localized: "表示中の記録をリセット",
+                table: "Settings",
+                comment: "Alert title and Settings button: reset the records shown now (earlier records stay stored)"
+            ), role: .destructive) { showResetData = true }
                 .disabled(!ActivityResetAdmissionPolicy.permitsUserReset(in: persistenceMode))
                 .accessibilityIdentifier("settings.activity-reset")
 
@@ -1354,9 +1544,13 @@ struct SettingsView: View {
                         Image(systemName: "trash.slash.fill")
                             .frame(width: 28)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("ユーザー内容を削除")
+                            Text(
+                                "ユーザー内容を削除",
+                                tableName: "Settings",
+                                comment: "Complete data deletion: row, sheet title and final button (glossary: Delete Your Content)"
+                            )
                                 .font(.headline)
-                            Text("端末とiCloudの内容（削除世代記録を除く）")
+                            Text("端末とiCloudの内容（削除世代記録を除く）", tableName: "Settings", comment: "Complete data deletion row subtitle")
                                 .font(.caption)
                                 .foregroundStyle(PomoGemTheme.muted)
                         }
@@ -1369,13 +1563,21 @@ struct SettingsView: View {
                 }
                 .buttonStyle(PomoGemBareButtonStyle())
                 .disabled(isExportingData || completeDeletion.hasStarted)
-                .accessibilityHint("二段階の確認画面を開きます。この操作は取り消せません")
+                .accessibilityHint(Text(
+                    "二段階の確認画面を開きます。この操作は取り消せません",
+                    tableName: "Settings",
+                    comment: "VoiceOver hint of the complete data deletion row"
+                ))
             }
 
             if persistenceMode != .localOnly,
                case let .failed(phase, message) = completeDeletion.status {
                 VStack(alignment: .leading, spacing: 8) {
-                    Label("削除は未完了です", systemImage: "exclamationmark.icloud")
+                    Label(String(
+                        localized: "削除は未完了です",
+                        table: "Settings",
+                        comment: "Complete data deletion status: it has not finished"
+                    ), systemImage: "exclamationmark.icloud")
                         .font(.headline)
                     if let phase {
                         Text(phase.userFacingTitle)
@@ -1385,7 +1587,7 @@ struct SettingsView: View {
                     Text(message)
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
-                    Button("削除を再試行") {
+                    Button(String(localized: "削除を再試行", table: "Settings", comment: "Button: retry complete data deletion")) {
                         completeDeletion.startOrRetry()
                     }
                 }
@@ -1401,7 +1603,7 @@ struct SettingsView: View {
     /// people look, instead of only in the local-only footer.
     private var dataExportSubtitle: String {
         isExportingData
-            ? "JSONファイルを作成中"
+            ? String(localized: "JSONファイルを作成中", table: "Settings", comment: "Export row subtitle while the file is being written")
             : String(
                 localized: "記録をJSONファイルに書き出す（読み込みには非対応）",
                 table: "Settings",
@@ -1468,7 +1670,11 @@ struct SettingsView: View {
                 try modelContext.save()
             }
         } catch {
-            dataExportError = "保存中の変更を確定できませんでした。\n\(error.localizedDescription)"
+            dataExportError = String(
+                localized: "保存中の変更を確定できませんでした。\n\(error.localizedDescription)",
+                table: "Settings",
+                comment: "Export error; the argument is the system error description"
+            )
             return
         }
 
@@ -1503,17 +1709,29 @@ struct SettingsView: View {
                 showDataExportShareSheet = true
                 UIAccessibility.post(
                     notification: .announcement,
-                    argument: "\(result.recordCounts.total)件のデータを書き出しました。保存先を選んでください"
+                    argument: String(
+                        localized: "\(result.recordCounts.total)件のデータを書き出しました。保存先を選んでください",
+                        table: "Settings",
+                        comment: "VoiceOver announcement after an export; the argument is the number of records written"
+                    )
                 )
             } catch is CancellationError {
                 // The explicit cancel control announces immediately. Navigating
                 // away cancels silently so VoiceOver is not interrupted.
             } catch {
                 guard activeDataExportID == exportID else { return }
-                dataExportError = "データを書き出せませんでした。\n\(error.localizedDescription)"
+                dataExportError = String(
+                    localized: "データを書き出せませんでした。\n\(error.localizedDescription)",
+                    table: "Settings",
+                    comment: "Export error; the argument is the system error description"
+                )
                 UIAccessibility.post(
                     notification: .announcement,
-                    argument: "データを書き出せませんでした"
+                    argument: String(
+                        localized: "データを書き出せませんでした",
+                        table: "Settings",
+                        comment: "Alert title and VoiceOver announcement: the data export failed"
+                    )
                 )
             }
 
@@ -1533,7 +1751,11 @@ struct SettingsView: View {
         dataExportProgress = nil
         isExportingData = false
         if announce {
-            UIAccessibility.post(notification: .announcement, argument: "データの書き出しをキャンセルしました")
+            UIAccessibility.post(notification: .announcement, argument: String(
+                localized: "データの書き出しをキャンセルしました",
+                table: "Settings",
+                comment: "VoiceOver announcement: the data export was canceled"
+            ))
         }
     }
 
@@ -1635,7 +1857,11 @@ struct SettingsView: View {
             _ = try? TimerCompletionSoundLibrary.ensureSoundFile(for: style)
         } catch {
             modelContext.rollback()
-            settingsError = "タイマー終了音を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
+            settingsError = String(
+                localized: "タイマー終了音を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)",
+                table: "Settings",
+                comment: "Settings error; the argument is the system error description"
+            )
         }
     }
 
@@ -1654,7 +1880,11 @@ struct SettingsView: View {
             booleanSettingsCommitGeneration &+= 1
         } catch {
             modelContext.rollback()
-            settingsError = "タイマー終了時の触覚を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
+            settingsError = String(
+                localized: "タイマー終了時の触覚を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)",
+                table: "Settings",
+                comment: "Settings error; the argument is the system error description"
+            )
         }
     }
 
@@ -1696,7 +1926,11 @@ struct SettingsView: View {
                     synchronizeNotifications()
                 } catch {
                     modelContext.rollback()
-                    settingsError = "通知時刻を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
+                    settingsError = String(
+                        localized: "通知時刻を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)",
+                        table: "Settings",
+                        comment: "Settings error; the argument is the system error description"
+                    )
                 }
             }
         )
@@ -1712,14 +1946,18 @@ struct SettingsView: View {
 
     private func addSubject(name: String, colorHex: String, isArchived _: Bool) -> String? {
         guard subjects.count < Constants.App.maximumSubjects else {
-            return "テーマは最大\(Constants.App.maximumSubjects)件までです。"
+            return String(
+                localized: "テーマは最大\(Constants.App.maximumSubjects)件までです。",
+                table: "Settings",
+                comment: "Theme editor error; the argument is the theme limit (12)"
+            )
         }
         if let validationError = subjectNameValidationError(name) {
             return validationError
         }
         guard let sanitizedName = SubjectNamePolicy.validated(name) else {
             return SubjectNamePolicy.validationError(for: name)?.message
-                ?? "テーマ名を入力してください。"
+                ?? String(localized: "テーマ名を入力してください。", table: "Settings", comment: "Theme editor error: the name is empty")
         }
         modelContext.insert(
             Subject(
@@ -1730,7 +1968,11 @@ struct SettingsView: View {
                 )
             )
         )
-        return commitChanges(failureMessage: "テーマを追加できませんでした。")
+        return commitChanges(failureMessage: String(
+            localized: "テーマを追加できませんでした。",
+            table: "Settings",
+            comment: "Theme editor error, followed by a line saying the change was undone"
+        ))
     }
 
     private func saveSubjectEdits(
@@ -1747,7 +1989,7 @@ struct SettingsView: View {
         }
         guard let sanitizedName = SubjectNamePolicy.validated(name) else {
             return SubjectNamePolicy.validationError(for: name)?.message
-                ?? "テーマ名を入力してください。"
+                ?? String(localized: "テーマ名を入力してください。", table: "Settings", comment: "Theme editor error: the name is empty")
         }
         do {
             subject.name = sanitizedName
@@ -1761,7 +2003,11 @@ struct SettingsView: View {
             return nil
         } catch {
             modelContext.rollback()
-            return "テーマの変更を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
+            return String(
+                localized: "テーマの変更を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)",
+                table: "Settings",
+                comment: "Theme editor error; the argument is the system error description"
+            )
         }
     }
 
@@ -1778,7 +2024,11 @@ struct SettingsView: View {
                 && SubjectNamePolicy.comparisonKey($0.name) == normalized
         }
         guard let duplicate else { return nil }
-        return "同じ名前のテーマ「\(duplicate.safeDisplayName)」がすでにあります。"
+        return String(
+            localized: "同じ名前のテーマ「\(duplicate.safeDisplayName)」がすでにあります。",
+            table: "Settings",
+            comment: "Theme editor error; the argument is the existing theme's name"
+        )
     }
 
     private func deleteSubject(_ subject: Subject) {
@@ -1801,7 +2051,11 @@ struct SettingsView: View {
             }
         } catch {
             modelContext.rollback()
-            settingsError = "テーマを削除できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
+            settingsError = String(
+                localized: "テーマを削除できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)",
+                table: "Settings",
+                comment: "Settings error; the argument is the system error description"
+            )
         }
     }
 
@@ -1811,9 +2065,24 @@ struct SettingsView: View {
     ) -> String {
         let message: String
         if recordCount == 0 {
-            message = "「\(subject.safeDisplayName)」を削除します。関連する過去の記録はありません。この操作は取り消せません。"
+            message = String(
+                localized: "「\(subject.safeDisplayName)」を削除します。関連する過去の記録はありません。この操作は取り消せません。",
+                table: "Settings",
+                comment: "Theme deletion alert message; the argument is the theme name"
+            )
         } else {
-            message = "「\(subject.safeDisplayName)」だけを削除します。過去の記録\(recordCount)件と質量は消えず、現在の名前と色も残ります。この操作は取り消せません。"
+            // The count is its own phrase so English can pluralize it.
+            let records = String(
+                localized: "settings.theme-deletion.record-count",
+                defaultValue: "過去の記録\(recordCount)件",
+                table: "Settings",
+                comment: "How many past records use the theme being deleted, inside the deletion message. English: '%lld past record' / '%lld past records'."
+            )
+            message = String(
+                localized: "「\(subject.safeDisplayName)」だけを削除します。\(records)と質量は消えず、現在の名前と色も残ります。この操作は取り消せません。",
+                table: "Settings",
+                comment: "Theme deletion alert message. The first argument is the theme name, the second how many past records use it (過去の記録3件)"
+            )
         }
         // Deleting the Screen Time destination also clears the study-app
         // selection (Docs/ScreenTimeGems.md). Say so while the user can still
@@ -1835,7 +2104,11 @@ struct SettingsView: View {
             subjectPendingDeletion = subject
         } catch {
             modelContext.rollback()
-            settingsError = "関連する記録を確認できないため、テーマを削除できません。\n\(error.localizedDescription)"
+            settingsError = String(
+                localized: "関連する記録を確認できないため、テーマを削除できません。\n\(error.localizedDescription)",
+                table: "Settings",
+                comment: "Settings error; the argument is the system error description"
+            )
         }
     }
 
@@ -1888,7 +2161,11 @@ struct SettingsView: View {
             try modelContext.save()
         } catch {
             modelContext.rollback()
-            settingsError = "テーマの並び順を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
+            settingsError = String(
+                localized: "テーマの並び順を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)",
+                table: "Settings",
+                comment: "Settings error; the argument is the system error description"
+            )
         }
     }
 
@@ -1913,7 +2190,11 @@ struct SettingsView: View {
 
     private func confirmPreferredFocusSeconds(_ totalSeconds: Int) -> Bool {
         guard purchase.isPro else {
-            router.showToast("Proの購入状態を確認してください", symbol: "lock")
+            router.showToast(String(
+                localized: "Proの購入状態を確認してください",
+                table: "Settings",
+                comment: "Toast: a custom duration needs Pro, and Pro is not confirmed on this device"
+            ), symbol: "lock")
             return false
         }
         guard savePreferredFocusSeconds(totalSeconds) else { return false }
@@ -1941,7 +2222,11 @@ struct SettingsView: View {
             return true
         } catch {
             modelContext.rollback()
-            router.showToast("既定の集中時間を保存できませんでした", symbol: "exclamationmark.triangle")
+            router.showToast(String(
+                localized: "既定の集中時間を保存できませんでした",
+                table: "Settings",
+                comment: "Toast: the default focus length could not be saved"
+            ), symbol: "exclamationmark.triangle")
             return false
         }
     }
@@ -1961,7 +2246,11 @@ struct SettingsView: View {
             booleanSettingsCommitGeneration &+= 1
         } catch {
             modelContext.rollback()
-            settingsError = "タイマーの表示を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
+            settingsError = String(
+                localized: "タイマーの表示を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)",
+                table: "Settings",
+                comment: "Settings error; the argument is the system error description"
+            )
         }
     }
 
@@ -2135,7 +2424,11 @@ struct SettingsView: View {
                 deviceID: FocusDeviceIdentity.current()
             )
         } catch {
-            settingsError = "リセット情報を安全に保存できませんでした。\n\(error.localizedDescription)"
+            settingsError = String(
+                localized: "リセット情報を安全に保存できませんでした。\n\(error.localizedDescription)",
+                table: "Settings",
+                comment: "Settings error; the argument is the system error description"
+            )
             return
         }
 
@@ -2154,10 +2447,18 @@ struct SettingsView: View {
             writer.manualUsedToday = 0
         } catch {
             modelContext.rollback()
-            settingsError = "記録をリセットできませんでした。\n\(error.localizedDescription)"
+            settingsError = String(
+                localized: "記録をリセットできませんでした。\n\(error.localizedDescription)",
+                table: "Settings",
+                comment: "Settings error; the argument is the system error description"
+            )
             return
         }
-        if let error = commitChanges(failureMessage: "記録をリセットできませんでした。") {
+        if let error = commitChanges(failureMessage: String(
+            localized: "記録をリセットできませんでした。",
+            table: "Settings",
+            comment: "Reset error, followed by a line saying the change was undone"
+        )) {
             settingsError = error
             return
         }
@@ -2184,8 +2485,12 @@ struct SettingsView: View {
         }
         router.showToast(
             persistenceMode == .localOnly
-                ? "このiPhone内の記録をリセットしました"
-                : "記録をリセットしました。ほかの端末にはiCloud接続後に反映されます",
+                ? String(localized: "このiPhone内の記録をリセットしました", table: "Settings", comment: "Toast after a reset on a local-only iPhone")
+                : String(
+                    localized: "記録をリセットしました。ほかの端末にはiCloud接続後に反映されます",
+                    table: "Settings",
+                    comment: "Toast after a reset in iCloud mode"
+                ),
             symbol: "trash"
         )
 
@@ -2212,14 +2517,28 @@ struct SettingsView: View {
             } catch {
                 guard !Task.isCancelled else { return }
                 settingsError = persistenceMode == .localOnly
-                    ? "このiPhone内の記録はリセット済みですが、端末上の補助表示を消去できませんでした。\n\(error.localizedDescription)"
-                    : "この端末の記録はリセット済みですが、ウィジェットの表示を消去できませんでした。iCloudへの反映には時間がかかる場合があります。\n\(error.localizedDescription)"
+                    ? String(
+                        localized: "このiPhone内の記録はリセット済みですが、端末上の補助表示を消去できませんでした。\n\(error.localizedDescription)",
+                        table: "Settings",
+                        comment: "Reset cleanup error on a local-only iPhone; the argument is the system error description"
+                    )
+                    : String(
+                        localized: "この端末の記録はリセット済みですが、ウィジェットの表示を消去できませんでした。iCloudへの反映には時間がかかる場合があります。\n\(error.localizedDescription)",
+                        table: "Settings",
+                        comment: "Reset cleanup error in iCloud mode; the argument is the system error description"
+                    )
             }
         }
     }
 
     private var storageDestination: String {
-        persistenceMode == .localOnly ? "このiPhone" : "iCloud"
+        persistenceMode == .localOnly
+            ? String(
+                localized: "このiPhone",
+                table: "Settings",
+                comment: "Where settings are saved, inside a sentence (English: this iPhone)"
+            )
+            : String(localized: "iCloud", table: "Settings", comment: "Where records or settings are saved: iCloud")
     }
 
     private func updateSetting(
@@ -2241,7 +2560,11 @@ struct SettingsView: View {
             return true
         } catch {
             modelContext.rollback()
-            settingsError = "設定を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
+            settingsError = String(
+                localized: "設定を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)",
+                table: "Settings",
+                comment: "Settings error; the argument is the system error description"
+            )
             return false
         }
     }
@@ -2252,7 +2575,11 @@ struct SettingsView: View {
             return nil
         } catch {
             modelContext.rollback()
-            return "\(failureMessage)\n変更前の状態に戻しました。\n\(error.localizedDescription)"
+            return String(
+                localized: "\(failureMessage)\n変更前の状態に戻しました。\n\(error.localizedDescription)",
+                table: "Settings",
+                comment: "Settings error. The first argument is what failed (a full sentence), the second the system error description"
+            )
         }
     }
 
@@ -2303,7 +2630,11 @@ struct SettingsView: View {
             )
         } catch {
             guard !Task.isCancelled else { return }
-            notificationError = "通知の予定を更新できませんでした。\n\(error.localizedDescription)"
+            notificationError = String(
+                localized: "通知の予定を更新できませんでした。\n\(error.localizedDescription)",
+                table: "Settings",
+                comment: "Notification error; the argument is the system error description"
+            )
         }
     }
 
@@ -2341,7 +2672,11 @@ struct SettingsView: View {
     }
 
     private func notificationPermissionMessage(underlyingError: String?) -> String {
-        let message = "通知が許可されていません。端末の「設定」から「ポモジェム」の通知を許可してください。"
+        let message = String(
+            localized: "通知が許可されていません。端末の「設定」から「ポモジェム」の通知を許可してください。",
+            table: "Settings",
+            comment: "Notification permission error; 設定 is the iOS Settings app"
+        )
         guard let underlyingError, !underlyingError.isEmpty else { return message }
         return "\(message)\n\(underlyingError)"
     }
@@ -2376,11 +2711,15 @@ struct TimerDisplayModeSelectionView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("残り時間の見え方を選ぶ")
+                    Text("残り時間の見え方を選ぶ", tableName: "Settings", comment: "Heading of the timer display page")
                         .font(.title2.weight(.bold))
                         .foregroundStyle(PomoGemTheme.text)
                         .accessibilityAddTraits(.isHeader)
-                    Text("見本は25分タイマーの途中、残り16分15秒です。選んだ表示はすぐに反映されます。")
+                    Text(
+                        "見本は25分タイマーの途中、残り16分15秒です。選んだ表示はすぐに反映されます。",
+                        tableName: "Settings",
+                        comment: "Timer display page: the samples show a 25-minute timer with 16:15 left"
+                    )
                         .font(.subheadline)
                         .foregroundStyle(PomoGemTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -2392,7 +2731,7 @@ struct TimerDisplayModeSelectionView: View {
                     }
                 }
 
-                Text("どの表示でも、タイマーの時間や集中の記録は変わりません。")
+                Text("どの表示でも、タイマーの時間や集中の記録は変わりません。", tableName: "Settings", comment: "Timer display page footer")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -2403,7 +2742,7 @@ struct TimerDisplayModeSelectionView: View {
         }
         .scrollBounceBehavior(.basedOnSize)
         .background(NightBackground())
-        .navigationTitle("タイマーの表示")
+        .navigationTitle(Text("タイマーの表示", tableName: "Settings", comment: "Navigation title of the timer display page"))
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("timer-display.selection")
@@ -2448,11 +2787,19 @@ struct TimerDisplayModeSelectionView: View {
         }
         .buttonStyle(PomoGemRowButtonStyle(isSelected: isSelected, cornerRadius: 18))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(mode.title)。\(mode.detail)")
-        .accessibilityValue(isSelected ? "選択中" : "未選択")
+        .accessibilityLabel(String(
+            localized: "\(mode.title)。\(mode.detail)",
+            table: "Settings",
+            comment: "VoiceOver label of a picker option: its name, then its description"
+        ))
+        .accessibilityValue(isSelected
+            ? String(localized: "選択中", table: "Settings", comment: "VoiceOver value: this option is selected")
+            : String(localized: "未選択", table: "Settings", comment: "VoiceOver value: this option is not selected"))
         .accessibilityAddTraits(.isButton)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .accessibilityHint(isSelected ? "現在のタイマー表示です" : "選ぶとすぐに反映されます")
+        .accessibilityHint(isSelected
+            ? String(localized: "現在のタイマー表示です", table: "Settings", comment: "VoiceOver hint of the selected timer display")
+            : String(localized: "選ぶとすぐに反映されます", table: "Settings", comment: "VoiceOver hint of a timer display option"))
         .accessibilityIdentifier("timer-display.option.\(mode.rawValue)")
         .accessibilityAction {
             guard selection != mode else { return }
@@ -2467,7 +2814,11 @@ struct TimerDisplayModeSelectionView: View {
             size: 240,
             progress: 0.35,
             remainingTime: "16:15",
-            accessibleRemainingTime: "残り16分15秒",
+            accessibleRemainingTime: String(
+                localized: "残り16分15秒",
+                table: "Settings",
+                comment: "VoiceOver text of the hidden timer sample (16 minutes 15 seconds left)"
+            ),
             modeLabel: "FOCUS",
             displayMode: mode,
             isBreakMode: false,
@@ -2608,17 +2959,21 @@ private struct TimerCompletionPreviewRow: View {
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(controller.isRunning
-                            ? "プレビューをキャンセル"
-                            : "3秒後に試す")
+                            ? String(localized: "プレビューをキャンセル", table: "Settings", comment: "Button: cancel the timer end preview")
+                            : String(
+                                localized: "3秒後に試す",
+                                table: "Settings",
+                                comment: "Button: play the timer end sound and haptics in 3 seconds"
+                            ))
                             .font(.body.weight(.semibold))
                             .foregroundStyle(PomoGemTheme.text)
-                        Text("選んだ終了音と触覚を一緒に確認します")
+                        Text("選んだ終了音と触覚を一緒に確認します", tableName: "Settings", comment: "Preview button subtitle")
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
                     }
                     Spacer(minLength: 8)
                     if let remaining = controller.state.remainingSeconds {
-                        Text("\(remaining)")
+                        Text(verbatim: "\(remaining)")
                             .font(.title3.monospacedDigit().weight(.bold))
                             .foregroundStyle(PomoGemTheme.amber)
                             .contentTransition(
@@ -2635,14 +2990,18 @@ private struct TimerCompletionPreviewRow: View {
             .buttonStyle(PomoGemRowButtonStyle())
             .accessibilityIdentifier("settings.completion-preview")
             .accessibilityLabel(controller.isRunning
-                ? "プレビューをキャンセル"
-                : "3秒後に試す")
+                ? String(localized: "プレビューをキャンセル", table: "Settings", comment: "Button: cancel the timer end preview")
+                : String(localized: "3秒後に試す", table: "Settings", comment: "Button: play the timer end sound and haptics in 3 seconds"))
             .accessibilityValue(controller.state.remainingSeconds.map {
-                "あと\($0)秒"
-            } ?? "待機中")
+                String(
+                    localized: "あと\($0)秒",
+                    table: "Settings",
+                    comment: "Seconds left before the preview plays; the argument is the count"
+                )
+            } ?? String(localized: "待機中", table: "Settings", comment: "VoiceOver value: the preview is not running"))
             .accessibilityHint(configuration.isSilent
-                ? "音か触覚をオンにすると試せます"
-                : "選んだタイマー終了音と触覚を3秒後に再生します")
+                ? String(localized: "音か触覚をオンにすると試せます", table: "Settings", comment: "VoiceOver hint: the preview needs sound or haptics on")
+                : String(localized: "選んだタイマー終了音と触覚を3秒後に再生します", table: "Settings", comment: "VoiceOver hint of the preview button"))
 
             if let remaining = controller.state.remainingSeconds {
                 VStack(alignment: .leading, spacing: 5) {
@@ -2651,7 +3010,11 @@ private struct TimerCompletionPreviewRow: View {
                         total: 3
                     )
                     .tint(PomoGemTheme.amber)
-                    Text("あと\(remaining)秒")
+                    Text(
+                        "あと\(remaining)秒",
+                        tableName: "Settings",
+                        comment: "Seconds left before the preview plays; the argument is the count"
+                    )
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(PomoGemTheme.muted)
                         .contentTransition(
@@ -2668,7 +3031,11 @@ private struct TimerCompletionPreviewRow: View {
                     value: remaining
                 )
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("プレビューまであと\(remaining)秒")
+                .accessibilityLabel(String(
+                    localized: "プレビューまであと\(remaining)秒",
+                    table: "Settings",
+                    comment: "VoiceOver: seconds until the preview plays; the argument is the count"
+                ))
                 .accessibilityAddTraits(.updatesFrequently)
             }
         }
@@ -2679,15 +3046,50 @@ private struct TimerCompletionPreviewRow: View {
             controller.cancel()
             UIAccessibility.post(
                 notification: .announcement,
-                argument: "プレビューをキャンセルしました"
+                argument: String(
+                    localized: "プレビューをキャンセルしました",
+                    table: "Settings",
+                    comment: "VoiceOver announcement: the preview was canceled"
+                )
             )
         } else {
             controller.start(configuration)
             UIAccessibility.post(
                 notification: .announcement,
-                argument: "3秒後にプレビューします。もう一度押すとキャンセルできます"
+                argument: String(
+                    localized: "3秒後にプレビューします。もう一度押すとキャンセルできます",
+                    table: "Settings",
+                    comment: "VoiceOver announcement when the preview starts"
+                )
             )
         }
+    }
+}
+
+/// The word typed on the last step of complete data deletion: ja 削除,
+/// en DELETE. One localized value is shown in the prompt and the placeholder
+/// and compared with the input, so the check can never drift from what the
+/// screen asks for. The comparison stays exact after trimming whitespace.
+enum CompleteDataDeletionConfirmationWord {
+    static func word(bundle: Bundle = .main, locale: Locale = PomoGemLocale.current) -> String {
+        String(
+            localized: "settings.complete-deletion.confirmation-word",
+            defaultValue: "削除",
+            table: "Settings",
+            bundle: bundle,
+            locale: locale,
+            comment: "The word the person types to confirm complete data deletion. It is shown in the prompt and compared exactly with the input. English: DELETE (capital letters)."
+        )
+    }
+
+    static func accepts(_ input: String, word: String = word()) -> Bool {
+        input.trimmingCharacters(in: .whitespacesAndNewlines) == word
+    }
+
+    /// Whether the keyboard should type capitals: only for a word written in
+    /// capital letters and nothing else.
+    static func typesCapitals(_ word: String) -> Bool {
+        word.contains(where: \.isUppercase) && word.allSatisfy { $0.isUppercase || !$0.isLetter }
     }
 }
 
@@ -2701,6 +3103,8 @@ private struct CompleteDataDeletionConfirmationView: View {
     @State private var step: Step = .consequences
     @State private var understoodOtherDevices = false
     @State private var confirmationText = ""
+    /// The prompt, the placeholder and the check all read this one value.
+    private let confirmationWord = CompleteDataDeletionConfirmationWord.word()
 
     let onConfirmed: () -> Void
 
@@ -2715,10 +3119,16 @@ private struct CompleteDataDeletionConfirmationView: View {
             }
             .scrollContentBackground(.hidden)
             .background(NightBackground())
-            .navigationTitle(step == .consequences ? "ユーザー内容を削除" : "最終確認")
+            .navigationTitle(step == .consequences
+                ? String(
+                    localized: "ユーザー内容を削除",
+                    table: "Settings",
+                    comment: "Complete data deletion: row, sheet title and final button (glossary: Delete Your Content)"
+                )
+                : String(localized: "最終確認", table: "Settings", comment: "Complete data deletion: title of the last step"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("キャンセル") { dismiss() }
+                    Button(String(localized: "キャンセル", table: "Settings", comment: "Toolbar button")) { dismiss() }
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -2733,20 +3143,52 @@ private struct CompleteDataDeletionConfirmationView: View {
     private var consequences: some View {
         Group {
             Section {
-                Label("テーマと成果メモ", systemImage: "tag.slash")
-                Label("集中記録・粒・集計", systemImage: "clock.badge.xmark")
-                Label("設定・タイマー復元情報・ウィジェット", systemImage: "gear.badge.xmark")
-                Label("このAppのプライベートiCloud上のユーザー内容", systemImage: "icloud.slash")
+                Label(String(
+                    localized: "テーマと成果メモ",
+                    table: "Settings",
+                    comment: "Complete data deletion: what is deleted"
+                ), systemImage: "tag.slash")
+                Label(String(
+                    localized: "集中記録・粒・集計",
+                    table: "Settings",
+                    comment: "Complete data deletion: what is deleted"
+                ), systemImage: "clock.badge.xmark")
+                Label(String(
+                    localized: "設定・タイマー復元情報・ウィジェット",
+                    table: "Settings",
+                    comment: "Complete data deletion: what is deleted"
+                ), systemImage: "gear.badge.xmark")
+                Label(String(
+                    localized: "このAppのプライベートiCloud上のユーザー内容",
+                    table: "Settings",
+                    comment: "Complete data deletion: what is deleted"
+                ), systemImage: "icloud.slash")
             } header: {
-                Text("取り消せない削除対象")
+                Text("取り消せない削除対象", tableName: "Settings", comment: "Complete data deletion: section header above what is deleted for good")
             } footer: {
-                Text("テーマ・記録・設定などのユーザー内容を削除します。古い端末からの再流入を検知するため、内容を含まない削除世代記録1件（世代ID・処理ID・連番・状態・日時）はiCloudに残ります。Proの購入履歴はAppleが管理しているため削除されず、同じApple Accountでは復元できます。")
+                Text(
+                    "テーマ・記録・設定などのユーザー内容を削除します。古い端末からの再流入を検知するため、内容を含まない削除世代記録1件（世代ID・処理ID・連番・状態・日時）はiCloudに残ります。Proの購入履歴はAppleが管理しているため削除されず、同じApple Accountでは復元できます。",
+                    tableName: "Settings",
+                    comment: "Complete data deletion: what stays (the content-free deletion record, the Pro purchase)"
+                )
             }
 
-            Section("削除を始める前に") {
-                Text("iCloudへ接続できる状態で実行してください。通信が切れた場合は完了と表示せず、安全な位置から再試行します。")
-                Text("ほかの端末も最新版へ更新し、オンラインで一度起動してください。オフラインのままの端末や、この削除世代に対応していない古いバージョンは、端末内の古い記録を後からiCloudへ再送する可能性があります。")
-                Text("本Appは別端末のローカル保存を遠隔消去できません。削除後も、使わない古いインストールは削除してください。")
+            Section(String(localized: "削除を始める前に", table: "Settings", comment: "Complete data deletion: section header")) {
+                Text(
+                    "iCloudへ接続できる状態で実行してください。通信が切れた場合は完了と表示せず、安全な位置から再試行します。",
+                    tableName: "Settings",
+                    comment: "Complete data deletion precondition"
+                )
+                Text(
+                    "ほかの端末も最新版へ更新し、オンラインで一度起動してください。オフラインのままの端末や、この削除世代に対応していない古いバージョンは、端末内の古い記録を後からiCloudへ再送する可能性があります。",
+                    tableName: "Settings",
+                    comment: "Complete data deletion precondition"
+                )
+                Text(
+                    "本Appは別端末のローカル保存を遠隔消去できません。削除後も、使わない古いインストールは削除してください。",
+                    tableName: "Settings",
+                    comment: "Complete data deletion precondition"
+                )
             }
         }
     }
@@ -2755,21 +3197,41 @@ private struct CompleteDataDeletionConfirmationView: View {
         Group {
             Section {
                 Toggle(
-                    "ほかの端末と古いバージョンに関する制約を確認しました",
+                    String(
+                        localized: "ほかの端末と古いバージョンに関する制約を確認しました",
+                        table: "Settings",
+                        comment: "Complete data deletion: acknowledgement switch on the last step"
+                    ),
                     isOn: $understoodOtherDevices
                 )
             }
 
             Section {
-                TextField("削除", text: $confirmationText)
-                    .textInputAutocapitalization(.never)
+                TextField(confirmationWord, text: $confirmationText)
+                    // Capitals only for a word written in them (en DELETE);
+                    // Japanese romaji input would turn capitals into letters.
+                    .textInputAutocapitalization(
+                        CompleteDataDeletionConfirmationWord.typesCapitals(confirmationWord) ? .characters : .never
+                    )
                     .autocorrectionDisabled()
                     .submitLabel(.done)
-                    .accessibilityLabel("確認のため削除と入力")
+                    .accessibilityLabel(String(
+                        localized: "確認のため\(confirmationWord)と入力",
+                        table: "Settings",
+                        comment: "VoiceOver label of the confirmation field; the argument is the word to type (削除 / DELETE)"
+                    ))
             } header: {
-                Text("「削除」と入力")
+                Text(
+                    "「\(confirmationWord)」と入力",
+                    tableName: "Settings",
+                    comment: "Header above the confirmation field; the argument is the word to type (削除 / DELETE)"
+                )
             } footer: {
-                Text("開始後は記録の追加を停止します。iCloudでユーザー内容の削除と、内容を含まない削除世代記録の確定を確認するまで、通常画面には戻りません。")
+                Text(
+                    "開始後は記録の追加を停止します。iCloudでユーザー内容の削除と、内容を含まない削除世代記録の確定を確認するまで、通常画面には戻りません。",
+                    tableName: "Settings",
+                    comment: "Complete data deletion: what happens once it starts"
+                )
             }
         }
     }
@@ -2777,21 +3239,28 @@ private struct CompleteDataDeletionConfirmationView: View {
     @ViewBuilder
     private var actionButton: some View {
         if step == .consequences {
-            Button("内容を確認して次へ") {
+            Button(String(
+                localized: "内容を確認して次へ",
+                table: "Settings",
+                comment: "Complete data deletion: go from the consequences to the last step"
+            )) {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     step = .finalConfirmation
                 }
             }
             .buttonStyle(PomoGemPrimaryButtonStyle())
         } else {
-            Button("ユーザー内容を削除", role: .destructive) {
+            Button(String(
+                localized: "ユーザー内容を削除",
+                table: "Settings",
+                comment: "Complete data deletion: row, sheet title and final button (glossary: Delete Your Content)"
+            ), role: .destructive) {
                 onConfirmed()
             }
             .buttonStyle(PomoGemPrimaryButtonStyle())
             .disabled(
                 !understoodOtherDevices
-                    || confirmationText.trimmingCharacters(in: .whitespacesAndNewlines)
-                        != "削除"
+                    || !CompleteDataDeletionConfirmationWord.accepts(confirmationText, word: confirmationWord)
             )
         }
     }
@@ -2803,7 +3272,11 @@ struct FontLicenseView: View {
     private var licenseText: String {
         guard let url = Bundle.main.url(forResource: "LICENSE-fonts", withExtension: "txt"),
               let text = try? String(contentsOf: url, encoding: .utf8)
-        else { return "ライセンス文書を読み込めませんでした。" }
+        else { return String(
+            localized: "ライセンス文書を読み込めませんでした。",
+            table: "Settings",
+            comment: "Font licence page: the licence file could not be read"
+        ) }
         return text
     }
 
@@ -2818,7 +3291,7 @@ struct FontLicenseView: View {
                     .padding(20)
             }
             .background(NightBackground())
-            .navigationTitle("フォントライセンス")
+            .navigationTitle(Text("フォントライセンス", tableName: "Settings", comment: "Navigation title of the font licence page"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -2844,13 +3317,29 @@ private struct SubjectReorderAccessibilityModifier: ViewModifier {
         if count <= 1 {
             content
         } else if index == 0 {
-            content.accessibilityAction(named: "下へ移動", moveDown)
+            content.accessibilityAction(named: Text(
+                "下へ移動",
+                tableName: "Settings",
+                comment: "VoiceOver action: move this theme down one row"
+            ), moveDown)
         } else if index == count - 1 {
-            content.accessibilityAction(named: "上へ移動", moveUp)
+            content.accessibilityAction(named: Text(
+                "上へ移動",
+                tableName: "Settings",
+                comment: "VoiceOver action: move this theme up one row"
+            ), moveUp)
         } else {
             content
-                .accessibilityAction(named: "上へ移動", moveUp)
-                .accessibilityAction(named: "下へ移動", moveDown)
+                .accessibilityAction(named: Text(
+                    "上へ移動",
+                    tableName: "Settings",
+                    comment: "VoiceOver action: move this theme up one row"
+                ), moveUp)
+                .accessibilityAction(named: Text(
+                    "下へ移動",
+                    tableName: "Settings",
+                    comment: "VoiceOver action: move this theme down one row"
+                ), moveDown)
         }
     }
 }
@@ -3110,9 +3599,17 @@ private struct SubjectEditorView: View {
             return nameValidationError.message
         }
         if SubjectNamePolicy.trimmed(name).isEmpty {
-            return "1〜\(SubjectNamePolicy.maximumCharacters)文字で入力してください。"
+            return String(
+                localized: "1〜\(SubjectNamePolicy.maximumCharacters)文字で入力してください。",
+                table: "Settings",
+                comment: "Theme name field status when empty; the argument is the longest allowed name (20)"
+            )
         }
-        return "あと\(SubjectNamePolicy.remainingCharacters(for: name))文字入力できます。"
+        return String(
+            localized: "あと\(SubjectNamePolicy.remainingCharacters(for: name))文字入力できます。",
+            table: "Settings",
+            comment: "Theme name field status; the argument is how many more characters fit"
+        )
     }
 
     init(
@@ -3137,9 +3634,13 @@ private struct SubjectEditorView: View {
                         .submitLabel(.done)
                         .focused($isNameFocused)
                         .onSubmit { isNameFocused = false }
-                        .accessibilityHint("テーマ名は\(SubjectNamePolicy.maximumCharacters)文字までです")
+                        .accessibilityHint(String(
+                            localized: "テーマ名は\(SubjectNamePolicy.maximumCharacters)文字までです",
+                            table: "Settings",
+                            comment: "VoiceOver hint of the theme name field; the argument is the longest allowed name (20)"
+                        ))
                 } header: {
-                    Text("名前")
+                    Text("名前", tableName: "Settings", comment: "Theme editor section header: the theme name")
                 } footer: {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(nameStatusMessage)
@@ -3158,7 +3659,11 @@ private struct SubjectEditorView: View {
                         }
                     }
                 }
-                Section("粒の色") {
+                Section(String(
+                    localized: "粒の色",
+                    table: "Settings",
+                    comment: "Theme editor section header: the colour of this theme's gems"
+                )) {
                     LazyVGrid(columns: colorColumns, spacing: 12) {
                         if let currentOffPaletteHex {
                             Button {
@@ -3173,7 +3678,11 @@ private struct SubjectEditorView: View {
                                                 Circle().stroke(.white, lineWidth: 3).padding(-4)
                                             }
                                         }
-                                    Text("現在の色", tableName: "Settings", comment: "A theme's saved colour that is not one of the palette swatches")
+                                    Text(
+                                        "現在の色",
+                                        tableName: "Settings",
+                                        comment: "A theme's saved colour that is not one of the palette swatches"
+                                    )
                                         .font(.caption2)
                                         .foregroundStyle(PomoGemTheme.text)
                                         .lineLimit(1)
@@ -3199,7 +3708,7 @@ private struct SubjectEditorView: View {
                                                 Circle().stroke(.white, lineWidth: 3).padding(-4)
                                             }
                                         }
-                                    Text("\(index + 1) \(choice.name)")
+                                    Text(verbatim: "\(index + 1) \(choice.name)")
                                         .font(.caption2)
                                         .foregroundStyle(PomoGemTheme.text)
                                         .lineLimit(1)
@@ -3209,7 +3718,11 @@ private struct SubjectEditorView: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(PomoGemBareButtonStyle())
-                            .accessibilityLabel("色候補\(index + 1)、\(choice.name)")
+                            .accessibilityLabel(String(
+                                localized: "色候補\(index + 1)、\(choice.name)",
+                                table: "Settings",
+                                comment: "VoiceOver label of a colour swatch. The first argument is its number, the second its name"
+                            ))
                             .accessibilityAddTraits(isSelected(choice.hex) ? .isSelected : [])
                         }
                     }
@@ -3217,25 +3730,39 @@ private struct SubjectEditorView: View {
                 }
                 if let subject {
                     Section {
-                        Toggle("ホームの選択肢に表示", isOn: Binding(
+                        Toggle(String(
+                            localized: "ホームの選択肢に表示",
+                            table: "Settings",
+                            comment: "Theme editor switch: offer this theme on Home"
+                        ), isOn: Binding(
                             get: { !isArchived },
                             set: { isArchived = !$0 }
                         ))
                     } footer: {
-                        Text("非表示にしても、\(subject.safeDisplayName)の過去の粒は瓶に残ります。")
+                        Text(
+                            "非表示にしても、\(subject.safeDisplayName)の過去の粒は瓶に残ります。",
+                            tableName: "Settings",
+                            comment: "Theme editor footer; the argument is the theme name"
+                        )
                     }
                 }
             }
             .scrollContentBackground(.hidden)
             .background(NightBackground())
-            .navigationTitle(subject == nil ? "テーマを追加" : "テーマを編集")
+            .navigationTitle(subject == nil
+                ? String(localized: "テーマを追加", table: "Settings", comment: "Button and editor title: add a theme")
+                : String(localized: "テーマを編集", table: "Settings", comment: "Theme editor title when editing"))
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("キャンセル") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(String(
+                    localized: "キャンセル",
+                    table: "Settings",
+                    comment: "Toolbar button"
+                )) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
+                    Button(String(localized: "保存", table: "Settings", comment: "Toolbar button: save the theme")) {
                         guard let sanitizedName = SubjectNamePolicy.validated(name) else {
                             saveError = nameValidationError?.message
-                                ?? "テーマ名を入力してください。"
+                                ?? String(localized: "テーマ名を入力してください。", table: "Settings", comment: "Theme editor error: the name is empty")
                             return
                         }
                         let error = onSave(
@@ -3252,11 +3779,15 @@ private struct SubjectEditorView: View {
                     .disabled(nameValidationError != nil)
                 }
             }
-            .alert("保存できませんでした", isPresented: Binding(
+            .alert(String(
+                localized: "保存できませんでした",
+                table: "Settings",
+                comment: "Alert title: the theme could not be saved"
+            ), isPresented: Binding(
                 get: { saveError != nil },
                 set: { if !$0 { saveError = nil } }
             )) {
-                Button("閉じる", role: .cancel) {}
+                Button(String(localized: "閉じる", table: "Settings", comment: "Alert button"), role: .cancel) {}
             } message: {
                 Text(saveError ?? "")
             }

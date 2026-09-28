@@ -74,14 +74,22 @@ struct PomoGemDataExportProgress: Equatable, Sendable {
     var accessibilityDescription: String {
         switch phase {
         case .preparing:
-            return "データを書き出す準備中"
+            return String(localized: "データを書き出す準備中", table: "Settings", comment: "Export progress: preparing")
         case let .writing(collectionName):
             guard estimatedTotalRecords > 0 else {
-                return "\(collectionName)を書き出し中"
+                return String(
+                    localized: "\(collectionName)を書き出し中",
+                    table: "Settings",
+                    comment: "Export progress; the argument is the kind of record being written, e.g. focus sessions"
+                )
             }
-            return "\(collectionName)を書き出し中、\(estimatedTotalRecords)件中\(completedRecords)件"
+            return String(
+                localized: "\(collectionName)を書き出し中、\(estimatedTotalRecords)件中\(completedRecords)件",
+                table: "Settings",
+                comment: "Export progress. The first argument is the kind of record being written, the second the estimated total, the third how many are done"
+            )
         case .finishing:
-            return "データの書き出しを仕上げています"
+            return String(localized: "データの書き出しを仕上げています", table: "Settings", comment: "Export progress: finishing the file")
         }
     }
 }
@@ -232,7 +240,13 @@ actor PomoGemDataExportWorker {
 
             let subjectCount = try writeCollection(
                 key: "subjects",
-                displayName: "テーマ",
+                // Semantic key: the same Japanese is the Themes section header.
+                displayName: String(
+                    localized: "settings.export.collection.themes",
+                    defaultValue: "テーマ",
+                    table: "Settings",
+                    comment: "Export progress: the collection being written (themes, lower case in English)"
+                ),
                 descriptor: FetchDescriptor<Subject>(sortBy: [
                     SortDescriptor(\Subject.createdAt),
                     SortDescriptor(\Subject.id)
@@ -247,7 +261,7 @@ actor PomoGemDataExportWorker {
             try Self.write(",", to: openedHandle)
             let sessionCount = try writeCollection(
                 key: "studySessions",
-                displayName: "集中記録",
+                displayName: String(localized: "集中記録", table: "Settings", comment: "Export progress: the collection being written (focus sessions)"),
                 descriptor: FetchDescriptor<StudySession>(sortBy: [
                     SortDescriptor(\StudySession.startAt),
                     SortDescriptor(\StudySession.id)
@@ -292,7 +306,7 @@ actor PomoGemDataExportWorker {
             try Self.write(",", to: openedHandle)
             let stratumCount = try writeCollection(
                 key: "legacyStrata",
-                displayName: "旧形式の地層",
+                displayName: String(localized: "旧形式の地層", table: "Settings", comment: "Export progress: the collection being written (strata from an older version)"),
                 descriptor: FetchDescriptor<Stratum>(sortBy: [
                     SortDescriptor(\Stratum.bakedAt),
                     SortDescriptor(\Stratum.id)
@@ -307,7 +321,7 @@ actor PomoGemDataExportWorker {
             try Self.write(",", to: openedHandle)
             let bedrockCount = try writeCollection(
                 key: "legacyBedrocks",
-                displayName: "旧形式の岩盤",
+                displayName: String(localized: "旧形式の岩盤", table: "Settings", comment: "Export progress: the collection being written (bedrock from an older version)"),
                 descriptor: FetchDescriptor<Bedrock>(sortBy: [
                     SortDescriptor(\Bedrock.importedAt),
                     SortDescriptor(\Bedrock.hours)
@@ -322,7 +336,7 @@ actor PomoGemDataExportWorker {
             try Self.write(",", to: openedHandle)
             let gachaCount = try writeCollection(
                 key: "gachaStates",
-                displayName: "旧形式の互換状態",
+                displayName: String(localized: "旧形式の互換状態", table: "Settings", comment: "Export progress: the collection being written (compatibility state from an older version)"),
                 descriptor: FetchDescriptor<GachaState>(sortBy: [
                     SortDescriptor(\GachaState.id)
                 ]),
@@ -336,7 +350,13 @@ actor PomoGemDataExportWorker {
             try Self.write(",", to: openedHandle)
             let prefsCount = try writeCollection(
                 key: "preferences",
-                displayName: "設定",
+                // Semantic key: the same Japanese is the Settings screen's title.
+                displayName: String(
+                    localized: "settings.export.collection.preferences",
+                    defaultValue: "設定",
+                    table: "Settings",
+                    comment: "Export progress: the collection being written (settings, lower case in English)"
+                ),
                 descriptor: FetchDescriptor<Prefs>(sortBy: [
                     SortDescriptor(\Prefs.id)
                 ]),
@@ -350,7 +370,7 @@ actor PomoGemDataExportWorker {
             try Self.write(",", to: openedHandle)
             let resetCount = try writeCollection(
                 key: "activityResetMarkers",
-                displayName: "リセット履歴",
+                displayName: String(localized: "リセット履歴", table: "Settings", comment: "Export progress: the collection being written (reset history)"),
                 descriptor: FetchDescriptor<ActivityResetMarker>(sortBy: [
                     SortDescriptor(\ActivityResetMarker.resetAt),
                     SortDescriptor(\ActivityResetMarker.id)
@@ -365,7 +385,7 @@ actor PomoGemDataExportWorker {
             try Self.write(",", to: openedHandle)
             let timerCount = try writeCollection(
                 key: "syncedFocusTimers",
-                displayName: "同期タイマー",
+                displayName: String(localized: "同期タイマー", table: "Settings", comment: "Export progress: the collection being written (synced timers)"),
                 descriptor: FetchDescriptor<SyncedFocusTimer>(sortBy: [
                     SortDescriptor(\SyncedFocusTimer.updatedAt),
                     SortDescriptor(\SyncedFocusTimer.id)
@@ -380,7 +400,7 @@ actor PomoGemDataExportWorker {
             try Self.write(",", to: openedHandle)
             let claimCount = try writeCollection(
                 key: "focusTimerDeviceClaims",
-                displayName: "タイマー端末引き継ぎ",
+                displayName: String(localized: "タイマー端末引き継ぎ", table: "Settings", comment: "Export progress: the collection being written (timer handoffs between devices)"),
                 descriptor: FetchDescriptor<FocusTimerDeviceClaim>(sortBy: [
                     SortDescriptor(\FocusTimerDeviceClaim.claimedAt),
                     SortDescriptor(\FocusTimerDeviceClaim.id)
@@ -397,7 +417,7 @@ actor PomoGemDataExportWorker {
             if shouldIncludeRetainedRareRewardModels {
                 rareRewardPendingCount = try writeCollection(
                     key: "rareRewardPendingCommits",
-                    displayName: "保留中の互換データ",
+                    displayName: String(localized: "保留中の互換データ", table: "Settings", comment: "Export progress: the collection being written (pending compatibility data)"),
                     descriptor: FetchDescriptor<RareRewardPendingCommit>(sortBy: [
                         SortDescriptor(\RareRewardPendingCommit.createdAt),
                         SortDescriptor(\RareRewardPendingCommit.id)
@@ -418,7 +438,7 @@ actor PomoGemDataExportWorker {
             if shouldIncludeRetainedRareRewardModels {
                 rareRewardCursorCount = try writeCollection(
                     key: "rareRewardLedgerCursors",
-                    displayName: "互換台帳の同期位置",
+                    displayName: String(localized: "互換台帳の同期位置", table: "Settings", comment: "Export progress: the collection being written (compatibility ledger sync positions)"),
                     descriptor: FetchDescriptor<RareRewardLedgerCursor>(sortBy: [
                         SortDescriptor(\RareRewardLedgerCursor.epochID),
                         SortDescriptor(\RareRewardLedgerCursor.revision),

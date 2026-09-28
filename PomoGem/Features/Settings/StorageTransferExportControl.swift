@@ -52,7 +52,11 @@ struct StorageTransferExportControl: View {
             do {
                 exportedURL = try await export()
             } catch {
-                failure = "書き出せませんでした。\(error.localizedDescription)"
+                failure = String(
+                    localized: "書き出せませんでした。\(error.localizedDescription)",
+                    table: "Settings",
+                    comment: "Export failure under a storage-transfer export button; the argument is the system error description"
+                )
             }
         }
     }
