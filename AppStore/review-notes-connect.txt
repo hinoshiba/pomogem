@@ -30,7 +30,7 @@ IN-APP PURCHASE
 - Product ID: com.hinoshiba.pomogem.pro.lifetime
 - Type: Non-Consumable、1回限りの買い切り
 - Entry: Settings→「ポモジェムPro」、またはHomeの時間表示→「自由な時間を設定」
-- Unlocks: 任意の1分00秒〜360分00秒、まとまり粒の月刻印、勉強アプリ数無制限（無料5つ）
+- Unlocks: 任意の1分00秒〜360分00秒、結晶の月刻印、勉強アプリ数無制限（無料5つ）
 - 秒単位timerの引き継ぎは両端末の最新版が必要です。1分30秒は90秒の記録・10gになります。
 - Share cards: 無料／Proともロゴとhttps://pomogem.hinoshiba.com/を表示
 - Restore: purchase screen下部の「購入を復元」

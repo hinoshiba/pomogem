@@ -941,7 +941,12 @@ struct SettingsView: View {
                 Button {
                     updateRareRewardMode(.off)
                 } label: {
-                    Label("「抽選しない」を選択として保存", systemImage: "checkmark.shield.fill")
+                    Label {
+                        Text("「抽選しない」を選択として保存", tableName: "Settings")
+                    } icon: {
+                        Image(systemName: "checkmark.shield.fill")
+                            .accessibilityHidden(true)
+                    }
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 }
@@ -1108,6 +1113,8 @@ struct SettingsView: View {
                 router.presentPaywall(from: .settings)
             } label: {
                 HStack(spacing: 14) {
+                    // Decorative: for Pro users the seal would read the row
+                    // as 「選択済み」; 「利用中」 already says it.
                     Image(systemName: purchase.isPro ? "checkmark.seal.fill" : "sparkles")
                         .foregroundStyle(PomoGemTheme.amber)
                         .frame(width: 28)

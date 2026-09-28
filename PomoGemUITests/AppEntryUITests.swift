@@ -199,6 +199,44 @@ final class AppEntryUITests: XCTestCase {
         XCTAssertGreaterThan(remaining, 24 * 60)
     }
 
+    /// history-02. A start link during a manual entry's Undo window saves
+    /// the entry first, exactly as Home's own start button does, and then
+    /// starts: the entry is neither lost nor left pending under the timer.
+    func testStartLinkDuringTheUndoWindowSavesTheEntryAndStarts() throws {
+        openMenuAction(containing: "手動で積む")
+        let thirtyMinutes = app.buttons["30分、300グラム加算"]
+        XCTAssertTrue(thirtyMinutes.waitForExistence(timeout: 6))
+        waitForUISettle(600_000)
+        thirtyMinutes.tap()
+        let confirm = app.buttons["manual.confirm"]
+        if !confirm.waitForExistence(timeout: 3), thirtyMinutes.exists, thirtyMinutes.isHittable {
+            thirtyMinutes.tap()
+        }
+        XCTAssertTrue(waitForHittable(confirm, timeout: 5))
+        confirm.tap()
+        let undo = app.buttons["manual.undo"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 5), "The entry waits under its Undo banner")
+
+        openLink(URL(string: "pomogem://focus/start?minutes=25")!)
+
+        let timer = focusTimerDisplay
+        XCTAssertTrue(timer.waitForExistence(timeout: 10), "The link starts the focus")
+        let remaining = try timerRemainingSeconds(timer)
+        XCTAssertGreaterThan(remaining, 24 * 60)
+        retain("Start link during the Undo window — focus started")
+
+        cancelPresentedFocusIfNeeded()
+        XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 8))
+        XCTAssertFalse(app.buttons["manual.undo"].exists, "Nothing is left pending")
+        openMenuAction(containing: "手動で積む")
+        let allowance = app.staticTexts["manual.remaining-count"]
+        XCTAssertTrue(allowance.waitForExistence(timeout: 5))
+        XCTAssertEqual(allowance.label, "この端末で本日あと2回", "The entry was saved before the focus started")
+        let close = app.buttons["閉じる"].firstMatch
+        XCTAssertTrue(waitForHittable(close, timeout: 4))
+        close.tap()
+    }
+
     /// A start waiting behind the fusion celebration belongs to 「続ける」.
     /// Choosing the crystal's breakdown instead drops it: the overview the
     /// person asked for stays, and no focus opens over it.
@@ -230,7 +268,7 @@ final class AppEntryUITests: XCTestCase {
 
         app.buttons["この結晶の内訳を見る"].tap()
         let overview = app.navigationBars.matching(
-            NSPredicate(format: "identifier IN %@", ["積み上がり", "まとまり粒"])
+            NSPredicate(format: "identifier IN %@", ["積み上がり", "結晶の内訳"])
         ).firstMatch
         XCTAssertTrue(overview.waitForExistence(timeout: 8), "The breakdown opens")
         waitForUISettle(2_500_000)

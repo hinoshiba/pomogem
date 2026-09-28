@@ -83,7 +83,8 @@ final class StringInterpolationLintTests: XCTestCase {
 /// A small Swift lexer: enough to find string literals, skip comments and
 /// raw strings, and drop interpolation segments (whose own nested literals
 /// are still returned).
-private enum SwiftStringLiteralScanner {
+/// Also used by `RewardVocabularyAndHUDTests` to read user-facing literals.
+enum SwiftStringLiteralScanner {
     struct Literal {
         let text: String
         let line: Int

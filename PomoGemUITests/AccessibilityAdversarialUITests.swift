@@ -109,6 +109,8 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(menu.isHittable)
         XCTAssertTrue(jar.waitForExistence(timeout: 5))
+        // At its natural top the theme row peeks above the pinned start
+        // button, cut by it; the audit leaves such a row out.
         try auditVisibleScreen(named: "AX5 Home")
 
         menu.tap()
@@ -676,6 +678,10 @@ final class AccessibilityAdversarialUITests: XCTestCase {
             ("text clipping", .textClipped),
             ("traits", .trait)
         ].filter { only?.contains($0.0) ?? true }
+        // A swipe keeps decelerating after XCTest returns from it. Audit the
+        // resting screen, not a frame in which a row is still sliding under
+        // the navigation bar.
+        usleep(1_000_000)
         // XCTest gives one combined audit roughly the same short watchdog as
         // a single check. The long AX5 menu can exceed it even when every
         // individual audit is healthy, so keep each diagnostic independently
@@ -690,8 +696,7 @@ final class AccessibilityAdversarialUITests: XCTestCase {
             if auditName == "text clipping", !includesTextClipping { continue }
             try XCTContext.runActivity(named: "\(name) — \(auditName)") { _ in
                 let windowFrame = app.windows.firstMatch.frame
-                let scrollView = app.scrollViews.firstMatch
-                let navigationBar = app.navigationBars.firstMatch
+                let (scrollView, navigationBar) = frontScreen()
                 let navigationLabels = navigationBar.exists
                     ? Set(navigationBar.descendants(
                         matching: .any
@@ -756,6 +761,39 @@ final class AccessibilityAdversarialUITests: XCTestCase {
                        frame.maxY > contentTop {
                         return true
                     }
+                    // A row that has scrolled partly under the opaque
+                    // navigation bar: the bar is painted over its top, and
+                    // XCTest samples the bar's own colour inside the row's
+                    // frame as if it were the text's. Which row sits there
+                    // depends only on where the last swipe stopped, so the
+                    // same screen passed or failed from run to run (a stat
+                    // tile's 「0」 on a 17 Pro, 「表示中の結晶」 on an SE). Such
+                    // a row counts only in audits that show it in full view.
+                    if frame.minY < contentTop - 0.5, frame.maxY > contentTop + 0.5 {
+                        return true
+                    }
+                    // A row cut by the scroll view's lower edge where
+                    // something is pinned below it (Home's start button at
+                    // accessibility sizes, home-03): the button is painted
+                    // over the row's lower part and XCTest samples its
+                    // colour inside the row's frame as the text's
+                    // background. Home's theme row peeks there at its
+                    // natural top; since #47's floor light warms the card
+                    // behind it, 「英語」 failed on the coral button's colour.
+                    // Such a row counts only where it is shown whole.
+                    if scrollFrame.maxY < windowFrame.maxY - 0.5,
+                       frame.minY < viewport.maxY - 0.5,
+                       frame.maxY > viewport.maxY + 0.5 {
+                        return true
+                    }
+                    // The same row resting flush against the bar's lower
+                    // edge: the sampled background still takes in the bar's
+                    // antialiased edge and shadow. On a freshly erased SE a
+                    // batch run flagged 「表示中の結晶」 there (its colours pass
+                    // WCAG), while a lone run passed.
+                    if frame.minY >= contentTop - 0.5, frame.minY < contentTop + 8 {
+                        return true
+                    }
                     let visible = frame.intersection(viewport)
                     return visible.isNull
                         || visible.width < frame.width * 0.5
@@ -786,7 +824,7 @@ final class AccessibilityAdversarialUITests: XCTestCase {
             "AX5 level count must stack after the hierarchy copy"
         )
 
-        for label in ["10分 = 0.4", "25分 = 1.0", "60分 = 2.4", "時間の核"] {
+        for label in ["10分 = 100g", "25分 = 250g", "60分 = 600g", "時間の核"] {
             let step = app.staticTexts["overview.fusion-step.\(label)"]
             XCTAssertTrue(step.exists, "Missing fusion legend step: \(label)")
             XCTAssertGreaterThan(
@@ -817,6 +855,16 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         _ element: XCUIElement,
         attempts: Int
     ) -> Bool {
+        // At accessibility sizes Home pins its start button below the scroll
+        // view (home-03). It is on screen without scrolling and outside the
+        // scrolling content, so the content viewport does not apply to it.
+        let window = app.windows.firstMatch.frame
+        let scrollView = frontScrollView()
+        if element.exists, element.isHittable, scrollView.exists,
+           window.contains(element.frame),
+           element.frame.minY >= scrollView.frame.maxY - 1 {
+            return true
+        }
         for _ in 0 ..< attempts {
             guard element.exists else {
                 app.swipeUp()
@@ -833,10 +881,14 @@ final class AccessibilityAdversarialUITests: XCTestCase {
             let contentMovesUp = frame.maxY > viewport.maxY
             let startY = contentMovesUp ? 0.72 : 0.38
             let endY = contentMovesUp ? 0.50 : 0.60
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: startY))
+            // Drag inside the scroll view. On Home at accessibility sizes the
+            // lower part of the window is the pinned start button, which
+            // does not scroll.
+            let surface: XCUIElement = scrollView.exists ? scrollView : app
+            surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: startY))
                 .press(
                     forDuration: 0.05,
-                    thenDragTo: app.coordinate(
+                    thenDragTo: surface.coordinate(
                         withNormalizedOffset: CGVector(dx: 0.5, dy: endY)
                     )
                 )
@@ -849,10 +901,34 @@ final class AccessibilityAdversarialUITests: XCTestCase {
             && frame.maxY <= viewport.maxY
     }
 
+    /// The vertical scroll view and navigation bar of the screen in front.
+    /// Home stays in the hierarchy under a sheet, and at accessibility sizes
+    /// its scroll view now ends above the pinned start button (home-03), so a
+    /// bare `firstMatch` measured Home's shorter frame and Home's bar for
+    /// 積み上がり and the menu, and reported their text as outside a viewport
+    /// it was not in.
+    private func frontScreen() -> (scrollView: XCUIElement, navigationBar: XCUIElement) {
+        let sheets = [
+            ("overview.introduction", "積み上がり"),
+            ("planning.accumulation.open", "メニュー")
+        ]
+        for (marker, title) in sheets {
+            let sheet = app.scrollViews.containing(.any, identifier: marker).firstMatch
+            if sheet.exists {
+                let bar = app.navigationBars[title]
+                return (sheet, bar.exists ? bar : app.navigationBars.firstMatch)
+            }
+        }
+        return (app.scrollViews.firstMatch, app.navigationBars.firstMatch)
+    }
+
+    private func frontScrollView() -> XCUIElement {
+        frontScreen().scrollView
+    }
+
     private func visibleContentViewport() -> CGRect {
         let windowFrame = app.windows.firstMatch.frame
-        let scrollView = app.scrollViews.firstMatch
-        let navigationBar = app.navigationBars.firstMatch
+        let (scrollView, navigationBar) = frontScreen()
         let scrollFrame = scrollView.exists
             ? windowFrame.intersection(scrollView.frame)
             : windowFrame
@@ -980,7 +1056,7 @@ final class DynamicTypeSystemAuditUITests: XCTestCase {
             // component with a ScaledMetric font. XCTest nevertheless audits
             // its glyph nodes; the surrounding controls/cards carry the
             // localized semantic descriptions.
-            "SPACE", "FOCUS", "FOCUS CONSTELLATION",
+            "SPACE", "FOCUS",
             "THIS WEEK", "CRYSTAL HIERARCHY",
             // Decorative text inside the accessibility-hidden empty weekly
             // crystal. The parent card announces the same value semantically.

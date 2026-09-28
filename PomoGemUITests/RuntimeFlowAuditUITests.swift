@@ -1572,9 +1572,16 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             waitForHittable(demoLauncherForVisualAudit, timeout: 6),
             "The demo launcher must be operable after the ninth Reward Bridge closes"
         )
-        let nineJarValue = (app.buttons["瓶"].value as? String) ?? ""
-        XCTAssertTrue(nineJarValue.contains("9粒"), nineJarValue)
-        XCTAssertFalse(nineJarValue.contains("まとまり粒"), nineJarValue)
+        // The jar counts a completed focus when its gem lands (dev-D7), a
+        // moment after the scene holds it; the probe's count includes the
+        // gem while it is still falling.
+        let jar = app.buttons["瓶"]
+        XCTAssertTrue(
+            waitForValue(of: jar, containing: "9粒", timeout: 6),
+            (jar.value as? String) ?? ""
+        )
+        let nineJarValue = (jar.value as? String) ?? ""
+        XCTAssertFalse(nineJarValue.contains("結晶1個"), nineJarValue)
         waitForUISettle()
         retainScreenshot(named: "Nine measured particles — pre-fusion Home rail")
 
@@ -1601,8 +1608,12 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(closeCelebration.waitForExistence(timeout: 4))
         closeCelebration.tap()
         XCTAssertTrue(waitForHittable(demoLauncherForVisualAudit, timeout: 8))
-        let tenJarValue = (app.buttons["瓶"].value as? String) ?? ""
-        XCTAssertTrue(tenJarValue.contains("まとまり粒1個"), tenJarValue)
+        XCTAssertTrue(
+            waitForValue(of: jar, containing: "合計10粒分", timeout: 6),
+            (jar.value as? String) ?? ""
+        )
+        let tenJarValue = (jar.value as? String) ?? ""
+        XCTAssertTrue(tenJarValue.contains("結晶1個"), tenJarValue)
         XCTAssertTrue(tenJarValue.contains("合計10粒分"), tenJarValue)
         waitForUISettle()
         retainScreenshot(named: "First decimal crystal — Home lifetime core")

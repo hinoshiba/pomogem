@@ -18,6 +18,9 @@
     "%@・記念石は自己申告" : {
       "comment" : "Share settings summary: focus scope, then the note that stones are self-reported"
     },
+    "この結晶は、確認が終わるとカードにできます。" : {
+
+    },
     "これまで" : {
       "comment" : "Share card period label for the whole history"
     },
@@ -52,6 +55,12 @@
     },
     "端末の中だけで生成" : {
 
+    },
+    "結晶 %lld" : {
+      "comment" : "Share card stat: crystal count"
+    },
+    "結晶%lld個" : {
+      "comment" : "Share caption disclosure item: crystals left out of the drawn jar"
     },
     "自己申告として明記したうえで、この記録をカードに含めます" : {
 

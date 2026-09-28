@@ -135,7 +135,7 @@ struct AccumulationTimelineBrowser: View {
                     foreground: PomoGemTheme.text
                 )
                 Text("年月をたどる")
-                    .font(PomoGemTheme.brand(20))
+                    .pomogemSectionTitle()
             }
             Spacer(minLength: 8)
             Button {
@@ -642,7 +642,7 @@ private struct AccumulationTimelineMonthSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("日ごとの記録", tableName: "Overview", comment: "Heading of a month's list of days")
-                    .font(PomoGemTheme.brand(20))
+                    .pomogemSectionTitle()
                 Text("日付を選ぶと、その日の記録を一件ずつ見られます。", tableName: "Overview")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
@@ -799,7 +799,7 @@ private struct AccumulationTimelineMonthSheet: View {
         VStack(alignment: .leading, spacing: 13) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("この月の代表瓶")
-                    .font(PomoGemTheme.brand(20))
+                    .pomogemSectionTitle()
                 Text(representativeDisclosure(detail))
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)

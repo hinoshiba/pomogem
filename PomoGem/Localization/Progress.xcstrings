@@ -1,7 +1,12 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
-
+    "次の結晶まで、あと%lld粒" : {
+      "comment" : "Next step toward the next crystal; the argument is a gem count"
+    },
+    "瓶%@杯" : {
+      "comment" : "Jar chip: how many times the jar has filled (2.5 kg each); the argument is a compact count such as 3 or 1.2万"
+    }
   },
   "version" : "1.0"
 }

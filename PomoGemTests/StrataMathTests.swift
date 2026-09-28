@@ -159,7 +159,7 @@ final class StrataMathTests: XCTestCase {
         XCTAssertTrue(attributedSummary.hasStrongPreservationEvidence)
         XCTAssertEqual(
             attributedSummary.preservationTitle,
-            "まとまり化で情報は削除されません"
+            "結晶になっても情報は削除されません"
         )
 
         let partialThemeAggregate = AggregatePebble(
@@ -813,8 +813,8 @@ final class StrataMathTests: XCTestCase {
     func testSpecialLandingCopyUsesAwardedMass() {
         XCTAssertEqual(Constants.UIStrings.goldToast(grams: 250), Constants.UIStrings.goldToast)
         XCTAssertEqual(Constants.UIStrings.prismToast(grams: 250), Constants.UIStrings.prismToast)
-        XCTAssertEqual(Constants.UIStrings.goldToast(grams: 600), "✦ 金のつぶが出た！ +600g")
-        XCTAssertEqual(Constants.UIStrings.prismToast(grams: 900), "❖ 虹のつぶ！！ +900g")
+        XCTAssertEqual(Constants.UIStrings.goldToast(grams: 600), "✦ 金の粒が出た！ +600g")
+        XCTAssertEqual(Constants.UIStrings.prismToast(grams: 900), "❖ 虹の粒！！ +900g")
     }
 
     func testTenStudyPebblesBecomeOneDecimalAggregateWithoutLosingDetail() throws {

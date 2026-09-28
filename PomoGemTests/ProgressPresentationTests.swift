@@ -500,7 +500,7 @@ final class ProgressPresentationTests: XCTestCase {
                 displayedClusterCount: 16,
                 displayedAchievementCount: 8
             ),
-            "瓶の中は、粒28個・表示中のまとまり16個・記念石8個の代表表示です。"
+            "瓶の中は、粒28個・表示中の結晶16個・記念石8個の代表表示です。"
         )
 
         let synchronizedLowerBound = AccumulationOverviewPageScope(
@@ -791,7 +791,7 @@ final class ProgressPresentationTests: XCTestCase {
                 totalNodeCount: 2,
                 visibleNodeCount: 2
             ),
-            "時間の核、集中2.75kg、11.0標準単位、物理履歴11粒、時間 4時間35分 / 41時間40分、核まであと37時間5分、表示中のまとまり結晶2個のうち代表2個を配置、瓶の物理整理：集中11粒"
+            "時間の核、集中2.75kg、11粒、時間 4時間35分 / 41時間40分、核まであと37時間5分、表示中の結晶2個のうち代表2個を配置"
         )
         XCTAssertEqual(
             EffortConstellationPresentation.materializedCoreAccessibilityLabel(
@@ -801,7 +801,7 @@ final class ProgressPresentationTests: XCTestCase {
                 totalNodeCount: 18,
                 visibleNodeCount: 8
             ),
-            "時間の核、集中24.8kg、99.0標準単位、物理履歴99粒、時間 41時間15分 / 41時間40分、核まであと25分、表示中のまとまり結晶18個のうち代表8個を配置、瓶の物理整理：集中99粒"
+            "時間の核、集中24.8kg、99粒、時間 41時間15分 / 41時間40分、核まであと25分、表示中の結晶18個のうち代表8個を配置"
         )
     }
 
@@ -816,7 +816,7 @@ final class ProgressPresentationTests: XCTestCase {
 
         XCTAssertEqual(
             label,
-            "時間の核、集中24.8kg以上、99.0標準単位以上、物理履歴99粒以上、進捗を整理中、表示中のまとまり結晶18個のうち代表8個を配置、瓶の物理整理：集中99粒"
+            "時間の核、集中24.8kg以上、99粒以上、進捗を整理中、表示中の結晶18個のうち代表8個を配置"
         )
         XCTAssertFalse(label.contains("×100へ"))
         XCTAssertFalse(label.contains("あと1粒"))
@@ -1652,13 +1652,13 @@ final class ProgressPresentationTests: XCTestCase {
         let one = FusionRewardBridgePresentation.state(totalPebbleCount: 1)
         XCTAssertEqual(one.progressLabel, "×10へ 1/10")
         XCTAssertEqual(one.litSlotCount, 1)
-        XCTAssertEqual(one.nextStepLabel, "次のまとまりまで、あと9粒")
+        XCTAssertEqual(one.nextStepLabel, "次の結晶まで、あと9粒")
         XCTAssertFalse(one.isFusionComplete)
 
         let nine = FusionRewardBridgePresentation.state(totalPebbleCount: 9)
         XCTAssertEqual(nine.progressLabel, "×10へ 9/10")
         XCTAssertEqual(nine.litSlotCount, 9)
-        XCTAssertEqual(nine.nextStepLabel, "次のまとまりまで、あと1粒")
+        XCTAssertEqual(nine.nextStepLabel, "次の結晶まで、あと1粒")
         XCTAssertFalse(nine.isFusionComplete)
 
         let ten = FusionRewardBridgePresentation.state(totalPebbleCount: 10)

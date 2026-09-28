@@ -287,7 +287,7 @@ final class GIFShareLifecycleUITests: XCTestCase {
         let monthRow = app.buttons.matching(
             NSPredicate(format: "label BEGINSWITH %@", currentMonthTitle())
         ).firstMatch
-        XCTAssertTrue(scrollUntilHittable(monthRow), "The month must be listed under 月ごとの瓶")
+        XCTAssertTrue(scrollUntilHittable(monthRow), "The month must be listed under 月の振り返り")
         XCTAssertTrue(monthRow.label.contains("30分・1粒"), monthRow.label)
         XCTAssertFalse(monthRow.label.contains("30m"), monthRow.label)
         attachScreenshot(named: "Log — month row in 分")

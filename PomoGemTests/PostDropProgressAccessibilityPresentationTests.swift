@@ -57,7 +57,7 @@ final class PostDropProgressAccessibilityPresentationTests: XCTestCase {
         )
 
         XCTAssertTrue(message.contains("瓶の整理：2粒"))
-        XCTAssertTrue(message.contains("旧形式のまとまり粒1個"))
+        XCTAssertTrue(message.contains("旧形式の結晶1個"))
         XCTAssertFalse(message.contains("合計2粒分"))
     }
 
