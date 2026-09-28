@@ -8,8 +8,9 @@ import Foundation
 /// timer screens call it whether or not notifications are allowed: someone
 /// who allowed alarms but declined notifications still gets the alarm.
 ///
-/// Part 2 wiring (the timer screens; #49's resolver decides whether an end
-/// rings in the app, this only books how it is announced while away):
+/// Part 2 wiring (the timer screens; #49's `TimerForegroundResolution`
+/// decides whether an end rings in the app, this only books how it is
+/// announced while away):
 ///
 /// 1. Booking. Replace every `NotificationManager.scheduleFocusCompletion`
 ///    / `scheduleBreakCompletion` call of a timer screen with
@@ -30,9 +31,11 @@ import Foundation
 ///    booker when the channel is `.systemAlarm`; only the notification UI
 ///    shows the denied state. The first-focus notification ask stays as it
 ///    is (once, never on recovery).
-/// 3. The outcome. Before the call the screen shows its scheduling state
-///    (#49's resolver waits while a booker call is in flight, which is
-///    `isScheduling`). Every outcome must leave that state:
+/// 3. The outcome. Before the call the screen sets its scheduling state;
+///    `TimerForegroundResolution` returns `.wait` while
+///    `isSchedulingNotification` (`notificationScheduleState.isScheduling`),
+///    so a booker call in flight must count as scheduling and every outcome
+///    must leave that state:
 ///    `.notification(.accepted(date))` as today; `.systemAlarm` settles it
 ///    with no notification delivery date (for example `.scheduled` with a
 ///    nil date, then save recovery state) and shows an alarm variant of the
@@ -51,9 +54,13 @@ import Foundation
 ///    `FocusEndAlarmMaintenance`.
 /// 5. The end. From the ticker, `handOffToForegroundIfDue`; when the scene
 ///    stops being active after a hand-off returned an end,
-///    `book…EndAfterLeavingDuringHandoff`. For #49's cue decision,
-///    `externalAlertMayHaveFired` in place of the notification-only
-///    witness. When the completion resolves on screen,
+///    `book…EndAfterLeavingDuringHandoff`. For the cue decision,
+///    `externalAlertMayHaveFired` in place of the notification-only witness
+///    (FocusView's `completionCueForElapsedTimer` and BreakTimerView's
+///    `notificationMayHaveDelivered(at:uptime:)` call
+///    `TimerCompletionForegroundFeedbackPolicy.notificationMayHaveDelivered`
+///    today; keep their trustworthy-timing gate on the notification date).
+///    When the completion resolves on screen,
 ///    `FocusEndAlarmScheduler.shared.acknowledge(sessionID:)` (Stop while
 ///    the system alarm rings). While the in-app alarm rings,
 ///    `TimerCompletionAlertController.keepsScreenAwake(sessionID:)` joins

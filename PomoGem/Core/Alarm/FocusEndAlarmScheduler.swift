@@ -493,7 +493,7 @@ final class FocusEndAlarmScheduler {
         supersedeBookingInFlight(of: sessionID)
         guard let booking = store.load() else { return true }
         if let sessionID, booking.sessionID != sessionID { return true }
-        generation &+= 1
+        supersedeBookings(of: booking)
         return releaseBooking(keepingWitnessOf: booking.sessionID)
     }
 
@@ -518,7 +518,7 @@ final class FocusEndAlarmScheduler {
         if let booking = store.load(),
            booking.sessionID == sessionID,
            booking.fireDate > now() {
-            generation &+= 1
+            supersedeBookings(of: booking)
             releaseBooking(keepingWitnessOf: nil)
             handedOff = handedOff ?? booking.fireDate
         }
@@ -534,7 +534,7 @@ final class FocusEndAlarmScheduler {
         retryPendingCancels()
         supersedeBookingInFlight(of: sessionID)
         guard let booking = store.load(), booking.sessionID == sessionID else { return }
-        generation &+= 1
+        supersedeBookings(of: booking)
         releaseBooking(keepingWitnessOf: sessionID)
     }
 
@@ -668,6 +668,15 @@ final class FocusEndAlarmScheduler {
         else { return }
         generation &+= 1
         pendingIntent = nil
+    }
+
+    /// Before `booking` is released: supersedes a `schedule` still booking
+    /// it (its write-ahead record), but never the newest `schedule` of
+    /// another session, which replaces `booking` anyway. A break booked
+    /// while the focus that preceded it is closed must keep its alarm.
+    private func supersedeBookings(of booking: FocusEndAlarmBooking) {
+        if let intent = pendingIntent, intent.sessionID != booking.sessionID { return }
+        generation &+= 1
     }
 
     /// The system's list of this app's alarms. An app that was never allowed

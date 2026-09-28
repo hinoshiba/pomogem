@@ -218,6 +218,34 @@ final class FocusEndAlarmSchedulerTests: XCTestCase {
         XCTAssertEqual(Array(client.scheduled.keys), [booked.alarmID])
     }
 
+    /// The reward break is booked while the focus before it is closed
+    /// (its alarm cancelled or acknowledged): closing the focus must not
+    /// cost the break its alarm.
+    func testClosingTheEarlierSessionKeepsTheNextSessionsBooking() async {
+        let focus = UUID()
+        guard case let .booked(focusAlarm) = await scheduler.schedule(sessionID: focus, phase: .focus, endDate: clock.addingTimeInterval(600), soundFileName: nil) else { return XCTFail() }
+        let closes: [(String, (FocusEndAlarmScheduler) -> Void)] = [
+            ("cancel", { $0.cancel(sessionID: focus) }),
+            ("acknowledge", { $0.acknowledge(sessionID: focus) }),
+            ("hand-off", { _ = $0.handOffToForeground(sessionID: focus) })
+        ]
+        for (name, close) in closes {
+            if scheduler.booking?.sessionID != focus {
+                _ = await scheduler.schedule(sessionID: focus, phase: .focus, endDate: clock.addingTimeInterval(600), soundFileName: nil)
+            }
+            let file = HeldAlarmSoundFile()
+            let rest = UUID()
+            let booking = Task { await scheduler.schedule(sessionID: rest, phase: .breakTime, endDate: clock.addingTimeInterval(900)) { await file.provide() } }
+            await file.waitUntilHeld()
+            close(scheduler)
+            file.release()
+            guard case let .booked(breakAlarm) = await booking.value else { return XCTFail(name) }
+            XCTAssertEqual(scheduler.booking, breakAlarm, name)
+            XCTAssertEqual(Array(client.scheduled.keys), [breakAlarm.alarmID], name)
+        }
+        XCTAssertTrue(client.cancelled.contains(focusAlarm.alarmID))
+    }
+
     func testEveryEndOfTheTimerSupersedesABookingThatWaitsForItsFile() async {
         let supersede: [(String, (FocusEndAlarmScheduler, UUID) -> Void)] = [
             ("hand-off", { _ = $0.handOffToForeground(sessionID: $1) }),
