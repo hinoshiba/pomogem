@@ -81,8 +81,15 @@ final class JarInteractionUITests: XCTestCase {
 
         let jar = app.buttons["瓶"]
         XCTAssertTrue(jar.waitForExistence(timeout: 3))
-        XCTAssertTrue((jar.value as? String)?.contains("1粒") == true)
-        XCTAssertTrue((jar.value as? String)?.contains("250グラム") == true)
+        // The jar counts a completed focus when its gem lands (dev-D7), a
+        // moment after the card closes and the gem starts to fall.
+        XCTAssertTrue(
+            waitForCondition(timeout: 6) {
+                let value = (jar.value as? String) ?? ""
+                return value.contains("1粒") && value.contains("250グラム")
+            },
+            (jar.value as? String) ?? ""
+        )
 
         let presentationProbe = app.descendants(matching: .any)["jar.presentation.probe"]
         XCTAssertTrue(
@@ -140,6 +147,15 @@ final class JarInteractionUITests: XCTestCase {
     /// UserDefaults whenever it opens a new or cleaned store
     /// (`UITestLocalStateIsolation`). Draining them here used to acknowledge
     /// a gem that could never land, which left the start button disabled.
+    private func waitForCondition(timeout: TimeInterval, _ condition: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if condition() { return true }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        } while Date() < deadline
+        return condition()
+    }
+
     private func assertNoRewardCardFromAnEarlierTest(in app: XCUIApplication) {
         XCTAssertFalse(
             app.descendants(matching: .any)["reward.bridge"].waitForExistence(timeout: 1),
