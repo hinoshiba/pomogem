@@ -163,6 +163,8 @@ Simulator にはモーションのハードウェアがありません。その�
 | worstcase（F3、6回） | 0.191〜0.208 | 0.158〜0.172 |
 | stress（基準、2回） | 0.211〜0.214 | 0.150〜0.152 |
 | stress（F3、3回） | 0.199〜0.218 | 0.147〜0.148 |
+| worstcase（F3・main e7e1f62 の上、2回） | 0.190〜0.193 | 0.161〜0.164 |
+| stress（F3・main e7e1f62 の上、1回） | 0.224 | 0.149 |
 
 - F3 は基準のばらつきの中にあります（テストは、基準のいちばん低い回から0.025までを許します）。下向きの重力では、復元と揺らしが通る処理を F3 は変えていません。
 - この再現は、アプリの沈降プローブ（§7.5 の表。12 mini の worstcase は22.6%）より5〜6ポイント低く出ます。これは基準のコミットでも同じです。起動直後から毎フレーム60fpsで進めるためと考えられますが、原因は切り分けていません。
@@ -173,12 +175,23 @@ Simulator にはモーションのハードウェアがありません。その�
 
 次の記述は、F3 で正しくなくなりました。ジェムの設計書の持ち主が直してください（行番号は fff5031 の Docs/GemExperienceDesign.md）。
 
-- 2026-09-27：オーナーの決定（ルール1）に従い、§7.13 の 3. の「物理は起こさず、光だけを描き直すもの」の行の後に、向きの変化で山が落ち着き直す規則（Reduce Motion では穏やかに）を1行加え、この文書へのリンクを置きました。§7.13 の中の下の3か所（966行・1009行・1031行。今の行番号では967行・1010行・1032行）には、F3 で変わったことを示す短い注記を括弧で足しました。本文はジェムの設計書の持ち主が直してください。1467行（§7.13 の外）は、まだ直していません。
+- 2026-09-27：オーナーの決定（ルール1）に従い、§7.13 の 3. の「物理は起こさず、光だけを描き直すもの」の行の後に、向きの変化で山が落ち着き直す規則（Reduce Motion では穏やかに）を1行加え、この文書へのリンクを置きました。§7.13 の中の下の3か所（966行・1009行・1031行。main（e7e1f62）に載せ替えた今の行番号では978行・1022行・1044行）には、F3 で変わったことを示す短い注記を括弧で足しました。本文はジェムの設計書の持ち主が直してください。1467行（§7.13 の外。今は1577行）は、まだ直していません。
 
 - 966行：「Reduce Motion：…アイドル中の傾きではメインに移らない（揺らしの山だけ）」。向きの変化（約6°以上の回転で、重力の向きも変わるとき）では、Reduce Motion でもメインに移り、物理が起きます。
 - 1009行：「意図して傾ける」の行。約6°までの傾きは光だけです。それを超える回転で重力の向きが変わると、物理が有界の操作ウィンドウで起きます。
 - 1031行：「Reduce Motion では同じ傾きで描画ループもモーションも起きない」（合成の傾き ±0.42）。この傾き（約25°）を合成のモーション源（`POMOGEM_UI_TEST_MOTION=synthetic`）で流すと、今は Reduce Motion でも物理と描画ループが起きます。`JarFrameProbe` が重力を直接渡す場合（合成のモーション源なし）は、従来どおり光だけです。
 - 1467行：`JarIdleEnergyTests` のまとめ。「Reduce Motion では揺らしの山だけ」と「意図した傾きで全速と描画に戻る（物理は起こさない）」。F3 では、`testIdleTiltFilterUnderReduceMotionWakesOnlyForATurnOrAShakePeak` などの傾きの幅を、山を落ち着き直させる回転より小さくしました（0.3→0.1、0.6→0.2 または0.08、0.5→0.08、0.2→0.06）。元の0.3gの傾きは、`JarOrientationGravityTests.testTheFormerIdleTiltNowReSettlesThePileThroughOneBoundedWindow` で、物理が1回だけ有界に起きることを確かめています。
+
+## main との統合（ラウンド13・14、2026-09-28）
+
+F3 のコミットを、gem-brilliance を統合した main（e7e1f62、#47）の上に載せ替えました（`git rebase --onto origin/main fff5031`）。F3 の変更そのものは変えていません。main 側のラウンド13・14の瓶の変更とは、次のように両立します。
+
+- **衝突は2か所だけ**：`JarScene.update(_:)` では、main の `refreshLightEdgeFade()` と F3 の `lastSceneUpdateTime` の両方を残しました。Docs/GemExperienceDesign.md の §7.13 の Reduce Motion の行では、F3 の注記と main のラウンド13（`nonisolated` の定数）の注記を両方残しました。`project.pbxproj` は手でまとめず、`xcodegen generate` で作り直しました。
+- **光の縁のフェード（`JarLightEdgeFade`）**：SwiftUI のマスクに代わる、場面の中のシェーダーです。描画面の座標（`gl_FragCoord`）で働くので、光の器具と同じく画面に固定され、重力では回りません。横・逆さでは、山と×1万の光の輪が壁や蓋に寄り、山の光もそこへ付いていきます。それでも、どの粒も山の光もフェードを持ち、ビューの縁に光は残らず、瓶の中は暗くなりません（`testTheSceneEdgeFadeHoldsInEveryPoseAndNeverDimsTheBottle`。実際に描いた画像で確かめます）。
+- **倍率**：main の最上段のヒステリシス（`JarScalePolicy.uncappedTargetScale`）と、段の焼き上げの期限（`scaleBakeDeadline`、0.5秒）はそのままです。F3 の「核と HUD の帯は、まっすぐ立った山だけを判定する」規則とも両立します。横・逆さのまま中身が最上段のまわりで増減しても、最上段から1回下りるだけで保たれます。帯には判定されず、上限は下がりません。縦に戻すと、同じ並びは判定され、帯の下まで下ります（`testOffTheFloorTheTopRungHoldsThroughChurnAndOnlyAnUprightPileIsJudged`）。焼き上げの期限は重力を読みません。
+- **記念石（ムーンストーンのカボション）**：物理の円と質量は前と同じで、Home は完走の粒と同じく上から落とします。予告の後、口から入り、どの姿勢でも着地し、瓶から出ません。刻印は、どの向きでも画面に対して正立します（`testAKeepsakeCabochonEntersThroughTheMouthLandsAndStaysContainedInEveryPose`）。
+- **`redrawHold`・`motionWakeHold` の `nonisolated`**：F3 の起こし方（背景の `JarIdleTiltFilter` が `JarGravityMapping.needsResettle` を判定し、メインで `setGravityReading` と `followTurn` が操作ウィンドウを開く）は、背景からこの2つの定数を読みません。通常のビルドで、瓶のファイルに警告はありません。`-strict-concurrency=complete` でも、背景で動く `JarMotionSampling.swift` と `JarGravityMapping.swift` は0件です。`JarScene.swift` に出る警告（`deinit` の observer、焼き込みの `install` のクロージャ）は、どれも main の行です。F3 が触れた行で出るのは、main に同じ形の警告が既にある2か所だけです（Debug 専用の `JarFrameProbe` の姿勢のタイマー。main の傾きのタイマーと同じ書き方。HomeView の `onGeometryChange` の座標空間。F3 は `.minY` を枠全体に変えただけ）。
+- **余白の再現**：main の上でも、基準のばらつきの中にあります（上の表）。
 
 ## 実機で未確認
 

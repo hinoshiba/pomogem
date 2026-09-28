@@ -1715,6 +1715,207 @@ final class JarOrientationGravityTests: XCTestCase {
         XCTAssertEqual(event.position.y, interior.minY, accuracy: 3, "Landed on the floor, not at the wall")
     }
 
+    // MARK: main's rounds 13 and 14 in every pose
+
+    func testAKeepsakeCabochonEntersThroughTheMouthLandsAndStaysContainedInEveryPose() throws {
+        // Round 13 redrew 記念石 as moonstone cabochons: no facets, the mark
+        // engraved in the dome, the physics circle and mass unchanged. Home
+        // drops one from above like a completion gem, after its herald
+        // (`showSpecialAnticipation`), so it takes the same entry ritual:
+        // through the mouth under the jar's own gravity, then the phone's,
+        // landing in every pose and never leaving the jar. Its mark stays
+        // upright on the screen, like the rest of the jar's screen-fixed
+        // art, whichever way the phone is held.
+        for pose in Pose.allCases {
+            for filled in [false, true] {
+                let scene = makeScene()
+                scene.reduceMotion = false
+                scene.restore(pebbles: filled ? looseSeries(8) + [keepsake(1, .examPass)] : [])
+                if filled { scene.setScreenTimeObstacles(totalUnits: 9_999) }
+                let driver = try Driver(scene: scene)
+                defer { driver.finish() }
+                driver.step(frames: 150) { scene.setGravityReading(pose.reading) }
+                var landings: [UUID] = []
+                scene.onLanding = { landings.append($0.pebble.id) }
+                let stone = keepsake(2, .perfectScore)
+                scene.dropFromAbove(stone)
+                let context = "記念石, \(pose)\(filled ? ", over a pile" : ", empty jar")"
+                var entered = false
+                var heraldShown = false
+                driver.step(frames: 300) {
+                    scene.setGravityReading(pose.reading)
+                    self.assertContained(scene, context)
+                    self.assertEntersThroughTheNeck(scene, id: stone.id, context)
+                    if scene.entryPhaseNameForTesting(stone.id) == "throughMouth" { entered = true }
+                    if scene.childNode(withName: "//drop.anticipation") != nil { heraldShown = true }
+                }
+                XCTAssertTrue(heraldShown, "\(context): its herald first, as before F3")
+                XCTAssertTrue(entered, "\(context): a completion entry through the mouth")
+                XCTAssertEqual(landings, [stone.id], context)
+                XCTAssertTrue(scene.completionDropHasLanded, context)
+                XCTAssertFalse(scene.hasCompletionDropInFlight, context)
+                assertContainedWithRadius(scene, context)
+                let node = try node(scene, stone.id)
+                XCTAssertNotNil(node.childNode(withName: ".//achievement.sheen"), "\(context): the round-13 cabochon")
+                let mark = try XCTUnwrap(node.childNode(withName: ".//achievement.mark"), context)
+                XCTAssertEqual(
+                    remainder(Double(mark.zRotation + node.zRotation), 2 * .pi),
+                    0,
+                    accuracy: 1e-6,
+                    "\(context): the mark reads upright on the screen"
+                )
+                let body = try XCTUnwrap(node.physicsBody)
+                XCTAssertEqual(body.categoryBitMask, JarPhysicsCategory.pebble, context)
+                XCTAssertTrue(body.affectedByGravity, context)
+                XCTAssertEqual(body.fieldBitMask, 0, context)
+                guard !filled else { continue }
+                let interior = JarScene.interiorRect(sceneSize: scene.size)
+                switch pose {
+                case .upsideDown:
+                    XCTAssertGreaterThan(node.position.y, interior.midY, "\(context): settles toward the cap")
+                case .landscapeLeft:
+                    XCTAssertLessThan(node.position.x, interior.midX, "\(context): drifts to the left wall")
+                case .landscapeRight:
+                    XCTAssertGreaterThan(node.position.x, interior.midX, "\(context): drifts to the right wall")
+                default:
+                    XCTAssertLessThan(node.position.y, interior.midY, "\(context): falls to the floor")
+                }
+            }
+        }
+
+        // A pile holding cabochons stays in the jar while the phone flips.
+        let scene = makeScene()
+        scene.restore(pebbles: looseSeries(16) + (0 ..< 3).map { keepsake(10 + $0, AchievementKind.allCases[$0 % 3]) })
+        let driver = try Driver(scene: scene)
+        defer { driver.finish() }
+        for pose in [Pose.landscapeLeft, .upsideDown, .landscapeRight, .portrait] {
+            driver.step(frames: 90) {
+                scene.setGravityReading(pose.reading)
+                self.assertContained(scene, "cabochons flipping to \(pose)")
+            }
+        }
+        assertContainedWithRadius(scene, "cabochons, settled upright")
+    }
+
+    func testTheSceneEdgeFadeHoldsInEveryPoseAndNeverDimsTheBottle() throws {
+        // Round 13 moved the light's fade before the SKView's edge into the
+        // scene (`JarLightEdgeFade`: one shader on `gl_FragCoord`). Like the
+        // light rig, it is fixed to the screen, not to gravity. Held
+        // sideways or upside down, the pile and a ×1万's halo press against
+        // a wall or the cap, nearer the view's edge than upright, and the
+        // pile light follows them there: every body still carries the
+        // fade, nothing is left at the view's edge, and nothing inside the
+        // bottle is dimmed.
+        let stage = CGSize(width: 402, height: 460)
+        let outer = JarScene.outerJarRect(sceneSize: stage)
+        var strongestUnfadedEdge = 0
+        for pose in [Pose.portrait, .landscapeLeft, .landscapeRight, .upsideDown] {
+            let scene = makeScene(size: stage)
+            scene.restore(pebbles: [crystal(1, level: 4)] + looseSeries(6) + [keepsake(3, .examPass)])
+            let driver = try Driver(scene: scene)
+            settle(scene, driver, holding: pose.reading)
+            XCTAssertTrue(scene.isIdlePaused, "\(pose): rests")
+            XCTAssertEqual(scene.pileRestsOnTheFloor, pose == .portrait, "\(pose)")
+            assertContainedWithRadius(scene, "\(pose)")
+            driver.finish()
+
+            let view = SKView(frame: CGRect(origin: .zero, size: stage))
+            view.allowsTransparency = true
+            view.presentScene(scene)
+            defer { view.presentScene(nil) }
+            let fade = scene.lightEdgeFade
+            let pileGlow = try XCTUnwrap(scene.childNode(withName: "//jar.pileGlow") as? SKSpriteNode)
+            XCTAssertTrue(pileGlow.shader === fade.shader, "\(pose): the pile light")
+            for pebble in pebbles(scene) {
+                XCTAssertTrue(pebble.lightEdgeFade === fade, "\(pose)")
+                let body = try XCTUnwrap(pebble.childNode(withName: "gem.body") as? SKSpriteNode, "\(pose)")
+                XCTAssertTrue(body.shader === fade.shader, "\(pose): \(pebble.descriptor.id)")
+                XCTAssertEqual(
+                    JarLightEdgeFade.coverage(at: pebble.position, stageSize: stage),
+                    1,
+                    "\(pose): a resting gem sits where the fade leaves it whole"
+                )
+            }
+
+            fade.isSuspended = true
+            let unfaded = try render(scene, in: view)
+            let pixelScale = CGFloat(unfaded.width) / stage.width
+            XCTAssertTrue(fade.update(stageSize: stage, pixelScale: pixelScale) || fade.pixelScale == pixelScale)
+            fade.isSuspended = false
+            let faded = try render(scene, in: view)
+            strongestUnfadedEdge = max(strongestUnfadedEdge, edgeAlpha(unfaded))
+            XCTAssertLessThanOrEqual(edgeAlpha(faded), 1, "\(pose): the light is gone at the view's edge")
+            let inside = outer.insetBy(dx: -JarLightEdgeFade.clearance + 1, dy: -JarLightEdgeFade.clearance + 1)
+            var largest = 0
+            for row in 0 ..< faded.height {
+                let y = stage.height - (CGFloat(row) + 0.5) / pixelScale
+                guard y > inside.minY, y < inside.maxY else { continue }
+                for column in 0 ..< faded.width {
+                    let x = (CGFloat(column) + 0.5) / pixelScale
+                    guard x > inside.minX, x < inside.maxX else { continue }
+                    let index = (row * faded.width + column) * 4
+                    for channel in 0 ..< 4 {
+                        largest = max(largest, abs(Int(faded.bytes[index + channel]) - Int(unfaded.bytes[index + channel])))
+                    }
+                }
+            }
+            XCTAssertLessThanOrEqual(largest, 1, "\(pose): the bottle is never dimmed")
+        }
+        XCTAssertGreaterThanOrEqual(strongestUnfadedEdge, 12, "Without the fade some pose's light reaches the view's edge")
+    }
+
+    func testOffTheFloorTheTopRungHoldsThroughChurnAndOnlyAnUprightPileIsJudged() {
+        // Round 13: the top rung's hysteresis reads the uncapped target
+        // (`JarScalePolicy.uncappedTargetScale`), so content churn around
+        // it steps the jar off once and holds. F3: the core's and the HUD's
+        // clearances judge only a pile that settles upright, so the phone's
+        // pose never steps the scale. Both hold together: held sideways or
+        // upside down the churn steps off the top once and holds, and a
+        // clearance the rows reach is not judged (the cap stays up); held
+        // upright again, the same rows are judged and step below it.
+        let top = JarScalePolicy.maximumScale
+        for pose in [Pose.landscapeLeft, .landscapeRight, .upsideDown] {
+            let scene = makeScene()
+            let interior = JarScene.interiorRect(sceneSize: scene.size)
+            let radius = loose(0).radius
+            func target(_ count: Int) -> CGFloat {
+                JarScalePolicy.uncappedTargetScale(
+                    baseArea: JarScalePolicy.baseArea(radii: Array(repeating: radius, count: count)),
+                    interiorArea: interior.width * interior.height
+                )
+            }
+            var count = 1
+            while target(count + 1) >= top { count += 1 }
+            let fewer = (0 ..< count).map { loose(200 + $0) }
+            let more = (0 ... count).map { loose(200 + $0) }
+            scene.setGravityReading(pose.reading, smoothing: false)
+            scene.pileClearances = [JarPileClearance(
+                minX: 0,
+                maxX: scene.size.width,
+                ceiling: interior.minY + 30,
+                minimumScale: JarScalePolicy.minimumScale
+            )]
+            scene.restore(pebbles: fewer)
+            XCTAssertEqual(scene.jarScale, top, "\(pose)")
+            XCTAssertFalse(scene.pileRestsOnTheFloor, "\(pose)")
+            let changes = scene.jarScaleChangeCount
+            var scales: [CGFloat] = []
+            for round in 0 ..< 12 {
+                scene.restore(pebbles: round.isMultiple(of: 2) ? more : fewer)
+                scales.append(scene.jarScale)
+            }
+            XCTAssertEqual(scene.jarScaleChangeCount, changes + 1, "\(pose): one step off the top: \(scales)")
+            XCTAssertEqual(scene.jarScale, top / JarScalePolicy.rungRatio, accuracy: 0.000_1, "\(pose)")
+            XCTAssertEqual(scene.pileHeightCap, top, "\(pose): the clearance never judges a pile off the floor")
+
+            scene.setGravityReading(Pose.portrait.reading, smoothing: false)
+            scene.restore(pebbles: fewer)
+            XCTAssertTrue(scene.pileRestsOnTheFloor, "\(pose), then upright")
+            XCTAssertLessThan(scene.pileHeightCap, top, "\(pose), then upright: the rows are judged")
+            XCTAssertLessThan(scene.jarScale, top / JarScalePolicy.rungRatio, "\(pose), then upright: they step below the band")
+        }
+    }
+
     // MARK: Headroom under the default gravity (D4, §7.5)
 
 #if DEBUG && targetEnvironment(simulator)
@@ -2118,6 +2319,57 @@ final class JarOrientationGravityTests: XCTestCase {
             gravityZ: pose.gravity.z,
             timestamp: 0
         )
+    }
+
+    /// A 記念石 (round 13: a moonstone cabochon; grams 0, its own radius).
+    private func keepsake(_ index: Int, _ kind: AchievementKind) -> PebbleDescriptor {
+        PebbleDescriptor(
+            id: UUID(uuidString: String(format: "F3000000-0000-4000-A000-%012X", index))!,
+            subjectName: "英語",
+            colorHex: Constants.Color.english,
+            source: .manual,
+            kind: .normal,
+            achievementKind: kind,
+            grams: 0,
+            createdAt: Date(timeIntervalSince1970: TimeInterval(3_000 + index))
+        )
+    }
+
+    /// Renders the scene the way its SKView shows it and returns RGBA
+    /// bytes (row 0 at the top).
+    private func render(_ scene: JarScene, in view: SKView) throws -> (width: Int, height: Int, bytes: [UInt8]) {
+        let texture = try XCTUnwrap(view.texture(from: scene, crop: CGRect(origin: .zero, size: scene.size)))
+        let image = texture.cgImage()
+        var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
+        bytes.withUnsafeMutableBytes { buffer in
+            let context = CGContext(
+                data: buffer.baseAddress,
+                width: image.width,
+                height: image.height,
+                bitsPerComponent: 8,
+                bytesPerRow: image.width * 4,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+            context?.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        }
+        return (image.width, image.height, bytes)
+    }
+
+    /// The largest alpha on the rendered image's outermost pixels.
+    private func edgeAlpha(_ pixels: (width: Int, height: Int, bytes: [UInt8])) -> Int {
+        var maximum = 0
+        for row in 0 ..< pixels.height {
+            for column in [0, pixels.width - 1] {
+                maximum = max(maximum, Int(pixels.bytes[(row * pixels.width + column) * 4 + 3]))
+            }
+        }
+        for column in 0 ..< pixels.width {
+            for row in [0, pixels.height - 1] {
+                maximum = max(maximum, Int(pixels.bytes[(row * pixels.width + column) * 4 + 3]))
+            }
+        }
+        return maximum
     }
 
     private func loose(_ index: Int, minutes: Int = 25, isTutorial: Bool = false) -> PebbleDescriptor {
