@@ -198,24 +198,27 @@ final class CloudVerificationPresentationUITests: XCTestCase {
         XCTAssertTrue(jar.waitForExistence(timeout: 10))
         // Pending without a verified total, then verified (after a re-read),
         // then pending again (a re-read again).
-        var timeline = sampledValues(of: jar, until: { !$0.contains("iCloudを確認中") && $0.contains("質量：") },
-                                     timeout: 30)
-        XCTAssertEqual(timeline.last?.contains("iCloudを確認中"), false, "Never verified: \(timeline)")
+        let isVerified = { (value: String) in
+            !value.contains("iCloudを確認中") && !value.hasPrefix(Self.loadingValue)
+        }
+        var timeline = sampledValues(of: jar, until: isVerified, timeout: 30)
+        XCTAssertEqual(timeline.last.map(isVerified), true, "Never verified: \(timeline)")
         timeline += sampledValues(of: jar, until: { $0.contains("iCloudを確認中") }, timeout: 25)
         XCTAssertEqual(timeline.last?.contains("iCloudを確認中"), true, "Never pending again: \(timeline)")
         saveScreenshot("reread-pending-again")
         timeline += sampledValues(of: jar, for: 4)
         saveScreenshot("reread-pending-settled")
+        attachTimeline("reread", timeline)
 
-        guard let firstVerified = timeline.firstIndex(where: { !$0.contains("iCloudを確認中") }),
+        guard let firstVerified = timeline.firstIndex(where: isVerified),
               let pendingAgain = timeline[firstVerified...].firstIndex(where: { $0.contains("iCloudを確認中") }) else {
             return XCTFail("No verified phase followed by a pending one: \(timeline)")
         }
-        // Before its first read Home has nothing to show; from verification
-        // on, every re-read keeps what was on screen.
-        let sinceVerified = timeline[firstVerified...]
-        XCTAssertFalse(sinceVerified.contains { $0.contains("質量：0グラム") || $0.contains("瓶の整理：0粒") },
-                       "The jar never reads empty while Home re-reads its page: \(sinceVerified)")
+        // From the first frame on (before its first read Home says it is
+        // loading), no re-read ever makes the jar read empty. (0 loose gems
+        // beside crystals is a fused jar, not an empty one.)
+        XCTAssertFalse(timeline.contains { $0.contains("質量：0グラム") || $0.contains("瓶の整理：0粒。") },
+                       "The jar never reads empty while Home reads its page: \(timeline)")
         // The total on screen when iCloud is checked again.
         let verifiedText = timeline[pendingAgain - 1]
         guard let massRange = verifiedText.range(of: "質量："),
@@ -223,11 +226,51 @@ final class CloudVerificationPresentationUITests: XCTestCase {
             return XCTFail("No verified mass in \(verifiedText)")
         }
         let mass = String(verifiedText[massRange.upperBound..<end.upperBound])
+        // Review of #56. Verification completing retires the page too. The
+        // pending readout held across it lost 「iCloudを確認中」, and its 128
+        // newest gems read as a verified lower bound (「32.00キログラム以上、
+        // 集計整理中」). Now the verified wording only ever carries the verified
+        // total: it first appears when the new page lands.
+        let verifiedPhase = timeline[firstVerified..<pendingAgain]
+        XCTAssertTrue(verifiedPhase.allSatisfy { $0.hasPrefix("記録した集中時間の質量：\(mass)。") },
+                      "Only the verified \(mass) in the verified wording: \(verifiedPhase)")
         let afterVerified = timeline[pendingAgain...]
         XCTAssertFalse(afterVerified.contains { $0.contains("これまでの合計は確認が済むと表示します") },
                        "A verified total exists: never 「再集計中」 while Home re-reads: \(afterVerified)")
         XCTAssertTrue(afterVerified.allSatisfy { $0.contains("iCloudを確認中。この端末で確認済みの集中時間の質量：\(mass)") },
                       "Pending again, the jar keeps the verified \(mass): \(afterVerified)")
+    }
+
+    /// Review of #56. Before its first read Home has no readout to hold: on
+    /// every launch, and every remount after the background grace, it said
+    /// 「再集計中」 over 「この端末で確認済み 0粒」 with an empty jar until the
+    /// read landed (about a second on the phone). The fixture slows that read
+    /// to six seconds, sampled from the first frame the test sees: Home says
+    /// it is loading and shows no number, and then its total.
+    func testHomeShowsNoNumberBeforeItsFirstRead() {
+        launch(verification: "pending", history: 3, rereadDelay: 6)
+        let jar = app.descendants(matching: .any)["瓶"]
+        XCTAssertTrue(jar.waitForExistence(timeout: 5))
+        let first = (jar.value as? String) ?? ""
+        XCTAssertTrue(first.hasPrefix(Self.loadingValue), "Before the first read: \(first)")
+        // The in-jar 「iCloudを確認中」 message is an empty jar's; this one is
+        // only still loading.
+        let emptyMessage = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label BEGINSWITH %@", "iCloudを確認中。この端末で確認できた記録")).firstMatch
+        XCTAssertFalse(emptyMessage.exists, "No empty-jar message before the first read")
+        saveScreenshot("first-read-loading")
+
+        let timeline = [first] + sampledValues(of: jar, until: { $0.contains("質量：") }, timeout: 15)
+        attachTimeline("first-read", timeline)
+        XCTAssertEqual(timeline.last?.contains("iCloudを確認中。この端末で確認済みの集中時間の質量：750グラム"), true,
+                       "\(timeline)")
+        XCTAssertFalse(timeline.contains {
+            $0.contains("質量：0グラム") || $0.contains("瓶の整理：0粒")
+                || $0.contains("これまでの合計は確認が済むと表示します")
+        }, "Never 0粒 or 「再集計中」 while Home reads its page: \(timeline)")
+        XCTAssertTrue(timeline.dropLast().allSatisfy { $0.hasPrefix(Self.loadingValue) },
+                      "Loading, then the total, with nothing in between: \(timeline)")
+        saveScreenshot("first-read-settled")
     }
 
     func testAX5PendingHomeStaysReadable() {
@@ -238,6 +281,21 @@ final class CloudVerificationPresentationUITests: XCTestCase {
     }
 
     // MARK: Helpers
+
+    /// The jar's VoiceOver value before Home has read its records.
+    private static let loadingValue = "これまでの記録を読み込み中"
+
+    /// Keeps a sampled timeline with the run, and beside the screenshots.
+    private func attachTimeline(_ name: String, _ timeline: [String]) {
+        let text = timeline.enumerated().map { "\($0.offset)\t\($0.element)" }.joined(separator: "\n")
+        let attachment = XCTAttachment(string: text)
+        attachment.name = "timeline-\(name)"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        guard let directory = ProcessInfo.processInfo.environment["POMOGEM_SHOTS_DIR"] else { return }
+        try? text.write(to: URL(fileURLWithPath: directory).appendingPathComponent("timeline-\(name).txt"),
+                        atomically: true, encoding: .utf8)
+    }
 
     private var demoLauncher: XCUIElement {
         app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "12秒集中する")).firstMatch

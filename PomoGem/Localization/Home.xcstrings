@@ -176,6 +176,9 @@
     "この結晶をカードにする" : {
       "comment" : "Fusion sheet action: makes a share card of the new crystal"
     },
+    "これまでの記録を読み込み中。記念石%@個" : {
+      "comment" : "VoiceOver, menu metrics before Home has read its records: achievement stone count"
+    },
     "しくみ" : {
       "comment" : "Disclosure that opens how gems, crystals and the time core work. en: 'How it works'"
     },

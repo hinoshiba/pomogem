@@ -43,6 +43,9 @@
         }
       }
     },
+    "これまでの記録を読み込み中" : {
+      "comment" : "VoiceOver, jar value before Home has read its focus records"
+    },
     "最新の結晶の内訳を見る" : {
       "comment" : "VoiceOver custom action on the jar"
     }
