@@ -87,12 +87,18 @@ struct AchievementEntrySheet: View {
             }
             }
             .background(NightBackground())
-            .navigationTitle(selectedKind == nil ? "成果を選ぶ" : "記念石にする")
+            .navigationTitle(
+                selectedKind == nil
+                    ? Text("成果を選ぶ", tableName: "Home", comment: "Achievement sheet title, first step: pick the kind of achievement")
+                    : Text("記念石にする", tableName: "Home", comment: "Achievement sheet title, second step: the details of the milestone stone")
+            )
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 if selectedKind != nil {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button("戻る") { selectedKind = nil }
+                        Button(String(localized: "戻る", table: "Home", comment: "Achievement sheet: back to the kind of achievement")) {
+                            selectedKind = nil
+                        }
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -110,7 +116,7 @@ struct AchievementEntrySheet: View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
                 SectionEyebrow(text: "MILESTONE")
-                Text("どんな成果だった？")
+                Text("どんな成果だった？", tableName: "Home", comment: "Achievement sheet heading above the kinds of achievement")
                     .font(PomoGemTheme.brand(26))
                 Text(achievementIntroduction)
                     .font(.subheadline)
@@ -153,7 +159,11 @@ struct AchievementEntrySheet: View {
     }
 
     private var achievementIntroduction: String {
-        "満点・試験合格・納品・公開などの節目を、集中時間とは別のひとまわり大きな記念石として残せます。"
+        String(
+            localized: "満点・試験合格・納品・公開などの節目を、集中時間とは別のひとまわり大きな記念石として残せます。",
+            table: "Home",
+            comment: "Achievement sheet introduction: what a milestone stone is for"
+        )
     }
 
     private func detailsStep(kind: AchievementKind) -> some View {
@@ -166,7 +176,11 @@ struct AchievementEntrySheet: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(kind.title)
                         .font(PomoGemTheme.brand(24))
-                    Text(selectedSubject?.safeDisplayName ?? "テーマを選んでください")
+                    Text(selectedSubject?.safeDisplayName ?? String(
+                        localized: "テーマを選んでください",
+                        table: "Home",
+                        comment: "Achievement details: shown under the kind while no theme is chosen"
+                    ))
                         .font(.subheadline)
                         .foregroundStyle(PomoGemTheme.muted)
                 }
@@ -175,7 +189,11 @@ struct AchievementEntrySheet: View {
             ThemeSelectionMenu(
                 subjects: subjects,
                 selectedID: $selectedSubjectID,
-                accessibilityHint: "成果を結びつけるテーマを変更できます",
+                accessibilityHint: String(
+                    localized: "成果を結びつけるテーマを変更できます",
+                    table: "Home",
+                    comment: "VoiceOver hint of the achievement sheet's theme menu"
+                ),
                 accessibilityIdentifier: "achievement.create.subject-picker"
             )
 
@@ -189,7 +207,7 @@ struct AchievementEntrySheet: View {
             .id(Self.noteFieldScrollID)
 
             DatePicker(
-                "達成した日",
+                String(localized: "達成した日", table: "Home", comment: "Achievement details: date picker label"),
                 selection: $achievedAt,
                 in: ...Date.now,
                 displayedComponents: .date
@@ -251,7 +269,10 @@ struct AchievementEntrySheet: View {
                 if isSubmitting {
                     ProgressView().tint(PomoGemTheme.background)
                 } else {
-                    Label("この成果を積む", systemImage: "medal.fill")
+                    Label(
+                        String(localized: "この成果を積む", table: "Home", comment: "Achievement sheet save button"),
+                        systemImage: "medal.fill"
+                    )
                 }
             }
             .buttonStyle(PomoGemPrimaryButtonStyle())
