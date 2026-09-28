@@ -106,7 +106,7 @@ final class TimerCompletionAlarmPlaybackTests: XCTestCase {
         uptime += 1
         await gate.waitForSleep()
         await gate.resumeNext()
-        await settle()
+        await waitUntil { controller.isSilenced }
         XCTAssertTrue(controller.isActive(sessionID: alarm.sessionID), "The Stop control stays")
         XCTAssertTrue(controller.isSilenced)
         XCTAssertFalse(controller.isRinging(sessionID: alarm.sessionID))
@@ -217,7 +217,7 @@ final class TimerCompletionAlarmPlaybackTests: XCTestCase {
         await gate.waitForSleeps(count: 2)
         await gate.resumeNext()
         await gate.resumeNext()
-        await settle()
+        await waitUntil { controller.isSilenced }
         XCTAssertTrue(controller.isSilenced, "Three minutes from the end, not from the remount")
 
         controller.suspendForContainerRetirement()
@@ -226,6 +226,39 @@ final class TimerCompletionAlarmPlaybackTests: XCTestCase {
         XCTAssertTrue(controller.isActive(sessionID: alarm.sessionID))
         XCTAssertTrue(controller.isSilenced, "An alarm that had gone quiet comes back quiet")
         XCTAssertFalse(player.events[before...].contains(.sustain(.bell)))
+        controller.stop()
+    }
+
+    /// Suspended at 2:59 by an account check that took longer than the
+    /// second left: the restored alarm is already past its automatic stop,
+    /// so it must come back quiet instead of sounding for another cycle.
+    func testAnAlarmRestoredAfterItsAutomaticStopComesBackQuiet() async {
+        let controller = makeController(strength: .maximum)
+        let alarm = configuration()
+        controller.start(alarm)
+        uptime += AlarmStrength.automaticStopDuration - 1
+        controller.suspendForContainerRetirement()
+        uptime += 5
+        let before = player.events.count
+
+        XCTAssertTrue(controller.resumeSuspendedAlert(sessionID: alarm.sessionID))
+        XCTAssertTrue(controller.isActive(sessionID: alarm.sessionID), "The Stop control stays")
+        XCTAssertTrue(controller.isSilenced)
+        XCTAssertFalse(controller.keepsScreenAwake(sessionID: alarm.sessionID))
+        XCTAssertFalse(player.events[before...].contains(.sustain(.bell)), "Not one more cycle")
+        controller.stop()
+    }
+
+    func testAnAlarmRestoredBeforeItsAutomaticStopRingsAtOnce() {
+        let controller = makeController(strength: .standard)
+        let alarm = configuration()
+        controller.start(alarm)
+        uptime += 60
+        controller.suspendForContainerRetirement()
+        let before = player.events.count
+        XCTAssertTrue(controller.resumeSuspendedAlert(sessionID: alarm.sessionID))
+        XCTAssertFalse(controller.isSilenced)
+        XCTAssertEqual(Array(player.events[before...]), [.sustain(.bell)])
         controller.stop()
     }
 
@@ -244,6 +277,54 @@ final class TimerCompletionAlarmPlaybackTests: XCTestCase {
         XCTAssertEqual(controller.activeRequest?.sound, .soft)
         XCTAssertFalse(controller.keepsScreenAwake(sessionID: alarm.sessionID))
         controller.stop()
+    }
+
+    // MARK: The Settings preview
+
+    /// 「3秒後に試す」 must let people who miss alarms feel what 標準 and
+    /// 最大 play: the loop and the continuous vibration, bounded.
+    func testThePreviewPlaysTheStrengthsLoopForAFewSecondsThenStops() async {
+        let sleeps = PreviewSleeps()
+        let preview = TimerCompletionAlarmPreview(player: player) { try await sleeps.sleep($0) }
+        for strength in [AlarmStrength.standard, .maximum] {
+            let before = player.events.count
+            let request = TimerCompletionAlarmRequest.resolve(
+                configuration: configuration(), cue: .repeating, strength: strength, sound: .bell
+            )
+            preview.play(request)
+            XCTAssertEqual(Array(player.events[before...]), [.sustain(.bell)], "\(strength)")
+            XCTAssertEqual(player.requests.last?.plan.haptic?.loopDuration, request.plan.haptic?.loopDuration)
+            XCTAssertNotNil(request.plan.haptic?.loopDuration, "the continuous vibration, not the taps")
+            XCTAssertTrue(preview.isLooping)
+            await sleeps.waitForSleep()
+            XCTAssertEqual(sleeps.durations.last, TimerCompletionAlarmPreview.loopDuration)
+            sleeps.resume()
+            await waitUntil { !preview.isLooping }
+            XCTAssertEqual(Array(player.events[before...]), [.sustain(.bell), .stop], "\(strength)")
+        }
+
+        let before = player.events.count
+        preview.play(TimerCompletionAlarmRequest.resolve(
+            configuration: configuration(), cue: .repeating, strength: .gentle, sound: .soft
+        ))
+        XCTAssertEqual(Array(player.events[before...]), [.cue(.soft)], "控えめ: one cue, as before")
+        XCTAssertFalse(preview.isLooping)
+    }
+
+    func testCancellingThePreviewStopsTheLoopAtOnce() async {
+        let sleeps = PreviewSleeps()
+        let preview = TimerCompletionAlarmPreview(player: player) { try await sleeps.sleep($0) }
+        preview.play(TimerCompletionAlarmRequest.resolve(
+            configuration: configuration(), cue: .repeating, strength: .maximum, sound: .digital
+        ))
+        await sleeps.waitForSleep()
+        preview.cancel()
+        XCTAssertEqual(player.events, [.sustain(.digital), .stop])
+        sleeps.resume()
+        await settle()
+        XCTAssertEqual(player.events, [.sustain(.digital), .stop], "one stop only")
+        preview.cancel()
+        XCTAssertEqual(player.events.count, 2, "nothing to stop")
     }
 
     // MARK: Resolution
@@ -271,8 +352,21 @@ final class TimerCompletionAlarmPlaybackTests: XCTestCase {
         XCTAssertEqual(muted.plan.audioSession, .ambient)
     }
 
+    /// A few turns of the main actor, for an assertion that nothing more
+    /// happens (a negative cannot be polled).
     private func settle() async {
         for _ in 0 ..< 20 { await Task.yield() }
+    }
+
+    /// Yields until `condition` holds (bounded), for an assertion that
+    /// something happened: the resumed loop hops off and back onto the main
+    /// actor, which may take more than a few turns on a loaded machine.
+    private func waitUntil(_ condition: () -> Bool) async {
+        var turns = 0
+        while !condition(), turns < 10_000 {
+            turns += 1
+            await Task.yield()
+        }
     }
 }
 
@@ -333,4 +427,29 @@ private actor AlarmSleepGate {
 @MainActor
 private final class PlayedConfigurations {
     var values: [TimerCompletionAlertConfiguration] = []
+}
+
+@MainActor
+private final class PreviewSleeps {
+    private(set) var durations: [TimeInterval] = []
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+
+    func sleep(_ duration: TimeInterval) async throws {
+        durations.append(duration)
+        await withCheckedContinuation { waiting.append($0) }
+    }
+
+    func waitForSleep() async {
+        var turns = 0
+        while waiting.isEmpty, turns < 10_000 {
+            turns += 1
+            await Task.yield()
+        }
+    }
+
+    func resume() {
+        let continuations = waiting
+        waiting.removeAll()
+        continuations.forEach { $0.resume() }
+    }
 }

@@ -186,3 +186,65 @@ final class LiveTimerCompletionAlarmPlayer: TimerCompletionAlarmPlayer {
         haptics.stopTimerCompletion()
     }
 }
+
+/// The Settings preview (「3秒後に試す」) plays what the chosen strength
+/// plays: one cue at the gentle preset, as before; at the standard and
+/// maximum presets the loop and its continuous vibration for
+/// `loopDuration`, then Stop (which also gives ducked music back). Never
+/// longer: a preview must not become an alarm.
+@MainActor
+final class TimerCompletionAlarmPreview {
+    typealias Sleeper = @Sendable (TimeInterval) async throws -> Void
+
+    static let shared = TimerCompletionAlarmPreview(player: LiveTimerCompletionAlarmPlayer())
+    /// Long enough for one full cycle of every sound and vibration.
+    static let loopDuration: TimeInterval = 3
+
+    private let player: TimerCompletionAlarmPlayer
+    private let sleeper: Sleeper
+    private var stopTask: Task<Void, Never>?
+
+    init(
+        player: TimerCompletionAlarmPlayer,
+        sleeper: @escaping Sleeper = { try await Task.sleep(for: .seconds($0)) }
+    ) {
+        self.player = player
+        self.sleeper = sleeper
+    }
+
+    var isLooping: Bool { stopTask != nil }
+
+    /// `request` resolved with the `.repeating` cue, as a completion on
+    /// screen would ring.
+    func play(_ request: TimerCompletionAlarmRequest) {
+        cancel()
+        switch request.plan.playback {
+        case .loop:
+            player.sustainLoop(request)
+            let sleeper = self.sleeper
+            let duration = Self.loopDuration
+            stopTask = Task { @MainActor [weak self] in
+                do {
+                    try await sleeper(duration)
+                } catch {
+                    return
+                }
+                guard let self, !Task.isCancelled else { return }
+                self.stopTask = nil
+                self.player.stop()
+            }
+        case .once, .repeating:
+            player.playCue(request)
+        case .none:
+            break
+        }
+    }
+
+    /// Stops a looping preview at once (another preview, leaving Settings).
+    func cancel() {
+        guard let stopTask else { return }
+        stopTask.cancel()
+        self.stopTask = nil
+        player.stop()
+    }
+}

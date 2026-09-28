@@ -216,6 +216,112 @@ final class SoundSynthOutputTests: XCTestCase {
         XCTAssertFalse(maximum.options.contains(.defaultToSpeaker))
     }
 
+    /// Both sustain calls are idempotent, so without `.loops` the standard
+    /// and maximum presets would play one cycle and go quiet while the
+    /// screen stays on for three minutes.
+    func testTheAlarmBufferLoops() {
+        XCTAssertTrue(AVSoundSynthOutput.alarmLoopBufferOptions.contains(.loops))
+        XCTAssertTrue(AVSoundSynthOutput.alarmLoopBufferOptions.contains(.interrupts))
+    }
+
+    func testTheHapticLoopUsesALoopingAdvancedPlayer() throws {
+        for strength in [AlarmStrength.standard, .maximum] {
+            let pattern = AlarmHapticPattern.completion(strength: strength, style: .standard)
+            let loopDuration = try XCTUnwrap(pattern.loopDuration)
+            let cue = try XCTUnwrap(Haptics.timerCompletionLoopCue(pattern))
+            XCTAssertEqual(cue.playerConfiguration, .advanced(loopEnd: loopDuration), "\(strength)")
+        }
+        let gentle = AlarmHapticPattern.completion(strength: .gentle, style: .standard)
+        XCTAssertNil(Haptics.timerCompletionLoopCue(gentle), "控えめ never loops")
+    }
+
+    // MARK: - F5 the production player
+
+    private func request(
+        strength: AlarmStrength,
+        cue: TimerCompletionForegroundFeedbackPolicy.Cue
+    ) -> TimerCompletionAlarmRequest {
+        TimerCompletionAlarmRequest.resolve(
+            configuration: TimerCompletionAlertConfiguration(sessionID: UUID(), sound: .standard, haptic: nil),
+            cue: cue,
+            strength: strength,
+            sound: .bell
+        )
+    }
+
+    /// Stop must give the session back: after a silent-switch override
+    /// the person's music would otherwise stay ducked.
+    func testTheLivePlayerOverridesTheSilentSwitchAtMaximumAndStopGivesTheMusicBack() async {
+        let fixture = Fixture()
+        await fixture.synth.prepareAlarmSoundAndWait(.bell)
+        let player = LiveTimerCompletionAlarmPlayer(sound: fixture.synth)
+        let maximum = request(strength: .maximum, cue: .repeating)
+        XCTAssertEqual(maximum.plan.audioSession, .playbackDuckingOthers)
+
+        player.sustainLoop(maximum)
+        fixture.drain()
+        XCTAssertEqual(fixture.output.calls.map(\.name), [
+            "useSessionMode(playbackDuckingOthers)",
+            "ensureRunning",
+            "playTimerCompletionLoop"
+        ])
+        XCTAssertTrue(fixture.synth.isTimerCompletionLoopRequested)
+
+        player.stop()
+        fixture.drain()
+        XCTAssertEqual(Array(fixture.output.calls.map(\.name).suffix(2)), [
+            "stop(deactivatingSession: true)",
+            "useSessionMode(ambient)"
+        ])
+        XCTAssertFalse(fixture.synth.isTimerCompletionLoopRequested)
+        XCTAssertEqual(fixture.synth.currentAlarmSessionMode, .ambient)
+    }
+
+    func testTheLivePlayerKeepsTheStandardLoopAmbient() async {
+        let fixture = Fixture()
+        await fixture.synth.prepareAlarmSoundAndWait(.bell)
+        let player = LiveTimerCompletionAlarmPlayer(sound: fixture.synth)
+        player.sustainLoop(request(strength: .standard, cue: .repeating))
+        fixture.drain()
+        player.stop()
+        fixture.drain()
+        XCTAssertFalse(fixture.output.calls.contains { $0.name.hasPrefix("useSessionMode") })
+        XCTAssertEqual(fixture.output.calls.last?.name, "stopTimerCompletion")
+    }
+
+    /// The single cue at 最大 (a return shortly after the end, and the
+    /// Settings preview) ducks the music too. Only its idle shutdown gives
+    /// the music back, so it must release the session and return to
+    /// `.ambient`.
+    func testASingleCueAtMaximumReleasesTheSessionAfterItPlays() async throws {
+        let checks = ManualIdleChecks()
+        let fixture = Fixture(idleLinger: 0.4, idleChecks: checks)
+        await fixture.synth.prepareAlarmSoundAndWait(.bell)
+        let player = LiveTimerCompletionAlarmPlayer(sound: fixture.synth)
+        player.playCue(request(strength: .maximum, cue: .single))
+        fixture.drain()
+        XCTAssertEqual(fixture.output.calls.map(\.name), [
+            "useSessionMode(playbackDuckingOthers)",
+            "ensureRunning",
+            "playTimerCompletion"
+        ])
+        XCTAssertLessThanOrEqual(
+            try XCTUnwrap(checks.pending.last).delay,
+            1.0 + 0.25 + 0.01,
+            "The cue, then a short linger: ducking lasts no longer than it must"
+        )
+        for _ in 0 ..< 80 where fixture.output.calls.last?.name != "useSessionMode(ambient)" {
+            fixture.wait(seconds: 0.05)
+            checks.fireAll()
+            fixture.drain()
+        }
+        XCTAssertEqual(Array(fixture.output.calls.map(\.name).suffix(2)), [
+            "stop(deactivatingSession: true)",
+            "useSessionMode(ambient)"
+        ])
+        XCTAssertEqual(fixture.synth.currentAlarmSessionMode, .ambient)
+    }
+
     func testALoopKeepsTheEngineUntilItStopsThenLingersAsUsual() async throws {
         let checks = ManualIdleChecks()
         let fixture = Fixture(idleLinger: 0.4, idleChecks: checks)

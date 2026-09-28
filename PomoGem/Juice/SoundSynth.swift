@@ -459,11 +459,20 @@ final class TimerCompletionAlertController {
         guard let memory = suspended,
               memory.configuration.sessionID == sessionID else { return false }
         suspended = nil
-        start(memory.configuration, playsImmediately: !memory.wasSilenced)
-        guard isActive(sessionID: sessionID) else { return false }
+        // Armed silently first: whether it may sound depends on the original
+        // start, which `start` does not know.
+        start(memory.configuration, playsImmediately: false)
+        guard isActive(sessionID: sessionID), let request = activeRequest else { return false }
         ringStartedAt = memory.ringStartedAt
-        if memory.wasSilenced {
+        // The automatic stop may have come while it was suspended (an
+        // account check that outlasted the time left): it comes back quiet.
+        let reachedAutomaticStop = request.plan.automaticStopInterval.map {
+            uptime() - ringStartedAt >= $0
+        } ?? false
+        if memory.wasSilenced || reachedAutomaticStop {
             silence()
+        } else if applicationIsActive() {
+            perform(request)
         }
         return true
     }
@@ -1592,6 +1601,12 @@ final class AVSoundSynthOutput: SoundSynthOutput, @unchecked Sendable {
         .mixWithOthers,
         .duckOthers
     ]
+    /// F5: the alarm's one seamless cycle repeats until Stop (`.loops`) and
+    /// replaces whatever the completion player was playing (`.interrupts`).
+    /// Without `.loops` the standard and maximum presets would play one
+    /// cycle and fall silent while the screen stays on (the controller only
+    /// asks again after a stop). SoundSynthOutputTests pin it.
+    static let alarmLoopBufferOptions: AVAudioPlayerNodeBufferOptions = [.loops, .interrupts]
 
     static func sessionConfiguration(
         for mode: AlarmAudioSessionMode
@@ -1726,7 +1741,7 @@ final class AVSoundSynthOutput: SoundSynthOutput, @unchecked Sendable {
         guard isEngineConfigured, engine.isRunning else { return }
         timerCompletionPlayer.stop()
         timerCompletionPlayer.volume = volume
-        timerCompletionPlayer.scheduleBuffer(buffer, at: nil, options: [.loops, .interrupts])
+        timerCompletionPlayer.scheduleBuffer(buffer, at: nil, options: Self.alarmLoopBufferOptions)
         timerCompletionPlayer.play()
         isTimerCompletionPlayerPrimed = true
     }
