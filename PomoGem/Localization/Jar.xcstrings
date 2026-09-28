@@ -1,6 +1,17 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "%@、%@の記念石、質量には含まれません" : {
+      "comment" : "VoiceOver, a milestone stone in the jar: the theme's name, then the milestone's title; the stone adds no mass",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@、%2$@の記念石、質量には含まれません"
+          }
+        }
+      }
+    },
     "%@。「最新の結晶の内訳を見る」アクションで、保存されている粒数や質量などを確認できます" : {
       "comment" : "VoiceOver jar hint: the tap/tilt hint, then the custom action that opens the newest crystal"
     },
@@ -29,6 +40,23 @@
     "%@。これまでの合計は確認が済むと表示します" : {
       "comment" : "VoiceOver, jar while iCloud is checked and no lifetime total can be shown: status"
     },
+    "%@など" : {
+      "comment" : "VoiceOver, a crystal of several themes: the name of the theme with the most gems, then 'and others'"
+    },
+    "%lld粒、%lld個の結晶を含む結晶" : {
+      "comment" : "VoiceOver, a ×100 or larger crystal: the number of gems it holds, then the number of smaller crystals in it",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld粒、%2$lld個の結晶を含む結晶"
+          }
+        }
+      }
+    },
+    "%lld粒を含む結晶" : {
+      "comment" : "VoiceOver, a ×10 crystal: the number of gems it holds"
+    },
     "、旧形式の結晶%lld個（保存済み情報を確認できます）" : {
       "comment" : "VoiceOver jar value fragment: crystals saved in the old format"
     },
@@ -43,8 +71,47 @@
         }
       }
     },
+    "勉強アプリの粒" : {
+      "comment" : "VoiceOver, a gem from the time spent in study apps (Screen Time)"
+    },
+    "勉強アプリの虹の粒" : {
+      "comment" : "VoiceOver, a prism (rainbow) gem from the time spent in study apps (Screen Time)"
+    },
+    "勉強アプリの金の粒" : {
+      "comment" : "VoiceOver, a gold gem from the time spent in study apps (Screen Time)"
+    },
+    "実測%lld粒" : {
+      "comment" : "VoiceOver, a crystal: how many of its gems were measured (timer or Screen Time)"
+    },
+    "実測の粒" : {
+      "comment" : "VoiceOver, a gem measured by the timer"
+    },
+    "実測の虹の粒" : {
+      "comment" : "VoiceOver, a prism (rainbow) gem measured by the timer"
+    },
+    "実測の金の粒" : {
+      "comment" : "VoiceOver, a gold gem measured by the timer"
+    },
     "最新の結晶の内訳を見る" : {
       "comment" : "VoiceOver custom action on the jar"
+    },
+    "自己申告%lld粒" : {
+      "comment" : "VoiceOver, a crystal: how many of its gems were entered by hand"
+    },
+    "自己申告の粒" : {
+      "comment" : "VoiceOver, a gem entered by hand"
+    },
+    "自己申告の虹の粒" : {
+      "comment" : "VoiceOver, a prism (rainbow) gem entered by hand"
+    },
+    "自己申告の金の粒" : {
+      "comment" : "VoiceOver, a gold gem entered by hand"
+    },
+    "虹%lld粒" : {
+      "comment" : "VoiceOver, a crystal: how many of its gems are prism (rainbow)"
+    },
+    "金%lld粒" : {
+      "comment" : "VoiceOver, a crystal: how many of its gems are gold"
     }
   },
   "version" : "1.0"
