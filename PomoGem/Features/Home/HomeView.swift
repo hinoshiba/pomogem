@@ -6132,8 +6132,10 @@ private struct StratumCelebrationView: View {
                 .scrollBounceBehavior(.basedOnSize)
             }
             .background(NightBackground())
-            // Scrolled content passes under a bar, not under the bare 閉じる.
-            .toolbarBackground(PomoGemTheme.background.opacity(0.94), for: .navigationBar)
+            // Scrolled content passes under a solid bar, not under the bare
+            // 閉じる. Opaque: iOS 26 let a 0.94 bar show the headline and the
+            // source gems legibly through it.
+            .toolbarBackground(PomoGemTheme.background, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     PomoGemSheetCloseButton(
