@@ -11,7 +11,10 @@ import Foundation
 /// `scheduleBreakCompletion` today (start, resume, recovery, adoption).
 /// Every existing cancel keeps working unchanged: `NotificationManager
 /// .cancelFocusCompletion` and `cancelBreakCompletion` also cancel the
-/// alarm.
+/// alarm (and stop one that is ringing, keeping it as the witness). At the
+/// end: `handOffToForegroundIfDue` from the ticker,
+/// `book…EndAfterLeavingDuringHandoff` when the scene stops being active
+/// after a hand-off, and `externalAlertMayHaveFired` for the cue.
 @MainActor
 final class TimerEndAnnouncementBooker {
     enum Outcome: Equatable, Sendable {
@@ -89,6 +92,118 @@ final class TimerEndAnnouncementBooker {
             endDate: endDate,
             playsSound: playsSound,
             completionSound: completionSound
+        )
+    }
+
+    // MARK: The end (part 2 calls these from the timer screens)
+
+    /// The app is active at most `AlarmChannelPolicy.foregroundHandoffLead`
+    /// before `endDate`: the session's system alarm that has not rung is
+    /// cancelled, so the in-app alarm is the only one that rings. Returns
+    /// the end the app now announces alone, or nil when nothing was handed
+    /// off (not due yet, the app is not active, the end has passed, or no
+    /// alarm is booked for the session). Call it from the timer's ticker;
+    /// repeated calls are harmless.
+    @discardableResult
+    func handOffToForegroundIfDue(
+        sessionID: UUID,
+        endDate: Date,
+        applicationIsActive: Bool,
+        now: Date = .now
+    ) -> Date? {
+        guard AlarmChannelPolicy.shouldHandOffToForeground(
+            applicationIsActive: applicationIsActive,
+            endDate: endDate,
+            now: now
+        ) else { return nil }
+        return systemAlarms.handOffToForeground(sessionID: sessionID)
+    }
+
+    /// After `handOffToForegroundIfDue` returned `endDate`, the scene stopped
+    /// being active before that end (locked, the app switcher): nothing else
+    /// would announce it, so the notification is booked at once
+    /// (`AlarmChannelPolicy.channelAfterLeavingDuringHandoff`). Nil when
+    /// nothing is booked: the end has passed (the in-app alarm has started,
+    /// and leaving it counts as Stop), or notifications are not allowed.
+    func bookFocusEndAfterLeavingDuringHandoff(
+        sessionID: UUID,
+        endDate: Date,
+        playsSound: Bool,
+        completionSound: TimerCompletionSound,
+        now: Date = .now
+    ) async throws -> TimerCompletionNotificationScheduleResult? {
+        try await bookAfterLeavingDuringHandoff(
+            sessionID: sessionID,
+            phase: .focus,
+            endDate: endDate,
+            playsSound: playsSound,
+            completionSound: completionSound,
+            now: now
+        )
+    }
+
+    /// `bookFocusEndAfterLeavingDuringHandoff` for a break.
+    func bookBreakEndAfterLeavingDuringHandoff(
+        id: UUID,
+        endDate: Date,
+        playsSound: Bool,
+        completionSound: TimerCompletionSound,
+        now: Date = .now
+    ) async throws -> TimerCompletionNotificationScheduleResult? {
+        try await bookAfterLeavingDuringHandoff(
+            sessionID: id,
+            phase: .breakTime,
+            endDate: endDate,
+            playsSound: playsSound,
+            completionSound: completionSound,
+            now: now
+        )
+    }
+
+    /// The delivery witness for the in-app cue at a resolved end: an
+    /// accepted notification whose delivery date passed, or a system alarm
+    /// AlarmKit confirmed whose time came (while alarms are still allowed).
+    /// Part 2 hands this to the foreground cue decision (#49's resolver) in
+    /// place of the notification-only witness. Reading it changes nothing.
+    func externalAlertMayHaveFired(
+        sessionID: UUID,
+        notificationAuthorized: Bool,
+        notificationDeliveryDate: Date?,
+        now: Date = .now
+    ) -> Bool {
+        AlarmChannelPolicy.externalAlertMayHaveFired(
+            notificationAuthorized: notificationAuthorized,
+            notificationDeliveryDate: notificationDeliveryDate,
+            systemAlarmAuthorized: systemAlarms.authorization == .authorized,
+            systemAlarmFireDate: systemAlarms.deliveryWitnessFireDate(sessionID: sessionID),
+            now: now
+        )
+    }
+
+    private func bookAfterLeavingDuringHandoff(
+        sessionID: UUID,
+        phase: FocusEndAlarmPhase,
+        endDate: Date,
+        playsSound: Bool,
+        completionSound: TimerCompletionSound,
+        now: Date
+    ) async throws -> TimerCompletionNotificationScheduleResult? {
+        guard notifications.isAuthorized,
+              let channel = AlarmChannelPolicy.channelAfterLeavingDuringHandoff(
+                  endDate: endDate,
+                  now: now,
+                  strength: preferences.strength,
+                  soundEnabled: playsSound,
+                  notificationsAuthorized: true
+              )
+        else { return nil }
+        return try await schedule(
+            sessionID: sessionID,
+            phase: phase,
+            endDate: endDate,
+            playsSound: playsSound,
+            completionSound: completionSound,
+            channel: channel
         )
     }
 

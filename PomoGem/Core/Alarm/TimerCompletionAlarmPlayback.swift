@@ -80,6 +80,23 @@ struct TimerCompletionAlarmRequest: Equatable, Sendable {
     }
 }
 
+/// Whether a timer screen holds the display (F5). The completion alarm at
+/// the standard and maximum presets holds it while it rings
+/// (`TimerCompletionAlertController.keepsScreenAwake(sessionID:)`), whatever
+/// the keep-awake preference, so auto-lock cannot end it: leaving the app
+/// counts as Stop. Only while the scene is active, and released once the
+/// alarm stops or goes quiet by itself. Part 2 combines this with the
+/// running timer's `TimerScreenAwakePolicy`.
+enum TimerCompletionAlarmScreenAwakePolicy {
+    static func shouldKeepScreenAwake(
+        runningTimerKeepsScreenAwake: Bool,
+        sceneIsActive: Bool,
+        alarmKeepsScreenAwake: Bool
+    ) -> Bool {
+        runningTimerKeepsScreenAwake || (sceneIsActive && alarmKeepsScreenAwake)
+    }
+}
+
 /// The hardware side of the in-app alarm. `TimerCompletionAlertController`
 /// decides when; this plays.
 @MainActor

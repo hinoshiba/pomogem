@@ -304,4 +304,108 @@ final class TimerEndAlarmChannelTests: XCTestCase {
         XCTAssertTrue(client.scheduled.isEmpty)
         XCTAssertTrue(pending.isEmpty)
     }
+
+    // MARK: The end (part 2 calls these too)
+
+    func testTheHandOffCancelsTheAlarmOnlyWhenTheAppIsActiveJustBeforeTheEnd() async throws {
+        let manager = makeManager()
+        await manager.refreshAuthorizationStatus()
+        preferences.setStrength(.maximum)
+        let booker = makeBooker(manager)
+        let session = UUID()
+        let end = clock.addingTimeInterval(600)
+        guard case let .systemAlarm(booking) = try await booker.bookFocusEnd(
+            sessionID: session, endDate: end, playsSound: true, completionSound: .standard
+        ) else { return XCTFail("the alarm was not booked") }
+
+        XCTAssertNil(booker.handOffToForegroundIfDue(
+            sessionID: session, endDate: end, applicationIsActive: true, now: end.addingTimeInterval(-10)
+        ), "Too early")
+        XCTAssertNil(booker.handOffToForegroundIfDue(
+            sessionID: session, endDate: end, applicationIsActive: false, now: end.addingTimeInterval(-1)
+        ), "Not looking at the timer")
+        XCTAssertNil(booker.handOffToForegroundIfDue(
+            sessionID: session, endDate: end, applicationIsActive: true, now: end
+        ), "At the end the system alarm may already ring: resolve it instead")
+        XCTAssertEqual(scheduler.booking, booking)
+        XCTAssertTrue(client.cancelled.isEmpty)
+
+        XCTAssertEqual(booker.handOffToForegroundIfDue(
+            sessionID: session, endDate: end, applicationIsActive: true, now: end.addingTimeInterval(-1)
+        ), end)
+        XCTAssertNil(scheduler.booking, "The in-app alarm is the only one now")
+        XCTAssertEqual(client.cancelled, [booking.alarmID])
+        XCTAssertNil(focusRequest)
+
+        // Locked before the end: the notification is booked at once, never
+        // AlarmKit again, with this iPhone's long sound.
+        let left = try await booker.bookFocusEndAfterLeavingDuringHandoff(
+            sessionID: session, endDate: end, playsSound: true, completionSound: .standard,
+            now: end.addingTimeInterval(-0.5)
+        )
+        guard case .accepted = left else { return XCTFail("\(String(describing: left))") }
+        XCTAssertEqual(focusRequest?.content.interruptionLevel, .timeSensitive)
+        XCTAssertEqual(requestedFiles.last, .ringtone(.standard))
+        XCTAssertEqual(client.scheduled.count, 0)
+
+        // After the end the in-app alarm has started: leaving it is Stop.
+        pending.removeAll()
+        let late = try await booker.bookFocusEndAfterLeavingDuringHandoff(
+            sessionID: session, endDate: end, playsSound: true, completionSound: .standard,
+            now: end.addingTimeInterval(0.1)
+        )
+        XCTAssertNil(late)
+        XCTAssertNil(focusRequest)
+
+        let rest = try await booker.bookBreakEndAfterLeavingDuringHandoff(
+            id: UUID(), endDate: end, playsSound: true, completionSound: .standard,
+            now: end.addingTimeInterval(-0.5)
+        )
+        guard case .accepted = rest else { return XCTFail("\(String(describing: rest))") }
+        XCTAssertNotNil(breakRequest)
+    }
+
+    func testLeavingDuringAHandOffBooksNothingWithoutNotificationPermission() async throws {
+        let manager = makeManager()
+        let booker = makeBooker(manager)
+        XCTAssertFalse(manager.isAuthorized)
+        let end = clock.addingTimeInterval(600)
+        let left = try await booker.bookFocusEndAfterLeavingDuringHandoff(
+            sessionID: UUID(), endDate: end, playsSound: true, completionSound: .standard,
+            now: end.addingTimeInterval(-1)
+        )
+        XCTAssertNil(left)
+        XCTAssertTrue(pending.isEmpty)
+    }
+
+    func testTheAlarmIsADeliveryWitnessOnceItsTimeCame() async throws {
+        let manager = makeManager()
+        let booker = makeBooker(manager)
+        let session = UUID()
+        let end = clock.addingTimeInterval(600)
+        guard case let .booked(booking) = await scheduler.schedule(
+            sessionID: session, phase: .focus, endDate: end, soundFileName: nil
+        ) else { return XCTFail("the alarm was not booked") }
+        func witnessed(_ now: Date) -> Bool {
+            booker.externalAlertMayHaveFired(
+                sessionID: session, notificationAuthorized: false, notificationDeliveryDate: nil, now: now
+            )
+        }
+        XCTAssertFalse(witnessed(clock), "Nothing rang yet")
+
+        clock = end.addingTimeInterval(1)
+        client.states[booking.alarmID] = .alerting
+        XCTAssertTrue(witnessed(clock), "Ringing now")
+        XCTAssertFalse(booker.externalAlertMayHaveFired(
+            sessionID: UUID(), notificationAuthorized: false, notificationDeliveryDate: nil, now: clock
+        ), "Another session's alarm proves nothing")
+
+        client.authorization = .denied
+        XCTAssertFalse(witnessed(clock), "Alarms turned off: nothing announced the end")
+        XCTAssertTrue(booker.externalAlertMayHaveFired(
+            sessionID: session, notificationAuthorized: true,
+            notificationDeliveryDate: end, now: clock
+        ), "The notification witness still counts")
+        XCTAssertEqual(scheduler.booking, booking, "Reading the witness changes nothing")
+    }
 }

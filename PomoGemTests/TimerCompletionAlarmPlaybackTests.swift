@@ -77,6 +77,22 @@ final class TimerCompletionAlarmPlaybackTests: XCTestCase {
         XCTAssertFalse(controller.keepsScreenAwake(sessionID: alarm.sessionID))
     }
 
+    func testTheRingingAlarmHoldsTheScreenOnlyWhileTheSceneIsActive() {
+        typealias Policy = TimerCompletionAlarmScreenAwakePolicy
+        XCTAssertTrue(Policy.shouldKeepScreenAwake(
+            runningTimerKeepsScreenAwake: false, sceneIsActive: true, alarmKeepsScreenAwake: true
+        ), "Whatever the keep-awake preference, a ringing alarm holds the display")
+        XCTAssertFalse(Policy.shouldKeepScreenAwake(
+            runningTimerKeepsScreenAwake: false, sceneIsActive: false, alarmKeepsScreenAwake: true
+        ))
+        XCTAssertFalse(Policy.shouldKeepScreenAwake(
+            runningTimerKeepsScreenAwake: false, sceneIsActive: true, alarmKeepsScreenAwake: false
+        ), "Gentle, or quiet after the automatic stop")
+        XCTAssertTrue(Policy.shouldKeepScreenAwake(
+            runningTimerKeepsScreenAwake: true, sceneIsActive: true, alarmKeepsScreenAwake: false
+        ), "The running timer's own rule is unchanged")
+    }
+
     func testAfterThreeMinutesItGoesQuietButKeepsItsStopControl() async {
         let controller = makeController(strength: .standard)
         let alarm = configuration()
