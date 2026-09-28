@@ -181,27 +181,31 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
             waitForCondition(timeout: 4) { self.app.buttons["瓶"].frame.height > jarHeightWithTip + 40 },
             "The jar must regain the tip row's height: before=\(jarHeightWithTip) after=\(app.buttons["瓶"].frame.height)"
         )
-        // The next tap shows the card over the upper jar. Since #47 the
-        // readout follows the bottle's mouth, lower on a stage taller than
-        // the bottle, and the card hangs under the readout, never above the
-        // former fixed 188 pt.
+        // The next tap shows the card under the jar, hanging under the
+        // bottle's base: over the jar it covered the time core and the pile
+        // (#47). The jar keeps its size, and the start button stays clear
+        // (`CrystalCardPlacementUITests` pins it on every phone).
+        let jarHeightAfterDetail = app.buttons["瓶"].frame.height
         tapCrystal(from: presentationProbe)
         XCTAssertTrue(
             inspectAggregate.waitForExistence(timeout: 3),
-            "After its detail, a tap shows the crystal's card over the jar"
+            "After its detail, a tap shows the crystal's card under the jar"
         )
+        XCTAssertTrue(waitForCondition(timeout: 3) { inspectAggregate.isHittable })
         let jarFrame = app.buttons["瓶"].frame
+        let launcherFrame = app.buttons["home.focus-launcher"].frame
         XCTAssertGreaterThanOrEqual(
             inspectAggregate.frame.minY,
-            jarFrame.minY + 187,
-            "Under the readout: card=\(inspectAggregate.frame) jar=\(jarFrame)"
+            jarFrame.maxY - 0.5,
+            "Under the jar: card=\(inspectAggregate.frame) jar=\(jarFrame)"
         )
         XCTAssertLessThanOrEqual(
             inspectAggregate.frame.maxY,
-            jarFrame.maxY,
-            "Inside the jar: card=\(inspectAggregate.frame) jar=\(jarFrame)"
+            launcherFrame.minY + 0.5,
+            "Above the start button: card=\(inspectAggregate.frame) start=\(launcherFrame)"
         )
-        saveScreenshot("crystal-card-over-jar")
+        XCTAssertEqual(jarFrame.height, jarHeightAfterDetail, accuracy: 0.5, "The card never resizes the jar")
+        saveScreenshot("crystal-card-under-jar")
         XCTAssertTrue(
             waitForCondition(timeout: 9) { !inspectAggregate.exists },
             "The card still closes by itself"

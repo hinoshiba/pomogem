@@ -95,6 +95,7 @@
 		3709C60ABCD5F3018E110AC9 /* HomeProjectionSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A8CBB070CBE2C504813FD08 /* HomeProjectionSupport.swift */; };
 		378B2704EBA78DA5BE0D7158 /* ThemeColorPaletteUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8ECE0D78C0F29D987DCE584 /* ThemeColorPaletteUITests.swift */; };
 		37FAB3C994EA4258FCA5C58B /* StorageTransferRemoteRecovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62CC4AB5C52221A9AA9963A2 /* StorageTransferRemoteRecovery.swift */; };
+		3891ED75802A66918D00F5F0 /* AggregateCardPlacementPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5857A78DF27B0E73DE32C374 /* AggregateCardPlacementPolicyTests.swift */; };
 		38DEC6856CFAABECC0594526 /* CloudOfflineHistoryPreflightTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA4EE8D1FB7A66F05F42BD7 /* CloudOfflineHistoryPreflightTests.swift */; };
 		39ACC4CF3C25717B84636A62 /* RawStoneWidgetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32CCEFFB635F49146B969351 /* RawStoneWidgetTests.swift */; };
 		3A4AEA37D55B4E47E777E3A8 /* FocusActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B814E25FF138C969CB6F717F /* FocusActivityAttributes.swift */; };
@@ -122,6 +123,7 @@
 		496869D85C5461233C56140C /* StorageTransferRuntimeStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A503997D8D710D5C186A1C85 /* StorageTransferRuntimeStateTests.swift */; };
 		49DE234C2184E68DF913F8CF /* PaywallMessages.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3000FE82DC714257D99D5A9 /* PaywallMessages.swift */; };
 		4A8A6C74534561EA48EE6433 /* StorageTransferCleanupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D26D449B8AEC9D324182BF9 /* StorageTransferCleanupTests.swift */; };
+		4BAC6B097ABCD8253818FD0D /* AggregateCardPlacementPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21BE4C96F93010AA055F05C8 /* AggregateCardPlacementPolicy.swift */; };
 		4BDB2EADE20D3D2DCA634C25 /* StorageTransferCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3C6BE90662CAB5EDEAA5D74 /* StorageTransferCoordinator.swift */; };
 		4C264F1E309CC8241E2C4385 /* ScreenTimeSettingsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BE03AD68663BB94BACCC1F3 /* ScreenTimeSettingsUITests.swift */; };
 		4C91A3DC21863ED4983DC2A5 /* CloudActivityHistoryPreflight.swift in Sources */ = {isa = PBXBuildFile; fileRef = 448C5665A29F67E58E8ED641 /* CloudActivityHistoryPreflight.swift */; };
@@ -536,6 +538,7 @@
 		20CEC194143F69FFEAA1FBD7 /* HomeLocalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeLocalizationTests.swift; sourceTree = "<group>"; };
 		21361A11D14FBB08C51AE057 /* AccumulationTimelineRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccumulationTimelineRepositoryTests.swift; sourceTree = "<group>"; };
 		21963F8BE90BF75F0619DD4D /* CloudOfflineRevocationEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudOfflineRevocationEvidenceTests.swift; sourceTree = "<group>"; };
+		21BE4C96F93010AA055F05C8 /* AggregateCardPlacementPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AggregateCardPlacementPolicy.swift; sourceTree = "<group>"; };
 		21C0823291E12749CF291866 /* CloudLaunchDeadlineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudLaunchDeadlineTests.swift; sourceTree = "<group>"; };
 		226332844DAE32502E55B165 /* LocalizationFormattingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationFormattingTests.swift; sourceTree = "<group>"; };
 		22AE75A11BD5EDDE67856C80 /* AcceptedActivityResetCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcceptedActivityResetCleanupTests.swift; sourceTree = "<group>"; };
@@ -638,6 +641,7 @@
 		5717D8DB966629633F7FABBD /* StorageTransferPartialDestinationRecovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferPartialDestinationRecovery.swift; sourceTree = "<group>"; };
 		57785E0908124CF42F8832A2 /* FocusLeaveMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusLeaveMonitor.swift; sourceTree = "<group>"; };
 		581304079EEB5D6AF419D641 /* GemThemeDistinctionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GemThemeDistinctionTests.swift; sourceTree = "<group>"; };
+		5857A78DF27B0E73DE32C374 /* AggregateCardPlacementPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AggregateCardPlacementPolicyTests.swift; sourceTree = "<group>"; };
 		5886D322F2E38AF563B7573B /* StorageTransferRemoteCancellation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferRemoteCancellation.swift; sourceTree = "<group>"; };
 		595CC27460BBA9626ED9C275 /* RawStoneArtwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RawStoneArtwork.swift; sourceTree = "<group>"; };
 		59BAE67DFFB9F4641C8314D6 /* ScreenTimeImportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeImportTests.swift; sourceTree = "<group>"; };
@@ -1107,6 +1111,7 @@
 			isa = PBXGroup;
 			children = (
 				8C58CC11FAAF8015BFAFF616 /* AchievementEntrySheet.swift */,
+				21BE4C96F93010AA055F05C8 /* AggregateCardPlacementPolicy.swift */,
 				6BED8D6BF2D1BAAB02EC256D /* CustomDurationEditingState.swift */,
 				8CEE148CEBF14D1D1A0C63F0 /* CustomDurationView.swift */,
 				D69A4D526254859FF17AA621 /* FocusStartEntryPolicy.swift */,
@@ -1297,6 +1302,7 @@
 				21361A11D14FBB08C51AE057 /* AccumulationTimelineRepositoryTests.swift */,
 				B87A3CE7EADB4B5A2C578A3A /* AchievementNotePolicyTests.swift */,
 				5C6C6F690DAE80124E03BFF0 /* ActivityResetTests.swift */,
+				5857A78DF27B0E73DE32C374 /* AggregateCardPlacementPolicyTests.swift */,
 				C7CA0949614CED6AA5F16278 /* AnimatedShareExporterTests.swift */,
 				5706397E816E7A2D9E23ABF0 /* AppEntryLinkTests.swift */,
 				189F9C27085367C86D86A859 /* BoundedLaunchPreparationTests.swift */,
@@ -1887,6 +1893,7 @@
 				23FC1A8354981B21083405A5 /* AchievementNoteField.swift in Sources */,
 				D69E4076FAEDE140CCAAEDB7 /* AchievementNotePolicy.swift in Sources */,
 				A003B64D43B8832EE14B3A1D /* ActivityDataReset.swift in Sources */,
+				4BAC6B097ABCD8253818FD0D /* AggregateCardPlacementPolicy.swift in Sources */,
 				9C81622243F21976590DDAEE /* Analytics.swift in Sources */,
 				AE8D65F0021D89EBCE8A654C /* AnimatedShareExporter.swift in Sources */,
 				54595B2939B00BD845B27BFE /* AppEntryInbox.swift in Sources */,
@@ -2080,6 +2087,7 @@
 				FCB1C8F99A85F6B47477E360 /* AccumulationTimelineRepositoryTests.swift in Sources */,
 				07241C08F72686A7F620090E /* AchievementNotePolicyTests.swift in Sources */,
 				210B91AF5B3C606C22519C12 /* ActivityResetTests.swift in Sources */,
+				3891ED75802A66918D00F5F0 /* AggregateCardPlacementPolicyTests.swift in Sources */,
 				AB36821AD3DF9DF1078F2A18 /* AnimatedShareExporterTests.swift in Sources */,
 				A809D9321A4F95BD4F796BD3 /* AppEntryLinkTests.swift in Sources */,
 				24FDE33C03F4B5B936F37337 /* BoundedLaunchPreparationTests.swift in Sources */,

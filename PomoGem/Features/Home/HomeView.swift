@@ -124,6 +124,11 @@ struct HomeView: View {
     /// space; the time core's orbit is laid out below the HUD.
     @State private var measuredJarHUDBottom: CGFloat?
     @State private var measuredJarStageTop: CGFloat = 0
+    /// Room for a tapped crystal's card under the bottle
+    /// (`AggregateCardPlacementPolicy`), in the Home content's coordinates.
+    @State private var measuredPickerRowTop: CGFloat?
+    @State private var measuredLauncherTop: CGFloat?
+    @State private var measuredAggregateCardHeight: CGFloat?
     @State private var homeIsVisible = false
     @State private var rewardDropRevealIsPending = false
     @State private var rewardDropRevealRequestID: UUID?
@@ -728,12 +733,14 @@ struct HomeView: View {
     private var mainContent: some View {
         VStack(spacing: 0) {
             GeometryReader { proxy in
+                let jarHeight = homeJarHeight(availableHeight: proxy.size.height)
+                let cardPlacement = aggregateCardPlacement(jarHeight: jarHeight)
                 ScrollViewReader { scrollProxy in
                 ScrollView {
                     VStack(spacing: 0) {
-                        jarCard(height: homeJarHeight(availableHeight: proxy.size.height))
+                        jarCard(height: jarHeight, cardPlacement: cardPlacement)
                             .id("home.jar")
-                        if showsAggregateInspectionSlot {
+                        if showsAggregateInspectionSlot(cardPlacement) {
                             aggregateInspectionSlot
                                 .padding(.top, 8)
                                 .id(Self.aggregateInspectionSlotID)
@@ -744,7 +751,21 @@ struct HomeView: View {
                         }
                         Spacer(minLength: 14)
                         if !activeSubjects.isEmpty {
+                            // The crystal's card under the bottle takes this
+                            // row for its few seconds when it reaches it
+                            // (`AggregateCardPlacementPolicy`).
+                            let givesWayToCard = aggregateInspectionSummary != nil
+                                && cardPlacement == .underBottle(hidesPickers: true)
                             focusSelectionControls
+                                .onGeometryChange(for: CGFloat.self) { geometry in
+                                    geometry.frame(in: .named(Self.homeContentCoordinateSpace)).minY
+                                } action: { top in
+                                    recordAggregateCardRoom(pickerTop: top, placement: cardPlacement)
+                                }
+                                .onDisappear { measuredPickerRowTop = nil }
+                                .opacity(givesWayToCard ? 0 : 1)
+                                .allowsHitTesting(!givesWayToCard)
+                                .accessibilityHidden(givesWayToCard)
                                 .padding(.bottom, 10)
                         }
                         if !pinsFocusLauncher {
@@ -752,11 +773,22 @@ struct HomeView: View {
                             // disabled and sits behind the card; a shorter card left
                             // it half showing above the reward, sliced mid-glyph.
                             focusLauncher
+                                .onGeometryChange(for: CGFloat.self) { geometry in
+                                    geometry.frame(in: .named(Self.homeContentCoordinateSpace)).minY
+                                } action: { top in
+                                    recordAggregateCardRoom(launcherTop: top, placement: cardPlacement)
+                                }
                                 .opacity(breakOffer == nil ? 1 : 0)
                                 .allowsHitTesting(breakOffer == nil)
                                 .accessibilityHidden(breakOffer != nil)
                         }
                     }
+                    // home-11 (#50 follow-up): under the bottle, in front of
+                    // the rows below it; the jar card starts at this stack's top.
+                    .overlay(alignment: .top) {
+                        aggregateCardUnderBottle(jarHeight: jarHeight, placement: cardPlacement)
+                    }
+                    .coordinateSpace(.named(Self.homeContentCoordinateSpace))
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
                     .padding(.bottom, 20)
@@ -783,7 +815,12 @@ struct HomeView: View {
                     }
                 }
                 .onChange(of: aggregateInspectionID) { oldID, id in
-                    followAggregateInspectionCard(from: oldID, to: id, with: scrollProxy)
+                    followAggregateInspectionCard(
+                        from: oldID,
+                        to: id,
+                        inRow: cardPlacement == .row,
+                        with: scrollProxy
+                    )
                 }
                 }
             }
@@ -1278,7 +1315,10 @@ struct HomeView: View {
 #endif
     }
 
-    private func jarCard(height: CGFloat) -> some View {
+    private func jarCard(
+        height: CGFloat,
+        cardPlacement: AggregateCardPlacementPolicy.Placement
+    ) -> some View {
         // One landed-totals read for the whole jar (`hudTotals`).
         let hud = hudTotals
         let lifetimeGrams = jarLifetimeGrams(hud)
@@ -1357,6 +1397,9 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 // Placed by offset, so the card's layout never changes.
                 .offset(y: Self.capacityChipTopInset(stageHeight: height))
+                // A tapped crystal's card hangs in the same place for its
+                // few seconds; the chip steps aside meanwhile.
+                .opacity(aggregateInspectionSummary != nil && cardPlacement != .row ? 0 : 1)
                 .transition(
                     reduceMotion
                         ? .opacity
@@ -1395,26 +1438,6 @@ struct HomeView: View {
                 .transition(.opacity)
             }
 
-            // home-11. Once the tip under the jar has done its job, a tapped
-            // crystal's card appears over the upper jar, where the pile
-            // rarely reaches, instead of in a row that kept 72 pt of the jar
-            // for good. It still closes after six seconds. Never at
-            // accessibility sizes, where it does not fit between the readout
-            // and the floor: the row under the jar holds it there
-            // (`showsAggregateInspectionSlot` is true whenever a card is up).
-            // The readout now follows the bottle's mouth (lower on a stage
-            // taller than the bottle), so the card hangs under its measured
-            // bottom rather than at a fixed 188 pt that could cover the value.
-            if !showsAggregateInspectionSlot, let summary = aggregateInspectionSummary {
-                VStack {
-                    aggregateInspectionButton(summary)
-                        .padding(.horizontal, 16)
-                        .padding(.top, max(188, jarMetricHUDClearance(hud) + 8))
-                    Spacer()
-                }
-                .transition(.opacity)
-            }
-
 #if DEBUG
             if LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess {
                 JarUITestPresentationProbe(scene: scene)
@@ -1445,12 +1468,19 @@ struct HomeView: View {
         .coordinateSpace(.named(Self.jarCardCoordinateSpace))
     }
 
-    /// The capacity chip hangs 6 pt under the bottle's base (the bottle is
-    /// centred in the stage and at most `Constants.Jar.height` tall), over
-    /// the 内訳 hint's row when the stage has no room below the bottle.
+    /// The capacity chip hangs 6 pt under the bottle's base, over the 内訳
+    /// hint's row when the stage has no room below the bottle.
     private static func capacityChipTopInset(stageHeight: CGFloat) -> CGFloat {
-        let outer = JarScene.outerJarRect(sceneSize: CGSize(width: 1, height: stageHeight))
-        return stageHeight - outer.minY + 6
+        bottleBaseInset(stageHeight: stageHeight) + 6
+    }
+
+    /// The bottle's base, from the top of the jar card: the bottle is centred
+    /// in the stage and at most `Constants.Jar.height` tall.
+    private static func bottleBaseInset(stageHeight: CGFloat) -> CGFloat {
+        let top: CGFloat = previewsHUDAboveJar ? hudAboveJarHeight : 0
+        let sceneHeight = max(0, stageHeight - top)
+        let outer = JarScene.outerJarRect(sceneSize: CGSize(width: 1, height: sceneHeight))
+        return top + sceneHeight - outer.minY
     }
 
     /// The chip above is showing (the 内訳 hint under the jar steps aside).
@@ -2034,37 +2064,108 @@ struct HomeView: View {
             return min(520, max(300, availableHeight - 72))
         }
         // Reserve room for the visible theme/time controls and start button,
-        // including on compact iPhones.
-        let inspectionHeight: CGFloat = showsAggregateInspectionSlot ? 72 : 0
-        return min(520, max(320, availableHeight - 216 - inspectionHeight))
+        // including on compact iPhones, and for the crystal tip's row while
+        // it shows. A tapped crystal's card never resizes the jar.
+        let tipRowHeight: CGFloat = showsAggregateTipRow ? 72 : 0
+        return min(520, max(320, availableHeight - 216 - tipRowHeight))
     }
 
-    /// home-11. The row under the jar is kept only while its tip is useful:
-    /// until the first crystal detail has been opened. After that a tapped
-    /// crystal's card appears over the upper jar (`jarCard`), except at
-    /// accessibility sizes: there the jar can be as short as 300 pt and the
-    /// large-text card about 264 pt tall, so over the jar it covered the
-    /// readout, lost its title and spilled onto the start button. It comes
-    /// back to this row, only while it is up (`followAggregateInspectionCard`).
-    private var showsAggregateInspectionSlot: Bool {
-        guard latestInspectableAggregateID != nil else { return false }
-        return !didSeeAggregateDetail
-            || (dynamicTypeSize.isAccessibilitySize && aggregateInspectionSummary != nil)
+    /// home-11. Until the first crystal detail has been opened, the row
+    /// under the jar holds a tip that crystals can be tapped, and a tapped
+    /// crystal's card in its place. Afterwards the tip's 72 pt row goes away
+    /// and the jar keeps its full height.
+    private var showsAggregateTipRow: Bool {
+        latestInspectableAggregateID != nil && !didSeeAggregateDetail
+    }
+
+    /// The row under the jar: the tip's, or a tapped crystal's card that
+    /// `AggregateCardPlacementPolicy` puts in a row of its own. That row is
+    /// inserted only while the card is up (`followAggregateInspectionCard`).
+    private func showsAggregateInspectionSlot(
+        _ placement: AggregateCardPlacementPolicy.Placement
+    ) -> Bool {
+        showsAggregateTipRow
+            || (placement == .row
+                && latestInspectableAggregateID != nil
+                && aggregateInspectionSummary != nil)
+    }
+
+    /// Where a tapped crystal's card shows over a jar `jarHeight` tall. The
+    /// tip's row holds it while that row is there.
+    private func aggregateCardPlacement(
+        jarHeight: CGFloat
+    ) -> AggregateCardPlacementPolicy.Placement {
+        guard !showsAggregateTipRow else { return .row }
+        return AggregateCardPlacementPolicy.placement(
+            isAccessibilitySize: dynamicTypeSize.isAccessibilitySize,
+            bottleBase: Self.bottleBaseInset(stageHeight: jarHeight),
+            cardHeight: measuredAggregateCardHeight ?? AggregateCardPlacementPolicy.estimatedCardHeight,
+            // Controls not measured yet count as right under the jar.
+            pickerTop: activeSubjects.isEmpty ? nil : (measuredPickerRowTop ?? 0),
+            launcherTop: pinsFocusLauncher ? nil : measuredLauncherTop
+        )
+    }
+
+    /// The controls' tops in the Home content, for the card's room. Not
+    /// while the card's own row is inserted: it pushes them down, and
+    /// measured then the room would look big enough to take the card back
+    /// under the bottle, so the row would come and go.
+    private func recordAggregateCardRoom(
+        pickerTop: CGFloat? = nil,
+        launcherTop: CGFloat? = nil,
+        placement: AggregateCardPlacementPolicy.Placement
+    ) {
+        guard !(placement == .row && !showsAggregateTipRow && aggregateInspectionSummary != nil)
+        else { return }
+        if let pickerTop { measuredPickerRowTop = pickerTop }
+        if let launcherTop { measuredLauncherTop = launcherTop }
+    }
+
+    /// home-11 (#50 follow-up). At default sizes, once the tip's row has
+    /// gone, a tapped crystal's card hangs under the bottle's base, like the
+    /// capacity chip: in the room above the start button, never over the
+    /// readout, the time core or the pile, and nothing on the screen moves.
+    /// Over the upper jar (#47's lower, mouth-following readout, the time
+    /// core under it and a taller pile) it covered the core and the gems.
+    /// The card stays laid out, hidden, while a crystal can be tapped, so its
+    /// measured height places it before it first shows.
+    @ViewBuilder
+    private func aggregateCardUnderBottle(
+        jarHeight: CGFloat,
+        placement: AggregateCardPlacementPolicy.Placement
+    ) -> some View {
+        if !dynamicTypeSize.isAccessibilitySize, !showsAggregateTipRow,
+           let aggregateID = latestInspectableAggregateID,
+           let restingSummary = inspectionSummary(for: aggregateID) {
+            let isPresented = aggregateInspectionSummary != nil && placement != .row
+            aggregateInspectionButton(aggregateInspectionSummary ?? restingSummary)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                    measuredAggregateCardHeight = height
+                }
+                .opacity(isPresented ? 1 : 0)
+                .allowsHitTesting(isPresented)
+                .accessibilityHidden(!isPresented)
+                .frame(maxWidth: .infinity)
+                .padding(.top, Self.bottleBaseInset(stageHeight: jarHeight) + AggregateCardPlacementPolicy.gap)
+        }
     }
 
     private static let aggregateInspectionSlotID = "home.aggregate-inspection"
+    private static let homeContentCoordinateSpace = "home.content"
 
-    /// At accessibility sizes the card's row is under the jar, mostly below
-    /// the first screen, so a tap brings the whole card into view. On a
-    /// 4.7-inch phone that moves the jar up out of sight, so once the card
-    /// closes (after six seconds, on another jar tap or for its detail) Home
-    /// scrolls back to the jar.
+    /// When the card is in a row of its own (at accessibility sizes, or at
+    /// default sizes on a screen without room above the start button), that
+    /// row is under the jar, mostly below the first screen, so a tap brings
+    /// the whole card into view. On a 4.7-inch phone that moves the jar up
+    /// out of sight, so once the card closes (after six seconds, on another
+    /// jar tap or for its detail) Home scrolls back to the jar.
     private func followAggregateInspectionCard(
         from oldID: UUID?,
         to id: UUID?,
+        inRow: Bool,
         with scrollProxy: ScrollViewProxy
     ) {
-        guard dynamicTypeSize.isAccessibilitySize else { return }
+        guard dynamicTypeSize.isAccessibilitySize || (inRow && !showsAggregateTipRow) else { return }
         let animation: Animation? = reduceMotion ? nil : .easeOut(duration: 0.3)
         if id != nil {
             // The row is inserted in this same update; scroll once it is
@@ -5708,7 +5809,7 @@ struct HomeView: View {
                     .accessibilityHidden(!isPresented)
 
                 // Once a detail has been opened the row holds only the card
-                // (accessibility sizes, `showsAggregateInspectionSlot`).
+                // (`showsAggregateInspectionSlot`).
                 if !didSeeAggregateDetail {
                     Label(
                         String(localized: "結晶をタップすると、内訳を見られます", table: "Home", comment: "Hint under the jar until a crystal's detail has been opened once"),
