@@ -1,27 +1,83 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
-    "%@。累計%@、集中%lld粒、成果%@個" : {
-      "comment" : "VoiceOver, menu metrics while iCloud is checked: status, lifetime mass, focus count, achievement count",
+    "%@ / %@" : {
+      "comment" : "Jar rail: focus time so far / time the next time core needs",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "%1$@。累計%2$@、集中%3$lld粒、成果%4$@個"
+            "value" : "%1$@ / %2$@"
           }
         }
       }
     },
-    "%@。累計は確認が済むと表示します。この端末で確認済みの集中%lld粒、成果%@個" : {
-      "comment" : "VoiceOver, menu metrics while iCloud is checked and no lifetime total can be shown: status, focus count, achievement count",
+    "%@。累計%@、集中%lld粒、記念石%@個" : {
+      "comment" : "VoiceOver, menu metrics while iCloud is checked: status, lifetime mass, focus count, achievement stone count",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "%1$@。累計は確認が済むと表示します。この端末で確認済みの集中%2$lld粒、成果%3$@個"
+            "value" : "%1$@。累計%2$@、集中%3$lld粒、記念石%4$@個"
           }
         }
       }
+    },
+    "%@。累計は確認が済むと表示します。この端末で確認済みの集中%lld粒、記念石%@個" : {
+      "comment" : "VoiceOver, menu metrics while iCloud is checked and no lifetime total can be shown: status, focus count, achievement stone count",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@。累計は確認が済むと表示します。この端末で確認済みの集中%2$lld粒、記念石%3$@個"
+          }
+        }
+      }
+    },
+    "%@に%@、%@を積みます。「元に戻す」で取り消せます" : {
+      "comment" : "VoiceOver, once the Undo banner of a manual entry has focus: theme, duration, grams",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@に%2$@、%3$@を積みます。「元に戻す」で取り消せます"
+          }
+        }
+      }
+    },
+    "%@に%@を積みます" : {
+      "comment" : "Undo banner after a manual entry: theme, then the self-reported time about to be added",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@に%2$@を積みます"
+          }
+        }
+      }
+    },
+    "%@の自己申告を保存できませんでした。もう一度積んでください" : {
+      "comment" : "Toast when a confirmed manual entry could not be saved; the argument is the theme"
+    },
+    "%@まで" : {
+      "comment" : "Jar rail caption; the argument is 最初の時間の核 or 時間の核・N段目"
+    },
+    "%lld粒が、ひとつの結晶になった" : {
+      "comment" : "Toast after ten gems fuse; the argument is the gem count"
+    },
+    "%lld粒の結晶、%@" : {
+      "comment" : "VoiceOver, crystal inspection card: gems inside, then what its detail shows",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld粒の結晶、%2$@"
+          }
+        }
+      }
+    },
+    "+%@ ・ まもなく瓶に入ります" : {
+      "comment" : "Undo banner subtitle: the mass, and that the entry is saved shortly"
     },
     "Proなら、この%@に「%@」と刻めます" : {
       "comment" : "Fusion sheet link for free users; arguments: the crystal's name (結晶…), the month it was made (2026年9月)",
@@ -34,6 +90,12 @@
         }
       }
     },
+    "あと%lld%%で、下の粒がひとつの結晶に" : {
+      "comment" : "Jar capsule before a fusion; the argument is the remaining capacity percent"
+    },
+    "まだ空っぽ" : {
+      "comment" : "Empty jar at accessibility text sizes: title"
+    },
     "アプリの時間を積む" : {
       "comment" : "Home menu row: open the Screen Time settings"
     },
@@ -43,11 +105,113 @@
     "ポモジェムProの説明を開きます" : {
       "comment" : "VoiceOver hint on the fusion sheet's Pro month-label link"
     },
+    "下のボタンへ" : {
+      "comment" : "Empty jar at accessibility text sizes: points to the start button below"
+    },
+    "今週 %@ ・ 完走%lld回" : {
+      "comment" : "Completion card heading line: this week's measured mass, timers completed this week",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "今週 %1$@ ・ 完走%2$lld回"
+          }
+        }
+      }
+    },
+    "今週の完走%lld回（時間の価値とは別）" : {
+      "comment" : "Completion card heading line for an old receipt without mass: timers completed this week"
+    },
+    "今週の完走した回数%lld回。回数は時間の価値とは別です" : {
+      "comment" : "VoiceOver, completion card for an old receipt: timers completed this week"
+    },
+    "今週・時間の核・結晶・年月の瓶" : {
+      "comment" : "Home menu row detail: what 積み上がり holds"
+    },
+    "今週記録した集中時間の質量%@。完走した回数%lld回。回数は時間の価値とは別です" : {
+      "comment" : "VoiceOver, completion card: this week's measured mass, timers completed this week",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "今週記録した集中時間の質量%1$@。完走した回数%2$lld回。回数は時間の価値とは別です"
+          }
+        }
+      }
+    },
     "休憩の選択を終えると、集中を始められます" : {
       "comment" : "Toast: a widget, link or Siri asked to start a focus while the reward card waits for the rest choice"
     },
+    "元に戻す" : {
+      "comment" : "Undo button for a manual entry that is not saved yet"
+    },
     "勉強アプリ10分ごとに1粒" : {
       "comment" : "Home menu row detail: every 10 minutes in the chosen study apps adds one pebble"
+    },
+    "取り消しました。瓶には積んでいません" : {
+      "comment" : "Toast after undoing a manual entry"
+    },
+    "小さな粒が%lld段階で結晶になり、瓶に余白ができた" : {
+      "comment" : "Toast after a cascade of fusions; the argument is how many levels formed"
+    },
+    "成果メモ（任意）" : {
+      "comment" : "Achievement note field title; the same label as the edit sheet in 記録"
+    },
+    "推移・履歴・記念石・月の振り返り" : {
+      "comment" : "Home menu row detail: what 記録 holds"
+    },
+    "瓶%lld杯ぶん満ちました" : {
+      "comment" : "VoiceOver, jar value: how many times the jar has filled (2.5 kg each)"
+    },
+    "瓶はまだ空です。下のボタンからテーマを追加できます" : {
+      "comment" : "VoiceOver, empty jar at accessibility text sizes, no theme yet"
+    },
+    "瓶はまだ空です。下のボタンから最初の集中を始められます" : {
+      "comment" : "VoiceOver, empty jar at accessibility text sizes"
+    },
+    "瓶をタップすると粒が跳ねます" : {
+      "comment" : "One-line jar tip in a short jar at accessibility text sizes"
+    },
+    "瓶をダブルタップすると粒が跳ねます" : {
+      "comment" : "One-line jar tip in a short jar at accessibility text sizes, with VoiceOver on"
+    },
+    "積んだ直後は、ホームで数秒のあいだ取り消せます。" : {
+      "comment" : "Manual entry: under the confirm button; the entry can be undone briefly on Home"
+    },
+    "累計%@、集中%lld粒、記念石%@個" : {
+      "comment" : "VoiceOver, menu metrics: lifetime mass, focus count, achievement stone count",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "累計%1$@、集中%2$lld粒、記念石%3$@個"
+          }
+        }
+      }
+    },
+    "結晶の保存を再試行します" : {
+
+    },
+    "結晶は未保存です" : {
+
+    },
+    "結晶は未保存です。再試行してください" : {
+
+    },
+    "結晶をつくっています" : {
+      "comment" : "Jar capsule while ten gems fuse"
+    },
+    "結晶をタップすると、内訳を見られます" : {
+      "comment" : "Hint under the jar until a crystal's detail has been opened once"
+    },
+    "結晶を見つけました" : {
+
+    },
+    "記念石" : {
+      "comment" : "Home menu metric caption: achievement stone count"
+    },
+    "記念石は0gで、集中時間・質量・通常の粒数には加わりません。瓶では新しい12個が動き、前の石も記録棚にずっと残ります。" : {
+
     },
     "進行中の集中があるため、新しい集中は始めませんでした" : {
       "comment" : "Toast: a widget, link or Siri asked to start a focus while another one still needs attention"

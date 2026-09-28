@@ -470,7 +470,7 @@ final class LogHistoryReadsTests: XCTestCase {
         }
     }
 
-    /// まとまり粒 are projections. An archive read under one verification is
+    /// 結晶 are projections. An archive read under one verification is
     /// never shown after that verification was invalidated, even once the
     /// next one succeeds and before a read under it arrives, whether the
     /// reads in between were cancelled or failed.

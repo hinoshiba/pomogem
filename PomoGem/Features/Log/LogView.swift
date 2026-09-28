@@ -949,7 +949,7 @@ enum LogPeriodPolicy {
 struct LogPeriodSummary: Equatable, Sendable {
     let totalSeconds: Int
     let grams: Int
-    /// Timers that ran to their end (「完走ポモ」).
+    /// Timers that ran to their end (「完走した回数」).
     let timerCompletionCount: Int
     let selfReportedGrams: Int
     let screenTimeSeconds: Int
@@ -1035,7 +1035,7 @@ enum LogHistoryLoadPolicy {
         return content
     }
 
-    /// The まとまり粒 archive to draw, if any: only one read under the
+    /// The 結晶 archive to draw, if any: only one read under the
     /// verification that is current now. The newest records do not depend
     /// on verification and stay; the archive does, like every cache derived
     /// from aggregate projections (`AggregateProjectionCacheStamp`). After
@@ -1432,7 +1432,7 @@ struct LogView: View {
     private func summaryTiles(_ summary: LogPeriodSummary) -> some View {
         SummaryTile(label: periodPageIsPartial ? "表示分の時間" : "積んだ時間", value: formatMinutes(summary.focusMinutes), symbol: "hourglass", identifier: "log.summary.time")
         // Timers that ran to their end; Screen Time chunks are not completions.
-        SummaryTile(label: periodPageIsPartial ? "表示分の完走" : "完走ポモ", value: "\(summary.timerCompletionCount)", symbol: "checkmark.circle", identifier: "log.summary.completions")
+        SummaryTile(label: periodPageIsPartial ? "表示分の完走" : String(localized: "完走した回数", table: "Log", comment: "Log tile: timers that ran to their end"), value: "\(summary.timerCompletionCount)", symbol: "checkmark.circle", identifier: "log.summary.completions")
         SummaryTile(
             label: periodPageIsPartial
                 ? "表示分の質量"
@@ -1466,7 +1466,7 @@ struct LogView: View {
         if summary.screenTimeSeconds > 0 {
             Label(
                 String(
-                    localized: "スクリーンタイムの\(DurationPresentation.minutesLabel(seconds: summary.screenTimeSeconds))は、完走ポモに含みません",
+                    localized: "スクリーンタイムの\(DurationPresentation.minutesLabel(seconds: summary.screenTimeSeconds))は、完走した回数に含みません",
                     table: "Log",
                     comment: "Log: Screen Time learning in the period is not counted as completed timers; the argument is a duration"
                 ),
@@ -1492,7 +1492,7 @@ struct LogView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     SectionEyebrow(text: "MASS")
                     Text("質量の推移")
-                        .font(PomoGemTheme.brand(20))
+                        .pomogemSectionTitle()
                 }
                 if shownPeriodContent == nil {
                     HistoryLoadingPlaceholder()
@@ -1584,7 +1584,7 @@ struct LogView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     SectionEyebrow(text: "SUBJECTS")
                     Text("テーマの構成")
-                        .font(PomoGemTheme.brand(20))
+                        .pomogemSectionTitle()
                 }
                 if shownPeriodContent == nil {
                     HistoryLoadingPlaceholder()
@@ -1668,7 +1668,7 @@ struct LogView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         SectionEyebrow(text: "MILESTONES")
                         Text("記念石アーカイブ")
-                            .font(PomoGemTheme.brand(20))
+                            .pomogemSectionTitle()
                         Text(achievementArchiveDescription(count: stones.count))
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
@@ -1741,9 +1741,11 @@ struct LogView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
                         SectionEyebrow(text: "MONTHLY WRAPPED")
-                        Text("月ごとの瓶")
-                            .font(PomoGemTheme.brand(20))
-                        Text("直近12か月を、月ごとの瓶で振り返れます。")
+                        // Not 「月ごとの瓶」: that is 積み上がり's 年月 shelf, a
+                        // different view (history-11).
+                        Text("月の振り返り", tableName: "Log", comment: "Log section title: the monthly Wrapped recaps")
+                            .pomogemSectionTitle()
+                        Text("直近12か月を、月ごとにふり返れます。", tableName: "Log")
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
                     }
@@ -1813,8 +1815,8 @@ struct LogView: View {
             PomoGemCard {
                 Label(
                     isCloudOfflineSession
-                        ? "このiPhoneのまとまり粒を確認中です。確認できた個別記録は引き続き表示しています。"
-                        : "iCloudのまとまり粒を再集計中です。この端末で確認できた個別記録は引き続き表示しています。",
+                        ? String(localized: "このiPhoneの結晶を確認中です。確認できた個別記録は引き続き表示しています。", table: "Log")
+                        : String(localized: "iCloudの結晶を再集計中です。この端末で確認できた個別記録は引き続き表示しています。", table: "Log"),
                     systemImage: isCloudOfflineSession ? "checklist" : "icloud.and.arrow.down"
                 )
                 .font(.caption.weight(.semibold))
@@ -1825,17 +1827,20 @@ struct LogView: View {
             PomoGemCard {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
-                        SectionEyebrow(text: "OVERVIEW PEBBLES")
-                        Text("まとまり粒アーカイブ")
-                            .font(PomoGemTheme.brand(20))
-                        Text("小さな粒は消えません。10粒ずつまとまり、瓶の中で動き続けます。")
+                        Text("結晶アーカイブ", tableName: "Log", comment: "Log section title: the jar's crystals")
+                            .pomogemSectionTitle()
+                        Text("小さな粒は消えません。10粒ずつ結晶になり、瓶の中で動き続けます。", tableName: "Log")
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
                     if shownAggregateArchive?.isPartial == true {
-                        Text("ここでは最新\(BoundedHistoryPolicy.aggregateRootLimit)個を表示しています。生涯の質量は瓶の俯瞰画面で確認できます。")
+                        Text(
+                            "ここでは最新\(BoundedHistoryPolicy.aggregateRootLimit)個を表示しています。生涯の質量は、メニューの「積み上がりを見る」で確認できます。",
+                            tableName: "Log",
+                            comment: "Crystal archive note; the argument is how many crystals are listed"
+                        )
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
                             .fixedSize(horizontal: false, vertical: true)
@@ -1887,7 +1892,9 @@ struct LogView: View {
     private var recentHistory: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("最近の記録").font(PomoGemTheme.brand(20))
+                // The trait sits on the title alone, so 「最新30件」 stays its
+                // own element.
+                Text("最近の記録").pomogemSectionTitle()
                 Spacer()
                 Text("最新30件").font(.caption).foregroundStyle(PomoGemTheme.muted)
             }
@@ -2407,7 +2414,7 @@ private struct DailyMassChartDescriptor: AXChartDescriptorRepresentable {
     }
 }
 
-/// One row of 「まとまり粒アーカイブ」. Roots are built on the repository's
+/// One row of 「結晶アーカイブ」. Roots are built on the repository's
 /// actor; legacy layers here, with the records on screen that they hold.
 struct LogAggregateArchiveItem: Identifiable, Equatable, Sendable {
     let id: UUID
@@ -2488,7 +2495,7 @@ private struct AggregateArchiveRow: View {
                 AggregateArchiveSwatch(item: item)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("×\(item.pebbleCount) のまとまり")
+                    Text("×\(item.pebbleCount) の結晶", tableName: "Log", comment: "Crystal archive row title; the argument is how many gems it holds")
                         .font(.system(.headline, design: .rounded, weight: .heavy))
                     Text(item.periodLabel)
                         .font(.caption2)
@@ -2543,7 +2550,7 @@ private struct AggregateArchiveRow: View {
     }
 
     private var accessibilityDescription: String {
-        let base = "\(item.pebbleCount)粒のまとまり、\(item.formattedMass)、\(item.periodLabel)、実測\(item.measuredPebbleCount)粒、手動\(item.manualPebbleCount)粒"
+        let base = "\(item.pebbleCount)粒の結晶、\(item.formattedMass)、\(item.periodLabel)、実測\(item.measuredPebbleCount)粒、手動\(item.manualPebbleCount)粒"
         guard RareRewardReleasePolicy.isEnabled else { return base }
         return "\(base)、金\(item.goldPebbleCount)粒、虹\(item.prismPebbleCount)粒"
     }
@@ -2637,7 +2644,11 @@ private struct SummaryTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            // Decorative. A checkmark symbol carries its own 「選択済み」
+            // label and Selected trait, which `.combine` would hand to the
+            // whole tile (the 完走 tile read as selected).
             Image(systemName: symbol).font(.caption).foregroundStyle(PomoGemTheme.amber)
+                .accessibilityHidden(true)
             Text(value).font(.system(.headline, design: .rounded, weight: .heavy)).lineLimit(1).minimumScaleFactor(0.72)
             Text(label).font(.caption2).foregroundStyle(PomoGemTheme.muted)
         }
@@ -2928,7 +2939,7 @@ private struct AchievementEditorSheet: View {
             VStack(alignment: .leading, spacing: 3) {
                 SectionEyebrow(text: "MILESTONE")
                 Text(AchievementStone.sanitizedNote(note).isEmpty ? kind.title : AchievementStone.sanitizedNote(note))
-                    .font(PomoGemTheme.brand(22))
+                    .pomogemSectionTitle(size: 22)
                     .lineLimit(2)
             }
         }

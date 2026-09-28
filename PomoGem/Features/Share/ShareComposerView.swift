@@ -513,7 +513,7 @@ struct ShareComposerView: View {
                     .tracking(1.8)
                     .foregroundStyle(PomoGemTheme.amber)
                 Text("積み重ねを、動く一枚に")
-                    .font(PomoGemTheme.brand(22))
+                    .pomogemSectionTitle(size: 22)
                     .foregroundStyle(PomoGemTheme.text)
                 // No duration: 720-pixel GIFs take several seconds on a
                 // small iPhone, and a photo save renders two of them.
@@ -1141,7 +1141,7 @@ struct ShareComposerView: View {
     private var emptyShareMessage: String {
         if aggregateProjectionPresentation.isCloudVerificationPending {
             if case .aggregate = scope {
-                return "このまとまりは確認後にカードへできます。"
+                return String(localized: "この結晶は、確認が終わるとカードにできます。", table: "Share")
             }
             return "古い集計値は使わず、この端末で確認できる個別記録だけを確認しています。"
         }
@@ -2137,7 +2137,7 @@ struct ShareHiddenContent: Equatable {
     var captionDisclosure: String? {
         let details = [
             loosePebbleCount > 0 ? "集中粒\(loosePebbleCount)粒" : nil,
-            aggregateCount > 0 ? "まとまり\(aggregateCount)個" : nil,
+            aggregateCount > 0 ? String(localized: "結晶\(aggregateCount)個", table: "Share", comment: "Share caption disclosure item: crystals left out of the drawn jar") : nil,
             achievementCount > 0 ? "記念石\(achievementCount)個" : nil
         ].compactMap { $0 }
         guard !details.isEmpty else { return nil }
@@ -2703,7 +2703,7 @@ struct ShareCardView: View {
                         HStack(spacing: 6) {
                             Text("実測 \(measuredCount)粒", tableName: "Share", comment: "Share card: measured gems (timer or Screen Time)")
                             Text("・")
-                            Text("まとまり \(aggregates.count)")
+                            Text("結晶 \(aggregates.count)", tableName: "Share", comment: "Share card stat: crystal count")
                             if goldCount > 0 {
                                 Text("・")
                                 Label("金 \(goldCount)", systemImage: "sparkles")
@@ -2769,7 +2769,7 @@ struct ShareCardView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            "ポモジェムシェアカード。\(periodLabel)。瓶に積んだ集中、\(ShareMassFormatter.spoken(totalGrams))\(ShareMassFormatter.focusTime(totalGrams).map { "、\($0)" } ?? "")。\(pebbleCount)粒、うち実測\(measuredCount)粒、まとまり粒\(aggregates.count)個、記念石\(achievements.count)個。\(rewardSemantics.accessibilityDetail)。\(hiddenContent.captionDisclosure ?? "すべての石を表示")。\(disclosure.accessibilityDisclosure)。公式サイト、\(ShareCopy.websiteDisplayName)。\(hashtags.isEmpty ? "ハッシュタグなし" : "ハッシュタグ、\(hashtags.joined(separator: "、"))")"
+            "ポモジェムシェアカード。\(periodLabel)。瓶に積んだ集中、\(ShareMassFormatter.spoken(totalGrams))\(ShareMassFormatter.focusTime(totalGrams).map { "、\($0)" } ?? "")。\(pebbleCount)粒、うち実測\(measuredCount)粒、結晶\(aggregates.count)個、記念石\(achievements.count)個。\(rewardSemantics.accessibilityDetail)。\(hiddenContent.captionDisclosure ?? "すべての石を表示")。\(disclosure.accessibilityDisclosure)。公式サイト、\(ShareCopy.websiteDisplayName)。\(hashtags.isEmpty ? "ハッシュタグなし" : "ハッシュタグ、\(hashtags.joined(separator: "、"))")"
         )
         .accessibilityIdentifier("share.card")
     }

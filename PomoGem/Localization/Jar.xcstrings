@@ -1,6 +1,9 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "%@。「最新の結晶の内訳を見る」アクションで、保存されている粒数や質量などを確認できます" : {
+      "comment" : "VoiceOver jar hint: the tap/tilt hint, then the custom action that opens the newest crystal"
+    },
     "%@。この端末で確認済みの集中時間の質量：%@" : {
       "comment" : "VoiceOver, jar while iCloud is checked: status, the lifetime mass",
       "localizations" : {
@@ -25,6 +28,23 @@
     },
     "%@。これまでの合計は確認が済むと表示します" : {
       "comment" : "VoiceOver, jar while iCloud is checked and no lifetime total can be shown: status"
+    },
+    "、旧形式の結晶%lld個（保存済み情報を確認できます）" : {
+      "comment" : "VoiceOver jar value fragment: crystals saved in the old format"
+    },
+    "、結晶%lld個、合計%lld粒分" : {
+      "comment" : "VoiceOver jar value fragment: crystal count, gems they hold",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "、結晶%1$lld個、合計%2$lld粒分"
+          }
+        }
+      }
+    },
+    "最新の結晶の内訳を見る" : {
+      "comment" : "VoiceOver custom action on the jar"
     }
   },
   "version" : "1.0"

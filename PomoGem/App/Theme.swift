@@ -673,6 +673,19 @@ struct SectionEyebrow: View {
     }
 }
 
+extension View {
+    /// A card or section title: the brand face plus the VoiceOver heading
+    /// trait, so the Headings rotor can jump section by section through the
+    /// long card screens (記録, 積み上がり, 計画, シェア). SwiftUI never infers
+    /// a heading from font size, and the eyebrow above a title is hidden from
+    /// VoiceOver. Inside a card that is one `.ignore` element the trait is
+    /// dropped, so those cards keep a plain brand font instead.
+    func pomogemSectionTitle(size: CGFloat = 20) -> some View {
+        font(PomoGemTheme.brand(size))
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
 extension PomoGemTheme {
     /// Chooses the higher-contrast monochrome foreground for an sRGB hex background.
     /// Invalid values fall back to the normal warm text instead of guessing a color.

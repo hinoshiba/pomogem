@@ -72,6 +72,7 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         launch()
         addThirtyMinutesManually()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
+        waitForPendingManualEntryToSave()
         pause(3.5) // let the three-second drop toast go
 
         app.buttons["home.duration-picker"].tap()
@@ -134,13 +135,15 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         )
         saveScreenshot("manual-confirm")
 
-        let toast = app.staticTexts.matching(
-            NSPredicate(format: "label CONTAINS %@", "数学")
-        ).firstMatch
+        let pendingBanner = app.descendants(matching: .any)["manual.pending"]
         confirm.tap()
-        // The toast lives three seconds: look for it first. (メニュー is no
-        // proof the sheet closed; Home's toolbar is there behind it.)
-        XCTAssertTrue(toast.waitForExistence(timeout: 5), "The confirmation toast names the chosen theme")
+        // (メニュー is no proof the sheet closed; Home's toolbar is there
+        // behind it.) The entry waits under an Undo banner that names it.
+        XCTAssertTrue(pendingBanner.waitForExistence(timeout: 5), "The confirmed entry waits under an Undo banner")
+        XCTAssertTrue(
+            app.staticTexts["数学に30分を積みます"].exists,
+            "The banner names the chosen theme"
+        )
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
         XCTAssertEqual(homeTheme.label, homeThemeLabel, "Choosing a theme in the sheet must not change Home's theme")
     }
@@ -236,7 +239,8 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         let menuFrame = app.buttons["メニュー"].frame
         let toast = app.descendants(matching: .any).matching(identifier: "app.toast").firstMatch
         addThirtyMinutesManually()
-        XCTAssertTrue(toast.waitForExistence(timeout: 5))
+        // The landing toast follows the few-second Undo window.
+        XCTAssertTrue(toast.waitForExistence(timeout: 20))
         let toastFrame = toast.frame
         XCTAssertTrue(toast.label.contains("+300g"), "toast=\(toast.label)")
         XCTAssertFalse(toastFrame.intersects(launcherFrame), "toast=\(toastFrame) launcher=\(launcherFrame)")
@@ -265,7 +269,7 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         XCTAssertTrue(probe.waitForExistence(timeout: 5))
         let toast = app.descendants(matching: .any).matching(identifier: "app.toast").firstMatch
         addThirtyMinutesManually()
-        XCTAssertTrue(toast.waitForExistence(timeout: 5))
+        XCTAssertTrue(toast.waitForExistence(timeout: 20))
 
         var fields: [String: String] = [:]
         let deadline = Date().addingTimeInterval(15)
@@ -347,6 +351,129 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         XCTAssertTrue(save.isEnabled)
         app.buttons["achievement.create.close"].tap()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
+    }
+
+    // MARK: - Undo after a manual add (history-02)
+
+    /// 「元に戻す」 right after 「確認して積む」 leaves no trace: nothing was
+    /// written, the jar stays empty and the daily allowance is untouched.
+    func testManualEntryCanBeUndoneBeforeItIsSaved() {
+        launch()
+        let probe = app.descendants(matching: .any)["jar.presentation.probe"]
+        XCTAssertTrue(probe.waitForExistence(timeout: 5))
+        XCTAssertEqual(probeFields(probe)["count"], "0")
+
+        addThirtyMinutesManually()
+        let undo = app.buttons["manual.undo"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 5), "The entry waits under an Undo banner")
+        XCTAssertTrue(undo.isHittable)
+        saveScreenshot("manual-undo-banner")
+        undo.tap()
+
+        XCTAssertTrue(waitUntil(timeout: 4) { !app.buttons["manual.undo"].exists })
+        let undone = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS %@", "取り消しました")
+        ).firstMatch
+        XCTAssertTrue(undone.waitForExistence(timeout: 3))
+        // Well past the window: still nothing in the jar.
+        pause(7)
+        XCTAssertEqual(probeFields(probe)["count"], "0", "An undone entry must never reach the jar")
+
+        openMenuRow("時間を手動で積む")
+        let remaining = app.staticTexts["manual.remaining-count"]
+        XCTAssertTrue(remaining.waitForExistence(timeout: 5))
+        XCTAssertEqual(remaining.label, "この端末で本日あと3回", "Undo must not spend the allowance")
+    }
+
+    /// Without Undo the entry is saved when the window ends and falls into
+    /// the jar like before.
+    func testManualEntryIsSavedWhenTheUndoWindowEnds() {
+        launch()
+        let probe = app.descendants(matching: .any)["jar.presentation.probe"]
+        XCTAssertTrue(probe.waitForExistence(timeout: 5))
+
+        addThirtyMinutesManually()
+        XCTAssertTrue(app.buttons["manual.undo"].waitForExistence(timeout: 5))
+        XCTAssertEqual(probeFields(probe)["count"], "0", "Nothing is in the jar while the entry can be undone")
+        waitForPendingManualEntryToSave()
+        XCTAssertTrue(
+            waitUntil(timeout: 10) { self.probeFields(probe)["count"] == "1" },
+            "The saved entry falls into the jar; probe=\(probeFields(probe))"
+        )
+
+        openMenuRow("時間を手動で積む")
+        let remaining = app.staticTexts["manual.remaining-count"]
+        XCTAssertTrue(remaining.waitForExistence(timeout: 5))
+        XCTAssertEqual(remaining.label, "この端末で本日あと2回")
+    }
+
+    // MARK: - VoiceOver semantics (walk-edge-06)
+
+    /// A decorative checkmark symbol used to hand its 「選択済み」 trait to
+    /// the whole control.
+    func testDecorativeCheckmarksDoNotReadAsSelected() {
+        launch()
+        openMenuRow("成果を積む")
+        let examPass = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "試験合格")
+        ).firstMatch
+        XCTAssertTrue(examPass.waitForExistence(timeout: 5))
+        XCTAssertFalse(examPass.isSelected, "Nothing is chosen yet: 試験合格 must not read as selected")
+        let close = app.buttons["achievement.create.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 3))
+        close.tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
+
+        openMenuRow("記録を見る")
+        XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 6))
+        let completions = app.descendants(matching: .any)["log.summary.completions"]
+        XCTAssertTrue(completions.waitForExistence(timeout: 5))
+        XCTAssertFalse(completions.isSelected, "The 完走 tile is not a selection")
+    }
+
+    // MARK: - Large text (home-03, home-04)
+
+    /// At AX5 the start button is on screen without scrolling, on the
+    /// smallest phone too, and the jar's progress has a readable card from
+    /// the first gem.
+    func testStartButtonAndProgressAreReadableAtAccessibilitySize() {
+        launch(accessibility5: true)
+        let launcher = app.buttons["home.focus-launcher"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: 5))
+        let window = app.windows.firstMatch.frame
+        XCTAssertTrue(launcher.isHittable, "The start button must be in the first viewport at AX5")
+        XCTAssertLessThanOrEqual(launcher.frame.maxY, window.maxY)
+        XCTAssertFalse(app.descendants(matching: .any)["home.fusion-progress.large-text"].exists,
+                       "An empty jar has no progress card")
+        saveScreenshot("home-ax5-empty")
+
+        addThirtyMinutesManually()
+        // history-02 at AX5: the Undo banner is a short strip over the jar,
+        // its button under the text, never over the pinned start button.
+        let banner = app.descendants(matching: .any)["manual.pending"]
+        let undo = app.buttons["manual.undo"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 5))
+        XCTAssertTrue(undo.isHittable)
+        XCTAssertTrue(launcher.isHittable, "The Undo banner must not cover the start button")
+        XCTAssertLessThanOrEqual(
+            banner.frame.maxY,
+            launcher.frame.minY,
+            "banner=\(banner.frame) launcher=\(launcher.frame)"
+        )
+        XCTAssertLessThan(
+            banner.frame.height,
+            window.height * 0.4,
+            "A short strip, not most of the screen: \(banner.frame)"
+        )
+        saveScreenshot("manual-undo-banner-ax5")
+        waitForPendingManualEntryToSave()
+        let card = app.descendants(matching: .any)["home.fusion-progress.large-text"]
+        XCTAssertTrue(card.waitForExistence(timeout: 8), "The first gem gets the large-text progress card")
+        XCTAssertTrue(card.label.contains("時間 30分 / 4時間10分"), card.label)
+        XCTAssertTrue(launcher.isHittable, "The start button stays in view with a gem in the jar")
+        XCTAssertLessThanOrEqual(launcher.frame.maxY, window.maxY)
+        pause(3.5)
+        saveScreenshot("home-ax5-first-gem")
     }
 
     func testPickingABackgroundLowersTheMenuSoTheBackgroundShows() {
@@ -434,6 +561,16 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         let confirm = chooseThirtyMinutes(scrolling: true)
         XCTAssertTrue(waitForHittable(confirm))
         confirm.tap()
+    }
+
+    /// A confirmed manual entry is written when its Undo window ends (5 s,
+    /// longer with VoiceOver); wait for its banner to go.
+    private func waitForPendingManualEntryToSave() {
+        let undo = app.buttons["manual.undo"]
+        XCTAssertTrue(
+            waitUntil(timeout: 20) { !undo.exists },
+            "The Undo window must end and save the entry"
+        )
     }
 
     /// Chooses 30分 in 手動で積む and returns its 確認して積む button.

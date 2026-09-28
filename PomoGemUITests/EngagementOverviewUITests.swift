@@ -41,7 +41,7 @@ final class EngagementOverviewUITests: XCTestCase {
             "The guaranteed completion reward must explain real weekly progress"
         )
         XCTAssertTrue(
-            String(describing: weeklyCompletion.value).contains("戻った回数1回"),
+            String(describing: weeklyCompletion.value).contains("完走した回数1回"),
             "The reward heading must retain weekly recurrence context without presenting count as time value"
         )
         let rewardBridge = app.descendants(matching: .any)["reward.bridge"]
@@ -129,7 +129,7 @@ final class EngagementOverviewUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 6))
         let weeklyCrystal = app.descendants(matching: .any)["overview.weekly-crystal"]
         XCTAssertTrue(weeklyCrystal.waitForExistence(timeout: 4))
-        XCTAssertTrue((weeklyCrystal.label).contains("タイマー完走1回"))
+        XCTAssertTrue((weeklyCrystal.label).contains("完走した回数1回"))
 
         let lenses = app.segmentedControls["overview.lens"]
         XCTAssertTrue(lenses.waitForExistence(timeout: 4))
@@ -160,7 +160,7 @@ final class EngagementOverviewUITests: XCTestCase {
             "A single effort must expose only the destination vessel, not a completed core"
         )
         XCTAssertTrue(
-            scrollUntilVisible(app.staticTexts["まとまり粒"], in: app),
+            scrollUntilVisible(app.staticTexts["結晶"], in: app),
             "The cluster section must remain reachable below the constellation"
         )
 
@@ -750,7 +750,7 @@ final class EngagementOverviewUITests: XCTestCase {
         let cluster = app.buttons.matching(
             NSPredicate(
                 format: "label CONTAINS %@ AND label CONTAINS %@",
-                "まとまり粒",
+                "の結晶、",
                 "グラム"
             )
         ).firstMatch
@@ -761,7 +761,7 @@ final class EngagementOverviewUITests: XCTestCase {
         XCTAssertTrue(cluster.isHittable)
         cluster.tap()
 
-        XCTAssertTrue(app.navigationBars["まとまり粒"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.navigationBars["結晶の内訳"].waitForExistence(timeout: 4))
         let preservation = app.descendants(matching: .any)[
             "overview.cluster.preservation"
         ]

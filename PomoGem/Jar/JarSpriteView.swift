@@ -79,10 +79,12 @@ enum JarAccessibilityPresentation {
             rawPrismPebbleCount
         )
         let aggregate = aggregateCount > 0
-            ? "、まとまり粒\(aggregateCount)個、合計\(representedPebbleCount)粒分"
+            ? String(localized: "、結晶\(aggregateCount)個、合計\(representedPebbleCount)粒分", table: "Jar",
+                     comment: "VoiceOver jar value fragment: crystal count, gems they hold")
             : ""
         let legacyAggregate = legacyAggregateCount > 0
-            ? "、旧形式のまとまり粒\(legacyAggregateCount)個（保存済み情報を確認できます）"
+            ? String(localized: "、旧形式の結晶\(legacyAggregateCount)個（保存済み情報を確認できます）", table: "Jar",
+                     comment: "VoiceOver jar value fragment: crystals saved in the old format")
             : ""
         let fusion = projectionIsUnverified
             ? ""
@@ -535,6 +537,12 @@ struct JarSpriteView: View {
             }
         }
         .accessibilityElement(children: .ignore)
+        // The element's frame is the stage. Without this it took in layers
+        // placed past the stage's lower edge (with a time core in a short
+        // stage, such as Home's 300 pt jar at accessibility sizes on an
+        // iPhone SE, it ran 40 pt below the jar over the row under it),
+        // which VoiceOver then treated as the jar. Merge of #47 into #50.
+        .contentShape(.accessibility, Rectangle())
         .accessibilityLabel("瓶")
         .accessibilityValue(accessibilityValue)
         .accessibilityHint(accessibilityHint)
@@ -777,7 +785,11 @@ struct JarSpriteView: View {
         let base = "瓶をタップすると数秒だけ1粒が大きく跳ね、ぶつかった周囲の粒も自然に動いて止まります。その間はiPhoneを傾けたり、軽く振ったりして動かせます"
 #endif
         guard inspectableAggregateID != nil else { return base }
-        return "\(base)。「最新のまとまり粒の内訳を見る」アクションで、保存されている粒数や質量などを確認できます"
+        return String(
+            localized: "\(base)。「最新の結晶の内訳を見る」アクションで、保存されている粒数や質量などを確認できます",
+            table: "Jar",
+            comment: "VoiceOver jar hint: the tap/tilt hint, then the custom action that opens the newest crystal"
+        )
     }
 
     private func performSpatialTap(at point: CGPoint) {
@@ -1015,7 +1027,7 @@ private struct JarAggregateAccessibilityModifier: ViewModifier {
     func body(content: Content) -> some View {
         if let aggregateID, let onInspectAggregate {
             content
-                .accessibilityAction(named: "最新のまとまり粒の内訳を見る") {
+                .accessibilityAction(named: Text("最新の結晶の内訳を見る", tableName: "Jar", comment: "VoiceOver custom action on the jar")) {
                     onInspectAggregate(aggregateID)
                 }
         } else {

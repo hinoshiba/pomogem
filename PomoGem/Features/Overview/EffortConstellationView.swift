@@ -174,11 +174,15 @@ enum EffortConstellationPresentation {
         totalNodeCount: Int,
         visibleNodeCount: Int
     ) -> String {
+        // The value is time (the progress line below) and mass. The former
+        // 「11.0標準単位」 and 「物理履歴」 were accounting terms, and the
+        // trailing 「瓶の物理整理：集中11粒」 repeated the count.
         var components = [
             "時間の核",
             "集中\(formattedMass(totalGrams))\(projectionIsLowerBound ? "以上" : "")",
-            "\(EffortProgressPresentation.formattedStandardUnits(grams: totalGrams))\(projectionIsLowerBound ? "以上" : "")",
-            "物理履歴\(totalPebbleCount)粒\(projectionIsLowerBound ? "以上" : "")"
+            projectionIsLowerBound
+                ? String(localized: "\(totalPebbleCount)粒以上", table: "Overview", comment: "VoiceOver, time core: at least this many gems (still being checked)")
+                : String(localized: "\(totalPebbleCount)粒", table: "Overview", comment: "VoiceOver, time core: gems stacked so far")
         ]
 
         if projectionIsLowerBound {
@@ -195,9 +199,12 @@ enum EffortConstellationPresentation {
         }
 
         components.append(
-            "表示中のまとまり結晶\(totalNodeCount)個のうち代表\(visibleNodeCount)個を配置"
+            String(
+                localized: "表示中の結晶\(totalNodeCount)個のうち代表\(visibleNodeCount)個を配置",
+                table: "Overview",
+                comment: "VoiceOver, time core: crystals on the page, how many are drawn"
+            )
         )
-        components.append("瓶の物理整理：集中\(totalPebbleCount)粒")
         return components.joined(separator: "、")
     }
 }
@@ -389,7 +396,9 @@ struct EffortConstellationView: View {
                         : (
                             projectionIsLowerBound
                                 ? "整理中"
-                                : EffortProgressPresentation.formattedStandardUnits(
+                                // Time, the value the core grows by, instead
+                                // of 「1.0標準単位」.
+                                : EffortProgressPresentation.formattedDuration(
                                     grams: totalGrams
                                 )
                         )
@@ -431,7 +440,11 @@ struct EffortConstellationView: View {
                 : (
                     projectionIsLowerBound
                         ? "最初の結晶までの進捗を整理しています"
-                        : "\(EffortProgressPresentation.formattedStandardUnits(grams: totalGrams))、\(EffortProgressPresentation.formattedDuration(grams: totalGrams))。最初の結晶まで、あと\(max(0, 10 - min(9, max(0, totalPebbleCount))))粒です"
+                        : String(
+                            localized: "集中\(EffortProgressPresentation.formattedDuration(grams: totalGrams))。最初の結晶まで、あと\(max(0, 10 - min(9, max(0, totalPebbleCount))))粒です",
+                            table: "Overview",
+                            comment: "VoiceOver, empty time-core vessel: focus time so far, gems left until the first crystal"
+                        )
                 )
         )
     }
@@ -439,7 +452,11 @@ struct EffortConstellationView: View {
     @ViewBuilder
     private func orbitNode(_ node: EffortConstellationNode) -> some View {
         let diameter = EffortConstellationPresentation.nodeDiameter(grams: node.grams)
-        let accessibilityLabel = "\(EffortConstellationPresentation.formattedMass(node.grams))、\(EffortProgressPresentation.formattedStandardUnits(grams: node.grams))。瓶の整理単位：\(AggregatePresentation.title(level: node.level))、\(node.pebbleCount)粒分"
+        let accessibilityLabel = String(
+            localized: "\(EffortConstellationPresentation.formattedMass(node.grams))、集中\(EffortProgressPresentation.formattedDuration(grams: node.grams))。\(AggregatePresentation.title(level: node.level))、\(node.pebbleCount)粒分",
+            table: "Overview",
+            comment: "VoiceOver, one crystal on the star map: mass, focus time, crystal name such as 結晶, gems it holds"
+        )
 
         if let onSelect {
             Button {

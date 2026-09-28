@@ -37,7 +37,7 @@ UIKitが届ける向きの通知に追従します。手動固定はすべての
 - Product ID: `com.hinoshiba.pomogem.pro.lifetime`
 - Type: Non-Consumable
 - Entry: Homeの時間表示 → 「自由な時間を設定」、またはSettings → ポモジェムPro
-- Unlocks: 無料の25分／45分／60分／90分以外の任意の1分00秒〜360分00秒を秒単位で指定、まとまり粒の月刻印、スクリーンタイムの勉強アプリ数無制限（無料5つ）
+- Unlocks: 無料の25分／45分／60分／90分以外の任意の1分00秒〜360分00秒を秒単位で指定、結晶の月刻印、スクリーンタイムの勉強アプリ数無制限（無料5つ）
 - Restore: purchase screenの「購入を復元」
 - Pricing: United States USD 0.99 base price; Japan JPY 100 custom price; other available storefronts use Apple's automatically generated local equivalent
 - Availability: App and IAP are available in 148 of 175 storefronts. Austria, Belgium, Bulgaria, Croatia, Cyprus, Czech Republic, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Ireland, Italy, Latvia, Lithuania, Luxembourg, Malta, Netherlands, Poland, Portugal, Romania, Slovakia, Slovenia, Spain, and Sweden are excluded. United Kingdom, Norway, and Switzerland remain included; automatic availability for new storefronts is enabled.
@@ -89,7 +89,7 @@ UIKitが届ける向きの通知に追従します。手動固定はすべての
   残り時間と状態だけ表示する
 - This iPhone only: 全ての基本機能をApple Account／networkなしで利用可能。専用random namespaceの
   local storeだけへ保存し、iCloudへ自動切替／uploadしない
-- Local projection: 瓶とまとまり粒に使う`AggregatePebble`、`Stratum`、`Bedrock`、`GachaState`は
+- Local projection: 瓶と結晶に使う`AggregatePebble`、`Stratum`、`Bedrock`、`GachaState`は
   CloudKitへuploadせず、選択した保存先の同期元記録から各端末で再構築。iCloudから後着した記録の
   再検証中は、古いaggregateを生涯の正確値として表示せず、この端末が責任を持てる質量（全記録を覆う端末の
   合計、または同じdataの直前の検証済み合計に新しい記録を足した値）だけを「iCloudを確認中」の注記付きで
@@ -209,7 +209,7 @@ account不一致・利用不可を確認した場合は引き続き保護のた�
 1. すぐ粒を用意するには Home menu → 「時間を手動で積む」→「30分」→「確認して積む」を選びます。
    Homeの瓶で粒付近をtapすると、局所的に跳ね、短いカラン音と触覚が同期します。
 2. iPhoneを軽く左右へ往復させると、単発の傾きや机への接触ではなく、反転した2回の加速を検知した
-   ときだけ瓶全体が動きます。粒数が多いほど音の密度が増え、大きいまとまり粒ほど低い音と丸く重い
+   ときだけ瓶全体が動きます。粒数が多いほど音の密度が増え、大きい結晶ほど低い音と丸く重い
    触覚になります。1操作あたりの音数と触覚数には上限があります。
 3. Settings → 音／触覚でそれぞれ独立にOFFにできます。どちらをOFFにしても記録、瓶、tap操作は利用可能です。
 4. iOSの「視差効果を減らす」のON／OFFに関係なく、粒は同じ物理挙動で跳ね、落下し、傾きやシェイクにも

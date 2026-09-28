@@ -269,7 +269,7 @@ struct LogLegacyLayer: Identifiable, Equatable, Sendable {
     }
 }
 
-/// 「まとまり粒アーカイブ」's rows before the legacy layers are matched with
+/// 「結晶アーカイブ」's rows before the legacy layers are matched with
 /// the records on screen.
 struct LogAggregateArchive: Equatable, Sendable {
     let roots: [LogAggregateArchiveItem]

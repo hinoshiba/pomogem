@@ -276,7 +276,7 @@ struct AnimatedShareExporterTests {
             achievementCount: 9
         ))
         #expect(feed.compactLabel == "代表表示 +74")
-        #expect(feed.captionDisclosure == "瓶は代表表示（ほか集中粒48粒・まとまり17個・記念石9個）")
+        #expect(feed.captionDisclosure == "瓶は代表表示（ほか集中粒48粒・結晶17個・記念石9個）")
         #expect(story == ShareHiddenContent(
             loosePebbleCount: 16,
             aggregateCount: 13,

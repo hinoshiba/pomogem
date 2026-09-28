@@ -159,7 +159,12 @@ struct PaywallView: View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .center, spacing: 12) {
-                    Label("ポモジェムPro", systemImage: "checkmark.seal.fill")
+                    Label {
+                        Text("ポモジェムPro", tableName: "Paywall", comment: "Paywall: title of the card shown once Pro is owned")
+                    } icon: {
+                        Image(systemName: "checkmark.seal.fill")
+                            .accessibilityHidden(true)
+                    }
                         .font(.headline)
                         .foregroundStyle(PomoGemTheme.amber)
                     Spacer()

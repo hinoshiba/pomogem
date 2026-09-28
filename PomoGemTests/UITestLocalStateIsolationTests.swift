@@ -74,7 +74,13 @@ final class UITestLocalStateIsolationTests: XCTestCase {
     func testANewUITestForgetsTheEarlierTestsTimerButItsOwnRelaunchKeepsIt() throws {
         let defaults = UserDefaults.standard
         let savedScenario = defaults.string(forKey: UITestLocalStateIsolation.scenarioDefaultsKey)
+        let detailSeenKey = AccountScopedLocalState.defaultsKey(
+            base: HomeView.aggregateDetailSeenStorageBase,
+            defaults: defaults
+        )
+        let savedDetailSeen = defaults.object(forKey: detailSeenKey)
         addTeardownBlock {
+            defaults.set(savedDetailSeen, forKey: detailSeenKey)
             FocusPersistence.clear()
             FocusPersistence.clearBreak()
             TimerCompletionAlertAcknowledgementStore.removeAll()
@@ -111,6 +117,8 @@ final class UITestLocalStateIsolationTests: XCTestCase {
             )
             defaults.set(true, forKey: FocusPersistence.interruptedFlagKey)
             FocusRestCadenceStore.record(sessionID: sessionID, contributionGrams: 250)
+            // It opened a crystal's detail, which drops Home's tip row.
+            defaults.set(true, forKey: detailSeenKey)
         }
 
         // Counts instead of clearing this test host's real notification center.
@@ -131,6 +139,7 @@ final class UITestLocalStateIsolationTests: XCTestCase {
         XCTAssertFalse(begin([key: "test-a"]))
         XCTAssertNotNil(FocusPersistence.load())
         XCTAssertEqual(DeferredFocusCompletionStore.sessionID(), sessionID)
+        XCTAssertTrue(defaults.bool(forKey: detailSeenKey))
         XCTAssertEqual(notificationRetirements, 1)
 
         // No scenario (an ordinary Debug or Release-like launch): untouched.
@@ -147,6 +156,10 @@ final class UITestLocalStateIsolationTests: XCTestCase {
         XCTAssertNil(FocusPersistence.loadBreak(at: now.addingTimeInterval(60)))
         XCTAssertFalse(defaults.bool(forKey: FocusPersistence.interruptedFlagKey))
         XCTAssertTrue(FocusRestCadenceStore.load().recentRecords.isEmpty)
+        XCTAssertNil(
+            defaults.object(forKey: detailSeenKey),
+            "Test B's jar starts with the crystal tip row, whatever test A opened"
+        )
         XCTAssertEqual(defaults.string(forKey: UITestLocalStateIsolation.scenarioDefaultsKey), "test-b")
     }
 }
