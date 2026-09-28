@@ -238,7 +238,7 @@ enum AlarmSoundLibrary {
         )
         let name = fileName(for: choice)
         let destination = directory.appendingPathComponent(name)
-        let temporary = directory.appendingPathComponent(".\(name).writing")
+        let temporary = directory.appendingPathComponent(temporaryFileName(for: name))
         if fileManager.fileExists(atPath: temporary.path) {
             try fileManager.removeItem(at: temporary)
         }
@@ -259,13 +259,22 @@ enum AlarmSoundLibrary {
         return destination
     }
 
-    /// Removes alarm ringtones written by an older `fileVersion` (or any
-    /// interrupted write), leaving the current files and every other sound
-    /// in Library/Sounds untouched.
+    /// A temporary `.writing` file younger than this may belong to a write
+    /// in progress (the launch sweep runs while the chosen sound and a
+    /// recovery booking prepare their files), so only an older one counts
+    /// as interrupted.
+    static let interruptedWriteAge: TimeInterval = 10 * 60
+
+    /// Removes alarm ringtones written by an older `fileVersion` and writes
+    /// interrupted at least `interruptedWriteAge` ago, leaving the current
+    /// files, writes in progress and every other sound in Library/Sounds
+    /// untouched. A file that disappears meanwhile (a write that just moved
+    /// its temporary file into place) does not stop the sweep.
     @discardableResult
     static func removeStaleRingtoneFiles(
         libraryDirectory: URL? = nil,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        now: Date = Date()
     ) throws -> [URL] {
         let directory = try soundsDirectory(
             libraryDirectory: libraryDirectory,
@@ -274,7 +283,7 @@ enum AlarmSoundLibrary {
         let current = currentFileNames
         let contents = try fileManager.contentsOfDirectory(
             at: directory,
-            includingPropertiesForKeys: nil
+            includingPropertiesForKeys: [.contentModificationDateKey]
         )
         var removed: [URL] = []
         for url in contents {
@@ -282,10 +291,23 @@ enum AlarmSoundLibrary {
             let isOurs = name.hasPrefix(fileNamePrefix)
                 || name.hasPrefix(".\(fileNamePrefix)")
             guard isOurs, !current.contains(name) else { continue }
-            try fileManager.removeItem(at: url)
+            if name.hasSuffix(temporarySuffix) {
+                guard let modified = try? url.resourceValues(
+                    forKeys: [.contentModificationDateKey]
+                ).contentModificationDate,
+                      now.timeIntervalSince(modified) >= interruptedWriteAge
+                else { continue }
+            }
+            guard (try? fileManager.removeItem(at: url)) != nil else { continue }
             removed.append(url)
         }
         return removed
+    }
+
+    static let temporarySuffix = ".writing"
+
+    static func temporaryFileName(for name: String) -> String {
+        ".\(name)\(temporarySuffix)"
     }
 
     /// Removes every alarm ringtone this library wrote.
@@ -400,7 +422,7 @@ enum AlarmSoundLibrary {
             )
             let name = fileName(.cue, for: choice)
             let destination = directory.appendingPathComponent(name)
-            let temporary = directory.appendingPathComponent(".\(name).writing")
+            let temporary = directory.appendingPathComponent(temporaryFileName(for: name))
             if fileManager.fileExists(atPath: temporary.path) {
                 try fileManager.removeItem(at: temporary)
             }

@@ -1,4 +1,5 @@
 import AVFoundation
+import os
 import XCTest
 @testable import PomoGem
 
@@ -108,14 +109,57 @@ final class AlarmSoundLibraryTests: XCTestCase {
             try Data("x".utf8).write(to: url)
         }
 
-        let removed = try AlarmSoundLibrary.removeStaleRingtoneFiles(libraryDirectory: library)
-        XCTAssertEqual(Set(removed.map(\.lastPathComponent)), [stale.lastPathComponent, interrupted.lastPathComponent])
+        // At launch the sweep runs while the chosen sound (or a recovery
+        // booking) may be writing: a fresh temporary file is left alone.
+        let atLaunch = try AlarmSoundLibrary.removeStaleRingtoneFiles(libraryDirectory: library)
+        XCTAssertEqual(atLaunch.map(\.lastPathComponent), [stale.lastPathComponent])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: interrupted.path), "a write in progress")
+
+        let later = Date().addingTimeInterval(AlarmSoundLibrary.interruptedWriteAge + 1)
+        let removed = try AlarmSoundLibrary.removeStaleRingtoneFiles(libraryDirectory: library, now: later)
+        XCTAssertEqual(removed.map(\.lastPathComponent), [interrupted.lastPathComponent], "an interrupted write")
         XCTAssertTrue(FileManager.default.fileExists(atPath: current.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: unrelated.path))
 
         try AlarmSoundLibrary.removeAllRingtoneFiles(libraryDirectory: library)
         XCTAssertFalse(FileManager.default.fileExists(atPath: current.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: unrelated.path), "the short chimes belong to TimerCompletionSoundLibrary")
+    }
+
+    /// The launch sweep and the first ringtone write run at the same time
+    /// (`FocusEndAlarmMaintenance.maintainSoundFilesOncePerProcess`): the
+    /// write must finish, and a file that vanishes mid-sweep must not stop
+    /// it.
+    func testTheSweepNeverBreaksAWriteInProgress() async throws {
+        let sounds = try AlarmSoundLibrary.soundsDirectory(libraryDirectory: library)
+        for round in 0 ..< 8 {
+            let stale = sounds.appendingPathComponent("pomogem-alarm-bell-v0-\(round).caf")
+            try Data("x".utf8).write(to: stale)
+            let directory = library!
+            let finished = OSAllocatedUnfairLock(initialState: false)
+            async let written = Task.detached(priority: .utility) {
+                defer { finished.withLock { $0 = true } }
+                return try AlarmSoundLibrary.writeFile(
+                    .cue,
+                    for: .digital,
+                    source: AlarmSoundSynthesis.source(for: .digital),
+                    libraryDirectory: directory
+                )
+            }.value
+            async let swept = Task.detached(priority: .utility) {
+                // Sweep over and over for as long as the write runs.
+                var removed: [URL] = []
+                repeat {
+                    removed += (try? AlarmSoundLibrary.removeStaleRingtoneFiles(libraryDirectory: directory)) ?? []
+                } while !finished.withLock { $0 }
+                return removed
+            }.value
+            let (url, removed) = try await (written, swept)
+            XCTAssertGreaterThan(try AVAudioFile(forReading: url).length, 0, "round \(round)")
+            XCTAssertFalse(removed.contains { $0.lastPathComponent.hasSuffix(AlarmSoundLibrary.temporarySuffix) })
+            XCTAssertFalse(FileManager.default.fileExists(atPath: stale.path), "round \(round)")
+            try FileManager.default.removeItem(at: url)
+        }
     }
 
     func testLoopAndPreviewBuffersUseThePlayableFormat() throws {
