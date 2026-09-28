@@ -172,7 +172,9 @@ final class CommonLocalizationTests: XCTestCase {
 
     /// Orchestrator decision (DECISIONS.md #1): a device that prefers neither
     /// Japanese nor English (Korean, Chinese, French ...) gets English, the
-    /// development region of every bundle. Japanese devices keep Japanese.
+    /// development region of every bundle. A device keeps Japanese when
+    /// Japanese comes before English in its language list; one that lists
+    /// English first gets English (it read Japanese before English shipped).
     func testThirdLanguagesFallBackToEnglish() throws {
         XCTAssertEqual(try LocalizationTestSupport.tableMap().developmentRegion, "en")
         for (name, bundle) in try LocalizationTestSupport.productBundles() {
@@ -188,6 +190,12 @@ final class CommonLocalizationTests: XCTestCase {
                 XCTAssertEqual(
                     Bundle.preferredLocalizations(from: localizations, forPreferences: preferences).first, "ja",
                     "\(name) \(preferences)"
+                )
+            }
+            for preferences in [["en-US", "ja-JP"], ["ko-KR", "en-GB", "ja-JP"]] {
+                XCTAssertEqual(
+                    Bundle.preferredLocalizations(from: localizations, forPreferences: preferences).first, "en",
+                    "\(name) \(preferences): English listed before Japanese wins"
                 )
             }
         }

@@ -197,7 +197,11 @@ catalogの同期は必ず全テーブルまとめて行います（一部だけ�
 - 設定: `project.yml`の`settings.base.DEVELOPMENT_LANGUAGE: en`と`table-map.json`の`development_region: "en"`。
   2つは必ず一緒に変えます（`check`、`verify-bundle`、`LocalizationEnvironmentTests`が食い違いを検出します）。
   `options.developmentLanguage`（catalogの元の言語）は`ja`のままです。
-- 日本語の端末（言語リストのどこかに日本語がある端末）は、これまでどおり日本語です。
+- iOSは言語リストを上から見て、アプリが持つ最初の言語（日本語か英語）を使います。言語リストで英語より前に
+  日本語がある端末（英語がリストにない端末を含む）は、これまでどおり日本語です。
+- 言語リストで日本語より前に英語がある端末（例: English、日本語の順）は英語になります。英語を出荷する前は
+  日本語でしたが、これは意図した変更です。`-AppleLanguages (en-US,ja-JP)`で起動すると、ワードマークが「PomoGem」、
+  ホームの「まだ空っぽ。」が「Still empty.」になります。`(ja-JP,en-US)`では日本語のままです（2026-09-29、iOS 26.5 Simulator）。
 - 確認（2026-09-29、iOS 26.5 Simulator）: Simulator全体を韓国語（ko-KR）にすると、ホーム画面のアイコン名と
   iOSの確認ダイアログのアプリ名が「PomoGem」になり、アプリ内は英語の文字列（まだ訳していない画面は日本語のキー）に
   なりました。書式は`PomoGemLocale`が英語と利用者の地域（en_KR）で決めます。日本語（ja-JP）では、変更前のビルドと
