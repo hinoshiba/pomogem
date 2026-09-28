@@ -25,9 +25,9 @@ final class RewardVocabularyAndHUDTests: XCTestCase {
             "巡目": "N杯目",
             "成果名": "成果メモ"
         ]
-        // PebbleNode's per-gem VoiceOver strings belong to the jar-art work
-        // and change there; debug-only fixtures never ship.
-        let exemptFiles: Set<String> = ["PebbleNode.swift"]
+        // Debug-only fixtures never ship. No shipping file is exempt: the
+        // last one, PebbleNode's per-gem VoiceOver text, now uses the final
+        // nouns too.
         var scannedFileCount = 0
         var findings: [String] = []
         for directory in ["PomoGem", "PomoGemWidgets", "PomoGemScreenTimeMonitor", "Shared"] {
@@ -38,7 +38,6 @@ final class RewardVocabularyAndHUDTests: XCTestCase {
             ) else { continue }
             for case let fileURL as URL in enumerator
             where fileURL.pathExtension == "swift"
-                && !exemptFiles.contains(fileURL.lastPathComponent)
                 && !fileURL.path.contains("/PomoGem/Debug/") {
                 let source = try String(contentsOf: fileURL, encoding: .utf8)
                 scannedFileCount += 1
@@ -54,6 +53,70 @@ final class RewardVocabularyAndHUDTests: XCTestCase {
 
         XCTAssertGreaterThan(scannedFileCount, 100)
         XCTAssertEqual(findings, [], "Use the one app-wide noun")
+    }
+
+    /// The per-body VoiceOver text in PebbleNode, the lint's last exemption,
+    /// speaks the final nouns: 粒, 結晶, 記念石 and 勉強アプリの粒.
+    func testJarBodiesSpeakTheFinalNouns() {
+        func gem(_ source: SessionSource) -> PebbleDescriptor {
+            PebbleDescriptor(subjectName: "英語", colorHex: Constants.Color.english, source: source, kind: .normal, grams: 250)
+        }
+        XCTAssertEqual(gem(.timer).accessibilityDescription, "英語、実測の粒、250グラム")
+        XCTAssertEqual(gem(.manual).accessibilityDescription, "英語、自己申告の粒、250グラム")
+        XCTAssertEqual(gem(.screenTime).accessibilityDescription, "英語、勉強アプリの粒、250グラム")
+
+        let stone = PebbleDescriptor(
+            subjectName: "英語",
+            colorHex: Constants.Color.english,
+            source: .manual,
+            kind: .normal,
+            achievementKind: .examPass,
+            grams: 0
+        )
+        XCTAssertEqual(stone.accessibilityDescription, "英語、試験合格の記念石、質量には含まれません")
+
+        func crystal(level: Int, pebbles: Int, children: Int, manual: Int) -> AggregateMetadata {
+            AggregateMetadata(
+                level: level,
+                pebbleCount: pebbles,
+                childAggregateCount: children,
+                colorMix: [StratumColorFraction(hex: Constants.Color.english, fraction: 1)],
+                subjectMix: [
+                    AggregateSubjectFraction(name: "英語", colorHex: Constants.Color.english, pebbleCount: pebbles - 4),
+                    AggregateSubjectFraction(name: "数学", colorHex: Constants.Color.mathematics, pebbleCount: 4)
+                ],
+                periodStart: Date(timeIntervalSince1970: 100),
+                periodEnd: Date(timeIntervalSince1970: 200),
+                sessionIDs: [],
+                measuredPebbleCount: pebbles - manual,
+                manualPebbleCount: manual,
+                goldPebbleCount: 1,
+                prismPebbleCount: 2
+            )
+        }
+        XCTAssertEqual(
+            crystal(level: 1, pebbles: 10, children: 0, manual: 0).accessibilityDescription(presentsRareRewards: false),
+            "英語など、10粒を含む結晶、実測10粒"
+        )
+        XCTAssertEqual(
+            crystal(level: 2, pebbles: 100, children: 10, manual: 3).accessibilityDescription(presentsRareRewards: false),
+            "英語など、100粒、10個の結晶を含む結晶、実測97粒、自己申告3粒"
+        )
+        let ten = crystal(level: 1, pebbles: 10, children: 0, manual: 0)
+        let descriptor = PebbleDescriptor(
+            subjectName: "英語",
+            colorHex: Constants.Color.english,
+            source: .timer,
+            kind: .normal,
+            aggregate: ten,
+            grams: 2_500
+        )
+        XCTAssertEqual(
+            descriptor.accessibilityDescription,
+            RareRewardReleasePolicy.isEnabled
+                ? "英語など、10粒を含む結晶、実測10粒、金1粒、虹2粒、2,500グラム"
+                : "英語など、10粒を含む結晶、実測10粒、2,500グラム"
+        )
     }
 
     // MARK: HUD (walk-std-09)
