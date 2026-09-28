@@ -46,9 +46,6 @@
         }
       }
     },
-    "「ミュージック」アプリでApple Musicにサインインすると再生できます。" : {
-
-    },
     "「設定」アプリを開く" : {
 
     },
@@ -69,6 +66,9 @@
     },
     "もう一度確認する" : {
 
+    },
+    "アプリを離れていたので一時停止しました" : {
+      "comment" : "Paused timer notice after the person left the app during a focus. Suggested English: Paused because you left the app"
     },
     "クラシックステーション" : {
       "comment" : "Apple Music station title (US storefront: Classical Station)"
@@ -106,6 +106,9 @@
     "下から音楽を選ぶと再生が始まります。" : {
 
     },
+    "休憩のときなどに「ミュージック」アプリでApple Musicにサインインすると、再生できるようになります。" : {
+
+    },
     "作業用BGM：クラシック" : {
       "comment" : "Apple Music Classical playlist title (US storefront: Classical Concentration)"
     },
@@ -136,11 +139,29 @@
     "瓶へ戻ると、集中が始まります" : {
 
     },
+    "画面を消したり、ほかのアプリに移ると一時停止します。" : {
+      "comment" : "Running focus on an iPhone without a passcode: locking or switching apps pauses the timer. Suggested English: Locking the screen or switching apps pauses the timer."
+    },
+    "画面ロック中も通常は進みます。ほかのアプリに移ると一時停止します。" : {
+      "comment" : "Running focus with a passcode: locking usually keeps the timer running (a lock right after an unlock can still pause it, so keep the hedge), switching apps pauses it. Suggested English: Usually keeps running while locked. Switching apps pauses it."
+    },
+    "画面ロック中も通常は進みます。終了通知は端末の設定から" : {
+      "comment" : "Button opening iOS Settings when end notifications are denied; the timer usually keeps running while locked (keep the hedge). Suggested English: Usually keeps running while locked. Turn on end alerts in Settings"
+    },
+    "画面ロック中も通常は進みます。終了通知を許可" : {
+      "comment" : "Button asking for notification permission; the timer usually keeps running while locked (keep the hedge). Suggested English: Usually keeps running while locked. Allow end alerts"
+    },
     "穏やかに集中するとき" : {
       "comment" : "Apple Music Focus playlist title (US storefront: Peaceful Focus)"
     },
     "空欄なら、ホームで選んでいる時間で始めます。" : {
       "comment" : "Shortcuts: what an empty focus length means"
+    },
+    "終了通知は端末の設定から" : {
+      "comment" : "Button opening iOS Settings when end notifications are denied (no passcode, so no promise about locking). Suggested English: Turn on end alerts in Settings"
+    },
+    "終了通知を許可" : {
+      "comment" : "Button asking for notification permission (no passcode, so no promise about locking). Suggested English: Allow end alerts"
     },
     "選んで再生します" : {
       "comment" : "VoiceOver hint of a music row"

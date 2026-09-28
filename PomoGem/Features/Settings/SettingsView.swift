@@ -8,6 +8,7 @@ enum NotificationPreference: Hashable {
     case dailyReminder
     case wrapped
     case focusReturnReminder
+    case focusLeaveNudges
 }
 
 /// Authorization may outlive a later toggle. Keep independent user intents
@@ -73,6 +74,15 @@ struct SettingsView: View {
     private var liveActivityEnabled = true
     @AppStorage(FocusReturnReminderPolicy.enabledDefaultsKey)
     private var focusReturnReminderEnabled = false
+    /// The two device-local F1 switches, read through `FocusLeavePreferences`
+    /// rather than @AppStorage: the default depends on the process (UI tests
+    /// opt in) and on the older return-reminder opt-in, and a launch argument
+    /// stores the string "NO", which @AppStorage's Bool does not read.
+    @State private var focusLeavePauseEnabled = FocusLeavePreferences.isEnabled()
+    @State private var focusLeaveNudgesEnabled = FocusLeavePreferences.nudgesAreEnabled()
+    /// On because the person chose it, not only by the product default:
+    /// only then does the permission notice sit under the switch.
+    @State private var focusLeaveNudgesChosen = FocusLeavePreferences.nudgesWereChosen()
     @AppStorage(TimerOrientationPreference.defaultsKey)
     private var defaultTimerOrientationRawValue = TimerDefaultOrientation.automatic.rawValue
     @AppStorage(FocusMusicPreferences.sourceKey)
@@ -152,6 +162,7 @@ struct SettingsView: View {
         List {
             subjectsSection
             focusSection
+            focusLeaveSection
             focusNoticesSection
             proSection
             screenTimeSection
@@ -159,6 +170,9 @@ struct SettingsView: View {
                 rarePebbleSection
             }
             sensorySection
+            // 演出の強さ sits with 音と触覚: both are how the app feels on
+            // this iPhone, not what it records.
+            JarEffectsSettingsSection()
             notificationSection
             shareSection
             // 記録とiCloud: where the records live, moving them, exporting
@@ -335,7 +349,10 @@ struct SettingsView: View {
             }
         }
 #endif
-        .onAppear { viewTasks.activate() }
+        .onAppear {
+            viewTasks.activate()
+            refreshFocusLeaveSwitches()
+        }
         .task {
             await refreshViewServices()
             guard !Task.isCancelled else { return }
@@ -346,6 +363,7 @@ struct SettingsView: View {
                 completionPreview.cancel()
                 return
             }
+            refreshFocusLeaveSwitches()
             viewTasks.start {
                 await refreshViewServices()
             }
@@ -617,9 +635,123 @@ struct SettingsView: View {
         )
     }
 
-    /// settings-06. The two switches that reach beyond the timer screen,
-    /// with their explanations as the card's footer instead of caption rows
-    /// between the switches. No header: it continues 「集中」.
+    /// F1, owner-requested change 2026-09-26: whether leaving the app pauses
+    /// a running focus, and the bounded 「集中が切れています」 series that
+    /// says so. Both switches are device-local and on by default
+    /// (`FocusLeavePolicy.enabledByDefault`). The footer says plainly what a
+    /// lock does with and without a passcode, and that only 再開する resumes;
+    /// it is worded to stay true with the switch on or off. No header: it
+    /// continues 「集中」.
+    private var focusLeaveSection: some View {
+        Section {
+            Toggle(isOn: Binding(
+                get: { focusLeavePauseEnabled },
+                set: { updateFocusLeavePause(enabled: $0) }
+            )) {
+                SettingLabel(
+                    title: String(
+                        localized: "アプリを離れたら一時停止",
+                        table: "Settings",
+                        comment: "Settings switch title: pause a running focus when the person goes to the Home Screen or another app. Suggested English: Pause When You Leave the App"
+                    ),
+                    subtitle: String(
+                        localized: "ホーム画面やほかのアプリへ移ると止めます",
+                        table: "Settings",
+                        comment: "Settings switch subtitle: what counts as leaving the app. Suggested English: Stops when you go Home or open another app"
+                    ),
+                    symbol: "pause.circle"
+                )
+            }
+            .accessibilityIdentifier("settings.focus-leave-pause")
+
+            // The series only exists while the leave pause does; with it off,
+            // 集中に戻るお知らせ below behaves as before.
+            if focusLeavePauseEnabled {
+                Toggle(isOn: Binding(
+                    get: { focusLeaveNudgesEnabled },
+                    set: { updateFocusLeaveNudges(enabled: $0) }
+                )) {
+                    SettingLabel(
+                        title: String(
+                            localized: "集中が切れたらお知らせ",
+                            table: "Settings",
+                            comment: "Settings switch title: the notifications sent while a focus is paused because the person left the app. Suggested English: Notify Me When I Drift Away"
+                        ),
+                        subtitle: focusLeaveNudgeSubtitle,
+                        symbol: "bell.badge"
+                    )
+                }
+                .accessibilityIdentifier("settings.focus-leave-nudges")
+
+                // Like every notification row, the notice answers an intent
+                // the person expressed. Under the product default alone the
+                // footer says, without a call to action, that nothing arrives
+                // without permission.
+                if focusLeaveNudgesEnabled, focusLeaveNudgesChosen {
+                    notificationPermissionStatus(identifier: "settings.focus-leave-nudges-permission")
+                }
+            }
+        } footer: {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(
+                    "オンのとき、集中タイマー中にホーム画面やほかのアプリへ移ると、離れた時点でタイマーを一時停止します。\(focusLeaveGraceText)以内に戻れば止まりません。パスコードを設定しているiPhoneでは、画面をロックしても、通常はタイマーが進みます。ただし、ロックを解除した直後にまたロックすると一時停止したり、ほかのアプリへ移ってすぐにロックすると止まらなかったりすることがあります。パスコードがないiPhoneでは、ロックとアプリの切り替えを区別できないため、画面ロックでも一時停止します。",
+                    tableName: "Settings",
+                    comment: "Settings footer under the leave-pause switch. The argument is the quick-glance grace (20秒). The lock is recognised from a notice iOS sends late right after an unlock, so both lock sentences are hedged; keep them hedged. Suggested English: When on, going Home or to another app during a focus pauses the timer from the moment you left. Coming back within %@ does not pause it. On an iPhone with a passcode, locking the screen usually keeps the timer running. However, locking again right after unlocking can pause it, and locking right after leaving the app can keep it running. Without a passcode, iPhone cannot tell locking from switching apps, so locking also pauses it."
+                )
+                .accessibilityIdentifier("settings.focus-leave-footer.behavior")
+                Text(
+                    "自動では再開しません。アプリに戻って「再開する」をタップすると、離れた時点の続きから進みます。休憩中と、終了まで\(focusLeaveFinalStretchText)以内の集中は止めません。オフのときは、アプリを離れてもタイマーは止まりません。",
+                    tableName: "Settings",
+                    comment: "Settings footer under the leave-pause switch: how the timer resumes, what is never paused, and the off state. The argument is the final stretch that is never paused (1分). Suggested English: The timer never resumes by itself. Go back to the app and tap Resume to continue from where you left. Breaks and the last %@ of a focus are never paused. When off, the timer keeps running after you leave the app."
+                )
+                .accessibilityIdentifier("settings.focus-leave-footer.resume")
+                if focusLeavePauseEnabled {
+                    Text(
+                        "「集中が切れたらお知らせ」は、タイマーが止まっていることを知らせる通知で、アプリに戻ると残りは届きません。このiPhoneで通知を許可していない場合は届きません。「アプリを離れたら一時停止」がオンのあいだは、「集中に戻るお知らせ」の代わりにこちらを使います。",
+                        tableName: "Settings",
+                        comment: "Settings footer under the leave-pause notification switch; it replaces the older Return-to-Focus Reminder while the leave pause is on. The switch is on by default, so the permission sentence is a plain fact with no call to action. Suggested English: These notifications say the timer is paused, and the rest are withdrawn when you come back. They do not arrive unless notifications are allowed on this iPhone. While Pause When You Leave the App is on, they replace the Return-to-Focus Reminder."
+                    )
+                    .accessibilityIdentifier("settings.focus-leave-footer.nudges")
+                }
+            }
+        }
+    }
+
+    /// 「離れてから20分までに最大5回」, from the policy's own offsets.
+    private var focusLeaveNudgeSubtitle: String {
+        let offsets = FocusLeavePolicy.nudgeOffsets
+        let lastOffset = DurationText.short(
+            seconds: Int(offsets.last ?? 0),
+            units: .minutesSeconds
+        )
+        let count = offsets.count
+        return String(
+            localized: "離れてから\(lastOffset)までに最大\(count)回",
+            table: "Settings",
+            comment: "Settings switch subtitle for the leave-pause notifications. The first argument is when the series stops after leaving (20分), the second how many notifications at most (5). Suggested English: Up to %2$lld times in your first %1$@ away"
+        )
+    }
+
+    private var focusLeaveGraceText: String {
+        DurationText.short(
+            seconds: Int(FocusLeavePolicy.lockDetectionWindow),
+            units: .minutesSeconds
+        )
+    }
+
+    private var focusLeaveFinalStretchText: String {
+        DurationText.short(
+            seconds: Int(FocusLeavePolicy.minimumRemaining),
+            units: .minutesSeconds
+        )
+    }
+
+    /// settings-06. The switches that reach beyond the timer screen, with
+    /// their explanations as the card's footer instead of caption rows
+    /// between the switches. No header: it continues 「集中」. While the
+    /// leave pause is on, 集中に戻るお知らせ is superseded (the host never
+    /// books it), so its row and caption are hidden rather than left to
+    /// contradict 「集中が切れたらお知らせ」 above.
     private var focusNoticesSection: some View {
         Section {
             Toggle(isOn: $liveActivityEnabled) {
@@ -646,33 +778,40 @@ struct SettingsView: View {
                 }
             }
 
-            Toggle(isOn: Binding(
-                get: { focusReturnReminderEnabled },
-                set: { updateFocusReturnReminder(enabled: $0) }
-            )) {
-                SettingLabel(
-                    title: "集中に戻るお知らせ",
-                    subtitle: "アプリを離れて30秒後に一度通知",
-                    symbol: "bell.badge"
-                )
-            }
-            .accessibilityIdentifier("settings.focus-return-reminder")
+            if !focusLeavePauseEnabled {
+                Toggle(isOn: Binding(
+                    get: { focusReturnReminderEnabled },
+                    set: { updateFocusReturnReminder(enabled: $0) }
+                )) {
+                    SettingLabel(
+                        title: "集中に戻るお知らせ",
+                        subtitle: "アプリを離れて30秒後に一度通知",
+                        symbol: "bell.badge"
+                    )
+                }
+                .accessibilityIdentifier("settings.focus-return-reminder")
 
-            if focusReturnReminderEnabled {
-                notificationPermissionStatus(identifier: "settings.focus-return-permission")
+                if focusReturnReminderEnabled {
+                    notificationPermissionStatus(identifier: "settings.focus-return-permission")
+                }
             }
         } footer: {
             VStack(alignment: .leading, spacing: 8) {
+                // True with the leave pause on or off: whether the timer
+                // stops in the background is the switch above's to say.
                 Text(
-                    "タイマーはバックグラウンドでも止まりません。画面を閉じたときの表示は、iPhoneの設定でライブアクティビティを許可している場合に出ます。",
+                    "画面を閉じたときの表示は、iPhoneの設定でライブアクティビティを許可している場合に出ます。アプリを離れたときにタイマーを止めるかどうかは、「アプリを離れたら一時停止」の設定に従います。",
                     tableName: "Settings",
-                    comment: "Settings footer: the Live Activity switch"
+                    comment: "Settings footer: the Live Activity switch. Suggested English: The Lock Screen timer appears when Live Activities are allowed in iPhone Settings. Whether the timer stops when you leave the app follows Pause When You Leave the App."
                 )
-                Text(
-                    "「集中に戻るお知らせ」は既定でオフです。オンにすると、集中タイマー中にホーム画面や別のアプリへ移ったとき、30秒後に一度通知し、戻ると取り消します。画面をロックしただけなら通知しません（パスコードを使っていないiPhoneなどでは届くことがあります）。一時停止中・休憩中・終了間際も通知しません。",
-                    tableName: "Settings",
-                    comment: "Settings caption under the return-to-focus reminder switch"
-                )
+                .accessibilityIdentifier("settings.live-activity-footer")
+                if !focusLeavePauseEnabled {
+                    Text(
+                        "「集中に戻るお知らせ」は既定でオフです。オンにすると、集中タイマー中にホーム画面や別のアプリへ移ったとき、30秒後に一度通知し、戻ると取り消します。画面をロックしただけなら通知しません（パスコードを使っていないiPhoneなどでは届くことがあります）。一時停止中・休憩中・終了間際も通知しません。",
+                        tableName: "Settings",
+                        comment: "Settings caption under the return-to-focus reminder switch"
+                    )
+                }
             }
         }
     }
@@ -930,7 +1069,14 @@ struct SettingsView: View {
         } header: {
             Text("通知")
         } footer: {
-            Text("既定はオフ。赤いバッジや連続記録の警告は使いません。タイマー終了の通知だけは「即時通知」として送るため、iPhoneの集中モード（おやすみモードなど）で即時通知を許可していれば、その間も届きます。")
+            // Scoped to this card's switches: 「集中が切れたらお知らせ」
+            // (F1, above) is on by default.
+            Text(
+                "「毎日のリマインダー」と「先月の瓶のお知らせ」は既定でオフです。赤いバッジや連続記録の警告は使いません。タイマー終了の通知だけは「即時通知」として送るため、iPhoneの集中モード（おやすみモードなど）で即時通知を許可していれば、その間も届きます。",
+                tableName: "Settings",
+                comment: "Settings footer under the Notifications card. The default-off sentence names only this card's two switches, because the leave-pause notifications in the Focus card are on by default. Suggested English: Daily Reminder and Last Month's Jar are off by default. The app never uses red badges or streak warnings. Only timer-end alerts are sent as Time Sensitive, so they still arrive during a Focus such as Do Not Disturb if Time Sensitive notifications are allowed there."
+            )
+            .accessibilityIdentifier("settings.notifications-footer")
         }
     }
 
@@ -1825,6 +1971,57 @@ struct SettingsView: View {
 
     private func updateWrappedNotification(enabled: Bool) {
         updatePassiveNotification(.wrapped, enabled: enabled)
+    }
+
+    private func refreshFocusLeaveSwitches() {
+        focusLeavePauseEnabled = FocusLeavePreferences.isEnabled()
+        focusLeaveNudgesEnabled = FocusLeavePreferences.nudgesAreEnabled()
+        focusLeaveNudgesChosen = FocusLeavePreferences.nudgesWereChosen()
+    }
+
+    /// No permission is involved: the pause works whether or not
+    /// notifications are allowed. Turning it off withdraws a booked series.
+    /// The switch shows the value read back, so an explicit launch-argument
+    /// value (which outranks this write) is never misreported.
+    private func updateFocusLeavePause(enabled: Bool) {
+        FocusLeavePreferences.setLeavePauseEnabled(enabled)
+        refreshFocusLeaveSwitches()
+    }
+
+    /// Same contract as 集中に戻るお知らせ: ON is saved only once this
+    /// iPhone allows notifications, and a refused ON saves nothing.
+    private func updateFocusLeaveNudges(enabled: Bool) {
+        let intent = notificationPreferenceIntents.begin(.focusLeaveNudges)
+        let manager = NotificationManager.shared
+        if !enabled {
+            FocusLeavePreferences.setNudgesEnabled(false)
+            refreshFocusLeaveSwitches()
+            return
+        }
+
+        viewTasks.start {
+            guard let granted = await notificationPreferenceIntents.authorizeUpdate(
+                .focusLeaveNudges,
+                intent: intent,
+                enabled: true,
+                refreshAuthorization: {
+                    await manager.refreshAuthorizationStatus()
+                    return manager.isAuthorized
+                },
+                requestAuthorization: {
+                    await manager.requestAuthorization()
+                }
+            ), notificationPreferenceIntents.isCurrent(.focusLeaveNudges, intent: intent)
+            else { return }
+            if granted {
+                FocusLeavePreferences.setNudgesEnabled(true)
+            } else {
+                notificationError = notificationPermissionMessage(
+                    underlyingError: manager.lastErrorDescription
+                )
+            }
+            refreshFocusLeaveSwitches()
+        }
     }
 
     private func updateFocusReturnReminder(enabled: Bool) {

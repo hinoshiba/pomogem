@@ -1,0 +1,3835 @@
+import SpriteKit
+import UIKit
+
+/// Visual cut used to draw one study gem. The cut is presentation only: it
+/// never changes the circular physics body, the mass-derived radius, or any
+/// persisted value. `GemCutLadder` is the single table that maps recorded
+/// effort to a cut.
+enum GemCut: String, CaseIterable, Sendable {
+    /// Loose measured gem (and an aggregate below 2.5 kg): a many-faceted
+    /// geodesic crystal.
+    case tumbled
+    /// Self-reported gem: the plain icosahedron, lower contrast. Its dashed
+    /// ring keeps the measured/self-reported distinction readable.
+    case rough
+    /// Zero-mass tutorial gem: colourless glass.
+    case glass
+    /// 2.5–25 kg aggregate: octagonal step cut.
+    case step
+    /// 25–250 kg aggregate: round brilliant (table, star, kite, girdle).
+    case brilliant
+    /// 250 kg and above: radiant brilliant with a white heart.
+    case radiant
+    /// The lifetime "time core": a decagonal brilliant drawn in SwiftUI.
+    case hero
+    /// 記念石 (round 13): a smooth domed moonstone cabochon. No facets, no
+    /// setting and no rim, so it never reads as a chip or a token.
+    case cabochon
+}
+
+/// Light budget for one rung. Every value is deterministic; brilliance grows
+/// only with recorded grams, never with chance, completion count or payment.
+struct GemCutRung: Equatable, Sendable {
+    var cut: GemCut
+    /// Rotational symmetry of the facet layout (outline vertex basis).
+    var symmetry: Int
+    /// Halo sprite diameter as a multiple of the gem diameter.
+    var haloScale: CGFloat
+    var haloAlpha: CGFloat
+    /// Dynamic star glints that respond to tilt and twinkle.
+    var glintCount: Int
+    /// Glint sprite size as a multiple of the gem radius.
+    var glintScale: CGFloat
+    /// Tiny static sparkles baked into the facet texture (rotationally
+    /// symmetric, so a rolling gem never looks lit from one side).
+    var sparkleCount: Int
+    /// 0...1 strength of the per-facet light/dark scintillation pattern.
+    var facetContrast: CGFloat
+    /// A3 and above: a white heart in the table.
+    var hasWhiteCore = false
+    /// A4: a ring of crown sparkles around the table.
+    var hasCrown = false
+}
+
+/// The single table that maps recorded effort to cuts.
+///
+/// Aggregates are ranked by the grams they contain (A0…A4), never by their
+/// decimal level or pebble count: ten one-minute completions (100 g) stay at
+/// the loose-gem rung, so splitting time cannot buy a brighter crystal.
+struct GemCutLadder: Sendable {
+    var loose: GemCutRung
+    var selfReported: GemCutRung
+    var tutorial: GemCutRung
+    var achievement: GemCutRung
+    /// A0 … A4, indexed by `aggregateTier(grams:)`.
+    var aggregates: [GemCutRung]
+
+    static let standard = GemCutLadder(
+        loose: GemCutRung(
+            cut: .tumbled, symmetry: 12, haloScale: 2.2, haloAlpha: 0.56,
+            glintCount: 1, glintScale: 0.9, sparkleCount: 2, facetContrast: 0.85
+        ),
+        selfReported: GemCutRung(
+            cut: .rough, symmetry: 12, haloScale: 1.9, haloAlpha: 0.20,
+            glintCount: 0, glintScale: 0, sparkleCount: 0, facetContrast: 0.40
+        ),
+        tutorial: GemCutRung(
+            cut: .glass, symmetry: 12, haloScale: 1.8, haloAlpha: 0.08,
+            glintCount: 0, glintScale: 0, sparkleCount: 1, facetContrast: 0.35
+        ),
+        // 記念石 (round 13): a moonstone cabochon. Its light is the milky
+        // body, a floating sheen and one soft highlight (the pebble's light
+        // rig), never a star glint.
+        achievement: GemCutRung(
+            cut: .cabochon, symmetry: 12, haloScale: 2.1, haloAlpha: 0.60,
+            glintCount: 0, glintScale: 0, sparkleCount: 0, facetContrast: 0
+        ),
+        aggregates: [
+            // A0 (< 2.5 kg): the same rung as a loose gem, plus its
+            // composition fan.
+            GemCutRung(
+                cut: .tumbled, symmetry: 12, haloScale: 2.3, haloAlpha: 0.60,
+                glintCount: 1, glintScale: 0.9, sparkleCount: 2, facetContrast: 0.85
+            ),
+            // A1 (2.5–25 kg): two glints like the larger cuts (round 12).
+            GemCutRung(
+                cut: .step, symmetry: 8, haloScale: 2.4, haloAlpha: 0.60,
+                glintCount: 2, glintScale: 0.95, sparkleCount: 2, facetContrast: 0.75
+            ),
+            // A2 (25–250 kg)
+            GemCutRung(
+                cut: .brilliant, symmetry: 8, haloScale: 2.5, haloAlpha: 0.68,
+                glintCount: 2, glintScale: 1.1, sparkleCount: 3, facetContrast: 0.95
+            ),
+            // A3 (250 kg–2.5 t)
+            GemCutRung(
+                cut: .radiant, symmetry: 10, haloScale: 2.6, haloAlpha: 0.74,
+                glintCount: 3, glintScale: 1.1, sparkleCount: 4, facetContrast: 1,
+                hasWhiteCore: true
+            ),
+            // A4 (≥ 2.5 t)
+            GemCutRung(
+                cut: .radiant, symmetry: 12, haloScale: 2.7, haloAlpha: 0.80,
+                glintCount: 3, glintScale: 1.1, sparkleCount: 5, facetContrast: 1,
+                hasWhiteCore: true, hasCrown: true
+            )
+        ]
+    )
+
+    /// A1 starts at one standard ×10 of 25-minute completions (2.5 kg).
+    static let firstCrystalTierGrams = Constants.Mass.measuredPebbleGrams
+        * Constants.Jar.aggregateFanIn
+
+    /// 0 = A0 (< 2.5 kg), 1 = A1 (< 25 kg), 2 = A2 (< 250 kg),
+    /// 3 = A3 (< 2.5 t), 4 = A4.
+    static func aggregateTier(grams rawGrams: Int) -> Int {
+        let grams = max(0, rawGrams)
+        var threshold = firstCrystalTierGrams
+        var tier = 0
+        while tier < 4, grams >= threshold {
+            tier += 1
+            threshold = threshold.multipliedReportingOverflow(by: 10).partialValue
+        }
+        return tier
+    }
+
+    func rung(aggregateGrams grams: Int) -> GemCutRung {
+        guard !aggregates.isEmpty else { return loose }
+        return aggregates[min(Self.aggregateTier(grams: grams), aggregates.count - 1)]
+    }
+
+    func rung(for descriptor: PebbleDescriptor) -> GemCutRung {
+        if descriptor.aggregate != nil { return rung(aggregateGrams: descriptor.grams) }
+        if descriptor.isAchievement { return achievement }
+        if descriptor.isTutorial { return tutorial }
+        return descriptor.isMeasured ? loose : selfReported
+    }
+
+    /// s(g) = clamp(√(g ÷ 250 g), 0.6, 1.0). A loose halo tops out at 25
+    /// minutes; its size already grows with mass.
+    static func looseHaloStrength(grams: Int) -> CGFloat {
+        let nominal = CGFloat(max(1, Constants.Mass.measuredPebbleGrams))
+        let ratio = CGFloat(max(0, grams)) / nominal
+        return min(1, max(0.6, ratio.squareRoot()))
+    }
+}
+
+/// Colour share used to paint facets by angular sector, clockwise from 12
+/// o'clock. A single entry paints a monochrome gem.
+struct GemColorShare: Hashable, Sendable {
+    let hex: String
+    let fraction: Double
+}
+
+/// Everything that affects a baked facet texture. Hashable so equal gems
+/// share one cached texture.
+struct GemArtworkSpec: Hashable, Sendable {
+    let cut: GemCut
+    let symmetry: Int
+    let colors: [GemColorShare]
+    private(set) var variant: Int
+    let facetContrast: CGFloat
+    let sparkleCount: Int
+    /// Reduces saturation for self-reported effort (existing convention).
+    let isMuted: Bool
+    let showsDashedRing: Bool
+    var hasWhiteCore = false
+    var hasCrown = false
+    /// Increase Contrast: brighter facet edges (+0.2 alpha).
+    var edgeBoost: CGFloat = 0
+    /// Differentiate Without Color: each theme's engraved mark
+    /// (`GemThemeMark`). Off, the bake is exactly the default gem.
+    var showsThemeMarks = false
+
+    static let variantCount = 4
+
+    init(
+        cut: GemCut,
+        symmetry: Int,
+        colors: [GemColorShare],
+        variant: Int,
+        facetContrast: CGFloat,
+        sparkleCount: Int,
+        isMuted: Bool,
+        showsDashedRing: Bool,
+        hasWhiteCore: Bool = false,
+        hasCrown: Bool = false,
+        edgeBoost: CGFloat = 0,
+        showsThemeMarks: Bool = false
+    ) {
+        self.cut = cut
+        self.symmetry = symmetry
+        self.colors = colors
+        self.variant = variant
+        self.facetContrast = facetContrast
+        self.sparkleCount = sparkleCount
+        self.isMuted = isMuted
+        self.showsDashedRing = showsDashedRing
+        self.hasWhiteCore = hasWhiteCore
+        self.hasCrown = hasCrown
+        self.edgeBoost = edgeBoost
+        self.showsThemeMarks = showsThemeMarks
+    }
+
+    /// The one place that turns a rung plus colours into a bake spec, used
+    /// by the jar and by every share-card gem so both show the same stone.
+    init(
+        rung: GemCutRung,
+        colors: [GemColorShare],
+        variant: Int,
+        isMuted: Bool,
+        showsDashedRing: Bool,
+        edgeBoost: CGFloat = 0,
+        showsThemeMarks: Bool = false
+    ) {
+        self.init(
+            cut: rung.cut,
+            symmetry: rung.symmetry,
+            colors: colors,
+            variant: variant,
+            facetContrast: rung.facetContrast,
+            sparkleCount: rung.sparkleCount,
+            isMuted: isMuted,
+            showsDashedRing: showsDashedRing,
+            hasWhiteCore: rung.hasWhiteCore,
+            hasCrown: rung.hasCrown,
+            edgeBoost: edgeBoost,
+            showsThemeMarks: showsThemeMarks
+        )
+    }
+
+    /// The same bake spec with another of the four variants.
+    func withVariant(_ variant: Int) -> GemArtworkSpec {
+        var spec = self
+        spec.variant = variant
+        return spec
+    }
+
+    /// The same bake spec with the theme marks on or off.
+    func withThemeMarks(_ shows: Bool) -> GemArtworkSpec {
+        var spec = self
+        spec.showsThemeMarks = shows
+        return spec
+    }
+
+    /// Value-free individuality: one of four same-rung variants from the
+    /// session UUID (never a rarity, never a ranking).
+    static func variant(for id: UUID) -> Int {
+        Int(id.presentationHash % UInt64(variantCount))
+    }
+
+    /// Up to four colour shares, largest first.
+    static func aggregateColors(
+        _ mix: [StratumColorFraction],
+        fallbackHex: String
+    ) -> [GemColorShare] {
+        let sorted = mix
+            .filter { $0.fraction > 0 }
+            .sorted { $0.fraction == $1.fraction ? $0.hex < $1.hex : $0.fraction > $1.fraction }
+            .prefix(4)
+        guard !sorted.isEmpty else { return [GemColorShare(hex: fallbackHex, fraction: 1)] }
+        return sorted.map { GemColorShare(hex: $0.hex, fraction: $0.fraction) }
+    }
+
+    var cacheKey: String {
+        let palette = colors
+            .map { "\($0.hex.uppercased())@\(Int(($0.fraction * 20).rounded()))" }
+            .joined(separator: ",")
+        return [
+            cut.rawValue,
+            "\(symmetry)",
+            palette,
+            "v\(variant)",
+            "c\(Int((facetContrast * 20).rounded()))",
+            "s\(sparkleCount)",
+            isMuted ? "m" : "f",
+            showsDashedRing ? "d" : "-",
+            hasWhiteCore ? "w" : "-",
+            hasCrown ? "k" : "-",
+            "e\(Int((edgeBoost * 10).rounded()))"
+        ].joined(separator: "|") + (showsThemeMarks ? "|t" : "")
+    }
+}
+
+/// Core Graphics renderer for faceted gems. All textures are baked once per
+/// (spec, size bucket, screen scale) and cached; nothing here runs per frame.
+///
+/// Lighting is split in two (see Docs/GemExperienceDesign.md §7.3):
+/// the baked body carries only light that does not depend on direction
+/// (view-direction shading, Fresnel rim, inner glow, rotationally symmetric
+/// sparkles), because the body rotates with physics. Every directional light
+/// (key sheen, pavilion shade, bounce and rim) lives in the screen-fixed
+/// `gem.lightRig` sprites in `PebbleNode`.
+enum GemArtwork {
+    /// Every cut's silhouette is scaled to the same share of its physics
+    /// circle, so visible area stays proportional to mass across cuts and
+    /// variants.
+    static let silhouetteAreaRatio: CGFloat = 0.93
+    /// The silhouette may overhang the circular physics body by at most 2 %.
+    static let silhouetteMaximumRadius: CGFloat = 1.02
+
+    // MARK: Public entry points
+
+    /// Unit-space (radius 1, y up) outline shared by the texture and the
+    /// container path, so both always agree exactly.
+    static func outline(cut: GemCut, symmetry: Int, variant: Int) -> [CGPoint] {
+        layout(cut: cut, symmetry: symmetry, variant: variant).outer
+    }
+
+    /// Facet count of a cut, for tests and documentation.
+    static func facetCount(cut: GemCut, symmetry: Int, variant: Int) -> Int {
+        layout(cut: cut, symmetry: symmetry, variant: variant).facets.count
+    }
+
+    static func outlinePath(for spec: GemArtworkSpec, radius: CGFloat) -> CGPath {
+        let points = outline(cut: spec.cut, symmetry: spec.symmetry, variant: spec.variant)
+        let path = CGMutablePath()
+        guard let first = points.first else {
+            return CGPath(
+                ellipseIn: CGRect(x: -radius, y: -radius, width: radius * 2, height: radius * 2),
+                transform: nil
+            )
+        }
+        path.move(to: CGPoint(x: first.x * radius, y: first.y * radius))
+        for point in points.dropFirst() {
+            path.addLine(to: CGPoint(x: point.x * radius, y: point.y * radius))
+        }
+        path.closeSubpath()
+        return path
+    }
+
+    /// Texture size in points for a gem of `radius`, including the outline
+    /// stroke margin. The sprite must use this size.
+    static func bodySpriteSize(radius: CGFloat) -> CGSize {
+        let side = (radius + margin(radius: radius)) * 2
+        return CGSize(width: side, height: side)
+    }
+
+    /// Name of a jar body texture in `GemTextureAtlas`: one per (spec, size
+    /// bucket, display scale). `scale` is the display scale of the view that
+    /// shows it (the SKView's `contentScaleFactor` or SwiftUI's
+    /// `displayScale`).
+    static func bodyTextureName(for spec: GemArtworkSpec, radius: CGFloat, scale rawScale: CGFloat) -> String {
+        "gem.body|\(spec.cacheKey)|r\(sizeBucket(radius: radius))|x\(renderScale(rawScale))"
+    }
+
+    /// Uncached bake of a jar body (the atlas keeps the result). Thread-safe:
+    /// Core Graphics only, so it may run off the main thread.
+    static func renderBodyImage(for spec: GemArtworkSpec, radius: CGFloat, scale rawScale: CGFloat) -> UIImage {
+        renderBody(spec: spec, radius: sizeBucket(radius: radius), scale: renderScale(rawScale))
+    }
+
+    /// The body texture a jar sprite shows (atlas-backed once packed).
+    @MainActor
+    static func bodyTexture(for spec: GemArtworkSpec, radius: CGFloat, scale: CGFloat) -> SKTexture {
+        GemTextureAtlas.shared.texture(named: bodyTextureName(for: spec, radius: radius, scale: scale)) {
+            renderBodyImage(for: spec, radius: radius, scale: scale)
+        }
+    }
+
+    /// The same renderer as a SwiftUI/UIKit image (share cards, overview).
+    static func bodyImage(for spec: GemArtworkSpec, radius: CGFloat, scale rawScale: CGFloat) -> UIImage {
+        let bucket = sizeBucket(radius: radius)
+        let scale = renderScale(rawScale)
+        let key = NSString(string: "\(spec.cacheKey)|r\(bucket)|x\(scale)")
+        if let cached = imageCache.object(forKey: key) { return cached }
+        let image = renderBody(spec: spec, radius: bucket, scale: scale)
+        imageCache.setObject(image, forKey: key, cost: byteCost(image))
+        return image
+    }
+
+    // MARK: Time core
+
+    /// Every core is baked once at this diameter and scaled down by SwiftUI,
+    /// so an animated frame change never re-renders on the main thread.
+    static let coreBakeDiameter: CGFloat = 192
+
+    /// Top five theme shares plus "other", quantised to 5 % (20 girdle
+    /// slots). The order is stable: largest first, ties by hex.
+    static func quantizedCoreShares(_ raw: [GemColorShare]) -> [GemColorShare] {
+        let valid = raw.filter { $0.fraction > 0 }
+        guard !valid.isEmpty else { return [GemColorShare(hex: Constants.Color.textMute, fraction: 1)] }
+        let total: Double = valid.reduce(0) { $0 + $1.fraction }
+        let normalized: [GemColorShare] = valid.map { share in
+            GemColorShare(hex: share.hex.uppercased(), fraction: share.fraction / total)
+        }
+        let sorted: [GemColorShare] = normalized.sorted { lhs, rhs in
+            if lhs.fraction == rhs.fraction { return lhs.hex < rhs.hex }
+            return lhs.fraction > rhs.fraction
+        }
+        var entries = Array(sorted.prefix(5))
+        let rest = sorted.dropFirst(5)
+        if !rest.isEmpty {
+            let restTotal = rest.reduce(0) { $0 + $1.fraction }
+            var mixed = GemColor(hex: rest.first?.hex ?? Constants.Color.textMute)
+            var accumulated = rest.first?.fraction ?? 0
+            for share in rest.dropFirst() {
+                accumulated += share.fraction
+                mixed = mixed.mixed(with: GemColor(hex: share.hex), amount: CGFloat(share.fraction / accumulated))
+            }
+            entries.append(GemColorShare(hex: mixed.hexString, fraction: restTotal))
+        }
+        // Largest-remainder rounding to 20 slots.
+        let slots = 20
+        var counts = entries.map { Int(($0.fraction * Double(slots)).rounded(.down)) }
+        var remaining = slots - counts.reduce(0, +)
+        let order = entries.indices.sorted {
+            let a = entries[$0].fraction * Double(slots) - Double(counts[$0])
+            let b = entries[$1].fraction * Double(slots) - Double(counts[$1])
+            return a == b ? $0 < $1 : a > b
+        }
+        var cursor = 0
+        while remaining > 0, !order.isEmpty {
+            counts[order[cursor % order.count]] += 1
+            remaining -= 1
+            cursor += 1
+        }
+        if counts.first == 0 { counts[0] = 1 }
+        var result: [GemColorShare] = []
+        for (entry, count) in zip(entries, counts) where count > 0 {
+            result.append(GemColorShare(hex: entry.hex, fraction: Double(count) / Double(slots)))
+        }
+        return result
+    }
+
+    /// Halo tint of the core: the share-weighted colour with 10 % aurora
+    /// violet, so the bloom belongs to the scene rather than one theme.
+    static func coreHaloColor(shares: [GemColorShare]) -> UIColor {
+        let field = CoreColorField(shares: quantizedCoreShares(shares))
+        return haloTint(field.meanColor(fromTurn: 0, toTurn: 1)).withAlpha(1)
+    }
+
+    /// The core's two halo lobes: the mean field colour of its left and its
+    /// right half (10 % aurora violet), so the light leaving the stone
+    /// carries the colours of the side it leaves from, like the reference.
+    static func coreHaloLobeColors(shares: [GemColorShare]) -> (left: UIColor, right: UIColor) {
+        let field = CoreColorField(shares: quantizedCoreShares(shares))
+        return (
+            haloTint(field.meanColor(fromTurn: 0.5, toTurn: 1)).withAlpha(1),
+            haloTint(field.meanColor(fromTurn: 0, toTurn: 0.5)).withAlpha(1)
+        )
+    }
+
+    private static func haloTint(_ color: GemColor) -> GemColor {
+        let hsb = color.hsb
+        let lifted = hsb.saturation < 0.08
+            ? color
+            : GemColor(hue: hsb.hue, saturation: min(0.75, max(0.45, hsb.saturation)), brightness: 1)
+        return lifted.mixed(with: GemColor(hex: Constants.Color.auroraViolet), amount: 0.10)
+    }
+
+    /// Pale bloom that hugs the core's girdle: the halo tint lifted toward
+    /// white, so the edge glows like the reference without a neon ring.
+    static func coreRimGlowColor(shares: [GemColorShare]) -> UIColor {
+        GemColor(coreHaloColor(shares: shares)).mixed(with: .white, amount: 0.74).withAlpha(1)
+    }
+
+    /// Time core: a luminous radial brilliant whose twenty facets are
+    /// painted by the approximate theme shares. Deterministic for (shares,
+    /// level, scale, marks). `themeMarks` (Differentiate Without Color)
+    /// engraves each theme arc's mark.
+    static func coreImage(shares: [GemColorShare], level: Int, scale rawScale: CGFloat, themeMarks: Bool = false) -> UIImage {
+        let key = NSString(string: coreImageKey(shares: shares, level: level, scale: rawScale, themeMarks: themeMarks))
+        if let cached = imageCache.object(forKey: key) { return cached }
+        let image = renderHero(
+            shares: quantizedCoreShares(shares),
+            level: min(max(level, 1), 6),
+            litVesselFacets: nil,
+            scale: renderScale(rawScale),
+            themeMarks: themeMarks ? coreThemeMarkPlacements(shares: shares) : []
+        )
+        imageCache.setObject(image, forKey: key, cost: byteCost(image))
+        return image
+    }
+
+    /// Cache key of a core bake (quantised shares, level, scale, marks).
+    static func coreImageKey(shares: [GemColorShare], level: Int, scale rawScale: CGFloat, themeMarks: Bool = false) -> String {
+        let palette = quantizedCoreShares(shares)
+            .map { "\($0.hex)@\(Int(($0.fraction * 20).rounded()))" }
+            .joined(separator: ",")
+        return "core5|\(palette)|L\(min(max(level, 1), 6))|x\(renderScale(rawScale))" + (themeMarks ? "|t" : "")
+    }
+
+    /// Cache key of a vessel bake.
+    static func vesselImageKey(litFacets: Int, scale rawScale: CGFloat) -> String {
+        "vessel4|\(min(max(litFacets, 0), 10))|x\(renderScale(rawScale))"
+    }
+
+    /// A core or vessel image already baked for `key`, without baking (the
+    /// SwiftUI views bake misses off the main thread).
+    static func cachedHeroImage(key: String) -> UIImage? {
+        imageCache.object(forKey: NSString(string: key))
+    }
+
+    /// The core gains a crown of lights at the 2.5 t stage (level 4).
+    static func coreHasCrown(level: Int) -> Bool { level >= 4 }
+
+    /// Single-colour convenience (legacy callers and the fusion card).
+    static func coreImage(colorHex: String, level: Int, scale: CGFloat) -> UIImage {
+        coreImage(shares: [GemColorShare(hex: colorHex, fraction: 1)], level: level, scale: scale)
+    }
+
+    /// Before the first 2.5 kg: a colourless vessel whose ten upper facets
+    /// light up one per 250 g. No colour enters until the core is born.
+    static func vesselImage(litFacets: Int, scale rawScale: CGFloat) -> UIImage {
+        let lit = min(max(litFacets, 0), 10)
+        let scale = renderScale(rawScale)
+        let key = NSString(string: vesselImageKey(litFacets: lit, scale: scale))
+        if let cached = imageCache.object(forKey: key) { return cached }
+        let image = renderHero(
+            shares: [GemColorShare(hex: "#DCEBFF", fraction: 1)],
+            level: 0,
+            litVesselFacets: lit,
+            scale: scale
+        )
+        imageCache.setObject(image, forKey: key, cost: byteCost(image))
+        return image
+    }
+
+    // MARK: Gem bed (積み上がりの光)
+
+    /// The lifetime gem bed behind the physics bodies, baked into one
+    /// texture per height (Docs/EngagementArchitecture.md §3.2 いまの瓶).
+    /// A soft, glowing sediment of light: fine, low-contrast chips in the
+    /// colours of the lifetime share fan under a luminous veil, baked at
+    /// half the display scale so it reads out of focus behind the sharp
+    /// jewels in front, with a rare static glint and a soft top edge. Chip
+    /// positions depend only on (row, column), never on the height, so a
+    /// taller bucket only adds chips on top: the bed never rearranges or
+    /// dims as it grows.
+    static func bedTexture(
+        width rawWidth: CGFloat,
+        height rawHeight: CGFloat,
+        slotHexes: [String],
+        scale rawScale: CGFloat
+    ) -> SKTexture {
+        let width = max(8, rawWidth.rounded())
+        let height = max(2, rawHeight.rounded())
+        let scale = bedRenderScale(rawScale)
+        let key = NSString(string: bedTextureKey(width: width, height: height, slotHexes: slotHexes, scale: rawScale))
+        if let cached = bodyCache.object(forKey: key) { return cached }
+        let image = bedImage(width: width, height: height, slotHexes: slotHexes, scale: scale)
+        let texture = SKTexture(image: image)
+        texture.filteringMode = .linear
+        bodyCache.setObject(texture, forKey: key, cost: byteCost(image))
+        return texture
+    }
+
+    static func bedTextureKey(width rawWidth: CGFloat, height rawHeight: CGFloat, slotHexes: [String], scale rawScale: CGFloat) -> String {
+        let width = max(8, rawWidth.rounded())
+        let height = max(2, rawHeight.rounded())
+        return "bed4|w\(Int(width))|h\(Int(height))|\(slotHexes.joined(separator: ","))|x\(bedRenderScale(rawScale))"
+    }
+
+    /// The bed bakes at half the display scale (at least 1×): the sediment
+    /// is meant to sit out of focus behind the sharp gems (a quarter of the
+    /// pixels, too).
+    static func bedRenderScale(_ displayScale: CGFloat) -> CGFloat {
+        max(1, renderScale(displayScale) * 0.5)
+    }
+
+    /// The bed as an image for SwiftUI surfaces (the ×N share card's
+    /// crystal rests on one), baked once per size, colours and scale.
+    static func bedCardImage(width rawWidth: CGFloat, height rawHeight: CGFloat, slotHexes: [String], scale rawScale: CGFloat) -> UIImage {
+        let width = max(8, rawWidth.rounded())
+        let height = max(2, rawHeight.rounded())
+        let key = NSString(string: "card|" + bedTextureKey(width: width, height: height, slotHexes: slotHexes, scale: rawScale))
+        if let cached = imageCache.object(forKey: key) { return cached }
+        let image = bedImage(width: width, height: height, slotHexes: slotHexes, scale: bedRenderScale(rawScale))
+        imageCache.setObject(image, forKey: key, cost: byteCost(image))
+        return image
+    }
+
+    /// A bed texture already baked, without baking.
+    static func cachedBedTexture(width: CGFloat, height: CGFloat, slotHexes: [String], scale: CGFloat) -> SKTexture? {
+        bodyCache.object(forKey: NSString(string: bedTextureKey(width: width, height: height, slotHexes: slotHexes, scale: scale)))
+    }
+
+    /// Chip pitch of the bed (points). Chips are 2.8–5 pt across (one in
+    /// ten 5–6.5 pt), a tenth of a young jar's gem, so the bed reads as fine
+    /// sediment of light, never as gravel or as something to tap.
+    static let bedRowPitch: CGFloat = 3.6
+    static let bedColumnPitch: CGFloat = 5.2
+    /// Largest chip (points).
+    static let bedMaximumChipSize: CGFloat = 6.5
+    /// One chip in this many keeps a tiny static glint (round 12: 1 in 14,
+    /// so the darker bed still twinkles).
+    static let bedSparkleInterval: UInt64 = 14
+
+    fileprivate struct BedChip {
+        var center: CGPoint
+        var size: CGFloat
+        var rotation: CGFloat
+        var radii: [CGFloat]
+        var slot: Int
+        var shade: CGFloat
+        var sparkle: Bool
+    }
+
+    /// Top edge of the bed at `x` for a bed `height` tall: a calm, uneven
+    /// line (88–100 % of the height), never a heap.
+    static func bedProfile(x: CGFloat, width: CGFloat, height: CGFloat) -> CGFloat {
+        let u = x / max(width, 1)
+        let wave = 0.5 + 0.30 * sin(u * .pi * 2 * 1.35 + 0.8) + 0.20 * sin(x * 0.19 + 1.7)
+        return height * (0.88 + 0.12 * min(max(wave, 0), 1))
+    }
+
+    fileprivate static func bedChips(width: CGFloat, height: CGFloat) -> [BedChip] {
+        var chips: [BedChip] = []
+        let rows = Int((height / bedRowPitch).rounded(.up)) + 1
+        for row in 0 ..< rows {
+            let stagger: CGFloat = row.isMultiple(of: 2) ? 0 : 0.5
+            var column = 0
+            var x = (stagger - 0.5) * bedColumnPitch
+            while x < width + bedColumnPitch * 0.5 {
+                var random = GemRandom(seed: UInt64(row) &* 7_919 &+ UInt64(column) &* 104_729 &+ 11)
+                // Mostly 2.8–5 pt, one in ten a larger 5–6.5 pt chip.
+                let size = random.next() % 10 == 0 ? 5 + random.unit() * 1.5 : 2.8 + random.unit() * 2.2
+                let sides = 4 + Int(random.next() % 3)
+                chips.append(BedChip(
+                    center: CGPoint(
+                        x: x + (random.unit() - 0.5) * bedColumnPitch * 0.6,
+                        y: CGFloat(row) * bedRowPitch + (random.unit() - 0.5) * bedRowPitch * 0.8
+                    ),
+                    size: size,
+                    rotation: random.unit() * .pi * 2,
+                    radii: (0 ..< sides).map { _ in 0.72 + random.unit() * 0.28 },
+                    slot: Int(random.next() % 20),
+                    shade: 0.97 + random.unit() * 0.06,
+                    sparkle: random.next() % bedSparkleInterval == 0
+                ))
+                column += 1
+                x += bedColumnPitch
+            }
+        }
+        return chips
+    }
+
+    /// Chip colour of the bed for a theme tone: the theme's hue, a middle
+    /// saturation (0.35–0.45) and a value around 0.66 that barely changes
+    /// from facet to facet (±4 %). Round 12: the bed sits a clear step
+    /// darker than the gems resting on it (luminance about 0.46–0.52
+    /// against their 0.63–0.73), so they stand out from it instead of
+    /// melting into a pale sugar floor; it is still light, never gravel.
+    static func bedChipColor(tone: GemTone, facet: CGFloat, lift: CGFloat) -> GemColor {
+        let neutral = tone.saturation < 0.08
+        let saturation = neutral ? tone.saturation : min(0.45, max(0.35, tone.saturation * 0.55))
+        // `lift` (0…1) is the warm light that rises from the floor.
+        let value = min(0.8, max(0.56, 0.64 + 0.04 * facet + 0.06 * lift))
+        return GemColor(hue: tone.hue, saturation: saturation * (1 - 0.15 * lift), brightness: value)
+    }
+
+    static func bedImage(width: CGFloat, height: CGFloat, slotHexes rawHexes: [String], scale: CGFloat) -> UIImage {
+        let hexes = rawHexes.isEmpty ? [Constants.Color.textMute] : rawHexes
+        let tones = hexes.map { GemTone(hex: $0, muted: true, glass: false) }
+        let light = CGPoint(x: -0.6, y: 0.8)
+        let warm = GemColor(hex: "#FFC9A8")
+        return UIGraphicsImageRenderer(
+            size: CGSize(width: width, height: height),
+            format: rendererFormat(scale: scale)
+        ).image { renderer in
+            let context = renderer.cgContext
+            // Bed space is y-up from the floor; the image is y-down.
+            func map(_ point: CGPoint) -> CGPoint { CGPoint(x: point.x, y: height - point.y) }
+
+            let silhouette = CGMutablePath()
+            silhouette.move(to: map(CGPoint(x: 0, y: 0)))
+            var x: CGFloat = 0
+            while x <= width {
+                silhouette.addLine(to: map(CGPoint(x: x, y: bedProfile(x: x, width: width, height: height))))
+                x += 2
+            }
+            silhouette.addLine(to: map(CGPoint(x: width, y: 0)))
+            silhouette.closeSubpath()
+
+            // Rounded floor corners follow the jar's inner wall.
+            let corner = min(12, height * 0.5)
+            context.addPath(CGPath(
+                roundedRect: CGRect(x: 0, y: -corner, width: width, height: height + corner),
+                cornerWidth: corner,
+                cornerHeight: corner,
+                transform: nil
+            ))
+            context.clip()
+
+            // A luminous ground (never ink, never brown): warm light pooled
+            // on the floor, the fan's calm light above it, gone at the top,
+            // so gaps between chips glow instead of showing a dark floor.
+            let calm = bedChipColor(tone: tones[0], facet: 0.4, lift: 0.3).mixed(with: GemColor(hex: "#D9C8F2"), amount: 0.35)
+            context.saveGState()
+            context.addPath(silhouette)
+            context.clip()
+            if let ground = CGGradient(
+                colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                colors: [
+                    warm.mixed(with: calm, amount: 0.35).withAlpha(0.52).cgColor,
+                    calm.withAlpha(0.38).cgColor,
+                    calm.withAlpha(0.16).cgColor,
+                    calm.withAlpha(0).cgColor
+                ] as CFArray,
+                locations: [0, 0.35, 0.75, 1]
+            ) {
+                context.drawLinearGradient(
+                    ground,
+                    start: map(CGPoint(x: 0, y: 0)),
+                    end: map(CGPoint(x: 0, y: height)),
+                    options: []
+                )
+            }
+            context.restoreGState()
+
+            let chips = bedChips(width: width, height: height)
+            var sparkles: [(CGPoint, CGFloat, CGFloat)] = []
+            // Back (upper) rows first, so lower chips overlap them.
+            for chip in chips.reversed() {
+                let top = bedProfile(x: chip.center.x, width: width, height: height)
+                let depth = top - chip.center.y
+                guard depth > chip.size * 0.15 else { continue }
+                // Soft top edge: chips fade in over the top 25 % of the bed.
+                let fade = min(1, depth / max(height * 0.25, 4))
+                let alpha = pow(fade, 0.9) * 0.9
+                let heightUnit = min(max(chip.center.y / max(height, 1), 0), 1)
+                // The bottom 30 % catches the warm light pooled on the floor.
+                let lift = max(0, 1 - heightUnit / 0.30)
+                let tone = tones[chip.slot % tones.count]
+                let count = chip.radii.count
+                let points: [CGPoint] = (0 ..< count).map { index in
+                    let angle = chip.rotation + CGFloat(index) / CGFloat(count) * .pi * 2
+                    let r = chip.size / 2 * chip.radii[index]
+                    return CGPoint(x: chip.center.x + cos(angle) * r, y: chip.center.y + sin(angle) * r * 0.80)
+                }
+                let apex = CGPoint(x: chip.center.x - chip.size * 0.10, y: chip.center.y + chip.size * 0.08)
+                for index in 0 ..< count {
+                    let a = points[index]
+                    let b = points[(index + 1) % count]
+                    var normal = CGPoint(x: b.y - a.y, y: -(b.x - a.x))
+                    let length = max(0.001, hypot(normal.x, normal.y))
+                    normal = CGPoint(x: normal.x / length, y: normal.y / length)
+                    // Counter-clockwise points: the outward normal is (dy, -dx).
+                    let facing = normal.x * light.x + normal.y * light.y
+                    var color = bedChipColor(tone: tone, facet: facing * chip.shade, lift: lift)
+                    if lift > 0 {
+                        color = color.mixed(with: warm, amount: 0.18 * lift)
+                    }
+                    if facing > 0.72 {
+                        // The facet that faces the light is a touch paler.
+                        color = color.mixed(with: .white, amount: 0.12)
+                    }
+                    let path = CGMutablePath()
+                    path.addLines(between: [map(apex), map(a), map(b)])
+                    path.closeSubpath()
+                    context.addPath(path)
+                    context.setFillColor(color.withAlpha(alpha).cgColor)
+                    context.fillPath()
+                }
+                // No outline and no hairline: chips melt into each other.
+                if chip.sparkle, fade > 0.45 {
+                    sparkles.append((map(apex), 1.2 + chip.size * 0.15, 0.40 * fade))
+                }
+            }
+
+            // A luminous veil over the chips lowers their contrast further:
+            // the sediment glows as one layer of light.
+            context.saveGState()
+            context.addPath(silhouette)
+            context.clip()
+            let veil = calm.mixed(with: warm, amount: 0.35)
+            if let wash = CGGradient(
+                colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                colors: [
+                    veil.withAlpha(0.10).cgColor,
+                    veil.withAlpha(0.06).cgColor,
+                    veil.withAlpha(0.02).cgColor
+                ] as CFArray,
+                locations: [0, 0.6, 1]
+            ) {
+                context.drawLinearGradient(
+                    wash,
+                    start: map(CGPoint(x: 0, y: 0)),
+                    end: map(CGPoint(x: 0, y: height)),
+                    options: []
+                )
+            }
+            context.restoreGState()
+
+            // Soft top edge that melts into the jar's light.
+            context.saveGState()
+            context.addPath(silhouette)
+            context.clip()
+            let glow = calm.mixed(with: GemColor(hex: "#FFB38A"), amount: 0.35)
+            if let haze = CGGradient(
+                colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                colors: [
+                    glow.withAlpha(0).cgColor,
+                    glow.withAlpha(0.05).cgColor,
+                    glow.withAlpha(0.14).cgColor,
+                    glow.withAlpha(0).cgColor
+                ] as CFArray,
+                locations: [0, 0.45, 0.80, 1]
+            ) {
+                context.drawLinearGradient(
+                    haze,
+                    start: map(CGPoint(x: 0, y: 0)),
+                    end: map(CGPoint(x: 0, y: height)),
+                    options: []
+                )
+            }
+            context.restoreGState()
+
+            // Static sparkle: a handful of tiny stars, no animation.
+            for (center, length, alpha) in sparkles {
+                drawSparkle(context: context, center: center, length: length, alpha: alpha)
+            }
+        }
+    }
+
+    // MARK: Shared light textures (one draw batch each)
+
+    /// Gaussian bloom: half maximum at about 1.2 × the gem radius for the
+    /// standard 2.2–2.7 halo scales. Tinted per gem via `color`.
+    static let haloTexture = sharedTexture(haloImage)
+    static let haloImage: UIImage = sharedImage(pixels: 128) { context, size in
+        let center = CGPoint(x: size / 2, y: size / 2)
+        var colors: [CGColor] = []
+        var locations: [CGFloat] = []
+        // 0.55 of the sprite radius ≈ 1.2 × the gem radius at halo 2.2.
+        let halfMaximum: CGFloat = 0.55
+        for step in 0 ... 14 {
+            let t = CGFloat(step) / 14
+            let gaussian = exp(-log(2) * pow(t / halfMaximum, 2))
+            let window = pow(max(0, 1 - t * t), 2)
+            colors.append(UIColor(white: 1, alpha: gaussian * window).cgColor)
+            locations.append(t)
+        }
+        if let gradient = CGGradient(
+            colorsSpace: CGColorSpaceCreateDeviceRGB(),
+            colors: colors as CFArray,
+            locations: locations
+        ) {
+            context.drawRadialGradient(
+                gradient,
+                startCenter: center, startRadius: 0,
+                endCenter: center, endRadius: size / 2,
+                options: []
+            )
+        }
+    }
+
+    /// Four-point star with a soft core; additive, white. The horizontal arm
+    /// is a little longer than the vertical one, like a lens flare.
+    static let glintTexture = sharedTexture(glintImage)
+    static let glintImage: UIImage = sharedImage(pixels: 128) { context, size in
+        let center = CGPoint(x: size / 2, y: size / 2)
+        let space = CGColorSpaceCreateDeviceRGB()
+        let core = [
+            UIColor(white: 1, alpha: 1).cgColor,
+            UIColor(white: 1, alpha: 0.30).cgColor,
+            UIColor(white: 1, alpha: 0).cgColor
+        ] as CFArray
+        if let gradient = CGGradient(colorsSpace: space, colors: core, locations: [0, 0.35, 1]) {
+            context.drawRadialGradient(
+                gradient,
+                startCenter: center, startRadius: 0,
+                endCenter: center, endRadius: size * 0.14,
+                options: []
+            )
+        }
+        func ray(length: CGFloat, width: CGFloat, angle: CGFloat, alpha: CGFloat) {
+            context.saveGState()
+            context.translateBy(x: center.x, y: center.y)
+            context.rotate(by: angle)
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: -length, y: 0))
+            path.addQuadCurve(to: CGPoint(x: length, y: 0), control: CGPoint(x: 0, y: width))
+            path.addQuadCurve(to: CGPoint(x: -length, y: 0), control: CGPoint(x: 0, y: -width))
+            context.addPath(path)
+            context.clip()
+            let colors = [
+                UIColor(white: 1, alpha: alpha).cgColor,
+                UIColor(white: 1, alpha: 0).cgColor
+            ] as CFArray
+            if let gradient = CGGradient(colorsSpace: space, colors: colors, locations: [0, 1]) {
+                context.drawRadialGradient(
+                    gradient,
+                    startCenter: .zero, startRadius: 0,
+                    endCenter: .zero, endRadius: length,
+                    options: []
+                )
+            }
+            context.restoreGState()
+        }
+        ray(length: size * 0.5, width: size * 0.045, angle: 0, alpha: 1)
+        ray(length: size * 0.34, width: size * 0.04, angle: .pi / 2, alpha: 0.9)
+        ray(length: size * 0.16, width: size * 0.025, angle: .pi / 4, alpha: 0.45)
+        ray(length: size * 0.16, width: size * 0.025, angle: -.pi / 4, alpha: 0.45)
+    }
+
+    /// Broad pool of light with a small flat plateau, used for
+    /// the light the whole pile casts into the jar and onto its floor.
+    static let poolTexture: SKTexture = sharedTexture(pixels: 128) { context, size in
+        let center = CGPoint(x: size / 2, y: size / 2)
+        var colors: [CGColor] = []
+        var locations: [CGFloat] = []
+        for step in 0 ... 14 {
+            let t = CGFloat(step) / 14
+            // Flat to 20 % of the radius, then a smoothstep to zero.
+            let u = min(max((t - 0.20) / 0.80, 0), 1)
+            colors.append(UIColor(white: 1, alpha: 1 - u * u * (3 - 2 * u)).cgColor)
+            locations.append(t)
+        }
+        if let gradient = CGGradient(
+            colorsSpace: CGColorSpaceCreateDeviceRGB(),
+            colors: colors as CFArray,
+            locations: locations
+        ) {
+            context.drawRadialGradient(
+                gradient,
+                startCenter: center, startRadius: 0,
+                endCenter: center, endRadius: size / 2,
+                options: []
+            )
+        }
+    }
+
+    /// Soft thin ring for the fusion shock ring (additive, white).
+    static let ringTexture: SKTexture = sharedTexture(pixels: 128) { context, size in
+        let center = CGPoint(x: size / 2, y: size / 2)
+        let colors = [
+            UIColor(white: 1, alpha: 0).cgColor,
+            UIColor(white: 1, alpha: 0.85).cgColor,
+            UIColor(white: 1, alpha: 0).cgColor
+        ] as CFArray
+        if let gradient = CGGradient(
+            colorsSpace: CGColorSpaceCreateDeviceRGB(),
+            colors: colors,
+            locations: [0.78, 0.90, 1]
+        ) {
+            context.drawRadialGradient(
+                gradient,
+                startCenter: center, startRadius: 0,
+                endCenter: center, endRadius: size / 2,
+                options: []
+            )
+        }
+    }
+
+    /// Soft contact shadow ellipse drawn in a square; the sprite squashes it.
+    static let shadowTexture = sharedTexture(shadowImage)
+    static let shadowImage: UIImage = sharedImage(pixels: 64) { context, size in
+        let center = CGPoint(x: size / 2, y: size / 2)
+        let colors = [
+            UIColor(red: 0.01, green: 0.02, blue: 0.08, alpha: 0.9).cgColor,
+            UIColor(red: 0.01, green: 0.02, blue: 0.08, alpha: 0.38).cgColor,
+            UIColor(red: 0.01, green: 0.02, blue: 0.08, alpha: 0).cgColor
+        ] as CFArray
+        if let gradient = CGGradient(
+            colorsSpace: CGColorSpaceCreateDeviceRGB(),
+            colors: colors,
+            locations: [0, 0.5, 1]
+        ) {
+            context.drawRadialGradient(
+                gradient,
+                startCenter: center, startRadius: 0,
+                endCenter: center, endRadius: size / 2,
+                options: []
+            )
+        }
+    }
+
+    /// Screen-fixed additive light (blend `.add`): the warm-white key sheen
+    /// at the upper left (centre −0.28R, +0.34R; 0.62R × 0.40R), the warm rim
+    /// on the upper-left edge and the cool bounce on the lower-left edge.
+    /// Drawn in a square whose half side is the gem radius.
+    static let lightRigAddTexture = sharedTexture(lightRigAddImage)
+    static let lightRigAddImage: UIImage = sharedImage(pixels: 128) { context, size in
+        let space = CGColorSpaceCreateDeviceRGB()
+        let radius = size / 2
+        // y-down texture space: unit (ux, uy up) → (radius + ux·r, radius − uy·r)
+        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            CGPoint(x: radius + x * radius, y: radius - y * radius)
+        }
+        context.saveGState()
+        context.addEllipse(in: CGRect(x: size * 0.03, y: size * 0.03, width: size * 0.94, height: size * 0.94))
+        context.clip()
+
+        // Warm rim arc (upper-left edge), #FFB38A α0.18.
+        drawRimArc(
+            context: context, space: space, center: point(0, 0), radius: radius * 0.93,
+            angle: .pi * 0.75, spread: .pi * 0.30, width: radius * 0.16,
+            color: GemColor(hex: "#FFB38A"), alpha: 0.18
+        )
+        // Cool bounce arc (lower-left edge), #8ACBFF α0.22.
+        drawRimArc(
+            context: context, space: space, center: point(0, 0), radius: radius * 0.93,
+            angle: .pi * 1.22, spread: .pi * 0.24, width: radius * 0.18,
+            color: GemColor(hex: "#8ACBFF"), alpha: 0.22
+        )
+        // Key sheen: #FFF3E6 α0.35 ellipse, softly falling off.
+        let sheen = [
+            GemColor(hex: "#FFF3E6").withAlpha(0.35).cgColor,
+            GemColor(hex: "#FFF3E6").withAlpha(0.14).cgColor,
+            GemColor(hex: "#FFF3E6").withAlpha(0).cgColor
+        ] as CFArray
+        if let gradient = CGGradient(colorsSpace: space, colors: sheen, locations: [0, 0.55, 1]) {
+            context.saveGState()
+            let center = point(-0.28, 0.34)
+            context.translateBy(x: center.x, y: center.y)
+            context.rotate(by: -.pi / 5)
+            context.scaleBy(x: 0.62, y: 0.40)
+            context.drawRadialGradient(
+                gradient,
+                startCenter: .zero, startRadius: 0,
+                endCenter: .zero, endRadius: radius,
+                options: []
+            )
+            context.restoreGState()
+        }
+        context.restoreGState()
+    }
+
+    /// Screen-fixed pavilion shade (blend `.alpha`): a crescent at the lower
+    /// right, black α0.16.
+    static let lightRigShadeTexture = sharedTexture(lightRigShadeImage)
+    static let lightRigShadeImage: UIImage = sharedImage(pixels: 128) { context, size in
+        let space = CGColorSpaceCreateDeviceRGB()
+        let radius = size / 2
+        context.saveGState()
+        context.addEllipse(in: CGRect(x: size * 0.03, y: size * 0.03, width: size * 0.94, height: size * 0.94))
+        context.clip()
+        let shade = [
+            UIColor(white: 0, alpha: 0).cgColor,
+            UIColor(white: 0, alpha: 0.16).cgColor
+        ] as CFArray
+        if let gradient = CGGradient(colorsSpace: space, colors: shade, locations: [0, 1]) {
+            context.drawRadialGradient(
+                gradient,
+                startCenter: CGPoint(x: radius * 0.80, y: radius * 0.78),
+                startRadius: radius * 0.62,
+                endCenter: CGPoint(x: radius * 0.92, y: radius * 0.90),
+                endRadius: radius * 1.18,
+                options: [.drawsAfterEndLocation]
+            )
+        }
+        context.restoreGState()
+    }
+
+    /// Light inside a large jewel (D4 round): rotation-invariant, additive
+    /// and white, tinted per gem. A soft core lifts the pavilion as if lit
+    /// from within and a bright band just inside the silhouette makes the
+    /// edges glow, like the reference image's jewels. Symmetric, so it adds
+    /// no directional light to a rolling gem (§7.3).
+    static let innerGlowTexture = sharedTexture(innerGlowImage)
+    static let innerGlowImage: UIImage = sharedImage(pixels: 128) { context, size in
+        let space = CGColorSpaceCreateDeviceRGB()
+        let center = CGPoint(x: size / 2, y: size / 2)
+        let radius = size / 2
+        let core = [
+            UIColor(white: 1, alpha: 0.70).cgColor,
+            UIColor(white: 1, alpha: 0.34).cgColor,
+            UIColor(white: 1, alpha: 0.10).cgColor,
+            UIColor(white: 1, alpha: 0).cgColor
+        ] as CFArray
+        if let gradient = CGGradient(colorsSpace: space, colors: core, locations: [0, 0.38, 0.66, 0.84]) {
+            context.drawRadialGradient(
+                gradient,
+                startCenter: center, startRadius: 0,
+                endCenter: center, endRadius: radius,
+                options: []
+            )
+        }
+        let rim = [
+            UIColor(white: 1, alpha: 0).cgColor,
+            UIColor(white: 1, alpha: 0.30).cgColor,
+            UIColor(white: 1, alpha: 0.85).cgColor,
+            UIColor(white: 1, alpha: 0.30).cgColor,
+            UIColor(white: 1, alpha: 0).cgColor
+        ] as CFArray
+        if let gradient = CGGradient(colorsSpace: space, colors: rim, locations: [0.66, 0.80, 0.90, 0.96, 1]) {
+            context.drawRadialGradient(
+                gradient,
+                startCenter: center, startRadius: 0,
+                endCenter: center, endRadius: radius,
+                options: []
+            )
+        }
+    }
+
+    /// Kept for callers that predate the split rig (tests, share previews):
+    /// the additive part of the rig.
+    static var keyLightTexture: SKTexture { lightRigAddTexture }
+
+    private static func drawRimArc(
+        context: CGContext,
+        space: CGColorSpace,
+        center: CGPoint,
+        radius: CGFloat,
+        angle: CGFloat,
+        spread: CGFloat,
+        width: CGFloat,
+        color: GemColor,
+        alpha: CGFloat
+    ) {
+        // A stroked arc with round caps, blurred by drawing a few widening
+        // passes with falling alpha (cheap, baked once).
+        context.saveGState()
+        context.setLineCap(.round)
+        for pass in 0 ..< 4 {
+            let t = CGFloat(pass) / 3
+            context.setStrokeColor(color.withAlpha(alpha * (1 - t * 0.72) / 2.2).cgColor)
+            context.setLineWidth(width * (0.45 + t * 1.1))
+            context.addArc(
+                center: center,
+                radius: radius - width * 0.3,
+                // y-down space mirrors the angle.
+                startAngle: -(angle + spread / 2),
+                endAngle: -(angle - spread / 2),
+                clockwise: false
+            )
+            context.strokePath()
+        }
+        context.restoreGState()
+    }
+
+    // MARK: Cache and sizing
+
+    private static let bodyCache: NSCache<NSString, SKTexture> = {
+        let cache = NSCache<NSString, SKTexture>()
+        cache.name = "PomoGem.GemArtwork.body"
+        cache.countLimit = 256
+        cache.totalCostLimit = 12 * 1_024 * 1_024
+        return cache
+    }()
+
+    private static let imageCache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.name = "PomoGem.GemArtwork.image"
+        cache.countLimit = 64
+        cache.totalCostLimit = 16 * 1_024 * 1_024
+        return cache
+    }()
+
+    /// Bakes follow the display scale of the view that shows them (passed
+    /// in by the caller), clamped to 1…3 so the cache stays bounded.
+    static func renderScale(_ displayScale: CGFloat) -> CGFloat {
+        guard displayScale.isFinite else { return 3 }
+        return min(3, max(1, displayScale.rounded()))
+    }
+
+    private static func byteCost(_ image: UIImage) -> Int {
+        Int(image.size.width * image.scale * image.size.height * image.scale) * 4
+    }
+
+    /// 1pt buckets below 16pt, 2pt above. Loose radii vary continuously with
+    /// mass, so bucketing is what makes the cache hit.
+    static func sizeBucket(radius: CGFloat) -> CGFloat {
+        let clamped = max(4, radius)
+        if clamped < 16 { return clamped.rounded(.up) }
+        return (clamped / 2).rounded(.up) * 2
+    }
+
+    private static func margin(radius: CGFloat) -> CGFloat {
+        max(1.5, radius * 0.08)
+    }
+
+    private static func rendererFormat(scale: CGFloat) -> UIGraphicsImageRendererFormat {
+        let format = UIGraphicsImageRendererFormat.preferred()
+        format.opaque = false
+        format.scale = scale
+        // 8-bit sRGB keeps the byte estimate honest on wide-colour devices.
+        format.preferredRange = .standard
+        return format
+    }
+
+    private static func sharedTexture(
+        pixels: Int,
+        draw: (CGContext, CGFloat) -> Void
+    ) -> SKTexture {
+        sharedTexture(sharedImage(pixels: pixels, draw: draw))
+    }
+
+    /// The shared light images are also packed into `GemTextureAtlas`, so
+    /// every gem layer can batch with the bodies of the same blend mode.
+    private static func sharedImage(
+        pixels: Int,
+        draw: (CGContext, CGFloat) -> Void
+    ) -> UIImage {
+        let size = CGFloat(pixels)
+        return UIGraphicsImageRenderer(
+            size: CGSize(width: size, height: size),
+            format: rendererFormat(scale: 1)
+        ).image { renderer in
+            draw(renderer.cgContext, size)
+        }
+    }
+
+    private static func sharedTexture(_ image: UIImage) -> SKTexture {
+        let texture = SKTexture(image: image)
+        texture.filteringMode = .linear
+        return texture
+    }
+
+    // MARK: Layouts (unit space, y up)
+
+    fileprivate struct Facet {
+        var points: [CGPoint]
+        /// True 3D facet normal; z is the cosine to the viewer.
+        var normal: (x: CGFloat, y: CGFloat, z: CGFloat)
+        /// Deterministic per-facet scintillation value h_f in 0...1.
+        var shade: CGFloat
+        /// Outermost band (receives the thin girdle fire tint).
+        var isGirdle = false
+        var isTable = false
+    }
+
+    fileprivate struct Layout {
+        let outer: [CGPoint]
+        let facets: [Facet]
+    }
+
+    private static let layoutLock = NSLock()
+    nonisolated(unsafe) private static var layoutCache: [String: Layout] = [:]
+
+    private static func layout(cut: GemCut, symmetry: Int, variant: Int) -> Layout {
+        let key = "\(cut.rawValue)-\(symmetry)-\(variant)"
+        layoutLock.lock()
+        if let cached = layoutCache[key] {
+            layoutLock.unlock()
+            return cached
+        }
+        layoutLock.unlock()
+
+        let raw: Layout
+        switch cut {
+        case .tumbled, .glass:
+            raw = geodesicLayout(frequency: 2, variant: variant, salt: 0x6E4D)
+        case .rough:
+            raw = roughLayout(variant: variant)
+        case .step:
+            raw = stepLayout(symmetry: symmetry)
+        case .brilliant, .radiant:
+            raw = brilliantLayout(symmetry: symmetry)
+        case .hero:
+            raw = heroLayout()
+        case .cabochon:
+            // A smooth dome: a round silhouette and no facets at all.
+            raw = Layout(outer: ring(count: 64, radius: 1, offset: 0), facets: [])
+        }
+        let normalized = normalize(raw)
+        layoutLock.lock()
+        layoutCache[key] = normalized
+        layoutLock.unlock()
+        return normalized
+    }
+
+    private static func polygonArea(_ points: [CGPoint]) -> CGFloat {
+        guard points.count > 2 else { return 0 }
+        var sum: CGFloat = 0
+        for index in points.indices {
+            let a = points[index]
+            let b = points[(index + 1) % points.count]
+            sum += a.x * b.y - b.x * a.y
+        }
+        return abs(sum) / 2
+    }
+
+    /// Scale factor that brings a silhouette to the shared area ratio,
+    /// capped so no vertex leaves 1.02 × the physics radius.
+    private static func normalizationScale(for outer: [CGPoint]) -> (scale: CGFloat, capped: Bool) {
+        let area = max(polygonArea(outer), 0.000_1)
+        let wanted = (silhouetteAreaRatio * .pi / area).squareRoot()
+        let maximumRadius = outer.map { hypot($0.x, $0.y) }.max() ?? 1
+        let cap = silhouetteMaximumRadius / max(maximumRadius, 0.000_1)
+        return (min(wanted, cap), wanted > cap + 0.000_1)
+    }
+
+    private static func normalize(_ layout: Layout) -> Layout {
+        let scale = normalizationScale(for: layout.outer).scale
+        func scaled(_ point: CGPoint) -> CGPoint { CGPoint(x: point.x * scale, y: point.y * scale) }
+        return Layout(
+            outer: layout.outer.map(scaled),
+            facets: layout.facets.map { facet in
+                var copy = facet
+                copy.points = facet.points.map(scaled)
+                return copy
+            }
+        )
+    }
+
+    /// Self-reported gems keep the plain icosahedron, seen along a five-fold
+    /// axis: a regular decagon silhouette that reaches the shared area ratio
+    /// inside the 1.02 radius cap. Variants differ by a small tilt and roll.
+    private static func roughLayout(variant: Int) -> Layout {
+        let t = (1 + sqrt(CGFloat(5))) / 2
+        let axisPitch = atan2(1, t)
+        let tilt = (CGFloat(variant % 2) - 0.5) * 0.10
+        let roll = CGFloat(variant) * .pi / 10 + 0.17
+        return geodesicLayout(frequency: 1, variant: variant, salt: 0x2B0B) { vertex in
+            var (x, y, z) = vertex
+            // Bring the vertex (0, 1, φ) onto the view axis, then vary.
+            let pitch = axisPitch + tilt
+            (y, z) = (y * cos(pitch) - z * sin(pitch), y * sin(pitch) + z * cos(pitch))
+            (x, y) = (x * cos(roll) - y * sin(roll), x * sin(roll) + y * cos(roll))
+            return (x, y, z)
+        }
+    }
+
+    /// Geodesic crystal: a subdivided icosahedron, rotated per variant and
+    /// seen orthographically. Every facet carries its real normal, so the
+    /// view-direction shading and Fresnel rim are physically coherent. The
+    /// silhouette is the convex hull of the projected vertices.
+    private static func geodesicLayout(
+        frequency: Int,
+        variant: Int,
+        salt: Int,
+        orientation: (((CGFloat, CGFloat, CGFloat)) -> (x: CGFloat, y: CGFloat, z: CGFloat))? = nil
+    ) -> Layout {
+        let mesh = icosphere(frequency: frequency)
+        var random = GemRandom(seed: UInt64(salt &* 7_919 &+ variant &* 104_729 &+ 17))
+        let yaw = random.unit() * .pi * 2
+        let pitch = (random.unit() - 0.5) * 1.1
+        let roll = random.unit() * .pi * 2
+        func rotate(_ v: (CGFloat, CGFloat, CGFloat)) -> (x: CGFloat, y: CGFloat, z: CGFloat) {
+            var (x, y, z) = v
+            (x, y) = (x * cos(roll) - y * sin(roll), x * sin(roll) + y * cos(roll))
+            (y, z) = (y * cos(pitch) - z * sin(pitch), y * sin(pitch) + z * cos(pitch))
+            (x, z) = (x * cos(yaw) + z * sin(yaw), -x * sin(yaw) + z * cos(yaw))
+            return (x, y, z)
+        }
+        let vertices = mesh.vertices.map(orientation ?? rotate)
+        var shadeRandom = GemRandom(seed: UInt64(0x5EED &+ variant &* 7_919 &+ salt))
+        var facets: [Facet] = []
+        for face in mesh.faces {
+            let a = vertices[face.0], b = vertices[face.1], c = vertices[face.2]
+            let u = (b.x - a.x, b.y - a.y, b.z - a.z)
+            let v = (c.x - a.x, c.y - a.y, c.z - a.z)
+            var n = (
+                x: u.1 * v.2 - u.2 * v.1,
+                y: u.2 * v.0 - u.0 * v.2,
+                z: u.0 * v.1 - u.1 * v.0
+            )
+            let length = max(sqrt(n.x * n.x + n.y * n.y + n.z * n.z), 0.000_1)
+            n = (n.x / length, n.y / length, n.z / length)
+            // Outward orientation: the centroid direction of a convex hull.
+            let centroid = ((a.x + b.x + c.x) / 3, (a.y + b.y + c.y) / 3, (a.z + b.z + c.z) / 3)
+            if n.x * centroid.0 + n.y * centroid.1 + n.z * centroid.2 < 0 {
+                n = (-n.x, -n.y, -n.z)
+            }
+            let shade = shadeRandom.unit()
+            guard n.z > 0.02 else { continue }
+            facets.append(Facet(
+                points: [CGPoint(x: a.x, y: a.y), CGPoint(x: b.x, y: b.y), CGPoint(x: c.x, y: c.y)],
+                normal: n,
+                shade: shade,
+                isGirdle: n.z < 0.35
+            ))
+        }
+        let hull = convexHull(vertices.map { CGPoint(x: $0.x, y: $0.y) })
+        return Layout(outer: hull, facets: facets)
+    }
+
+    private static func icosphere(frequency: Int) -> (vertices: [(CGFloat, CGFloat, CGFloat)], faces: [(Int, Int, Int)]) {
+        let t = (1 + sqrt(CGFloat(5))) / 2
+        var vertices: [(CGFloat, CGFloat, CGFloat)] = [
+            (-1, t, 0), (1, t, 0), (-1, -t, 0), (1, -t, 0),
+            (0, -1, t), (0, 1, t), (0, -1, -t), (0, 1, -t),
+            (t, 0, -1), (t, 0, 1), (-t, 0, -1), (-t, 0, 1)
+        ].map { normalized($0) }
+        var faces: [(Int, Int, Int)] = [
+            (0, 11, 5), (0, 5, 1), (0, 1, 7), (0, 7, 10), (0, 10, 11),
+            (1, 5, 9), (5, 11, 4), (11, 10, 2), (10, 7, 6), (7, 1, 8),
+            (3, 9, 4), (3, 4, 2), (3, 2, 6), (3, 6, 8), (3, 8, 9),
+            (4, 9, 5), (2, 4, 11), (6, 2, 10), (8, 6, 7), (9, 8, 1)
+        ]
+        for _ in 1 ..< max(1, frequency) {
+            var midpointCache: [Int: Int] = [:]
+            func midpoint(_ i: Int, _ j: Int) -> Int {
+                let key = min(i, j) << 16 | max(i, j)
+                if let cached = midpointCache[key] { return cached }
+                let a = vertices[i], b = vertices[j]
+                vertices.append(normalized(((a.0 + b.0) / 2, (a.1 + b.1) / 2, (a.2 + b.2) / 2)))
+                midpointCache[key] = vertices.count - 1
+                return vertices.count - 1
+            }
+            var next: [(Int, Int, Int)] = []
+            for face in faces {
+                let ab = midpoint(face.0, face.1)
+                let bc = midpoint(face.1, face.2)
+                let ca = midpoint(face.2, face.0)
+                next.append((face.0, ab, ca))
+                next.append((face.1, bc, ab))
+                next.append((face.2, ca, bc))
+                next.append((ab, bc, ca))
+            }
+            faces = next
+        }
+        return (vertices, faces)
+    }
+
+    private static func normalized(_ v: (CGFloat, CGFloat, CGFloat)) -> (CGFloat, CGFloat, CGFloat) {
+        let length = max(sqrt(v.0 * v.0 + v.1 * v.1 + v.2 * v.2), 0.000_1)
+        return (v.0 / length, v.1 / length, v.2 / length)
+    }
+
+    /// Andrew's monotone chain; counter-clockwise in y-up space.
+    private static func convexHull(_ raw: [CGPoint]) -> [CGPoint] {
+        let points = raw.sorted { $0.x == $1.x ? $0.y < $1.y : $0.x < $1.x }
+        guard points.count > 2 else { return points }
+        func cross(_ o: CGPoint, _ a: CGPoint, _ b: CGPoint) -> CGFloat {
+            (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x)
+        }
+        var lower: [CGPoint] = []
+        for point in points {
+            while lower.count >= 2, cross(lower[lower.count - 2], lower[lower.count - 1], point) <= 0.000_1 {
+                lower.removeLast()
+            }
+            lower.append(point)
+        }
+        var upper: [CGPoint] = []
+        for point in points.reversed() {
+            while upper.count >= 2, cross(upper[upper.count - 2], upper[upper.count - 1], point) <= 0.000_1 {
+                upper.removeLast()
+            }
+            upper.append(point)
+        }
+        return Array(lower.dropLast() + upper.dropLast())
+    }
+
+    private static func polar(_ angle: CGFloat, _ radius: CGFloat) -> CGPoint {
+        CGPoint(x: cos(angle) * radius, y: sin(angle) * radius)
+    }
+
+    /// Normal of a facet tilted `slope` (0 = flat table, 1 = steep) toward
+    /// the direction of its centroid.
+    private static func slopedNormal(points: [CGPoint], slope: CGFloat) -> (x: CGFloat, y: CGFloat, z: CGFloat) {
+        let centroid = points.reduce(CGPoint.zero) { CGPoint(x: $0.x + $1.x, y: $0.y + $1.y) }
+        let direction = atan2(centroid.y, centroid.x)
+        let tilt = slope * .pi / 2.9
+        return (cos(direction) * sin(tilt), sin(direction) * sin(tilt), cos(tilt))
+    }
+
+    private static func ring(count: Int, radius: CGFloat, offset: CGFloat) -> [CGPoint] {
+        (0 ..< count).map { index in
+            polar(.pi / 2 + offset + CGFloat(index) / CGFloat(count) * .pi * 2, radius)
+        }
+    }
+
+    /// Octagonal step cut: four stepped bands and a large table. Shades
+    /// alternate in mirror-symmetric pairs, like steps catching the light.
+    private static func stepLayout(symmetry rawSymmetry: Int) -> Layout {
+        let count = max(6, rawSymmetry)
+        let offset = CGFloat.pi / CGFloat(count)
+        let scales: [CGFloat] = [1, 0.84, 0.70, 0.57, 0.45]
+        let slopes: [CGFloat] = [0.90, 0.70, 0.50, 0.30]
+        let bandShades: [(CGFloat, CGFloat)] = [(0.28, 0.58), (0.78, 0.46), (0.40, 0.86), (0.92, 0.60)]
+        let rings = scales.map { ring(count: count, radius: $0, offset: offset) }
+        var facets: [Facet] = []
+        for band in 0 ..< 4 {
+            let outer = rings[band]
+            let inner = rings[band + 1]
+            for index in outer.indices {
+                let next = (index + 1) % outer.count
+                let points = [outer[index], outer[next], inner[next], inner[index]]
+                let shades = bandShades[band]
+                facets.append(Facet(
+                    points: points,
+                    normal: slopedNormal(points: points, slope: slopes[band]),
+                    shade: index.isMultiple(of: 2) ? shades.0 : shades.1,
+                    isGirdle: band == 0
+                ))
+            }
+        }
+        // Table split into a mirrored bow-tie of pavilion reflections.
+        let table = rings[4]
+        for index in table.indices {
+            let next = (index + 1) % table.count
+            let points = [CGPoint.zero, table[index], table[next]]
+            facets.append(Facet(
+                points: points,
+                normal: (0, 0, 1),
+                shade: (index / 2).isMultiple(of: 2) ? 0.95 : 0.50,
+                isTable: true
+            ))
+        }
+        return Layout(outer: rings[0], facets: facets)
+    }
+
+    /// Round brilliant (A2) and radiant (A3/A4): table triangles, stars,
+    /// kites and split girdle facets, alternating in two values (0.42/0.88)
+    /// with mirror symmetry so the stone reads as cut, not as a mosaic.
+    private static func brilliantLayout(symmetry rawSymmetry: Int) -> Layout {
+        let count = max(6, rawSymmetry)
+        let step = CGFloat.pi * 2 / CGFloat(count)
+        let start = CGFloat.pi / 2
+        let table = (0 ..< count).map { polar(start + CGFloat($0) * step, 0.50) }
+        let stars = (0 ..< count).map { polar(start + (CGFloat($0) + 0.5) * step, 0.77) }
+        let girdle = (0 ..< count * 2).map { polar(start + CGFloat($0) * step / 2, 1) }
+        var facets: [Facet] = []
+        for index in 0 ..< count {
+            let next = (index + 1) % count
+            let previous = (index + count - 1) % count
+            let even = index.isMultiple(of: 2)
+            let tablePoints = [CGPoint.zero, table[index], table[next]]
+            facets.append(Facet(
+                points: tablePoints, normal: (0, 0, 1),
+                shade: even ? 0.88 : 0.42, isTable: true
+            ))
+            let starPoints = [table[index], table[next], stars[index]]
+            facets.append(Facet(
+                points: starPoints, normal: slopedNormal(points: starPoints, slope: 0.36),
+                shade: even ? 0.52 : 0.80
+            ))
+            let kitePoints = [table[index], stars[previous], girdle[index * 2], stars[index]]
+            facets.append(Facet(
+                points: kitePoints, normal: slopedNormal(points: kitePoints, slope: 0.60),
+                shade: even ? 0.88 : 0.42
+            ))
+            let leftGirdle = [stars[index], girdle[index * 2], girdle[index * 2 + 1]]
+            facets.append(Facet(
+                points: leftGirdle, normal: slopedNormal(points: leftGirdle, slope: 0.86),
+                shade: 0.36, isGirdle: true
+            ))
+            let rightGirdle = [stars[index], girdle[index * 2 + 1], girdle[(index * 2 + 2) % (count * 2)]]
+            facets.append(Facet(
+                points: rightGirdle, normal: slopedNormal(points: rightGirdle, slope: 0.86),
+                shade: 0.66, isGirdle: true
+            ))
+        }
+        return Layout(outer: girdle, facets: facets)
+    }
+
+    /// Decagonal hero outline (the time core's silhouette, shared with the
+    /// outline tests). The core itself is painted by `renderHero` on its own
+    /// radial geometry (`CoreGeometry`) with the same ten girdle vertices.
+    private static func heroLayout() -> Layout {
+        let count = 10
+        let step = CGFloat.pi * 2 / CGFloat(count)
+        let start = CGFloat.pi / 2
+        let table = (0 ..< count).map { polar(start + CGFloat($0) * step, 0.42) }
+        let inner = (0 ..< count).map { polar(start + (CGFloat($0) + 0.5) * step, 0.78) }
+        let outer = (0 ..< count).map { polar(start + CGFloat($0) * step, 1) }
+        var facets: [Facet] = [
+            Facet(points: table, normal: (0, 0, 1), shade: 0.9, isTable: true)
+        ]
+        for index in 0 ..< count {
+            let next = (index + 1) % count
+            let previous = (index + count - 1) % count
+            let star = [table[index], table[next], inner[index]]
+            facets.append(Facet(points: star, normal: slopedNormal(points: star, slope: 0.30), shade: 0.7))
+            let kite = [table[index], inner[previous], outer[index], inner[index]]
+            facets.append(Facet(points: kite, normal: slopedNormal(points: kite, slope: 0.62), shade: 1, isGirdle: true))
+            let girdleFacet = [outer[index], outer[next], inner[index]]
+            facets.append(Facet(points: girdleFacet, normal: slopedNormal(points: girdleFacet, slope: 0.86), shade: 0.55, isGirdle: true))
+        }
+        return Layout(outer: outer, facets: facets)
+    }
+
+    // MARK: Rendering
+
+    private static func renderBody(spec: GemArtworkSpec, radius: CGFloat, scale: CGFloat) -> UIImage {
+        let pad = margin(radius: radius)
+        let side = (radius + pad) * 2
+        return UIGraphicsImageRenderer(
+            size: CGSize(width: side, height: side),
+            format: rendererFormat(scale: scale)
+        ).image { renderer in
+            let center = CGPoint(x: side / 2, y: side / 2)
+            // Unit space is y-up; UIKit image space is y-down.
+            func map(_ point: CGPoint) -> CGPoint {
+                CGPoint(x: center.x + point.x * radius, y: center.y - point.y * radius)
+            }
+            if spec.cut == .cabochon {
+                drawCabochon(spec: spec, context: renderer.cgContext, radius: radius, map: map)
+            } else {
+                drawGem(spec: spec, context: renderer.cgContext, radius: radius, map: map)
+            }
+        }
+    }
+
+    private static func centroid(_ points: [CGPoint]) -> CGPoint {
+        let sum = points.reduce(CGPoint.zero) { CGPoint(x: $0.x + $1.x, y: $0.y + $1.y) }
+        return CGPoint(x: sum.x / CGFloat(max(points.count, 1)), y: sum.y / CGFloat(max(points.count, 1)))
+    }
+
+    private static func drawGem(
+        spec: GemArtworkSpec,
+        context: CGContext,
+        radius: CGFloat,
+        map: (CGPoint) -> CGPoint
+    ) {
+        let space = CGColorSpaceCreateDeviceRGB()
+        let gemLayout = layout(cut: spec.cut, symmetry: spec.symmetry, variant: spec.variant)
+        let outlinePath = CGMutablePath()
+        outlinePath.addLines(between: gemLayout.outer.map(map))
+        outlinePath.closeSubpath()
+
+        let isGlass = spec.cut == .glass
+        let tones = SectorTones(spec: spec)
+        let dominant = tones.dominant
+        // Round 12: a step cut's concentric bands at half their former
+        // contrast, so the crystal reads as a lit stone, not as a target or
+        // a parasol.
+        let stepSoftening: CGFloat = spec.cut == .step ? 0.5 : 1
+        let contrast = min(max(spec.facetContrast + dominant.contrastBoost, 0), 1) * stepSoftening
+        let jitterLimit: CGFloat = spec.cut == .brilliant || spec.cut == .radiant ? 0.12 : 0.18
+        var jitter = GemRandom(seed: UInt64(0xF1CE &+ spec.variant &* 131 &+ spec.symmetry))
+
+        context.saveGState()
+        context.addPath(outlinePath)
+        context.clip()
+
+        // 1. Body: the deep tone shows through hairline gaps.
+        context.setFillColor(dominant.deep.cgColor)
+        context.addPath(outlinePath)
+        context.fillPath()
+
+        // 2. Facets: view-direction shading only, so rotation never moves a
+        //    baked highlight. b = lerp(1 − 0.7c, 1, h) × (0.55 + 0.45·nz^0.6).
+        for facet in gemLayout.facets {
+            let nz = min(max(facet.normal.z, 0), 1)
+            var shade = facet.shade
+            if facet.isTable || spec.cut != .tumbled {
+                shade += (jitter.unit() - 0.5) * 2 * jitterLimit * (1 - facet.shade * 0.4) * 0.5
+            }
+            shade = min(max(shade, 0), 1)
+            let floor = 1 - 0.7 * contrast
+            let tiltShading = 0.45 * stepSoftening
+            var brightness = (floor + (1 - floor) * shade) * (1 - tiltShading + tiltShading * pow(nz, 0.6))
+            if spec.isMuted { brightness = 0.25 + brightness * 0.7 }
+            brightness = min(max(brightness, 0.08), 1)
+
+            let center = centroid(facet.points)
+            let sector = tones.blend(atAngle: atan2(center.y, center.x))
+            var color = sector.tone.facet(brightness: brightness, hueJitter: shade * 2 - 1)
+            if let neighbour = sector.neighbour, sector.weight > 0 {
+                color = color.mixed(with: neighbour.facet(brightness: brightness, hueJitter: shade * 2 - 1), amount: sector.weight)
+            }
+            // Fresnel rim: (1 − N·V)^3 × 0.35 toward white/#8ACBFF.
+            let fresnel = pow(1 - nz, 3) * 0.35 * (isGlass ? 1.2 : 1)
+            color = color.mixed(with: GemColor.fresnelTint, amount: fresnel)
+            // A whisper of fire in the girdle band only (A1+ cut stones).
+            if facet.isGirdle, !spec.isMuted, !isGlass, spec.cut != .tumbled, spec.cut != .rough {
+                let fire = [GemColor.fireWarm, GemColor.fireCool, GemColor.fireViolet]
+                let index = Int((center.x * 997 + center.y * 131).magnitude * 10) % fire.count
+                color = color.mixed(with: fire[index], amount: 0.14)
+            }
+
+            let mapped = facet.points.map(map)
+            let path = CGMutablePath()
+            path.addLines(between: mapped)
+            path.closeSubpath()
+            // Radial (rotation-invariant) gradient across the facet: the
+            // inner edge slightly lighter than the outer edge.
+            let byDistance = mapped.sorted {
+                hypot($0.x - map(.zero).x, $0.y - map(.zero).y)
+                    < hypot($1.x - map(.zero).x, $1.y - map(.zero).y)
+            }
+            let gradientColors = [
+                color.lighter(0.07).cgColor,
+                color.cgColor,
+                color.darker(0.10).cgColor
+            ] as CFArray
+            context.saveGState()
+            context.addPath(path)
+            context.clip()
+            if let first = byDistance.first, let last = byDistance.last,
+               hypot(first.x - last.x, first.y - last.y) > 0.01,
+               let gradient = CGGradient(colorsSpace: space, colors: gradientColors, locations: [0, 0.5, 1]) {
+                context.drawLinearGradient(
+                    gradient,
+                    start: first,
+                    end: last,
+                    options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
+                )
+            } else {
+                context.setFillColor(color.cgColor)
+                context.fill(path.boundingBoxOfPath)
+            }
+            context.restoreGState()
+        }
+
+        // 3. Inner glow: the light tone gathered in the middle, α0.45 → 0
+        //    at 0.7R (lit from within).
+        let glow = dominant.light
+        context.saveGState()
+        context.setBlendMode(.screen)
+        let glowAlpha: CGFloat = spec.isMuted ? 0.22 : (isGlass ? 0.30 : 0.50)
+        let glowColors = [
+            glow.withAlpha(glowAlpha).cgColor,
+            glow.withAlpha(glowAlpha * 0.40).cgColor,
+            glow.withAlpha(0).cgColor
+        ] as CFArray
+        if let gradient = CGGradient(colorsSpace: space, colors: glowColors, locations: [0, 0.5, 1]) {
+            context.drawRadialGradient(
+                gradient,
+                startCenter: map(.zero), startRadius: 0,
+                endCenter: map(.zero), endRadius: radius * 0.75,
+                options: []
+            )
+        }
+        context.restoreGState()
+
+        // Pin-point lights where facets meet (tumbled crystals): tiny, many,
+        // spread over the whole stone so they add sparkle without a side.
+        if spec.cut == .tumbled, !spec.isMuted, radius >= 6 {
+            var seen = Set<Int>()
+            var pins: [CGPoint] = []
+            for facet in gemLayout.facets where facet.normal.z > 0.45 {
+                for point in facet.points {
+                    let key = Int((point.x * 500).rounded()) * 4_099 + Int((point.y * 500).rounded())
+                    if seen.insert(key).inserted { pins.append(point) }
+                }
+            }
+            let stride = max(1, pins.count / 7)
+            for (index, point) in pins.enumerated() where index % stride == spec.variant % stride {
+                drawDot(context: context, center: map(point), radius: max(0.35, radius * 0.028), alpha: 0.75)
+            }
+        }
+
+        // 4. A3+: a white heart in the table.
+        if spec.hasWhiteCore {
+            context.saveGState()
+            context.setBlendMode(.screen)
+            let heart = [
+                UIColor(white: 1, alpha: 0.80).cgColor,
+                UIColor(white: 1, alpha: 0.30).cgColor,
+                UIColor(white: 1, alpha: 0).cgColor
+            ] as CFArray
+            if let gradient = CGGradient(colorsSpace: space, colors: heart, locations: [0, 0.45, 1]) {
+                context.drawRadialGradient(
+                    gradient,
+                    startCenter: map(.zero), startRadius: 0,
+                    endCenter: map(.zero), endRadius: radius * 0.25,
+                    options: []
+                )
+            }
+            context.restoreGState()
+        }
+
+        // 5. Facet edges: hairline internal edges in the light tone.
+        let internalWidth = min(max(radius * 0.035, 0.35), 0.6)
+        let edgeAlpha = min(1, (isGlass ? 0.34 : (spec.isMuted ? 0.14 : 0.28)) + spec.edgeBoost)
+        context.setLineJoin(.round)
+        context.setStrokeColor(dominant.light.mixed(with: .white, amount: 0.5).withAlpha(edgeAlpha).cgColor)
+        context.setLineWidth(internalWidth)
+        for facet in gemLayout.facets {
+            let path = CGMutablePath()
+            path.addLines(between: facet.points.map(map))
+            path.closeSubpath()
+            context.addPath(path)
+        }
+        context.strokePath()
+
+        // 6. Baked micro sparkles: rotationally symmetric so the texture has
+        //    no preferred light direction.
+        if spec.sparkleCount > 0, !spec.isMuted {
+            let count = spec.sparkleCount
+            let phase = CGFloat(spec.variant) * 0.61 + 0.35
+            for index in 0 ..< count {
+                let point: CGPoint
+                if count == 1 {
+                    point = .zero
+                } else {
+                    let angle = phase + CGFloat(index) / CGFloat(count) * .pi * 2
+                    point = polar(angle, 0.52)
+                }
+                drawSparkle(
+                    context: context,
+                    center: map(point),
+                    length: radius * (count == 1 ? 0.16 : 0.13),
+                    alpha: 0.80
+                )
+            }
+        }
+        // A4: crown of small lights around the table.
+        if spec.hasCrown {
+            let count = max(6, spec.symmetry)
+            for index in 0 ..< count {
+                let angle = .pi / 2 + CGFloat(index) / CGFloat(count) * .pi * 2
+                drawDot(context: context, center: map(polar(angle, 0.52)), radius: max(0.6, radius * 0.035), alpha: 0.9)
+            }
+        }
+        // Differentiate Without Color: each theme's mark, engraved last so
+        // no sparkle sits on it (§7.12).
+        if spec.showsThemeMarks, !isGlass {
+            for placement in themeMarkPlacements(for: spec.colors, radius: radius) {
+                drawThemeMark(placement.mark, center: map(placement.center), radius: radius * placement.radius, in: context)
+            }
+        }
+        context.restoreGState() // outline clip
+
+        // 7. Girdle outline, white α0.75.
+        let outlineAlpha = min(1, (isGlass ? 0.55 : (spec.isMuted ? 0.36 : 0.75)) + spec.edgeBoost)
+        context.addPath(outlinePath)
+        context.setStrokeColor(UIColor(white: 1, alpha: outlineAlpha).cgColor)
+        context.setLineWidth(min(max(radius * 0.06, 0.6), 1.0))
+        context.strokePath()
+
+        // 8. Self-reported fairness ring (existing semantic marker).
+        if spec.showsDashedRing {
+            let ringRadius = radius * 0.80
+            let dashCount = max(Constants.Jar.manualDashCount, 1)
+            let dashLength = 2 * CGFloat.pi * ringRadius / CGFloat(dashCount * 2)
+            let ringCenter = map(.zero)
+            context.saveGState()
+            context.setStrokeColor(UIColor.white.withAlphaComponent(0.55).cgColor)
+            context.setLineWidth(max(0.9, radius * 0.07))
+            context.setLineCap(.round)
+            context.setLineDash(phase: 0, lengths: [dashLength, dashLength])
+            context.strokeEllipse(in: CGRect(
+                x: ringCenter.x - ringRadius,
+                y: ringCenter.y - ringRadius,
+                width: ringRadius * 2,
+                height: ringRadius * 2
+            ))
+            context.restoreGState()
+        }
+    }
+
+    private static func drawSparkle(
+        context: CGContext,
+        center: CGPoint,
+        length: CGFloat,
+        alpha: CGFloat,
+        rotation: CGFloat = 0
+    ) {
+        context.saveGState()
+        context.setBlendMode(.screen)
+        if rotation != 0 {
+            context.translateBy(x: center.x, y: center.y)
+            context.rotate(by: rotation)
+            context.translateBy(x: -center.x, y: -center.y)
+        }
+        context.setFillColor(UIColor(white: 1, alpha: alpha).cgColor)
+        let waist = length * 0.16
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: center.x, y: center.y - length))
+        path.addQuadCurve(to: CGPoint(x: center.x + length, y: center.y), control: CGPoint(x: center.x + waist, y: center.y - waist))
+        path.addQuadCurve(to: CGPoint(x: center.x, y: center.y + length), control: CGPoint(x: center.x + waist, y: center.y + waist))
+        path.addQuadCurve(to: CGPoint(x: center.x - length, y: center.y), control: CGPoint(x: center.x - waist, y: center.y + waist))
+        path.addQuadCurve(to: CGPoint(x: center.x, y: center.y - length), control: CGPoint(x: center.x - waist, y: center.y - waist))
+        path.closeSubpath()
+        context.addPath(path)
+        context.fillPath()
+        context.restoreGState()
+        drawDot(context: context, center: center, radius: length * 0.35, alpha: alpha)
+    }
+
+    private static func drawDot(context: CGContext, center: CGPoint, radius: CGFloat, alpha: CGFloat) {
+        context.saveGState()
+        context.setBlendMode(.screen)
+        let colors = [
+            UIColor(white: 1, alpha: alpha).cgColor,
+            UIColor(white: 1, alpha: 0).cgColor
+        ] as CFArray
+        if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1]) {
+            context.drawRadialGradient(
+                gradient,
+                startCenter: center, startRadius: 0,
+                endCenter: center, endRadius: radius * 2,
+                options: []
+            )
+        }
+        context.restoreGState()
+    }
+
+    // MARK: Time core v3 (luminous radial brilliant)
+
+    /// The twenty colour slots of the core, clockwise from 12 o'clock, as
+    /// the theme-share fan paints them (top five + その他, 5 % steps). The
+    /// twenty radial facets between the heart and the crown take exactly
+    /// these colours; there is no fixed hue sweep.
+    static func coreSlotHexes(shares: [GemColorShare]) -> [String] {
+        let quantized = quantizedCoreShares(shares)
+        var slots: [String] = []
+        for share in quantized {
+            slots += Array(repeating: share.hex, count: max(1, Int((share.fraction * 20).rounded())))
+        }
+        if slots.isEmpty { slots = [Constants.Color.textMute] }
+        while slots.count < 20 { slots.append(slots[slots.count - 1]) }
+        return Array(slots.prefix(20))
+    }
+
+    /// Unit-space geometry of the core (girdle vertex radius 1, y up). Ten
+    /// girdle vertices start at 12 o'clock. The crown ring has a point under
+    /// every girdle vertex and one in every sector's middle, so the twenty
+    /// radial facets from the heart to the crown are the twenty 5 % slots.
+    fileprivate enum CoreGeometry {
+        static let crownVertexRadius: CGFloat = 0.74
+        static let crownMidRadius: CGFloat = 0.82
+
+        /// Math angle of slot boundary `b` (clockwise from 12 o'clock, 18° each).
+        static func angle(boundary: Int) -> CGFloat {
+            .pi / 2 - CGFloat(boundary) * (.pi / 10)
+        }
+
+        static func girdle(_ index: Int) -> CGPoint {
+            GemArtwork.polar(angle(boundary: 2 * (index % 10)), 1)
+        }
+
+        /// Crown ring point at slot boundary `b`: even → under a girdle
+        /// vertex, odd → the sector's middle.
+        static func crown(_ boundary: Int) -> CGPoint {
+            let b = boundary % 20
+            return GemArtwork.polar(angle(boundary: b), b.isMultiple(of: 2) ? crownVertexRadius : crownMidRadius)
+        }
+
+        static var outline: [CGPoint] { (0 ..< 10).map(girdle) }
+    }
+
+    /// The core's colour field (Docs/GemExperienceDesign.md §7.9). The share
+    /// fan keeps its proportions (top five + その他, 5 % steps) but is laid
+    /// out in hue order, clockwise from 7:30, starting after the widest hue
+    /// gap, and neighbouring colours melt into each other over one facet
+    /// (a tenth of the turn). Round 12: at most four fields — the three
+    /// largest shares, and a fourth that holds at least 15 % — while each
+    /// smaller share widens the kept colour nearest in hue. So the stone
+    /// reads as a few large fields of colour (blue on one side, warm on the
+    /// other) crossed by facet ridges — not as a colour wheel of every
+    /// theme or a beach ball of alternating wedges. Deterministic for the
+    /// quantised shares.
+    struct CoreColorField: Sendable {
+        struct Arc: Sendable {
+            let hex: String
+            let color: GemColor
+            /// Clockwise from 12 o'clock, in turns (0…1, may exceed 1).
+            let start: CGFloat
+            let end: CGFloat
+        }
+
+        /// Where the first colour starts: 7:30, so hue order runs up the
+        /// left side, over the top and down the right.
+        static let startTurn: CGFloat = 0.625
+        /// Width of the blend between neighbouring colours: one facet.
+        static let blendTurns: CGFloat = 0.10
+        /// A fourth field needs at least this share of the fan.
+        static let fourthFieldShare: Double = 0.15
+
+        let arcs: [Arc]
+
+        init(shares quantized: [GemColorShare]) {
+            let valid = quantized.filter { $0.fraction > 0 }
+            guard !valid.isEmpty else {
+                let fallback = GemColor(hex: Constants.Color.textMute)
+                arcs = [Arc(hex: Constants.Color.textMute, color: fallback, start: Self.startTurn, end: Self.startTurn + 1)]
+                return
+            }
+            let fields = Self.fieldShares(valid)
+            let total = fields.reduce(0) { $0 + $1.fraction }
+            // Hue order (neutral colours last, ties by hex), then rotate so
+            // the sequence starts right after the widest gap in hue.
+            let entries = fields.map { share -> (share: GemColorShare, hue: CGFloat, neutral: Bool) in
+                let hsb = GemColor(hex: share.hex).hsb
+                return (share, hsb.hue, hsb.saturation < 0.08)
+            }
+            let chromatic = entries.filter { !$0.neutral }.sorted {
+                $0.hue == $1.hue ? $0.share.hex < $1.share.hex : $0.hue < $1.hue
+            }
+            let neutral = entries.filter(\.neutral).sorted { $0.share.hex < $1.share.hex }
+            var ordered = chromatic
+            if chromatic.count > 1 {
+                var widest = 0
+                var widestGap: CGFloat = -1
+                for index in chromatic.indices {
+                    let next = chromatic[(index + 1) % chromatic.count].hue
+                    var gap = next - chromatic[index].hue
+                    if gap <= 0 { gap += 1 }
+                    if gap > widestGap + 0.000_1 {
+                        widestGap = gap
+                        widest = index
+                    }
+                }
+                let first = (widest + 1) % chromatic.count
+                ordered = Array(chromatic[first...] + chromatic[..<first])
+            }
+            ordered += neutral
+            var cursor = Self.startTurn
+            arcs = ordered.map { entry in
+                let span = CGFloat(entry.share.fraction / total)
+                defer { cursor += span }
+                return Arc(hex: entry.share.hex, color: GemColor(hex: entry.share.hex), start: cursor, end: cursor + span)
+            }
+        }
+
+        /// The shares the field shows: the three largest, a fourth when it
+        /// holds `fourthFieldShare` of the fan, and every smaller share
+        /// added to the kept colour nearest in hue (a neutral one to the
+        /// largest), so the spans still add up to the whole fan.
+        /// A crystal's body keeps three (`fourthShare` nil).
+        static func fieldShares(_ shares: [GemColorShare], fourthShare: Double? = fourthFieldShare) -> [GemColorShare] {
+            let ranked = shares.sorted {
+                $0.fraction == $1.fraction ? $0.hex < $1.hex : $0.fraction > $1.fraction
+            }
+            let total = ranked.reduce(0) { $0 + $1.fraction }
+            guard ranked.count > 3, total > 0 else { return ranked }
+            let keepsFourth = fourthShare.map { ranked[3].fraction / total >= $0 } ?? false
+            var kept = Array(ranked.prefix(keepsFourth ? 4 : 3))
+            for share in ranked.dropFirst(kept.count) {
+                let hsb = GemColor(hex: share.hex).hsb
+                var target = 0
+                if hsb.saturation >= 0.08 {
+                    var nearest = CGFloat.greatestFiniteMagnitude
+                    for (index, candidate) in kept.enumerated() {
+                        let other = GemColor(hex: candidate.hex).hsb
+                        guard other.saturation >= 0.08 else { continue }
+                        var distance = abs(other.hue - hsb.hue)
+                        distance = min(distance, 1 - distance)
+                        if distance < nearest - 0.000_1 {
+                            nearest = distance
+                            target = index
+                        }
+                    }
+                }
+                kept[target] = GemColorShare(hex: kept[target].hex, fraction: kept[target].fraction + share.fraction)
+            }
+            return kept
+        }
+
+        /// Field colour at `turn` (clockwise from 12 o'clock).
+        func color(atTurn rawTurn: CGFloat) -> GemColor {
+            guard arcs.count > 1 else { return arcs[0].color }
+            var turn = (rawTurn - Self.startTurn).truncatingRemainder(dividingBy: 1)
+            if turn < 0 { turn += 1 }
+            turn += Self.startTurn
+            let index = arcs.firstIndex { turn < $0.end } ?? arcs.count - 1
+            let arc = arcs[index]
+            let half = min(Self.blendTurns / 2, (arc.end - arc.start) / 2)
+            if turn - arc.start < half {
+                let previous = arcs[(index + arcs.count - 1) % arcs.count]
+                let t = 0.5 + 0.5 * (turn - arc.start) / max(half, 0.000_1)
+                return Self.blend(previous.color, arc.color, smooth(t))
+            }
+            if arc.end - turn < half {
+                let next = arcs[(index + 1) % arcs.count]
+                let t = 0.5 - 0.5 * (arc.end - turn) / max(half, 0.000_1)
+                return Self.blend(arc.color, next.color, smooth(t))
+            }
+            return arc.color
+        }
+
+        /// Mean field colour over `from…to` turns (sampled).
+        func meanColor(fromTurn from: CGFloat, toTurn to: CGFloat) -> GemColor {
+            let samples = 36
+            var red: CGFloat = 0
+            var green: CGFloat = 0
+            var blue: CGFloat = 0
+            for index in 0 ..< samples {
+                let color = color(atTurn: from + (to - from) * (CGFloat(index) + 0.5) / CGFloat(samples))
+                red += color.red
+                green += color.green
+                blue += color.blue
+            }
+            return GemColor(red: red / CGFloat(samples), green: green / CGFloat(samples), blue: blue / CGFloat(samples))
+        }
+
+        private func smooth(_ t: CGFloat) -> CGFloat {
+            let x = min(max(t, 0), 1)
+            return x * x * (3 - 2 * x)
+        }
+
+        /// Neighbouring hues (under 80° apart) blend along the shorter way
+        /// round the hue circle, so violet and pink meet in orchid. Distant
+        /// hues never pass through the colours between them (no rainbow and
+        /// no grey): each fades to its own pale light, and the two meet in a
+        /// near-white seam, like light caught on a facet edge. Neutral
+        /// colours mix in RGB.
+        static func blend(_ a: GemColor, _ b: GemColor, _ t: CGFloat) -> GemColor {
+            let ha = a.hsb
+            let hb = b.hsb
+            guard ha.saturation >= 0.08, hb.saturation >= 0.08 else { return a.mixed(with: b, amount: t) }
+            var delta = hb.hue - ha.hue
+            if delta > 0.5 { delta -= 1 }
+            if delta < -0.5 { delta += 1 }
+            func lerp(_ x: (hue: CGFloat, saturation: CGFloat, brightness: CGFloat),
+                      _ y: (hue: CGFloat, saturation: CGFloat, brightness: CGFloat),
+                      _ hueDelta: CGFloat,
+                      _ u: CGFloat) -> GemColor {
+                GemColor(
+                    hue: x.hue + hueDelta * u,
+                    saturation: x.saturation + (y.saturation - x.saturation) * u,
+                    brightness: x.brightness + (y.brightness - x.brightness) * u
+                )
+            }
+            guard abs(delta) > 80 / 360 else { return lerp(ha, hb, delta, t) }
+            let paleSaturation: CGFloat = 0.16
+            if t < 0.5 {
+                return lerp(ha, (ha.hue, paleSaturation, 1), 0, t * 2)
+            }
+            return lerp((hb.hue, paleSaturation, 1), hb, 0, (t - 0.5) * 2)
+        }
+    }
+
+    /// Luminous tones of one facet strip, heart → girdle: near-white heart,
+    /// pale light, saturated mid, deeper edge (never brown), and the pale lit
+    /// crown. The colour comes from the field at the strip's angle; the
+    /// facet only sets the light. `parity` 1 is the second half of a sector:
+    /// a few degrees warmer and a step deeper, so even a single-theme core
+    /// sparkles.
+    fileprivate struct CoreSlotTones {
+        let heart: GemColor
+        let light: GemColor
+        let vivid: GemColor
+        let deep: GemColor
+        let crown: GemColor
+
+        init(color: GemColor, slot: Int, turn: CGFloat, vessel: Bool, lit: Bool) {
+            let parity = slot % 2
+            // Sector-wise hue breathing (±2°) and a key light from the upper
+            // left (±7 %), fixed per slot so the bake is deterministic.
+            let sector = (slot / 2) % 10
+            let jitter: [CGFloat] = [0, 1.5, -1, 2, -1.5, 0.5, -2, 1, -0.5, 1.5]
+            let center = CGFloat.pi / 2 - turn * .pi * 2
+            let key = cos(center - .pi * 0.75)
+            let lightFactor = 1 + 0.07 * key
+            if vessel {
+                // Clear crystal: ice-white facets (no theme colour enters
+                // before the core is born); lit facets are whiter still.
+                let glassLight = lit ? GemColor(red: 1, green: 1, blue: 1) : GemColor(red: 0.80, green: 0.84, blue: 0.90)
+                let glassMid = lit ? GemColor(red: 0.95, green: 0.98, blue: 1) : GemColor(red: 0.62, green: 0.67, blue: 0.76)
+                let glassDeep = lit ? GemColor(red: 0.86, green: 0.92, blue: 1) : GemColor(red: 0.48, green: 0.53, blue: 0.63)
+                let shade: CGFloat = parity == 0 ? 1 : 0.92
+                heart = GemColor.white
+                light = glassLight.darker(1 - min(1, shade * lightFactor))
+                vivid = glassMid.darker(1 - min(1, shade * lightFactor))
+                deep = glassDeep.darker(1 - shade)
+                crown = glassMid.lighter(lit ? 0.45 : 0.32)
+                return
+            }
+            let raw = color.hsb
+            let neutral = raw.saturation < 0.08
+            let hue = raw.hue + (jitter[sector] + (parity == 0 ? 0 : 4)) / 360
+            // Theme colours keep a vivid floor (0.66); the pale seams where
+            // distant hues meet keep their own low saturation.
+            let saturation = neutral
+                ? raw.saturation
+                : min(0.82, max(raw.saturation * 0.94, min(0.66, raw.saturation * 1.25)))
+            let shade: CGFloat = (parity == 0 ? 1 : 0.86) * lightFactor
+            vivid = GemColor(hue: hue, saturation: parity == 0 ? saturation : min(1, saturation + 0.08), brightness: min(1, shade))
+            deep = GemColor(
+                hue: hue - 5 / 360,
+                saturation: neutral ? saturation : min(1, saturation + 0.14),
+                brightness: (parity == 0 ? 0.90 : 0.77) * lightFactor
+            )
+            light = GemColor(
+                hue: hue + 8 / 360,
+                saturation: neutral ? saturation : min(saturation, parity == 0 ? 0.30 : 0.38),
+                brightness: 1
+            )
+            heart = light.lighter(0.78)
+            crown = vivid.mixed(with: .white, amount: parity == 0 ? 0.60 : 0.48)
+        }
+    }
+
+    /// Time core v4 (Docs/GemExperienceDesign.md §7.9): a luminous radial
+    /// brilliant. Twenty radial facets (ten sectors, each split in a lighter
+    /// and a deeper half) run from a wide white-hot heart through saturated
+    /// colour to a deeper edge; a crown ring of thirty small pale facets, a
+    /// bright girdle, an additive dispersion fringe and a crisp specular
+    /// streak at the upper left. Colour is a field (`CoreColorField`) that
+    /// the facets only light: ridges are white lines laid over it. The core
+    /// never rotates, so directional light is allowed here.
+    private static func renderHero(
+        shares: [GemColorShare],
+        level: Int,
+        litVesselFacets: Int?,
+        scale: CGFloat,
+        themeMarks: [ThemeMarkPlacement] = []
+    ) -> UIImage {
+        let diameter = coreBakeDiameter
+        let radius = diameter / 2 - margin(radius: diameter / 2)
+        let side = diameter
+        return UIGraphicsImageRenderer(
+            size: CGSize(width: side, height: side),
+            format: rendererFormat(scale: scale)
+        ).image { renderer in
+            let context = renderer.cgContext
+            let space = CGColorSpaceCreateDeviceRGB()
+            let center = CGPoint(x: side / 2, y: side / 2)
+            func map(_ point: CGPoint) -> CGPoint {
+                CGPoint(x: center.x + point.x * radius, y: center.y - point.y * radius)
+            }
+            func polygon(_ points: [CGPoint]) -> CGPath {
+                let path = CGMutablePath()
+                path.addLines(between: points.map(map))
+                path.closeSubpath()
+                return path
+            }
+            func gradient(_ colors: [UIColor], _ locations: [CGFloat]) -> CGGradient? {
+                CGGradient(colorsSpace: space, colors: colors.map(\.cgColor) as CFArray, locations: locations)
+            }
+            let isVessel = litVesselFacets != nil
+            let litSectors = min(max(litVesselFacets ?? 0, 0), 10)
+            let field = CoreColorField(shares: isVessel ? [GemColorShare(hex: "#DCEBFF", fraction: 1)] : shares)
+            let isSingleColour = field.arcs.count == 1
+            /// Tones of facet `slot` at `turn` (clockwise from 12 o'clock).
+            func tones(slot: Int, turn: CGFloat) -> CoreSlotTones {
+                CoreSlotTones(
+                    color: field.color(atTurn: turn),
+                    slot: slot,
+                    turn: turn,
+                    vessel: isVessel,
+                    lit: (slot / 2) < litSectors
+                )
+            }
+            func slotTurn(_ slot: Int, _ fraction: CGFloat = 0.5) -> CGFloat {
+                (CGFloat(slot) + fraction) / 20
+            }
+            let outline = polygon(CoreGeometry.outline)
+
+            context.saveGState()
+            context.addPath(outline)
+            context.clip()
+            context.setFillColor(tones(slot: 0, turn: slotTurn(0)).deep.cgColor)
+            context.fill(CGRect(x: 0, y: 0, width: side, height: side))
+
+            // 1. Twenty radial facets: heart → light → vivid → deep. Each is
+            // painted in six strips so the colour field flows across it.
+            let strips = 6
+            for slot in 0 ..< 20 {
+                let a = CoreGeometry.crown(slot)
+                let b = CoreGeometry.crown(slot + 1)
+                for strip in 0 ..< strips {
+                    // A hair of overlap hides antialiasing seams between strips.
+                    let f0 = max(0, (CGFloat(strip) - 0.08) / CGFloat(strips))
+                    let f1 = min(1, (CGFloat(strip) + 1.08) / CGFloat(strips))
+                    let tone = tones(slot: slot, turn: slotTurn(slot, (CGFloat(strip) + 0.5) / CGFloat(strips)))
+                    let p0 = a.mixed(with: b, amount: f0).scaled(1.02)
+                    let p1 = a.mixed(with: b, amount: f1).scaled(1.02)
+                    context.saveGState()
+                    context.addPath(polygon([CGPoint.zero, p0, p1]))
+                    context.clip()
+                    if let fill = gradient(
+                        [
+                            tone.heart.withAlpha(1),
+                            tone.light.withAlpha(1),
+                            tone.vivid.withAlpha(1),
+                            tone.vivid.mixed(with: tone.deep, amount: 0.45).withAlpha(1),
+                            tone.deep.withAlpha(1)
+                        ],
+                        [0, 0.30, 0.64, 0.90, 1]
+                    ) {
+                        context.drawRadialGradient(
+                            fill,
+                            startCenter: map(.zero), startRadius: 0,
+                            endCenter: map(.zero), endRadius: radius * CoreGeometry.crownMidRadius,
+                            options: [.drawsAfterEndLocation]
+                        )
+                    }
+                    context.restoreGState()
+                }
+                // Glassy sheen across the facet: its leading spoke catches
+                // more light than its trailing one.
+                context.saveGState()
+                context.addPath(polygon([CGPoint.zero, a, b]))
+                context.clip()
+                if let sheen = gradient(
+                    [UIColor(white: 1, alpha: slot.isMultiple(of: 2) ? 0.16 : 0.04), UIColor(white: 1, alpha: 0)],
+                    [0, 1]
+                ) {
+                    context.setBlendMode(.screen)
+                    context.drawLinearGradient(sheen, start: map(a), end: map(b), options: [])
+                }
+                context.restoreGState()
+            }
+
+            // 2. Crown ring: thirty small pale facets, lit toward the girdle.
+            for sector in 0 ..< 10 {
+                let first = tones(slot: 2 * sector, turn: slotTurn(2 * sector, 0.3))
+                let second = tones(slot: 2 * sector + 1, turn: slotTurn(2 * sector + 1, 0.7))
+                let bezel = tones(slot: 2 * sector, turn: slotTurn(2 * sector, 1))
+                let outerA = CoreGeometry.girdle(sector)
+                let outerB = CoreGeometry.girdle(sector + 1)
+                let vertexA = CoreGeometry.crown(2 * sector)
+                let middle = CoreGeometry.crown(2 * sector + 1)
+                let vertexB = CoreGeometry.crown(2 * sector + 2)
+                let bezelInner = bezel.vivid
+                let facets: [([CGPoint], GemColor, GemColor)] = [
+                    ([outerA, middle, vertexA], first.crown.mixed(with: first.vivid, amount: 0.30), first.crown.lighter(0.30)),
+                    ([outerA, outerB, middle], bezelInner.mixed(with: bezel.deep, amount: 0.12), bezelInner.lighter(0.48)),
+                    ([outerB, vertexB, middle], second.crown.mixed(with: second.vivid, amount: 0.38), second.crown.lighter(0.18))
+                ]
+                for (points, inner, outer) in facets {
+                    context.saveGState()
+                    context.addPath(polygon(points))
+                    context.clip()
+                    let innerPoint = centroid(points).scaled(0.84)
+                    let outerPoint = centroid(points).scaled(1.12)
+                    if let fill = gradient([inner.withAlpha(1), outer.withAlpha(1)], [0, 1]) {
+                        context.drawLinearGradient(
+                            fill,
+                            start: map(innerPoint),
+                            end: map(outerPoint),
+                            options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
+                        )
+                    }
+                    context.restoreGState()
+                }
+            }
+
+            // 3. White-hot heart: a wide plateau of light (white 70 % and
+            // more inside 0.12R, gone by 0.42R), then a faint outer glow.
+            context.saveGState()
+            context.setBlendMode(.screen)
+            if let heart = gradient(
+                [
+                    UIColor(white: 1, alpha: 1),
+                    UIColor(white: 1, alpha: isVessel ? 0.70 : 0.82),
+                    UIColor(white: 1, alpha: isVessel ? 0.36 : 0.46),
+                    UIColor(white: 1, alpha: isVessel ? 0.10 : 0.14),
+                    UIColor(white: 1, alpha: 0)
+                ],
+                [0, 0.18, 0.48, 0.78, 1]
+            ) {
+                context.drawRadialGradient(
+                    heart,
+                    startCenter: map(.zero), startRadius: 0,
+                    endCenter: map(.zero), endRadius: radius * 0.42,
+                    options: []
+                )
+            }
+            context.restoreGState()
+
+            // 4. Facet ridges: white lines laid over the colour field
+            // (fading toward the crown), finer mid-ridges, and the crown ring.
+            // Round 12: white α0.35 at most, so the ridges cross the colour
+            // fields instead of cutting the stone into wedges.
+            for boundary in 0 ..< 20 {
+                let tip = map(CoreGeometry.crown(boundary))
+                let major = boundary.isMultiple(of: 2)
+                drawSpoke(
+                    context: context,
+                    from: map(.zero),
+                    to: tip,
+                    width: radius * (major ? 0.016 : 0.009),
+                    alphas: major ? (0.35, 0.18) : (0.16, 0.05)
+                )
+            }
+            context.setLineJoin(.round)
+            context.setStrokeColor(UIColor(white: 1, alpha: isVessel ? 0.50 : 0.42).cgColor)
+            context.setLineWidth(max(0.6, radius * 0.012))
+            context.addPath(polygon((0 ..< 20).map(CoreGeometry.crown)))
+            context.strokePath()
+            context.setStrokeColor(UIColor(white: 1, alpha: isVessel ? 0.40 : 0.35).cgColor)
+            context.setLineWidth(max(0.5, radius * 0.009))
+            for sector in 0 ..< 10 {
+                let middle = map(CoreGeometry.crown(2 * sector + 1))
+                context.move(to: map(CoreGeometry.girdle(sector)))
+                context.addLine(to: middle)
+                context.addLine(to: map(CoreGeometry.girdle(sector + 1)))
+                context.move(to: map(CoreGeometry.girdle(sector)))
+                context.addLine(to: map(CoreGeometry.crown(2 * sector)))
+            }
+            context.strokePath()
+
+            // 5. Dispersion: a spectral fringe inside the girdle (warm on the
+            // right, cool on the left) and a few fire flecks in the crown.
+            // The colourless vessel keeps a faint fringe (optics, not theme).
+            let fringeAlpha: CGFloat = isVessel ? 0.24 : (level >= 3 ? 0.50 : (level == 2 ? 0.44 : 0.38))
+            context.saveGState()
+            context.setBlendMode(.plusLighter)
+            for sector in 0 ..< 10 {
+                let start = CoreGeometry.girdle(sector).scaled(0.955)
+                let end = CoreGeometry.girdle(sector + 1).scaled(0.955)
+                context.saveGState()
+                context.move(to: map(start))
+                context.addLine(to: map(end))
+                context.setLineWidth(radius * 0.055)
+                context.setLineCap(.round)
+                context.replacePathWithStrokedPath()
+                context.clip()
+                let startHue = CGFloat(sector) / 10
+                let endHue = CGFloat(sector + 1) / 10
+                if let fringe = gradient(
+                    [
+                        GemColor(hue: 0.02 + startHue * 0.78, saturation: 0.70, brightness: 1).withAlpha(fringeAlpha),
+                        GemColor(hue: 0.02 + endHue * 0.78, saturation: 0.70, brightness: 1).withAlpha(fringeAlpha)
+                    ],
+                    [0, 1]
+                ) {
+                    context.drawLinearGradient(fringe, start: map(start), end: map(end), options: [])
+                }
+                context.restoreGState()
+            }
+            let fire = [GemColor.fireCool, GemColor.fireWarm, GemColor.fireViolet, GemColor.fireWarm, GemColor.fireCool]
+            let fleckSectors = [8, 2, 6, 4, 9, 1, 5]
+            let fleckCount = isVessel ? 4 : (isSingleColour ? 7 : 5)
+            for (index, sector) in fleckSectors.prefix(fleckCount).enumerated() {
+                let outer = CoreGeometry.girdle(sector)
+                let middle = CoreGeometry.crown(2 * sector + 1)
+                let vertex = CoreGeometry.crown(2 * sector)
+                let fleck = [
+                    outer.mixed(with: middle, amount: 0.30),
+                    outer.mixed(with: vertex, amount: 0.30),
+                    outer.mixed(with: middle.mixed(with: vertex, amount: 0.5), amount: 0.70)
+                ]
+                context.addPath(polygon(fleck))
+                context.setFillColor(fire[index % fire.count].withAlpha(isVessel ? 0.32 : 0.55).cgColor)
+                context.fillPath()
+            }
+            context.restoreGState()
+
+            // 6. A luminous veil from the key light (upper left), so the
+            // stone glows through rather than reading as painted glass.
+            context.saveGState()
+            context.setBlendMode(.screen)
+            if let veil = gradient(
+                [UIColor(white: 1, alpha: isVessel ? 0.18 : 0.24), UIColor(white: 1, alpha: 0.06), UIColor(white: 1, alpha: 0)],
+                [0, 0.55, 1]
+            ) {
+                let origin = map(CGPoint(x: -0.34, y: 0.40))
+                context.drawRadialGradient(
+                    veil,
+                    startCenter: origin, startRadius: 0,
+                    endCenter: origin, endRadius: radius * 1.25,
+                    options: []
+                )
+            }
+            context.restoreGState()
+
+            // 7. Crisp specular streak at the upper left, and a glare dot.
+            context.saveGState()
+            context.setBlendMode(.screen)
+            for (offset, length, thickness, alpha) in [
+                (CGPoint(x: -0.40, y: 0.50), CGFloat(0.40), CGFloat(0.085), CGFloat(isVessel ? 0.80 : 0.95)),
+                (CGPoint(x: -0.54, y: 0.28), CGFloat(0.17), CGFloat(0.045), CGFloat(isVessel ? 0.60 : 0.80))
+            ] {
+                guard let streak = gradient(
+                    [UIColor(white: 1, alpha: alpha), UIColor(white: 1, alpha: alpha * 0.45), UIColor(white: 1, alpha: 0)],
+                    [0, 0.45, 1]
+                ) else { continue }
+                context.saveGState()
+                let point = map(offset)
+                context.translateBy(x: point.x, y: point.y)
+                context.rotate(by: -atan2(offset.y, offset.x) + .pi / 2)
+                context.scaleBy(x: 1, y: thickness / length)
+                context.drawRadialGradient(
+                    streak,
+                    startCenter: .zero, startRadius: 0,
+                    endCenter: .zero, endRadius: radius * length,
+                    options: []
+                )
+                context.restoreGState()
+            }
+            context.restoreGState()
+
+            // 8. Bright girdle: a soft inner glow band along the outline.
+            context.addPath(outline)
+            context.setStrokeColor(UIColor(white: 1, alpha: isVessel ? 0.34 : 0.40).cgColor)
+            context.setLineWidth(radius * 0.14)
+            context.strokePath()
+            context.addPath(outline)
+            context.setStrokeColor(UIColor(white: 1, alpha: isVessel ? 0.50 : 0.50).cgColor)
+            context.setLineWidth(radius * 0.045)
+            context.strokePath()
+
+            // The vessel's lit sectors (one per 250 g) each hold a small star.
+            if isVessel {
+                for sector in 0 ..< litSectors {
+                    drawSparkle(
+                        context: context,
+                        center: map(CoreGeometry.crown(2 * sector + 1).scaled(0.9)),
+                        length: radius * 0.10,
+                        alpha: 0.9
+                    )
+                }
+            }
+
+            // 2.5 t: a crown of lights on the crown ring.
+            if coreHasCrown(level: level) {
+                for sector in 0 ..< 10 {
+                    drawDot(context: context, center: map(CoreGeometry.crown(2 * sector)), radius: radius * 0.028, alpha: 0.95)
+                }
+            }
+            context.restoreGState() // outline clip
+
+            // Crisp girdle edge.
+            context.setLineJoin(.round)
+            context.addPath(outline)
+            context.setStrokeColor(UIColor(white: 1, alpha: isVessel ? 0.85 : 0.92).cgColor)
+            context.setLineWidth(max(1, radius * 0.020))
+            context.strokePath()
+
+            // White-hot star at the heart, and a small star on the left girdle.
+            drawSparkle(context: context, center: map(.zero), length: radius * (isVessel ? 0.20 : 0.24), alpha: isVessel ? 0.9 : 1)
+            drawSparkle(context: context, center: map(.zero), length: radius * (isVessel ? 0.11 : 0.13), alpha: 0.55, rotation: .pi / 4)
+            drawSparkle(context: context, center: map(CoreGeometry.girdle(7)), length: radius * 0.13, alpha: isVessel ? 0.6 : 0.85)
+
+            // Differentiate Without Color: one mark per theme arc (§7.12).
+            for placement in themeMarks {
+                drawThemeMark(placement.mark, center: map(placement.center), radius: radius * placement.radius, in: context)
+            }
+        }
+    }
+
+    /// A tapered white spoke from the heart, bright at its root.
+    private static func drawSpoke(
+        context: CGContext,
+        from start: CGPoint,
+        to end: CGPoint,
+        width: CGFloat,
+        alphas: (CGFloat, CGFloat)
+    ) {
+        let angle = atan2(end.y - start.y, end.x - start.x)
+        let normal = CGPoint(x: -sin(angle) * width / 2, y: cos(angle) * width / 2)
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: start.x + normal.x, y: start.y + normal.y))
+        path.addLine(to: CGPoint(x: end.x + normal.x * 0.5, y: end.y + normal.y * 0.5))
+        path.addLine(to: CGPoint(x: end.x - normal.x * 0.5, y: end.y - normal.y * 0.5))
+        path.addLine(to: CGPoint(x: start.x - normal.x, y: start.y - normal.y))
+        path.closeSubpath()
+        context.saveGState()
+        context.addPath(path)
+        context.clip()
+        let colors = [UIColor(white: 1, alpha: alphas.0).cgColor, UIColor(white: 1, alpha: alphas.1).cgColor] as CFArray
+        if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1]) {
+            context.drawLinearGradient(gradient, start: start, end: end, options: [])
+        }
+        context.restoreGState()
+    }
+}
+
+// MARK: - Tones
+
+/// One theme colour turned into gem tones (Docs/GemExperienceDesign.md
+/// §7.4). Hue is never changed: it is how people tell their themes apart.
+/// Lightness keeps the palette's order (OKLab L, `GemToneLightness`): a
+/// lighter swatch always makes a lighter gem, so 琥珀 and 赤銅 or 菫 and 藍
+/// never collapse into one stone.
+struct GemTone: Sendable {
+    let hue: CGFloat
+    let saturation: CGFloat
+    /// HSB value of the gem's body colour (`body`): the facet light at
+    /// `referenceFacetLight`, chosen so the body's OKLab lightness follows
+    /// the theme's own lightness.
+    let brightness: CGFloat
+    let lightHueShift: CGFloat
+    let contrastBoost: CGFloat
+    let isGlass: Bool
+    let isMuted: Bool
+    /// Share of white in the glint colour (white 70 % + halo 30 %; the
+    /// saturated reds stay whiter so they never flash red).
+    let glintWhiteShare: CGFloat
+
+    /// Facet light at which a facet shows the body colour itself: the
+    /// facet saturation s₀ × (1.36 − 0.70b) equals s₀ there.
+    static let referenceFacetLight: CGFloat = 0.36 / 0.70
+    /// HSB value of the facet ramp 0.50 + 0.50b at `referenceFacetLight`
+    /// (the value every theme shared before the lightness mapping).
+    static let referenceValue: CGFloat = 0.50 + 0.50 * referenceFacetLight
+
+    init(hex: String, muted: Bool, glass: Bool) {
+        let key = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted).uppercased()
+        let raw = GemColor(hex: key).hsb
+        var saturationFloor: CGFloat = 0.74
+        var lightShift: CGFloat = 8
+        var boost: CGFloat = 0
+        var whiteShare: CGFloat = 0.70
+        switch key {
+        case "3FA57C": lightShift = -4
+        case "A76A3F": boost = 0.1
+        case "5688A8": saturationFloor = 0.60
+        case "E85D4A", "D56B82": whiteShare = 0.85
+        default: break
+        }
+        hue = raw.hue
+        // Neutral inputs (the tutorial glass, legacy greys) stay neutral.
+        let base = raw.saturation < 0.08 ? raw.saturation : max(raw.saturation, saturationFloor)
+        let body = GemToneLightness.body(hex: key, hue: raw.hue, saturation: muted ? base * 0.85 : base)
+        saturation = body.saturation
+        brightness = body.value
+        lightHueShift = lightShift / 360
+        contrastBoost = boost
+        isGlass = glass
+        isMuted = muted
+        glintWhiteShare = whiteShare
+    }
+
+    /// Scale of every facet value against the shared ramp (1 at
+    /// `referenceValue`).
+    var valueScale: CGFloat { brightness / Self.referenceValue }
+
+    /// The gem's own colour: a facet at `referenceFacetLight`.
+    var body: GemColor {
+        isGlass ? facet(brightness: Self.referenceFacetLight, hueJitter: 0) : GemColor(hue: hue, saturation: saturation, brightness: brightness)
+    }
+
+    var light: GemColor {
+        isGlass
+            ? GemColor(hex: "#EAF3FF")
+            : GemColor(hue: hue + lightHueShift, saturation: min(0.30, saturation), brightness: 1)
+    }
+
+    var deep: GemColor {
+        isGlass
+            ? GemColor(red: 0.30, green: 0.36, blue: 0.46)
+            : GemColor(hue: hue - 6 / 360, saturation: saturation < 0.08 ? saturation : 0.85, brightness: 0.44 * valueScale)
+    }
+
+    var halo: GemColor {
+        isGlass
+            ? GemColor(red: 0.78, green: 0.88, blue: 1)
+            : GemColor(hue: hue, saturation: saturation < 0.08 ? saturation : (isMuted ? 0.64 : 0.75), brightness: 1)
+    }
+
+    var glint: GemColor {
+        GemColor(red: 1, green: 1, blue: 1).mixed(with: halo, amount: 1 - glintWhiteShare)
+    }
+
+    /// Tint of the light inside a gem: the gem's hue, pale (at most 0.36
+    /// saturation) and full value, so the glow lifts it toward white.
+    var innerGlow: GemColor {
+        isGlass
+            ? GemColor(hex: "#EAF3FF")
+            : GemColor(hue: hue, saturation: saturation < 0.08 ? saturation : min(0.36, saturation * 0.48), brightness: 1)
+    }
+
+    var innerGlowUIColor: UIColor { innerGlow.withAlpha(1) }
+
+    /// Facet colour for facet light b (0…1): hue ± 8°. Dark facets stay
+    /// deep and saturated rather than going brown, bright facets turn pale
+    /// and luminous: the HSB value is (0.50 + 0.50b) × `valueScale` (capped
+    /// at 1) and saturation s₀ × (1.36 − 0.70b) (capped at 1), so a coral
+    /// gem keeps red-orange depths and near-white peach lights (luminance
+    /// ratio ≈ 1:4). `valueScale` carries the theme's lightness into every
+    /// facet.
+    func facet(brightness b: CGFloat, hueJitter: CGFloat) -> GemColor {
+        if isGlass {
+            let tone = 0.45 + b * 0.55
+            return GemColor(red: tone * 0.90, green: tone * 0.95, blue: tone)
+        }
+        let neutral = saturation < 0.08
+        return GemColor(
+            hue: hue + 8 / 360 * hueJitter,
+            saturation: neutral ? saturation : min(1, saturation * (1.36 - 0.70 * b)),
+            brightness: (0.50 + 0.50 * b) * valueScale
+        )
+    }
+
+    var haloUIColor: UIColor { halo.withAlpha(1) }
+    var glintUIColor: UIColor { glint.withAlpha(1) }
+}
+
+/// The brightness-order render transform (Docs/GemExperienceDesign.md
+/// §7.4): a theme's OKLab lightness L picks the lightness of its gem body,
+/// through one strictly increasing curve. Hue and the vivid saturation
+/// floor stay as they were; only the HSB value moves (and, for a hue that
+/// cannot reach its lightness at full value, the saturation gives way).
+/// So the gems keep the palette's lightness order for any hex list,
+/// including one curated later.
+enum GemToneLightness {
+    /// Centre of the curve: the palette's mean lightness maps to the jar's
+    /// former mean body lightness (≈ 0.61).
+    static let inputCenter: CGFloat = 0.63
+    static let outputCenter: CGFloat = 0.61
+    /// Half the output range: every body lies within 0.61 ± 0.21.
+    static let amplitude: CGFloat = 0.21
+    /// Slope at the centre: the palette's small lightness steps are widened
+    /// by 1.4 so neighbouring swatches stay apart in the jar.
+    static let gain: CGFloat = 1.4
+
+    /// Body lightness for a theme of lightness `inputL` (strictly
+    /// increasing, bounded).
+    static func bodyLightness(forInput inputL: CGFloat) -> CGFloat {
+        outputCenter + amplitude * CGFloat(tanh(Double(gain * (inputL - inputCenter) / amplitude)))
+    }
+
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var cache: [String: (saturation: CGFloat, value: CGFloat)] = [:]
+
+    /// Saturation and value of the body colour (hue fixed). Solved by
+    /// bisection once per (hex, hue, saturation) and cached: the lighting
+    /// passes build tones several times a second.
+    static func body(hex: String, hue: CGFloat, saturation: CGFloat) -> (saturation: CGFloat, value: CGFloat) {
+        let key = "\(hex)|\(Int((hue * 3_600).rounded()))|\(Int((saturation * 1_000).rounded()))"
+        lock.lock()
+        if let cached = cache[key] {
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+        let target = bodyLightness(forInput: GemColor(hex: hex).oklabLightness)
+        let solved = solve(hue: hue, saturation: saturation, target: target)
+        lock.lock()
+        if cache.count > 512 { cache.removeAll(keepingCapacity: true) }
+        cache[key] = solved
+        lock.unlock()
+        return solved
+    }
+
+    /// The HSB value at which (hue, saturation) reaches OKLab lightness
+    /// `target`; at full value, the saturation that does.
+    static func solve(hue: CGFloat, saturation: CGFloat, target: CGFloat) -> (saturation: CGFloat, value: CGFloat) {
+        func lightness(_ s: CGFloat, _ v: CGFloat) -> CGFloat {
+            GemColor(hue: hue, saturation: s, brightness: v).oklabLightness
+        }
+        if lightness(saturation, 1) >= target {
+            var low: CGFloat = 0
+            var high: CGFloat = 1
+            for _ in 0 ..< 30 {
+                let mid = (low + high) / 2
+                if lightness(saturation, mid) < target { low = mid } else { high = mid }
+            }
+            return (saturation, (low + high) / 2)
+        }
+        // Lighter than this hue can be at the vivid saturation: move toward
+        // white (full value, less saturation) until the lightness matches.
+        var low: CGFloat = 0
+        var high = saturation
+        for _ in 0 ..< 30 {
+            let mid = (low + high) / 2
+            if lightness(mid, 1) < target { high = mid } else { low = mid }
+        }
+        return ((low + high) / 2, 1)
+    }
+}
+
+/// Tones by angular sector (clockwise from 12 o'clock). Each facet takes
+/// the tone at its centroid, so a multi-theme stone reads as cut glass
+/// rather than a pie chart. Round 12: at most the three largest themes
+/// (a smaller one widens the kept theme nearest in hue), and within one
+/// facet's angle of a boundary the two tones blend, so a two-theme crystal
+/// no longer reads as a beach ball split in half.
+private struct SectorTones {
+    private let entries: [(end: CGFloat, tone: GemTone)]
+    let dominant: GemTone
+    /// Half the angular width of a boundary's blend (radians).
+    private let blendHalfWidth: CGFloat
+
+    init(spec: GemArtworkSpec) {
+        let glass = spec.cut == .glass
+        let shares = GemArtwork.CoreColorField.fieldShares(spec.colors.filter { $0.fraction > 0 }, fourthShare: nil)
+        let fallback = GemTone(hex: shares.first?.hex ?? "#8A9BB8", muted: spec.isMuted, glass: glass)
+        dominant = fallback
+        blendHalfWidth = .pi / CGFloat(max(spec.symmetry, 8))
+        guard shares.count > 1, !glass else {
+            entries = [(.pi * 2, fallback)]
+            return
+        }
+        let total = shares.reduce(0) { $0 + $1.fraction }
+        var cursor: CGFloat = 0
+        var list: [(end: CGFloat, tone: GemTone)] = []
+        for share in shares {
+            cursor += CGFloat(share.fraction / max(total, 0.000_1)) * .pi * 2
+            list.append((cursor, GemTone(hex: share.hex, muted: spec.isMuted, glass: false)))
+        }
+        entries = list
+    }
+
+    func tone(atAngle mathAngle: CGFloat) -> GemTone {
+        blend(atAngle: mathAngle).tone
+    }
+
+    /// The tone at `mathAngle`, and near a boundary the neighbouring tone
+    /// with its weight (0…0.5, smoothstep across the blend).
+    func blend(atAngle mathAngle: CGFloat) -> (tone: GemTone, neighbour: GemTone?, weight: CGFloat) {
+        guard entries.count > 1 else { return (dominant, nil, 0) }
+        let turn = CGFloat.pi * 2
+        var clockwise = CGFloat.pi / 2 - mathAngle
+        clockwise = clockwise.truncatingRemainder(dividingBy: turn)
+        if clockwise < 0 { clockwise += turn }
+        let index = entries.firstIndex { clockwise < $0.end } ?? entries.count - 1
+        let start = index == 0 ? 0 : entries[index - 1].end
+        let end = entries[index].end
+        let tone = entries[index].tone
+        func smooth(_ t: CGFloat) -> CGFloat {
+            let u = min(max(t, 0), 1)
+            return u * u * (3 - 2 * u)
+        }
+        let half = min(blendHalfWidth, (end - start) / 2)
+        guard half > 0.000_1 else { return (tone, nil, 0) }
+        if clockwise - start < half {
+            let previous = entries[(index + entries.count - 1) % entries.count].tone
+            return (tone, previous, 1 - smooth(0.5 + 0.5 * (clockwise - start) / half))
+        }
+        if end - clockwise < half {
+            let next = entries[(index + 1) % entries.count].tone
+            return (tone, next, 1 - smooth(0.5 + 0.5 * (end - clockwise) / half))
+        }
+        return (tone, nil, 0)
+    }
+}
+
+// MARK: - Colour math
+
+/// Minimal RGB value type so baking never allocates thousands of UIColors.
+struct GemColor: Equatable, Sendable {
+    var red: CGFloat
+    var green: CGFloat
+    var blue: CGFloat
+
+    static let fireWarm = GemColor(hex: "FFB38A")
+    static let fireCool = GemColor(hex: "8FD6FF")
+    static let fireViolet = GemColor(hex: "C8A6FF")
+    /// Midpoint of white and #8ACBFF.
+    static let fresnelTint = GemColor(red: 0.77, green: 0.90, blue: 1)
+    static let white = GemColor(red: 1, green: 1, blue: 1)
+
+    init(red: CGFloat, green: CGFloat, blue: CGFloat) {
+        self.red = min(max(red, 0), 1)
+        self.green = min(max(green, 0), 1)
+        self.blue = min(max(blue, 0), 1)
+    }
+
+    init(_ color: UIColor) {
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        if !color.getRed(&red, green: &green, blue: &blue, alpha: &alpha) {
+            var white: CGFloat = 0
+            color.getWhite(&white, alpha: &alpha)
+            red = white
+            green = white
+            blue = white
+        }
+        self.init(red: red, green: green, blue: blue)
+    }
+
+    init(hex: String) {
+        let clean = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        guard clean.count == 6, let value = UInt64(clean, radix: 16) else {
+            self.init(red: 0.54, green: 0.60, blue: 0.72)
+            return
+        }
+        self.init(
+            red: CGFloat((value >> 16) & 0xFF) / 255,
+            green: CGFloat((value >> 8) & 0xFF) / 255,
+            blue: CGFloat(value & 0xFF) / 255
+        )
+    }
+
+    var hexString: String {
+        String(
+            format: "#%02X%02X%02X",
+            Int((red * 255).rounded()),
+            Int((green * 255).rounded()),
+            Int((blue * 255).rounded())
+        )
+    }
+
+    var cgColor: CGColor { withAlpha(1).cgColor }
+
+    func withAlpha(_ alpha: CGFloat) -> UIColor {
+        UIColor(red: red, green: green, blue: blue, alpha: alpha)
+    }
+
+    func mixed(with other: GemColor, amount: CGFloat) -> GemColor {
+        let t = min(max(amount, 0), 1)
+        return GemColor(
+            red: red + (other.red - red) * t,
+            green: green + (other.green - green) * t,
+            blue: blue + (other.blue - blue) * t
+        )
+    }
+
+    func lighter(_ amount: CGFloat) -> GemColor {
+        mixed(with: .white, amount: amount)
+    }
+
+    func darker(_ amount: CGFloat) -> GemColor {
+        GemColor(red: red * (1 - amount), green: green * (1 - amount), blue: blue * (1 - amount))
+    }
+
+    /// Rec. 709 relative luminance of the (gamma-encoded) value, for tests.
+    var luminance: CGFloat {
+        0.2126 * red + 0.7152 * green + 0.0722 * blue
+    }
+
+    /// OKLab (Björn Ottosson, 2020) of the sRGB value: L is perceived
+    /// lightness (0 black … 1 white), a and b the opponent axes.
+    var oklab: (L: CGFloat, a: CGFloat, b: CGFloat) {
+        func linear(_ c: CGFloat) -> CGFloat {
+            c <= 0.040_45 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+        }
+        let r = linear(red)
+        let g = linear(green)
+        let b = linear(blue)
+        let l = cbrt(0.412_221_470_8 * r + 0.536_332_536_3 * g + 0.051_445_992_9 * b)
+        let m = cbrt(0.211_903_498_2 * r + 0.680_699_545_1 * g + 0.107_396_956_6 * b)
+        let s = cbrt(0.088_302_461_9 * r + 0.281_718_837_6 * g + 0.629_978_700_5 * b)
+        return (
+            0.210_454_255_3 * l + 0.793_617_785_0 * m - 0.004_072_046_8 * s,
+            1.977_998_495_1 * l - 2.428_592_205_0 * m + 0.450_593_709_9 * s,
+            0.025_904_037_1 * l + 0.782_771_766_2 * m - 0.808_675_766_0 * s
+        )
+    }
+
+    var oklabLightness: CGFloat { oklab.L }
+
+    /// CIELAB (D65 white) of the sRGB value: L 0…100.
+    var cielab: (L: Double, a: Double, b: Double) {
+        func linear(_ component: CGFloat) -> Double {
+            let c = Double(component)
+            return c <= 0.040_45 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+        }
+        let r: Double = linear(red)
+        let g: Double = linear(green)
+        let b: Double = linear(blue)
+        let x: Double = (0.412_456_4 * r + 0.357_576_1 * g + 0.180_437_5 * b) / 0.950_47
+        let y: Double = 0.212_672_9 * r + 0.715_152_2 * g + 0.072_175_0 * b
+        let z: Double = (0.019_333_9 * r + 0.119_192_0 * g + 0.950_304_1 * b) / 1.088_83
+        func f(_ value: Double) -> Double {
+            value > 216.0 / 24_389.0 ? cbrt(value) : (24_389.0 / 27.0 * value + 16) / 116
+        }
+        let fx: Double = f(x)
+        let fy: Double = f(y)
+        let fz: Double = f(z)
+        return (116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz))
+    }
+
+    /// CIEDE2000 colour difference to `other` (kL = kC = kH = 1).
+    func ciede2000(to other: GemColor) -> Double {
+        Self.ciede2000(cielab, other.cielab)
+    }
+
+    /// CIEDE2000 (Sharma, Wu and Dalal 2005) between two CIELAB values.
+    static func ciede2000(
+        _ first: (L: Double, a: Double, b: Double),
+        _ second: (L: Double, a: Double, b: Double)
+    ) -> Double {
+        let degreesToRadians: Double = .pi / 180
+        let twentyFiveTo7: Double = 6_103_515_625 // 25⁷
+        func seventh(_ value: Double) -> Double {
+            let square = value * value
+            return square * square * square * value
+        }
+        let chroma1: Double = (first.a * first.a + first.b * first.b).squareRoot()
+        let chroma2: Double = (second.a * second.a + second.b * second.b).squareRoot()
+        let meanChroma7: Double = seventh((chroma1 + chroma2) / 2)
+        let g: Double = 0.5 * (1 - (meanChroma7 / (meanChroma7 + twentyFiveTo7)).squareRoot())
+        let a1: Double = (1 + g) * first.a
+        let a2: Double = (1 + g) * second.a
+        let c1: Double = (a1 * a1 + first.b * first.b).squareRoot()
+        let c2: Double = (a2 * a2 + second.b * second.b).squareRoot()
+        func hueDegrees(_ b: Double, _ a: Double) -> Double {
+            guard b != 0 || a != 0 else { return 0 }
+            let degrees: Double = atan2(b, a) / degreesToRadians
+            return degrees < 0 ? degrees + 360 : degrees
+        }
+        let h1: Double = hueDegrees(first.b, a1)
+        let h2: Double = hueDegrees(second.b, a2)
+        let chromaProduct: Double = c1 * c2
+        let deltaL: Double = second.L - first.L
+        let deltaC: Double = c2 - c1
+        var deltaHue: Double = 0
+        if chromaProduct != 0 {
+            deltaHue = h2 - h1
+            if deltaHue > 180 {
+                deltaHue -= 360
+            } else if deltaHue < -180 {
+                deltaHue += 360
+            }
+        }
+        let deltaH: Double = 2 * chromaProduct.squareRoot() * sin(deltaHue / 2 * degreesToRadians)
+        let meanL: Double = (first.L + second.L) / 2
+        let meanC: Double = (c1 + c2) / 2
+        var meanHue: Double = h1 + h2
+        if chromaProduct != 0 {
+            if abs(h1 - h2) <= 180 {
+                meanHue = (h1 + h2) / 2
+            } else if h1 + h2 < 360 {
+                meanHue = (h1 + h2 + 360) / 2
+            } else {
+                meanHue = (h1 + h2 - 360) / 2
+            }
+        }
+        var t: Double = 1
+        t -= 0.17 * cos((meanHue - 30) * degreesToRadians)
+        t += 0.24 * cos(2 * meanHue * degreesToRadians)
+        t += 0.32 * cos((3 * meanHue + 6) * degreesToRadians)
+        t -= 0.20 * cos((4 * meanHue - 63) * degreesToRadians)
+        let hueOffset: Double = (meanHue - 275) / 25
+        let deltaTheta: Double = 30 * exp(-(hueOffset * hueOffset))
+        let meanC7: Double = seventh(meanC)
+        let rotationC: Double = 2 * (meanC7 / (meanC7 + twentyFiveTo7)).squareRoot()
+        let lightnessOffset: Double = (meanL - 50) * (meanL - 50)
+        let scaleL: Double = 1 + 0.015 * lightnessOffset / (20 + lightnessOffset).squareRoot()
+        let scaleC: Double = 1 + 0.045 * meanC
+        let scaleH: Double = 1 + 0.015 * meanC * t
+        let rotation: Double = -sin(2 * deltaTheta * degreesToRadians) * rotationC
+        let termL: Double = deltaL / scaleL
+        let termC: Double = deltaC / scaleC
+        let termH: Double = deltaH / scaleH
+        let sum: Double = termL * termL + termC * termC + termH * termH + rotation * termC * termH
+        return sum.squareRoot()
+    }
+
+    var hsb: (hue: CGFloat, saturation: CGFloat, brightness: CGFloat) {
+        let maximum = max(red, green, blue)
+        let minimum = min(red, green, blue)
+        let delta = maximum - minimum
+        var hue: CGFloat = 0
+        if delta > 0.0001 {
+            if maximum == red {
+                hue = ((green - blue) / delta).truncatingRemainder(dividingBy: 6)
+            } else if maximum == green {
+                hue = (blue - red) / delta + 2
+            } else {
+                hue = (red - green) / delta + 4
+            }
+            hue /= 6
+            if hue < 0 { hue += 1 }
+        }
+        let saturation = maximum <= 0 ? 0 : delta / maximum
+        return (hue, saturation, maximum)
+    }
+
+    init(hue rawHue: CGFloat, saturation rawSaturation: CGFloat, brightness rawBrightness: CGFloat) {
+        var hue = rawHue.truncatingRemainder(dividingBy: 1)
+        if hue < 0 { hue += 1 }
+        let saturation = min(max(rawSaturation, 0), 1)
+        let brightness = min(max(rawBrightness, 0), 1)
+        let sector = hue * 6
+        let index = Int(sector) % 6
+        let fraction = sector - floor(sector)
+        let p = brightness * (1 - saturation)
+        let q = brightness * (1 - saturation * fraction)
+        let t = brightness * (1 - saturation * (1 - fraction))
+        switch index {
+        case 0: self.init(red: brightness, green: t, blue: p)
+        case 1: self.init(red: q, green: brightness, blue: p)
+        case 2: self.init(red: p, green: brightness, blue: t)
+        case 3: self.init(red: p, green: q, blue: brightness)
+        case 4: self.init(red: t, green: p, blue: brightness)
+        default: self.init(red: brightness, green: p, blue: q)
+        }
+    }
+
+    /// Additive halo colour: the theme hue at s0.75, b1.0 (never white).
+    func haloColor(muted: Bool) -> UIColor {
+        GemTone(hex: hexString, muted: muted, glass: false).haloUIColor
+    }
+}
+
+/// Deterministic xorshift so bakes are identical across launches and devices.
+struct GemRandom {
+    private var state: UInt64
+
+    init(seed: UInt64) {
+        state = seed &* 0x9E37_79B9_7F4A_7C15 | 1
+    }
+
+    mutating func next() -> UInt64 {
+        state ^= state << 13
+        state ^= state >> 7
+        state ^= state << 17
+        return state
+    }
+
+    mutating func unit() -> CGFloat {
+        CGFloat(next() % 10_000) / 10_000
+    }
+}
+
+extension UUID {
+    /// Stable 64-bit FNV-1a hash of the UUID string, for presentation-only
+    /// variety (facet variant, glint position and phase, twinkle order).
+    var presentationHash: UInt64 {
+        var hash: UInt64 = 1_469_598_103_934_665_603
+        for byte in uuidString.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return hash
+    }
+}
+
+private extension CGPoint {
+    func scaled(_ factor: CGFloat) -> CGPoint {
+        CGPoint(x: x * factor, y: y * factor)
+    }
+
+    func mixed(with other: CGPoint, amount: CGFloat) -> CGPoint {
+        CGPoint(x: x + (other.x - x) * amount, y: y + (other.y - y) * amount)
+    }
+}
+
+// MARK: - Count engravings (D26)
+
+extension GemArtwork {
+    /// How a count is engraved: on a small copper tag in the collar's
+    /// material (crystals, D26 (b)) or straight into a black stone at low
+    /// contrast (D26 (a)).
+    enum CountEngraving: String, Sendable {
+        case copperTag
+        case stone
+    }
+
+    /// Tag type size in scene points for a crystal of `sceneRadius`: small
+    /// enough to read as a maker's tag, never as a multiplier.
+    static func countTagFontSize(sceneRadius: CGFloat) -> CGFloat {
+        guard sceneRadius.isFinite else { return 7.5 }
+        return min(9, max(7, sceneRadius * 0.20))
+    }
+
+    private static func countEngravingFont(fontSize: CGFloat, style: CountEngraving) -> UIFont {
+        let weight: UIFont.Weight = style == .copperTag ? .bold : .semibold
+        let base = UIFont.systemFont(ofSize: fontSize, weight: weight)
+        guard let rounded = base.fontDescriptor.withDesign(.rounded) else { return base }
+        return UIFont(descriptor: rounded, size: fontSize)
+    }
+
+    private static func countEngravingText(_ text: String, fontSize: CGFloat, style: CountEngraving) -> NSAttributedString {
+        NSAttributedString(string: text, attributes: [
+            .font: countEngravingFont(fontSize: fontSize, style: style),
+            .kern: fontSize * 0.02
+        ])
+    }
+
+    /// Scene-point size of an engraving (the tag plate or the stone text).
+    /// A copper tag with a `month` (D21) grows a second, smaller line below
+    /// the count; without one it is exactly the D26 tag.
+    static func countEngravingSize(text: String, fontSize rawFontSize: CGFloat, style: CountEngraving, month: String? = nil) -> CGSize {
+        let fontSize = max(3, rawFontSize.isFinite ? rawFontSize : 7)
+        let measured = countEngravingText(text, fontSize: fontSize, style: style).size()
+        switch style {
+        case .copperTag:
+            let height = (fontSize * 1.50).rounded(.up)
+            let width = (measured.width + fontSize * 0.95).rounded(.up)
+            guard let month else { return CGSize(width: width, height: height) }
+            let monthFont = monthEngravingFontSize(countFontSize: fontSize)
+            let monthWidth = (countEngravingText(month, fontSize: monthFont, style: style).size().width + monthFont * 0.95).rounded(.up)
+            return CGSize(width: max(width, monthWidth), height: height + monthEngravingLineHeight(countFontSize: fontSize))
+        case .stone:
+            return CGSize(width: (measured.width + 2).rounded(.up), height: (measured.height + 1.5).rounded(.up))
+        }
+    }
+
+    /// Height of the count line on a copper tag (the D26 tag's height). A
+    /// tag with a month keeps this line where the single-line tag had it.
+    static func countEngravingCountLineHeight(fontSize rawFontSize: CGFloat) -> CGFloat {
+        let fontSize = max(3, rawFontSize.isFinite ? rawFontSize : 7)
+        return (fontSize * 1.50).rounded(.up)
+    }
+
+    /// The month line is 0.8 of the count's type size (5.6–7.2 pt).
+    static func monthEngravingFontSize(countFontSize: CGFloat) -> CGFloat {
+        countFontSize * 0.80
+    }
+
+    private static func monthEngravingLineHeight(countFontSize: CGFloat) -> CGFloat {
+        (monthEngravingFontSize(countFontSize: countFontSize) * 1.25).rounded(.up)
+    }
+
+    /// D21: the Pro month engraving under a crystal's count, "2026.9": the
+    /// month the crystal was formed, the same month the fusion sheet names
+    /// (`JarAggregateRequest.monthLabel`, 「2026年9月」). A hallmark of
+    /// digits that reads the same in every language, so it is never a
+    /// localised sentence; the year is formatted as a date field, never as
+    /// a grouped number.
+    static func monthHallmark(for date: Date, timeZone: TimeZone = .current) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let style = Date.VerbatimFormatStyle(
+            format: "\(year: .defaultDigits).\(month: .defaultDigits)",
+            timeZone: timeZone,
+            calendar: calendar
+        )
+        return date.formatted(style)
+    }
+
+    /// Atlas name of an engraving. `SKTextureAtlas` keys must stay ASCII
+    /// (a "×" in a key comes back as the missing-texture cross), so the text
+    /// is spelled as its Unicode scalar values.
+    static func countEngravingTextureName(text: String, fontSize: CGFloat, style: CountEngraving, scale: CGFloat, month: String? = nil) -> String {
+        let spelled = text.unicodeScalars.map { String($0.value, radix: 16) }.joined(separator: ".")
+        let base = "gem.engraving|\(style.rawValue)|\(spelled)|f\((fontSize * 4).rounded() / 4)|x\(renderScale(scale))"
+        guard let month, style == .copperTag else { return base }
+        return "\(base)|m\(month.unicodeScalars.map { String($0.value, radix: 16) }.joined(separator: "."))"
+    }
+
+    /// The engraving as an image the size of `countEngravingSize`.
+    ///
+    /// - Copper tag: a small rounded plate shaded like the neck collar
+    ///   (#F2C4A8 → #B8735A → #8A4E3A), a bright bevel on its top edge and
+    ///   a dark one below, the count cut into it in dark copper with a pale
+    ///   lower lip. No black ink, no pill, no glow.
+    /// - Stone: the count alone, a shade lighter than the rock (white α0.30)
+    ///   with a dark upper lip, so it reads as cut into the stone and never
+    ///   as a label.
+    /// - Month (D21, copper tag only): a second, smaller line cut below the
+    ///   count on the same plate, under a faint groove.
+    static func countEngravingImage(text: String, fontSize rawFontSize: CGFloat, style: CountEngraving, scale: CGFloat, month: String? = nil) -> UIImage {
+        let fontSize = max(3, rawFontSize.isFinite ? rawFontSize : 7)
+        let month = style == .copperTag ? month : nil
+        let size = countEngravingSize(text: text, fontSize: fontSize, style: style, month: month)
+        let font = countEngravingFont(fontSize: fontSize, style: style)
+        // The count keeps the single-line tag's line at the top.
+        let countLine = month == nil ? size.height : countEngravingCountLineHeight(fontSize: fontSize)
+        return UIGraphicsImageRenderer(size: size, format: rendererFormat(scale: scale)).image { renderer in
+            let context = renderer.cgContext
+            let bounds = CGRect(origin: .zero, size: size)
+            let textSize = countEngravingText(text, fontSize: fontSize, style: style).size()
+            let origin = CGPoint(
+                x: (size.width - textSize.width) / 2,
+                y: (countLine - textSize.height) / 2 - fontSize * 0.02
+            )
+            func draw(color: UIColor, offset: CGFloat) {
+                NSAttributedString(string: text, attributes: [
+                    .font: font,
+                    .kern: fontSize * 0.02,
+                    .foregroundColor: color
+                ]).draw(at: CGPoint(x: origin.x, y: origin.y + offset))
+            }
+            func drawMonth(_ month: String, color: UIColor, offset: CGFloat) {
+                let monthFont = monthEngravingFontSize(countFontSize: fontSize)
+                let attributes: [NSAttributedString.Key: Any] = [
+                    .font: countEngravingFont(fontSize: monthFont, style: style),
+                    .kern: monthFont * 0.04,
+                    .foregroundColor: color
+                ]
+                let monthSize = NSAttributedString(string: month, attributes: attributes).size()
+                let lineHeight = size.height - countLine
+                NSAttributedString(string: month, attributes: attributes).draw(at: CGPoint(
+                    x: (size.width - monthSize.width) / 2,
+                    y: countLine + (lineHeight - monthSize.height) / 2 - fontSize * 0.08 + offset
+                ))
+            }
+            switch style {
+            case .copperTag:
+                let plate = bounds.insetBy(dx: 0.5, dy: 0.5)
+                let corner = min(plate.height * 0.30, 3.2)
+                let path = UIBezierPath(roundedRect: plate, cornerRadius: corner)
+                context.saveGState()
+                path.addClip()
+                if let gradient = CGGradient(
+                    colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                    colors: [
+                        GemColor(hex: "#F2C4A8").cgColor,
+                        GemColor(hex: "#D9967A").cgColor,
+                        GemColor(hex: "#B8735A").cgColor,
+                        GemColor(hex: "#8A4E3A").cgColor
+                    ] as CFArray,
+                    locations: [0, 0.30, 0.62, 1]
+                ) {
+                    context.drawLinearGradient(
+                        gradient,
+                        start: CGPoint(x: 0, y: plate.minY),
+                        end: CGPoint(x: 0, y: plate.maxY),
+                        options: []
+                    )
+                }
+                // Bevel: light along the top edge, shade along the bottom.
+                context.setFillColor(UIColor(red: 1, green: 0.90, blue: 0.82, alpha: 0.70).cgColor)
+                context.fill(CGRect(x: plate.minX, y: plate.minY, width: plate.width, height: 0.6))
+                context.setFillColor(UIColor(red: 0.30, green: 0.14, blue: 0.08, alpha: 0.55).cgColor)
+                context.fill(CGRect(x: plate.minX, y: plate.maxY - 0.6, width: plate.width, height: 0.6))
+                context.restoreGState()
+                context.addPath(path.cgPath)
+                context.setStrokeColor(UIColor(red: 0.24, green: 0.11, blue: 0.06, alpha: 0.60).cgColor)
+                context.setLineWidth(0.6)
+                context.strokePath()
+                // Cut letters: the pale lower lip first, the dark cut on top.
+                draw(color: UIColor(red: 1, green: 0.88, blue: 0.78, alpha: 0.55), offset: 0.55)
+                draw(color: UIColor(red: 0.27, green: 0.13, blue: 0.07, alpha: 0.92), offset: 0)
+                if let month {
+                    // A faint groove, then the month cut a little lighter.
+                    context.setFillColor(UIColor(red: 0.30, green: 0.14, blue: 0.08, alpha: 0.30).cgColor)
+                    context.fill(CGRect(x: plate.minX + plate.width * 0.18, y: countLine - 0.3, width: plate.width * 0.64, height: 0.5))
+                    drawMonth(month, color: UIColor(red: 1, green: 0.88, blue: 0.78, alpha: 0.50), offset: 0.5)
+                    drawMonth(month, color: UIColor(red: 0.27, green: 0.13, blue: 0.07, alpha: 0.82), offset: 0)
+                }
+            case .stone:
+                draw(color: UIColor(white: 0, alpha: 0.65), offset: -0.5)
+                draw(color: UIColor(white: 1, alpha: 0.30), offset: 0)
+            }
+        }
+    }
+}
+
+// MARK: - Theme marks (Differentiate Without Color)
+
+/// Differentiate Without Color (Docs/GemExperienceDesign.md §7.12): a
+/// small engraved glyph that tells a theme's gems apart without its colour.
+/// Twelve simple glyphs are keyed by the theme colour's normalized hex
+/// (`paletteGlyphs`, round 14), never by its position in `SubjectPalette`,
+/// so reordering or curating the palette never moves a mark. A colour
+/// outside the table (older themes) shows the glyph of its nearest palette
+/// colour (CIEDE2000) inside a ring, so it never looks like a palette
+/// theme. Nothing is stored: the mark is derived from the colour each time
+/// a gem is baked.
+///
+/// The glyphs are told apart by their shape alone, whatever the angle (a
+/// loose gem rolls, and its engraving rolls with it): no square and
+/// diamond pair, no plus and cross pair.
+struct GemThemeMark: Hashable, Sendable {
+    enum Glyph: Int, CaseIterable, Sendable {
+        case dot, triangle, square, star, asterisk, plus, crescent, sparkle, bar, twoDots, heart, drop
+    }
+
+    let glyph: Glyph
+    /// A colour outside the palette: the glyph sits in a ring.
+    let isFramed: Bool
+
+    /// The palette colours' glyphs by normalized hex (`SubjectPalette.normalized`).
+    /// The assignment is the one rounds 7–13 made by palette position, so
+    /// nobody's marks change; colours that sit close together (琥珀 and
+    /// 赤銅, 菫 and 藍, 瑠璃 and 空色) have very different shapes.
+    static let paletteGlyphs: [String: Glyph] = [
+        "E85D4A": .dot, // 朱色
+        "4D7CDE": .triangle, // 瑠璃
+        "C25FA3": .square, // 紅藤
+        "3FA57C": .star, // 緑青
+        "8A6FD1": .asterisk, // 菫
+        "D6863A": .plus, // 琥珀
+        "36A7AE": .crescent, // 青緑
+        "D56B82": .sparkle, // 珊瑚
+        "739B45": .bar, // 若草
+        "5967C8": .twoDots, // 藍
+        "A76A3F": .heart, // 赤銅
+        "5688A8": .drop // 空色
+    ]
+
+    init(glyph: Glyph, isFramed: Bool = false) {
+        self.glyph = glyph
+        self.isFramed = isFramed
+    }
+
+    init(hex: String) {
+        if let glyph = Self.paletteGlyphs[SubjectPalette.normalized(hex)] {
+            self.glyph = glyph
+            isFramed = false
+            return
+        }
+        let nearest = Self.nearestPaletteHex(to: hex, among: Array(Self.paletteGlyphs.keys))
+        glyph = nearest.flatMap { Self.paletteGlyphs[SubjectPalette.normalized($0)] } ?? .dot
+        isFramed = true
+    }
+
+    /// The candidate closest to `hex` by CIEDE2000; a tie goes to the
+    /// smaller normalized hex, so the answer never depends on the order of
+    /// `candidates`.
+    static func nearestPaletteHex(to hex: String, among candidates: [String]) -> String? {
+        let target = GemColor(hex: hex).cielab
+        var best: (hex: String, key: String, distance: Double)?
+        for candidate in candidates {
+            let key = SubjectPalette.normalized(candidate)
+            let distance = GemColor.ciede2000(target, GemColor(hex: candidate).cielab)
+            if let current = best {
+                let closer = distance < current.distance || (distance == current.distance && key < current.key)
+                guard closer else { continue }
+            }
+            best = (candidate, key, distance)
+        }
+        return best?.hex
+    }
+
+    /// The system setting (Settings › Accessibility › Display & Text Size).
+    static var isSystemEnabled: Bool { UIAccessibility.shouldDifferentiateWithoutColor }
+
+    /// SwiftUI's environment value, or the system setting where a view is
+    /// rendered outside a window (share-card export).
+    static func isEnabled(environment: Bool) -> Bool {
+        environment || isSystemEnabled
+    }
+}
+
+extension GemArtwork {
+    /// Smallest glyph (points across) a mark is drawn at.
+    static let minimumThemeMarkGlyphSize: CGFloat = 7
+
+    /// Where a gem's theme marks sit, in unit space (y up, gem radius 1).
+    struct ThemeMarkPlacement: Equatable, Sendable {
+        let mark: GemThemeMark
+        let center: CGPoint
+        /// Glyph radius as a share of the gem radius.
+        let radius: CGFloat
+    }
+
+    /// Glyph radius of a single-theme gem's mark on its table.
+    static let tableThemeMarkRadius: CGFloat = 0.40
+    /// A multi-theme crystal's sector marks: centre distance and glyph
+    /// radius (round 14: pulled in from 0.58 R and 0.23 R, so the ×N tag
+    /// fits below the ring they turn in, `countTagDrop`).
+    static let sectorThemeMarkDistance: CGFloat = 0.46
+    static let sectorThemeMarkRadius: CGFloat = 0.19
+
+    /// A single-theme gem carries one mark on its table (0.40 R, a 20 pt
+    /// gem shows an 8 pt glyph); a crystal of several themes carries one
+    /// smaller mark (0.19 R) in the middle of each theme's sector, 0.46 R
+    /// out, in the same sectors `SectorTones` paints (clockwise from 12
+    /// o'clock). A crystal too small for those to reach `minimumGlyphSize`
+    /// (`radius` in points) shows its largest theme's mark on the table
+    /// instead.
+    static func themeMarkPlacements(for colors: [GemColorShare], radius: CGFloat? = nil) -> [ThemeMarkPlacement] {
+        // The same three largest themes the body's sectors show (round 12);
+        // the breakdown lists the rest.
+        let shares = CoreColorField.fieldShares(colors.filter { $0.fraction > 0 }, fourthShare: nil)
+        let sectorMarksFit = radius.map { $0 * sectorThemeMarkRadius * 2 >= minimumThemeMarkGlyphSize } ?? true
+        guard shares.count > 1, sectorMarksFit else {
+            let largest = shares.max { $0.fraction < $1.fraction }
+            return largest.map {
+                [ThemeMarkPlacement(mark: GemThemeMark(hex: $0.hex), center: .zero, radius: tableThemeMarkRadius)]
+            } ?? []
+        }
+        let total = shares.reduce(0) { $0 + $1.fraction }
+        var cursor: CGFloat = 0
+        return shares.map { share in
+            let span = CGFloat(share.fraction / max(total, 0.000_1))
+            defer { cursor += span }
+            let angle = .pi / 2 - (cursor + span / 2) * .pi * 2
+            return ThemeMarkPlacement(
+                mark: GemThemeMark(hex: share.hex),
+                center: polar(angle, sectorThemeMarkDistance),
+                radius: sectorThemeMarkRadius
+            )
+        }
+    }
+
+    /// How far any theme mark of `colors` reaches from the centre (a share
+    /// of the gem radius) on a stone baked at `radius` points; 0 without
+    /// marks.
+    static func themeMarkExtent(for colors: [GemColorShare], radius: CGFloat?) -> CGFloat {
+        themeMarkPlacements(for: colors, radius: radius)
+            .map { hypot($0.center.x, $0.center.y) + $0.radius }
+            .max() ?? 0
+    }
+
+    /// Where the ×N tag rests below the table (D26), as a share of the gem
+    /// radius.
+    static let countTagRestingDrop: CGFloat = 0.40
+    /// Gap between the tag's top edge and the theme marks above it.
+    static let countTagMarkClearance: CGFloat = 0.05
+
+    /// How far below the centre the ×N tag's count line sits (a share of
+    /// the gem radius). Without theme marks it rests at 0.40 R. With them
+    /// (Differentiate Without Color, §7.12, round 14) it drops until its top
+    /// edge clears every mark by `countTagMarkClearance`, whichever way the
+    /// stone has rolled: the marks turn with the body inside the disc of
+    /// radius `themeMarkExtent`, the tag stays upright below the centre, so
+    /// the nearest point of the tag is its top edge straight below.
+    /// `tagHalfHeight` is half the count line's height, as a share of the
+    /// gem radius.
+    static func countTagDrop(themeMarkExtent: CGFloat?, tagHalfHeight: CGFloat) -> CGFloat {
+        guard let extent = themeMarkExtent, extent.isFinite, extent > 0 else { return countTagRestingDrop }
+        let half = tagHalfHeight.isFinite ? max(0, tagHalfHeight) : 0
+        return max(countTagRestingDrop, extent + countTagMarkClearance + half)
+    }
+
+    /// `countTagDrop` for a stone drawn `radius` points across its radius
+    /// (SwiftUI cards: the Overview and share cards), whose count line is
+    /// `countLineHeight` points tall.
+    static func countTagDrop(
+        colors: [GemColorShare],
+        radius: CGFloat,
+        countLineHeight: CGFloat,
+        showsThemeMarks: Bool
+    ) -> CGFloat {
+        guard showsThemeMarks, radius.isFinite, radius > 0 else { return countTagRestingDrop }
+        return countTagDrop(
+            themeMarkExtent: themeMarkExtent(for: colors, radius: sizeBucket(radius: radius)),
+            tagHalfHeight: countLineHeight / 2 / radius
+        )
+    }
+
+    /// Marks on the time core: one per theme arc of its colour field, on
+    /// the ring between the white heart and the crown (0.56 R, glyph
+    /// 0.105 R). The mixed その他 arc has no theme and carries none.
+    static func coreThemeMarkPlacements(shares: [GemColorShare]) -> [ThemeMarkPlacement] {
+        let themes = Set(shares.filter { $0.fraction > 0 }.map { SubjectPalette.normalized($0.hex) })
+        let field = CoreColorField(shares: quantizedCoreShares(shares))
+        return field.arcs.compactMap { arc in
+            guard themes.contains(SubjectPalette.normalized(arc.hex)) else { return nil }
+            let turn = (arc.start + arc.end) / 2
+            let angle = .pi / 2 - turn * .pi * 2
+            return ThemeMarkPlacement(mark: GemThemeMark(hex: arc.hex), center: polar(angle, 0.56), radius: 0.105)
+        }
+    }
+
+    /// The glyph as a filled path around `center` with radius `radius`, in
+    /// y-down image space (upright on an unrotated image).
+    static func themeMarkPath(_ mark: GemThemeMark, center: CGPoint, radius: CGFloat) -> CGPath {
+        var transform = CGAffineTransform(translationX: center.x, y: center.y).scaledBy(x: radius, y: radius)
+        return unitThemeMarkPath(mark).copy(using: &transform) ?? CGMutablePath()
+    }
+
+    /// Engraves `mark`: a lit rim where the cut's edge catches the light
+    /// (so the glyph reads on the darkest facets) and the deep cut inside
+    /// (so it reads on the palest).
+    static func drawThemeMark(_ mark: GemThemeMark, center: CGPoint, radius: CGFloat, in context: CGContext) {
+        let path = themeMarkPath(mark, center: center, radius: radius)
+        context.saveGState()
+        context.setBlendMode(.normal)
+        context.setLineJoin(.round)
+        context.addPath(path)
+        context.setStrokeColor(UIColor(white: 1, alpha: 0.84).cgColor)
+        context.setLineWidth(max(0.7, radius * 0.30))
+        context.strokePath()
+        context.addPath(path)
+        context.setFillColor(GemColor(red: 0.06, green: 0.07, blue: 0.14).withAlpha(0.84).cgColor)
+        context.fillPath()
+        context.restoreGState()
+    }
+
+    /// A stand-alone mark (legends and tests): the engraving on a clear
+    /// square `side` points wide.
+    static func themeMarkImage(_ mark: GemThemeMark, side: CGFloat, scale: CGFloat) -> UIImage {
+        let side = max(4, side)
+        return UIGraphicsImageRenderer(
+            size: CGSize(width: side, height: side),
+            format: rendererFormat(scale: scale)
+        ).image { renderer in
+            drawThemeMark(mark, center: CGPoint(x: side / 2, y: side / 2), radius: side * 0.40, in: renderer.cgContext)
+        }
+    }
+
+    private static let themeMarkPathLock = NSLock()
+    nonisolated(unsafe) private static var themeMarkPathCache: [GemThemeMark: CGPath] = [:]
+
+    /// The glyph within the unit circle (y down), built once per mark.
+    private static func unitThemeMarkPath(_ mark: GemThemeMark) -> CGPath {
+        themeMarkPathLock.lock()
+        defer { themeMarkPathLock.unlock() }
+        if let cached = themeMarkPathCache[mark] { return cached }
+        var path = unitGlyphPath(mark.glyph)
+        if mark.isFramed {
+            var shrink = CGAffineTransform(scaleX: 0.56, y: 0.56)
+            let inner = path.copy(using: &shrink) ?? path
+            let ring = CGPath(ellipseIn: CGRect(x: -1, y: -1, width: 2, height: 2), transform: nil)
+                .subtracting(CGPath(ellipseIn: CGRect(x: -0.80, y: -0.80, width: 1.6, height: 1.6), transform: nil))
+            path = ring.union(inner)
+        }
+        themeMarkPathCache[mark] = path
+        return path
+    }
+
+    private static func unitGlyphPath(_ glyph: GemThemeMark.Glyph) -> CGPath {
+        func circle(_ x: CGFloat, _ y: CGFloat, _ r: CGFloat) -> CGPath {
+            CGPath(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2), transform: nil)
+        }
+        /// Regular star or polygon, first point straight up (y down).
+        func star(points: Int, outer: CGFloat, inner: CGFloat?, dy: CGFloat = 0) -> CGPath {
+            let path = CGMutablePath()
+            let count = inner == nil ? points : points * 2
+            for index in 0 ..< count {
+                let r = inner.map { index.isMultiple(of: 2) ? outer : $0 } ?? outer
+                let angle = -CGFloat.pi / 2 + CGFloat(index) / CGFloat(count) * .pi * 2
+                let point = CGPoint(x: cos(angle) * r, y: sin(angle) * r + dy)
+                if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
+            }
+            path.closeSubpath()
+            return path
+        }
+        func bar(length: CGFloat, width: CGFloat, angle: CGFloat) -> CGPath {
+            var rotation = CGAffineTransform(rotationAngle: angle)
+            return CGPath(
+                roundedRect: CGRect(x: -length / 2, y: -width / 2, width: length, height: width),
+                cornerWidth: width * 0.5,
+                cornerHeight: width * 0.5,
+                transform: &rotation
+            )
+        }
+        switch glyph {
+        case .dot:
+            return circle(0, 0, 0.62)
+        case .triangle:
+            return star(points: 3, outer: 0.98, inner: nil, dy: 0.14)
+        case .square:
+            return CGPath(rect: CGRect(x: -0.64, y: -0.64, width: 1.28, height: 1.28), transform: nil)
+        case .star:
+            return star(points: 5, outer: 1.0, inner: 0.44, dy: 0.06)
+        case .asterisk:
+            return bar(length: 1.9, width: 0.40, angle: .pi / 2)
+                .union(bar(length: 1.9, width: 0.40, angle: .pi / 6))
+                .union(bar(length: 1.9, width: 0.40, angle: -.pi / 6))
+        case .plus:
+            let arm: CGFloat = 0.27
+            return CGPath(rect: CGRect(x: -0.86, y: -arm, width: 1.72, height: arm * 2), transform: nil)
+                .union(CGPath(rect: CGRect(x: -arm, y: -0.86, width: arm * 2, height: 1.72), transform: nil))
+        case .crescent:
+            return circle(-0.08, 0, 0.88).subtracting(circle(0.36, -0.20, 0.70))
+        case .sparkle:
+            return star(points: 4, outer: 1.0, inner: 0.30)
+        case .bar:
+            return bar(length: 1.84, width: 0.66, angle: 0)
+        case .twoDots:
+            return circle(-0.50, 0, 0.40).union(circle(0.50, 0, 0.40))
+        case .heart:
+            let lobes = circle(-0.40, -0.26, 0.46).union(circle(0.40, -0.26, 0.46))
+            let point = CGMutablePath()
+            point.move(to: CGPoint(x: -0.83, y: -0.12))
+            point.addLine(to: CGPoint(x: 0.83, y: -0.12))
+            point.addLine(to: CGPoint(x: 0, y: 0.90))
+            point.closeSubpath()
+            return lobes.union(point)
+        case .drop:
+            let tip = CGMutablePath()
+            tip.move(to: CGPoint(x: 0, y: -0.96))
+            tip.addLine(to: CGPoint(x: 0.535, y: -0.06))
+            tip.addLine(to: CGPoint(x: -0.535, y: -0.06))
+            tip.closeSubpath()
+            return circle(0, 0.26, 0.62).union(tip)
+        }
+    }
+}
+
+// MARK: - 記念石 cabochons (round 13)
+
+extension GemArtwork {
+    /// A 記念石's moonstone colours, from its kind's hue
+    /// (`AchievementKind.gemBaseHex`): a milky, nearly white crown, a
+    /// translucent and cooler edge, the floating sheen (adularescence) in
+    /// the kind's hue, and the engraving's groove.
+    struct CabochonPalette: Sendable {
+        let crown: GemColor
+        let body: GemColor
+        let edge: GemColor
+        let sheen: GemColor
+        /// The engraving: several shades deeper than the crown (≥ 4.5:1,
+        /// WCAG AA for the small 「100」 and 「W」; round 14, was ≥ 3:1).
+        let groove: GemColor
+        /// The engraving with Increase Contrast (≥ 7:1, the floor the
+        /// former badge had on main).
+        let deepGroove: GemColor
+        /// The shaded upper wall of the cut.
+        let slate: GemColor
+
+        init(hex: String) {
+            let hue = GemColor(hex: hex).hsb.hue
+            let tint = GemColor(hue: hue, saturation: 0.55, brightness: 1)
+            crown = GemColor(hex: "#FBFAF8").mixed(with: tint, amount: 0.06)
+            body = GemColor(hex: "#E2E3EC").mixed(with: tint, amount: 0.12)
+            edge = GemColor(hex: "#8E97B6").mixed(with: tint, amount: 0.28)
+            sheen = GemColor(hex: "#9DBEFF").mixed(with: tint, amount: 0.55)
+            slate = GemColor(hex: "#2B3048").mixed(with: tint.darker(0.6), amount: 0.25)
+            // Worst hue 4.87:1 and 7.72:1 (`GachaTests` checks every kind
+            // and every hue).
+            groove = crown.mixed(with: slate, amount: 0.74)
+            deepGroove = crown.mixed(with: slate, amount: 0.90)
+        }
+    }
+
+    /// 記念石: a smooth domed moonstone cabochon. Milky and nearly white at
+    /// the crown, translucent and cooler toward the edge, with soft milky
+    /// veils and a pearly play of pastel colour inside. No facets, no
+    /// setting, no rim. Only light that does not depend on direction is
+    /// baked (the body rolls with physics, §7.3); the floating sheen and the
+    /// highlight are screen-fixed sprites in the pebble's light rig.
+    fileprivate static func drawCabochon(
+        spec: GemArtworkSpec,
+        context: CGContext,
+        radius: CGFloat,
+        map: (CGPoint) -> CGPoint
+    ) {
+        let space = CGColorSpaceCreateDeviceRGB()
+        let palette = CabochonPalette(hex: spec.colors.first?.hex ?? "#6D50EA")
+        let outer = layout(cut: .cabochon, symmetry: spec.symmetry, variant: spec.variant).outer
+        let unit = outer.map { hypot($0.x, $0.y) }.max() ?? 0.96
+        let visible = unit * radius
+        let center = map(.zero)
+        let disc = CGRect(x: center.x - visible, y: center.y - visible, width: visible * 2, height: visible * 2)
+        func radial(_ colors: [UIColor], _ locations: [CGFloat], at point: CGPoint, radius: CGFloat) {
+            guard let gradient = CGGradient(
+                colorsSpace: space,
+                colors: colors.map(\.cgColor) as CFArray,
+                locations: locations
+            ) else { return }
+            context.drawRadialGradient(
+                gradient,
+                startCenter: point, startRadius: 0,
+                endCenter: point, endRadius: radius,
+                options: []
+            )
+        }
+
+        context.saveGState()
+        context.addEllipse(in: disc)
+        context.clip()
+        // 1. The milky dome: brightest at the crown, deeper and more
+        // translucent toward the edge. Symmetric, so it never shows the roll.
+        radial(
+            [
+                palette.crown.withAlpha(1),
+                palette.body.withAlpha(1),
+                palette.body.mixed(with: palette.edge, amount: 0.55).withAlpha(1),
+                palette.edge.withAlpha(1)
+            ],
+            [0, 0.40, 0.78, 1],
+            at: center,
+            radius: visible
+        )
+        // 2. Milky veils inside. They roll with the stone, like any
+        // inclusion; the four variants place them differently.
+        var random = GemRandom(seed: 0xCAB0_C40D &+ UInt64(spec.variant) &* 977)
+        for _ in 0 ..< 3 {
+            let angle = random.unit() * 2 * .pi
+            let distance = (0.18 + random.unit() * 0.34) * unit
+            let spot = map(CGPoint(x: cos(angle) * distance, y: sin(angle) * distance))
+            radial(
+                [UIColor(white: 1, alpha: 0.22 + random.unit() * 0.08), UIColor(white: 1, alpha: 0)],
+                [0, 1],
+                at: spot,
+                radius: visible * (0.34 + random.unit() * 0.22)
+            )
+        }
+        // 3. The pearly play of colour: faint pastel clouds near the edge,
+        // and deep inside a soft glow of the kind's hue (adularescence).
+        context.setBlendMode(.screen)
+        let pearls = ["#FFD2E4", "#CFF3E4", "#D9D3FF", "#FFE9C4"]
+        for (index, hex) in pearls.enumerated() {
+            let angle = (CGFloat(index) / CGFloat(pearls.count) + CGFloat(spec.variant) * 0.11) * 2 * .pi
+            let spot = map(CGPoint(x: cos(angle) * 0.58 * unit, y: sin(angle) * 0.58 * unit))
+            radial(
+                [GemColor(hex: hex).withAlpha(0.28), GemColor(hex: hex).withAlpha(0)],
+                [0, 1],
+                at: spot,
+                radius: visible * 0.52
+            )
+        }
+        radial(
+            [palette.sheen.withAlpha(0.42), palette.sheen.withAlpha(0.14), palette.sheen.withAlpha(0)],
+            [0, 0.5, 1],
+            at: center,
+            radius: visible * 0.72
+        )
+        context.setBlendMode(.normal)
+        context.restoreGState()
+
+        // 4. Where the dome meets the dark jar, a translucent stone's edge
+        // reads a little deeper: a hairline, never a bright coin rim.
+        context.addEllipse(in: disc.insetBy(dx: 0.25, dy: 0.25))
+        context.setStrokeColor(palette.edge.darker(0.45).withAlpha(min(1, 0.30 + spec.edgeBoost)).cgColor)
+        context.setLineWidth(min(max(radius * 0.035, 0.5), 0.8))
+        context.strokePath()
+    }
+
+    // MARK: The engraved mark
+
+    /// The crown the mark is cut into and the groove's colour: at least
+    /// 4.5:1 (an intaglio that reads at 7 pt), 7:1 or more with Increase
+    /// Contrast.
+    static func achievementEngravingColors(hex: String, increasedContrast: Bool) -> (surface: GemColor, groove: GemColor) {
+        let palette = CabochonPalette(hex: hex)
+        return (palette.crown, increasedContrast ? palette.deepGroove : palette.groove)
+    }
+
+    /// Type size in scene points for a stone of `sceneRadius`: a figure
+    /// ("100") smaller than a single glyph (✓, W).
+    static func achievementEngravingFontSize(mark: String, sceneRadius: CGFloat) -> CGFloat {
+        let radius = sceneRadius.isFinite ? max(sceneRadius, 2) : 11.5
+        let share: CGFloat
+        switch mark.count {
+        case ...1: share = mark == "✓" ? 0.66 : 0.60
+        case 2: share = 0.54
+        default: share = 0.46
+        }
+        return radius * share
+    }
+
+    private static func achievementEngravingFont(fontSize: CGFloat) -> UIFont {
+        let base = UIFont.systemFont(ofSize: fontSize, weight: .semibold)
+        guard let rounded = base.fontDescriptor.withDesign(.rounded) else { return base }
+        return UIFont(descriptor: rounded, size: fontSize)
+    }
+
+    private static func achievementEngravingText(_ mark: String, fontSize: CGFloat, color: UIColor = .black) -> NSAttributedString {
+        NSAttributedString(string: mark, attributes: [
+            .font: achievementEngravingFont(fontSize: fontSize),
+            .kern: fontSize * 0.02,
+            .foregroundColor: color
+        ])
+    }
+
+    /// Scene-point size of an engraving (the text plus its lip).
+    static func achievementEngravingSize(mark: String, fontSize rawFontSize: CGFloat) -> CGSize {
+        let fontSize = max(3, rawFontSize.isFinite ? rawFontSize : 7)
+        let measured = achievementEngravingText(mark, fontSize: fontSize).size()
+        return CGSize(width: (measured.width + 2).rounded(.up), height: (measured.height + 1.5).rounded(.up))
+    }
+
+    /// Atlas name of an engraving (ASCII: the mark is spelled as its
+    /// Unicode scalar values, like the count engravings).
+    static func achievementEngravingTextureName(
+        mark: String,
+        hex: String,
+        fontSize: CGFloat,
+        scale: CGFloat,
+        increasedContrast: Bool
+    ) -> String {
+        let spelled = mark.unicodeScalars.map { String($0.value, radix: 16) }.joined(separator: ".")
+        let clean = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted).uppercased()
+        return "gem.intaglio|\(spelled)|\(clean)|f\((fontSize * 4).rounded() / 4)|x\(renderScale(scale))"
+            + (increasedContrast ? "|c" : "")
+    }
+
+    /// The mark cut into the dome: a pale lip below it where the cut
+    /// catches the light, then the groove, a few shades deeper than the
+    /// crown. It reads as engraved, never as printed ink or a badge.
+    static func achievementEngravingImage(
+        mark: String,
+        hex: String,
+        fontSize rawFontSize: CGFloat,
+        scale: CGFloat,
+        increasedContrast: Bool
+    ) -> UIImage {
+        let fontSize = max(3, rawFontSize.isFinite ? rawFontSize : 7)
+        let size = achievementEngravingSize(mark: mark, fontSize: fontSize)
+        let colors = achievementEngravingColors(hex: hex, increasedContrast: increasedContrast)
+        let palette = CabochonPalette(hex: hex)
+        // The groove's upper wall is in shade, its floor lighter toward the
+        // lower wall that faces the light: deeper at the top, the groove
+        // colour (the contrast floor) at the bottom.
+        let wall = colors.groove.mixed(with: palette.slate, amount: 0.35)
+        let fill = UIGraphicsImageRenderer(size: size, format: rendererFormat(scale: scale)).image { renderer in
+            guard let gradient = CGGradient(
+                colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                colors: [wall.cgColor, colors.groove.cgColor] as CFArray,
+                locations: [0.2, 0.8]
+            ) else { return }
+            renderer.cgContext.drawLinearGradient(
+                gradient,
+                start: .zero,
+                end: CGPoint(x: 0, y: size.height),
+                options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
+            )
+        }
+        return UIGraphicsImageRenderer(size: size, format: rendererFormat(scale: scale)).image { _ in
+            let textSize = achievementEngravingText(mark, fontSize: fontSize).size()
+            let origin = CGPoint(x: (size.width - textSize.width) / 2, y: (size.height - textSize.height) / 2)
+            let lip = max(0.5, fontSize * 0.06)
+            achievementEngravingText(mark, fontSize: fontSize, color: UIColor(white: 1, alpha: 0.80))
+                .draw(at: CGPoint(x: origin.x + lip * 0.4, y: origin.y + lip))
+            achievementEngravingText(mark, fontSize: fontSize, color: UIColor(patternImage: fill))
+                .draw(at: origin)
+        }
+    }
+}
