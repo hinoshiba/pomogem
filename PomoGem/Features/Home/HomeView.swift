@@ -5601,6 +5601,9 @@ enum CompletionCardPresentation {
         )
     }
 
+    /// The core's progress in plain words. The birth of the first core is
+    /// never said here: the card's face or the fusion sheet says it, once
+    /// (`coreBirthMoment`), so this line only says how far its next growth is.
     private static func coreLine(_ snapshot: EffortProgressSnapshot, projectionIsLowerBound: Bool) -> String {
         guard !projectionIsLowerBound else {
             return String(localized: "時間の核の進みを確認しています", table: "Home",
@@ -5609,11 +5612,11 @@ enum CompletionCardPresentation {
         if snapshot.crossedMilestoneGrams != nil {
             let next = remainingDuration(grams: snapshot.nextTargetGrams - snapshot.totalGrams)
             if snapshot.displayedTargetLevel <= 1 {
-                return String(localized: "時間の核が生まれました。次の段まで あと\(next)", table: "Home",
-                              comment: "Completion card 「しくみ」: this focus brought the first time core. %@ is the time to its next level")
+                return String(localized: "集中した時間があと\(next)たまると、時間の核はさらに育ちます", table: "Home",
+                              comment: "Completion card 「しくみ」 when this focus brought the first time core (the card's face or the fusion sheet says so). %@ is the focus time until the core grows again. en: 'After %@ more of focus, your time core grows again'")
             }
-            return String(localized: "時間の核が\(snapshot.displayedTargetLevel)段目になりました。次の段まで あと\(next)", table: "Home",
-                          comment: "Completion card 「しくみ」: this focus raised the time core. %1$lld is the new level, %2$@ the time to the next one")
+            return String(localized: "時間の核が育ち、\(snapshot.displayedTargetLevel)段目になりました。集中した時間があと\(next)たまると、さらに育ちます", table: "Home",
+                          comment: "Completion card 「しくみ」: this focus grew the time core. %1$lld is its new level (the jar labels it 時間の核・二段目…), %2$@ the focus time until it grows again. en: 'Your time core grew to level %1$lld. After %2$@ more of focus, it grows again'")
         }
         let remaining = remainingDuration(grams: snapshot.remainingGrams)
         if snapshot.displayedTargetLevel <= 1 {

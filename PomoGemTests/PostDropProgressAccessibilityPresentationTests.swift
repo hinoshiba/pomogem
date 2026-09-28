@@ -171,7 +171,9 @@ final class CompletionCardPresentationTests: XCTestCase {
             grams: 250,
             weeklyTimerCompletionCount: 0
         )
-        XCTAssertEqual(tenth.coreLine, "時間の核が生まれました。次の段まで あと37時間30分")
+        // The fusion sheet says the core was born; 「しくみ」 only says how
+        // far its next growth is, in plain words (no 「次の段」).
+        XCTAssertEqual(tenth.coreLine, "集中した時間があと37時間30分たまると、時間の核はさらに育ちます")
         XCTAssertEqual(tenth.coreFraction, 1)
         XCTAssertTrue(tenth.jarLine.contains("10粒がそろい"), tenth.jarLine)
         XCTAssertNil(tenth.weekCountLine)
@@ -197,6 +199,53 @@ final class CompletionCardPresentationTests: XCTestCase {
         XCTAssertNil(legacy.coreLine)
         XCTAssertNil(legacy.unitLine)
         XCTAssertTrue(legacy.jarLine.contains("あと1粒"), legacy.jarLine)
+    }
+
+    /// The card that says 「時間の核が生まれました」 on its face (a 50-minute
+    /// fifth gem) never says it again inside 「しくみ」, and no level of the
+    /// core is named 「次の段」 without saying what it is.
+    func testMechanicsNeverRepeatTheCoreBirthNorNameTheNextLevelBare() throws {
+        let fifth = CompletionCardPresentation.mechanics(
+            effortProgress: EffortProgressPolicy.snapshot(totalGrams: 2_500, latestContributionGrams: 500),
+            fusionState: FusionRewardBridgePresentation.state(totalPebbleCount: 5),
+            projectionIsLowerBound: false,
+            grams: 500,
+            weeklyTimerCompletionCount: 5
+        )
+        XCTAssertEqual(CompletionCardPresentation.coreBirthMoment(
+            effortProgress: EffortProgressPolicy.snapshot(totalGrams: 2_500, latestContributionGrams: 500),
+            fusionState: FusionRewardBridgePresentation.state(totalPebbleCount: 5),
+            projectionIsLowerBound: false
+        ), .card)
+        XCTAssertEqual(fifth.coreLine, "集中した時間があと37時間30分たまると、時間の核はさらに育ちます")
+        let shownWithTheFace = [
+            CompletionCardPresentation.coreBirthOnCard,
+            fifth.coreLine,
+            fifth.unitLine,
+            fifth.jarLine
+        ].compactMap { $0 }.joined()
+        XCTAssertEqual(
+            shownWithTheFace.components(separatedBy: "時間の核が生まれました").count - 1,
+            1,
+            shownWithTheFace
+        )
+
+        let second = CompletionCardPresentation.mechanics(
+            effortProgress: EffortProgressPolicy.snapshot(totalGrams: 25_000, latestContributionGrams: 250),
+            fusionState: FusionRewardBridgePresentation.state(totalPebbleCount: 100),
+            projectionIsLowerBound: false,
+            grams: 250,
+            weeklyTimerCompletionCount: 1
+        )
+        XCTAssertEqual(
+            second.coreLine,
+            "時間の核が育ち、2段目になりました。集中した時間があと375時間たまると、さらに育ちます"
+        )
+        for mechanics in [fifth, second] {
+            let visible = [mechanics.coreLine, mechanics.unitLine, mechanics.jarLine].compactMap { $0 }.joined()
+            XCTAssertFalse(visible.contains("次の段"), visible)
+            XCTAssertFalse(visible.contains("生まれました"), visible)
+        }
     }
 
     func testRemainingTimeNeverClaimsLessThanIsLeft() {

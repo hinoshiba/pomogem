@@ -214,22 +214,19 @@
     "時間" : {
       "comment" : "Fusion sheet tile title: the focus time the crystal holds. en: 'Time'"
     },
-    "時間の核が%lld段目になりました。次の段まで あと%@" : {
-      "comment" : "Completion card 「しくみ」: this focus raised the time core. %1$lld is the new level, %2$@ the time to the next one",
+    "時間の核が生まれました。これからは核が、積み上げた時間の重さを表します。" : {
+      "comment" : "Completion card, once: this focus brought the first time core (without a fusion). en: 'Your time core is born. From now on it shows the weight of the time you have built up.'"
+    },
+    "時間の核が育ち、%lld段目になりました。集中した時間があと%@たまると、さらに育ちます" : {
+      "comment" : "Completion card 「しくみ」: this focus grew the time core. %1$lld is its new level (the jar labels it 時間の核・二段目…), %2$@ the focus time until it grows again. en: 'Your time core grew to level %1$lld. After %2$@ more of focus, it grows again'",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "時間の核が%1$lld段目になりました。次の段まで あと%2$@"
+            "value" : "時間の核が育ち、%1$lld段目になりました。集中した時間があと%2$@たまると、さらに育ちます"
           }
         }
       }
-    },
-    "時間の核が生まれました。これからは核が、積み上げた時間の重さを表します。" : {
-      "comment" : "Completion card, once: this focus brought the first time core (without a fusion). en: 'Your time core is born. From now on it shows the weight of the time you have built up.'"
-    },
-    "時間の核が生まれました。次の段まで あと%@" : {
-      "comment" : "Completion card 「しくみ」: this focus brought the first time core. %@ is the time to its next level"
     },
     "時間の核の%lld段目まで あと%@" : {
       "comment" : "Completion card 「しくみ」: focus time left until the time core's next level. %1$lld is the level, %2$@ a duration",
@@ -310,6 +307,9 @@
     },
     "開いています" : {
       "comment" : "VoiceOver value: the 「しくみ」 disclosure is open"
+    },
+    "集中した時間があと%@たまると、時間の核はさらに育ちます" : {
+      "comment" : "Completion card 「しくみ」 when this focus brought the first time core (the card's face or the fusion sheet says so). %@ is the focus time until the core grows again. en: 'After %@ more of focus, your time core grows again'"
     },
     "集中を記録しました" : {
       "comment" : "Completion card headline, shown after every finished focus. en: 'Focus recorded'"
