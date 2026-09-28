@@ -1,6 +1,28 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "%@の集中 = この一粒（+%@）" : {
+      "comment" : "Onboarding trial drop, shown after the trial gem lands: what one gem stands for. %1$@ is a focus time (25分), %2$@ its mass (250g). en: '%1$@ of focus = this gem (+%2$@)'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@の集中 = この一粒（+%2$@）"
+          }
+        }
+      }
+    },
+    "%@の集中が、この一粒（%@）になります" : {
+      "comment" : "VoiceOver: what the onboarding trial gem stands for. %1$@ is a spoken focus time, %2$@ a spoken mass",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@の集中が、この一粒（%2$@）になります"
+          }
+        }
+      }
+    },
     "%lld件" : {
       "comment" : "Restore waiting screen: a received count"
     },
@@ -16,6 +38,9 @@
     "この画面を開いたままお待ちください。" : {
       "comment" : "Restore waiting screen: keep the app open while records arrive"
     },
+    "これはお試しなので、記録には入りません。「次へ」で省略できます。" : {
+      "comment" : "Onboarding trial drop page: the trial gem is never recorded, and the page can be skipped"
+    },
     "しばらく新しい記録が届いていません。通信状態を確認するか、待たずに「新しく始める」を選べます。" : {
       "comment" : "Restore waiting screen: shown when nothing new has arrived for a while"
     },
@@ -25,8 +50,8 @@
     "テーマと時間を選んで、集中をはじめる。\n完走すると、その時間が一粒になって瓶に残ります。" : {
       "comment" : "Onboarding page 1: how a focus becomes a gem in the jar"
     },
-    "一粒、着地しました。本番では、25分の集中でこの大きさの一粒（250グラム）が瓶に残ります。次へ進めます" : {
-      "comment" : "VoiceOver announcement when the onboarding trial gem lands"
+    "一粒、着地しました。%@。次へ進めます" : {
+      "comment" : "VoiceOver announcement when the onboarding trial gem lands; %@ is the spoken form of 「25分の集中 = この一粒（+250g）」"
     },
     "届いた記録" : {
       "comment" : "Restore waiting screen: heading above the received counts"
@@ -51,11 +76,8 @@
     "新しく始める" : {
       "comment" : "Restore waiting screen: confirm starting without waiting\nRestore waiting screen: start onboarding without waiting for iCloud"
     },
-    "本番では、25分の集中でこの大きさの一粒（250g）が瓶に残ります。" : {
-      "comment" : "Onboarding trial drop: shown after the trial gem lands"
-    },
-    "演出を省略して一粒を積みました。本番では、25分の集中でこの大きさの一粒（250グラム）が瓶に残ります。次へ進めます" : {
-      "comment" : "VoiceOver announcement when the onboarding trial gem is placed without animation"
+    "演出を省略して一粒を積みました。%@。次へ進めます" : {
+      "comment" : "VoiceOver announcement when the onboarding trial gem is placed without animation; %@ is the spoken form of 「25分の集中 = この一粒（+250g）」"
     },
     "経過 %@" : {
       "comment" : "Restore waiting screen: elapsed time, e.g. 経過 1:05"

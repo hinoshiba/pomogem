@@ -49,7 +49,7 @@ final class CloudVerificationPresentationUITests: XCTestCase {
                        "A receipt with frozen progress is shown, not replaced by a pending card")
         let heading = app.descendants(matching: .any)["reward.heading"]
         XCTAssertTrue(heading.exists)
-        XCTAssertTrue((heading.value as? String)?.contains("今週記録した集中時間の質量") == true,
+        XCTAssertTrue((heading.value as? String)?.contains("今週の実測は") == true,
                       "The weekly figure is shown instead of 「今回の記録は保存済みです」: \(String(describing: heading.value))")
         // A one-session jar is a total this device can stand behind: the card
         // shows a real position, not 「時間の核を整理中」 beside a spinner.
@@ -130,7 +130,7 @@ final class CloudVerificationPresentationUITests: XCTestCase {
         XCTAssertTrue(progress.label.contains("時間の核"), progress.label)
         // The weekly heading is re-derived with the progress, not left frozen.
         let heading = app.descendants(matching: .any)["reward.heading"]
-        XCTAssertTrue((heading.value as? String)?.contains("今週記録した集中時間の質量") == true,
+        XCTAssertTrue((heading.value as? String)?.contains("今週の実測は") == true,
                       String(describing: heading.value))
         saveScreenshot("restamp-after")
         let jar = app.descendants(matching: .any)["瓶"]
