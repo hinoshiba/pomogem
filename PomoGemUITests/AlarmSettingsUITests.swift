@@ -50,8 +50,7 @@ final class AlarmSettingsUITests: XCTestCase {
             element("settings.completion-sound.standard").frame.minY
         )
         let bell = element("settings.completion-sound.bell")
-        bell.tap()
-        XCTAssertTrue(waitForValue(of: bell, "選択中"))
+        tapUntilSelected(bell)
         XCTAssertEqual(element("settings.completion-sound.standard").value as? String, "未選択")
         let softHint = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS %@", "「アラーム」の音から選んでください")
@@ -103,9 +102,26 @@ final class AlarmSettingsUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["終了アラームの強さ"].waitForExistence(timeout: 5))
         let option = element("settings.alarm-strength.\(raw)")
         XCTAssertTrue(option.waitForExistence(timeout: 3))
-        option.tap()
-        XCTAssertTrue(waitForValue(of: option, "選択中"))
+        tapUntilSelected(option)
         goBack(from: "終了アラームの強さ")
+    }
+
+    /// Chooses a row once it has come to rest. On a loaded Simulator a tap
+    /// can be lost (the recording of a failed run shows the list at rest
+    /// with the old row still checked), so, as `tapUntilGone` does, a row
+    /// that is still not selected 4 s later is tapped once more.
+    private func tapUntilSelected(
+        _ row: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertTrue(waitUntilFrameSettles(row), "The row must come to rest", file: file, line: line)
+        row.tap()
+        if !waitForValue(of: row, "選択中"), row.exists, row.isHittable {
+            XCTContext.runActivity(named: "The first tap was lost; tapping again") { _ in }
+            row.tap()
+        }
+        XCTAssertTrue(waitForValue(of: row, "選択中"), "The tapped row must be selected", file: file, line: line)
     }
 
     private func openSettings() {
