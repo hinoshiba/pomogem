@@ -104,7 +104,7 @@
       }
     },
     "Appleの購入履歴を確認" : {
-      "comment" : "Paywall, Pro owned: link to Apple's purchase history (reportaproblem.apple.com)",
+      "comment" : "Paywall, Pro owned: link to Apple's purchase history on reportaproblem.apple.com",
       "localizations" : {
         "en" : {
           "stringUnit" : {
