@@ -11,6 +11,9 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
     let dataEpochID: UUID?
     /// Three seconds in the app; unit tests shorten it.
     let refreshInterval: Duration
+    /// How long the loop waits before it tries a failed binding again; unit
+    /// tests shorten it.
+    let bindingRetryInterval: Duration
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     /// Optional so a host without the app's router (a unit-test mount) still
@@ -37,13 +40,15 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
         contextKey: String,
         dataEpochID: UUID?,
         controller: ScreenTimeController? = nil,
-        refreshInterval: Duration = .seconds(3)
+        refreshInterval: Duration = .seconds(3),
+        bindingRetryInterval: Duration = .seconds(30)
     ) {
         self.isReady = isReady
         self.timerPresented = timerPresented
         self.contextKey = contextKey
         self.dataEpochID = dataEpochID
         self.refreshInterval = refreshInterval
+        self.bindingRetryInterval = bindingRetryInterval
         _controller = ObservedObject(wrappedValue: controller ?? .shared)
     }
 
@@ -93,7 +98,14 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
                     // that instead of re-reading it every three seconds
                     // (device-verify-2 P6, `ScreenTimeForegroundRefreshPolicy`).
                     if !controller.needsForegroundRefresh {
-                        guard await waitForForegroundRefreshWork() else { return }
+                        // Only a bound controller can report work, so a
+                        // binding that failed (an unreadable ledger, a lock
+                        // that timed out) is retried on a slow timer instead
+                        // of waiting for a report that cannot come. Without
+                        // an App Group it fails the same way every time, at
+                        // one attempt per 30 s instead of every 3 s.
+                        let retry = bindingHasFailed ? bindingRetryInterval : nil
+                        guard await waitForForegroundRefreshWork(orRetryAfter: retry) else { return }
                         // A new observation session: the settling window
                         // must not span the time the loop was idle.
                         controller.beginAuthorizationObservation()
@@ -172,10 +184,34 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
         }
     }
 
-    /// Suspends until the controller reports something to watch. False when
-    /// the task was cancelled first (deactivation, a changed owner or epoch).
+    /// The activation pass could not bind this owner, and nothing else has
+    /// since: its reason is published and the controller is not bound.
     @MainActor
-    private func waitForForegroundRefreshWork() async -> Bool {
+    private var bindingHasFailed: Bool {
+        controller.bindingError != nil
+            && !controller.isBound(contextKey: contextKey, dataEpochID: dataEpochID)
+    }
+
+    /// Suspends until the controller reports something to watch, or until
+    /// `retry` has passed when one is given. False when the task was
+    /// cancelled first (deactivation, a changed owner or epoch).
+    @MainActor
+    private func waitForForegroundRefreshWork(orRetryAfter retry: Duration?) async -> Bool {
+        guard let retry else { return await waitForReportedRefreshWork() }
+        return await withTaskGroup(of: Bool.self) { group in
+            group.addTask { @MainActor in await waitForReportedRefreshWork() }
+            group.addTask {
+                do { try await Task.sleep(for: retry) } catch { return false }
+                return true
+            }
+            let first = await group.next() ?? false
+            group.cancelAll()
+            return first && !Task.isCancelled
+        }
+    }
+
+    @MainActor
+    private func waitForReportedRefreshWork() async -> Bool {
         for await needed in controller.foregroundRefreshNeeds.values where needed {
             return !Task.isCancelled
         }

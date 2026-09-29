@@ -940,6 +940,7 @@ final class ScreenTimeIntegrationLifecycleTests: XCTestCase {
         let contextKey: String
         let dataEpochID: UUID?
         var refreshInterval: Duration = .seconds(3)
+        var bindingRetryInterval: Duration = .seconds(30)
 
         var body: some View {
             Group {
@@ -948,7 +949,8 @@ final class ScreenTimeIntegrationLifecycleTests: XCTestCase {
                         .modifier(ScreenTimeIntegrationModifier(
                             isReady: true, timerPresented: false,
                             contextKey: contextKey, dataEpochID: dataEpochID,
-                            controller: controller, refreshInterval: refreshInterval
+                            controller: controller, refreshInterval: refreshInterval,
+                            bindingRetryInterval: bindingRetryInterval
                         ))
                         .onDisappear { probe.onUnmounted?() }
                 } else {
@@ -1184,6 +1186,51 @@ final class ScreenTimeIntegrationLifecycleTests: XCTestCase {
         let idleAgain = reads.count
         try await Task.sleep(for: .milliseconds(600))
         XCTAssertEqual(reads.count, idleAgain)
+    }
+
+    /// Review of #58. A binding that fails at activation (an unreadable
+    /// ledger, a lock that timed out) used to be retried by the next
+    /// three-second pass. Once the loop idled while nothing was set up, it
+    /// waited instead for a report only a bound controller can make, so a
+    /// configured user had no imports, no shield backstop and no revocation
+    /// check until the next activation. It now retries on a slow timer.
+    func testForegroundLoopRetriesAFailedBindingWithoutANewActivation() async throws {
+        let owner = AccountScopedLocalState.defaultsKey(base: "screen-time-owner")
+        let epoch = UUID()
+        let store = try makeStore(owner: owner, epoch: epoch)
+        let path = try XCTUnwrap(directories.last).appendingPathComponent("ScreenTime/ledger.json")
+        let original = try Data(contentsOf: path)
+        try Data("corrupt".utf8).write(to: path)
+        let controller = ScreenTimeController(
+            store: store, currentContextKey: { owner }, monitoring: Driver(store: store),
+            authorization: { .approved }
+        )
+        let probe = MountProbe()
+        let scene = try XCTUnwrap(
+            UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        )
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = UIHostingController(rootView: Host(
+            probe: probe, controller: controller, contextKey: owner, dataEpochID: epoch,
+            refreshInterval: .milliseconds(50), bindingRetryInterval: .milliseconds(300)
+        ))
+        window.isHidden = false
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+        }
+        try await waitUntil("the activation pass fails to bind") { controller.bindingError != nil }
+        XCTAssertFalse(controller.isBound(contextKey: owner, dataEpochID: epoch))
+        XCTAssertFalse(controller.needsForegroundRefresh)
+
+        // The ledger reads again; no activation, reload or save follows.
+        try original.write(to: path)
+        try await waitUntil("a retry binds while the app stays in the foreground") {
+            controller.isBound(contextKey: owner, dataEpochID: epoch)
+        }
+        XCTAssertNil(controller.bindingError)
+        try await controller.waitForPendingOperations()
+        XCTAssertTrue(controller.needsForegroundRefresh, "Recording is on: the three-second loop runs again")
     }
 
     func testForegroundRefreshIsNeededExactlyWhileTheLedgerHoldsSomethingToWatch() {
