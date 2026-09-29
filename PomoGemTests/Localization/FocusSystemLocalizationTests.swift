@@ -179,9 +179,42 @@ final class FocusSystemLocalizationTests: XCTestCase {
             try english("画面を離れたので、この回は自己申告あつかいになった", table: "Common"),
             "You left the screen, so this session counts as self-reported."
         )
+    }
+
+    // MARK: Completion facts
+
+    /// The card has always grouped its digits (its `Text` interpolated the
+    /// Int, which SwiftUI groups), and VoiceOver has always read them plain.
+    /// A focus of 100 min or more saves 1,000 g or more.
+    func testCompletionFactsKeepTheirJapaneseDigits() {
+        XCTAssertEqual(FocusCompletionText.cardLine(themeName: "英語", grams: 250, locale: ja), "英語  +250g")
+        XCTAssertEqual(FocusCompletionText.cardLine(themeName: "英語", grams: 1_200, locale: ja), "英語  +1,200g")
+        XCTAssertEqual(FocusCompletionText.cardLine(themeName: "数学", grams: 3_600), "数学  +3,600g")
         XCTAssertEqual(
-            try english("集中が完了しました。%@、%@を保存しています", table: "Focus", "Math", MassText.spoken(grams: 250, locale: en)),
+            FocusCompletionText.announcement(themeName: "英語", grams: 250),
+            "集中が完了しました。英語、250グラムを保存しています"
+        )
+        XCTAssertEqual(
+            FocusCompletionText.announcement(themeName: "数学", grams: 3_600, locale: ja),
+            "集中が完了しました。数学、3600グラムを保存しています"
+        )
+        XCTAssertEqual(
+            FocusCompletionText.announcementWhileAlerting(themeName: "英語", grams: 1_200, locale: ja),
+            "集中が完了しました。英語、1200グラム。2本指でダブルタップすると終了アラートを止められます"
+        )
+    }
+
+    func testCompletionFactsInEnglish() throws {
+        let bundle = try LocalizationTestSupport.englishBundle()
+        XCTAssertEqual(FocusCompletionText.cardLine(themeName: "Math", grams: 250, bundle: bundle, locale: en), "Math  +250 g")
+        XCTAssertEqual(FocusCompletionText.cardLine(themeName: "Math", grams: 1_200, bundle: bundle, locale: en), "Math  +1,200 g")
+        XCTAssertEqual(
+            FocusCompletionText.announcement(themeName: "Math", grams: 250, bundle: bundle, locale: en),
             "Focus complete. Saving 250 grams to Math."
+        )
+        XCTAssertEqual(
+            FocusCompletionText.announcementWhileAlerting(themeName: "Math", grams: 3_600, bundle: bundle, locale: en),
+            "Focus complete. Math, 3600 grams. Double-tap with two fingers to stop the alert."
         )
     }
 

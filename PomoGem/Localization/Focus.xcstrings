@@ -2672,36 +2672,36 @@
         }
       }
     },
-    "集中が完了しました。%@、%@。2本指でダブルタップすると終了アラートを止められます" : {
-      "comment" : "VoiceOver announcement when a focus completes while the end alert repeats. 1 = theme name, 2 = spoken mass, e.g. 250グラム (250 grams).",
+    "集中が完了しました。%@、%@グラム。2本指でダブルタップすると終了アラートを止められます" : {
+      "comment" : "VoiceOver announcement when a focus completes while the end alert repeats. 1 = theme name, 2 = grams as plain digits (always 10 or more, so en says 'grams').",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Focus complete. %1$@, %2$@. Double-tap with two fingers to stop the end alert."
+            "value" : "Focus complete. %1$@, %2$@ grams. Double-tap with two fingers to stop the alert."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "集中が完了しました。%@、%@。2本指でダブルタップすると終了アラートを止められます"
+            "value" : "集中が完了しました。%@、%@グラム。2本指でダブルタップすると終了アラートを止められます"
           }
         }
       }
     },
-    "集中が完了しました。%@、%@を保存しています" : {
-      "comment" : "VoiceOver announcement when a focus completes. 1 = theme name, 2 = spoken mass, e.g. 250グラム (250 grams).",
+    "集中が完了しました。%@、%@グラムを保存しています" : {
+      "comment" : "VoiceOver announcement when a focus completes. 1 = theme name, 2 = grams as plain digits (always 10 or more, so en says 'grams').",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Focus complete. Saving %2$@ to %1$@."
+            "value" : "Focus complete. Saving %2$@ grams to %1$@."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "集中が完了しました。%@、%@を保存しています"
+            "value" : "集中が完了しました。%@、%@グラムを保存しています"
           }
         }
       }

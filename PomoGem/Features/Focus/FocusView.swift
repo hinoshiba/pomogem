@@ -2842,11 +2842,7 @@ struct FocusView: View {
         guard completionAlert.isActive(sessionID: result.sessionID) else {
             UIAccessibility.post(
                 notification: .announcement,
-                argument: String(
-                    localized: "集中が完了しました。\(subjectSnapshot.name)、\(MassText.spoken(grams: result.grams))を保存しています",
-                    table: "Focus",
-                    comment: "VoiceOver announcement when a focus completes. 1 = theme name, 2 = spoken mass, e.g. 250グラム (250 grams)."
-                )
+                argument: FocusCompletionText.announcement(themeName: subjectSnapshot.name, grams: result.grams)
             )
             return
         }
@@ -2860,10 +2856,9 @@ struct FocusView: View {
             UIAccessibility.post(
                 notification: .announcement,
                 argument: NSAttributedString(
-                    string: String(
-                        localized: "集中が完了しました。\(subjectSnapshot.name)、\(MassText.spoken(grams: result.grams))。2本指でダブルタップすると終了アラートを止められます",
-                        table: "Focus",
-                        comment: "VoiceOver announcement when a focus completes while the end alert repeats. 1 = theme name, 2 = spoken mass, e.g. 250グラム (250 grams)."
+                    string: FocusCompletionText.announcementWhileAlerting(
+                        themeName: subjectSnapshot.name,
+                        grams: result.grams
                     ),
                     attributes: [.accessibilitySpeechQueueAnnouncement: true]
                 )
@@ -3215,9 +3210,8 @@ struct FocusView: View {
                     .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                     .multilineTextAlignment(.center)
                     .accessibilityAddTraits(.isHeader)
-                // Theme name and mass: no words, so no catalog key. The
-                // mass keeps its plain digits and gets the unit from Common.
-                Text(verbatim: "\(subjectSnapshot.name)  +\(MassText.grams(String(result.grams)))")
+                // Grouped digits (「+1,200g」), as the card always showed.
+                Text(verbatim: FocusCompletionText.cardLine(themeName: subjectSnapshot.name, grams: result.grams))
                     .font(.system(.headline, design: .rounded, weight: .bold))
                     // Same ceiling as the title, so the facts never outgrow
                     // the heading at the largest sizes.
@@ -3805,6 +3799,60 @@ enum FocusTimerDisplayPolicy {
 
     static func remainingFraction(for progress: Double) -> Double {
         1 - normalizedProgress(progress)
+    }
+}
+
+/// The facts a finished focus reports: the completion card's line and the
+/// VoiceOver announcements. Each keeps the digits the Japanese screen and
+/// voice have always used, so the Japanese stays byte-identical.
+enum FocusCompletionText {
+    /// 「英語  +1,200g」; en "English  +1,200 g". The card's `Text` used to
+    /// interpolate the Int, which SwiftUI grouped by the locale.
+    static func cardLine(
+        themeName: String,
+        grams: Int,
+        bundle: Bundle = .main,
+        locale: Locale = PomoGemLocale.current
+    ) -> String {
+        let mass = MassText.grams(PomoGemLocale.grouped(grams, locale: locale), bundle: bundle, locale: locale)
+        // Theme name and mass: no words, so no catalog key.
+        return "\(themeName)  +\(mass)"
+    }
+
+    /// 「集中が完了しました。英語、3600グラムを保存しています」. The digits
+    /// are never grouped, as the announcement always read them. A String
+    /// argument keeps them so: an Int would be grouped (3,600). A finished
+    /// focus is at least a minute, 10 g, so English always says "grams".
+    static func announcement(
+        themeName: String,
+        grams: Int,
+        bundle: Bundle = .main,
+        locale: Locale = PomoGemLocale.current
+    ) -> String {
+        String(
+            localized: "集中が完了しました。\(themeName)、\(String(grams))グラムを保存しています",
+            table: "Focus",
+            bundle: bundle,
+            locale: locale,
+            comment: "VoiceOver announcement when a focus completes. 1 = theme name, 2 = grams as plain digits (always 10 or more, so en says 'grams')."
+        )
+    }
+
+    /// The announcement while the end alert repeats, with the gesture that
+    /// stops it.
+    static func announcementWhileAlerting(
+        themeName: String,
+        grams: Int,
+        bundle: Bundle = .main,
+        locale: Locale = PomoGemLocale.current
+    ) -> String {
+        String(
+            localized: "集中が完了しました。\(themeName)、\(String(grams))グラム。2本指でダブルタップすると終了アラートを止められます",
+            table: "Focus",
+            bundle: bundle,
+            locale: locale,
+            comment: "VoiceOver announcement when a focus completes while the end alert repeats. 1 = theme name, 2 = grams as plain digits (always 10 or more, so en says 'grams')."
+        )
     }
 }
 
