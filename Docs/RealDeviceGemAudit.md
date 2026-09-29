@@ -217,7 +217,8 @@ Potential Interaction Delay（35〜47 ms）は、ハーネスが20秒ごとに�
   - 表示の状態の違い: 今回は「iCloudを確認中」の表示で測りました。そのため、確認中の合計の計算
     （`pendingMassHeadline`、`pendingProjectionCoversEverySession`、`pendingMassSessions`）が加わっています。
     着地1回あたり包含でそれぞれ約150・73・36 ms です。5601527 の着地は確定済みの表示で、これらは出てきません。
-    どれも 5601527 より前からあるコードです。
+    どれも 5601527 より前からあるコードです。計測の後に `main` へ入った #56 が、この計算を変えています
+    （`pendingProjectionCoversEverySession` と `pendingMassSessions` は無くなりました）。ここの値は 12dc663 のものです。
   - #57: 結晶カードの置き場所の計算（`aggregateCardPlacement(jarHeight:)`）が、Home を描き直すたびに
     `activeSubjects` をもう一度計算します（着地1回あたり21・19 ms）。これは今回の作業による退行です（小さい）。
   - 今回の着地は、比べる値より重い計測器（Metal System Trace）で測りました。同じ条件の比較ではありません。
