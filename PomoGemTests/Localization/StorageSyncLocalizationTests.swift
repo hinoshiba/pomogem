@@ -340,25 +340,32 @@ final class StorageSyncLocalizationTests: XCTestCase {
     }
 
     /// The comparison a user reads before a deletion: counts as labeled
-    /// digits, and a date that always carries its year.
+    /// digits, grouped the English way, and a date that always carries its year.
     func testComparisonRowInEnglish() throws {
-        let counts = try english("テーマ%@・記録%@・成果%@", "12", "1234", "36")
-        XCTAssertEqual(counts, "Themes 12 · Records 1234 · Achievements 36")
+        let preview = Self.preview(subjects: 12, sessions: 12_480, stones: 36, latest: nil)
+        let (themes, records, achievements) = StorageTransferOverwriteCopy.countArguments(preview, locale: en)
+        XCTAssertEqual([themes, records, achievements], ["12", "12,480", "36"], "English groups the digits")
+        let japanese = StorageTransferOverwriteCopy.countArguments(preview, locale: LocalizationTestSupport.japanese)
+        XCTAssertEqual([japanese.0, japanese.1, japanese.2], ["12", "12480", "36"],
+                       "Japanese keeps 「記録12480」, as before")
+
+        let counts = try english("テーマ%@・記録%@・成果%@", themes, records, achievements)
+        XCTAssertEqual(counts, "Themes 12 · Records 12,480 · Achievements 36")
         let date = DateText.longDate(Self.date(2025, 9, 18), locale: en)
         XCTAssertEqual(try english("%@: %@（最終 %@）", try english("このiPhone"), counts, date),
-                       "This iPhone: Themes 12 · Records 1234 · Achievements 36 (latest record: September 18, 2025)")
+                       "This iPhone: Themes 12 · Records 12,480 · Achievements 36 (latest record: September 18, 2025)")
         XCTAssertEqual(try english("%@: %@（日付のある記録なし）", "iCloud", counts),
-                       "iCloud: Themes 12 · Records 1234 · Achievements 36 (no dated records)")
+                       "iCloud: Themes 12 · Records 12,480 · Achievements 36 (no dated records)")
         XCTAssertEqual(try english("%@: 確認できませんでした", "iCloud"), "iCloud: couldn't be checked")
-        XCTAssertEqual(try english("%@: %@", "iCloud", counts), "iCloud: Themes 12 · Records 1234 · Achievements 36")
+        XCTAssertEqual(try english("%@: %@", "iCloud", counts), "iCloud: Themes 12 · Records 12,480 · Achievements 36")
 
         let empty = SentenceText.join([
             try english("iCloudには、このアプリの記録と成果が1件も見つかりませんでした。"),
             try english("このまま実行すると、このiPhoneのテーマ%@・記録%@・成果%@を含む、テーマ・記録・設定はすべて削除され、元に戻すことはできません。",
-                        "12", "480", "36"),
+                        themes, records, achievements),
             try english("中止して、先にこの端末の記録を書き出すか、他の端末の同期が終わるのをお待ちください。")
         ], locale: en)
-        XCTAssertEqual(empty, "No records or achievements from this app were found in iCloud. If you continue, all themes, records and settings on this iPhone (themes: 12, records: 480, achievements: 36) will be deleted and can't be restored. Stop here and export this device's records first, or wait for your other devices to finish syncing.")
+        XCTAssertEqual(empty, "No records or achievements from this app were found in iCloud. If you continue, all themes, records and settings on this iPhone (themes: 12, records: 12,480, achievements: 36) will be deleted and can't be restored. Stop here and export this device's records first, or wait for your other devices to finish syncing.")
     }
 
     // MARK: Data deletion

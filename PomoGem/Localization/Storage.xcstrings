@@ -1709,7 +1709,7 @@
       }
     },
     "このまま実行すると、このiPhoneのテーマ%@・記録%@・成果%@を含む、テーマ・記録・設定はすべて削除され、元に戻すことはできません。" : {
-      "comment" : "Re-download warning when iCloud is empty. The arguments are this iPhone's theme, record and achievement counts (ungrouped digits)",
+      "comment" : "Re-download warning when iCloud is empty. The arguments are this iPhone's theme, record and achievement counts as digit text (ungrouped in Japanese, grouped in English)",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1726,7 +1726,7 @@
       }
     },
     "このまま実行すると、このiPhoneのテーマ%@・記録%@・成果%@を含む、テーマ・記録・設定はすべて削除され、空の状態からiCloudの同期を始めます。" : {
-      "comment" : "Turn-on-iCloud warning when iCloud is empty. The arguments are this iPhone's theme, record and achievement counts (ungrouped digits)",
+      "comment" : "Turn-on-iCloud warning when iCloud is empty. The arguments are this iPhone's theme, record and achievement counts as digit text (ungrouped in Japanese, grouped in English)",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2248,7 +2248,7 @@
       }
     },
     "テーマ%@・記録%@・成果%@" : {
-      "comment" : "Counts in a comparison row: themes, records (focus sessions) and achievements, as ungrouped digits",
+      "comment" : "Counts in a comparison row: themes, records (focus sessions) and achievements, as digit text (ungrouped in Japanese, grouped in English)",
       "localizations" : {
         "en" : {
           "stringUnit" : {

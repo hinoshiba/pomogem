@@ -175,7 +175,7 @@ enum StorageTransferRefreshCopy {
     ///
     /// One catalog entry per sentence, joined by `SentenceText`: the counted
     /// loss sits inside the second sentence, so each variant of it is a whole
-    /// sentence of its own. The counts stay ungrouped digits, as before.
+    /// sentence of its own. The Japanese counts stay ungrouped digits, as before.
     static func cloudSideEmpty(device: StorageTransferCloudPreview?) -> String {
         let loss: String
         if let device {
@@ -183,7 +183,7 @@ enum StorageTransferRefreshCopy {
             loss = String(
                 localized: "このまま実行すると、このiPhoneのテーマ\(themes)・記録\(records)・成果\(achievements)を含む、テーマ・記録・設定はすべて削除され、元に戻すことはできません。",
                 table: "Storage",
-                comment: "Re-download warning when iCloud is empty. The arguments are this iPhone's theme, record and achievement counts (ungrouped digits)")
+                comment: "Re-download warning when iCloud is empty. The arguments are this iPhone's theme, record and achievement counts as digit text (ungrouped in Japanese, grouped in English)")
         } else {
             loss = String(
                 localized: "このまま実行すると、このiPhoneのテーマ・記録・設定は削除され、元に戻すことはできません。",
@@ -226,7 +226,7 @@ enum StorageTransferEnableCopy {
             loss = String(
                 localized: "このまま実行すると、このiPhoneのテーマ\(themes)・記録\(records)・成果\(achievements)を含む、テーマ・記録・設定はすべて削除され、空の状態からiCloudの同期を始めます。",
                 table: "Storage",
-                comment: "Turn-on-iCloud warning when iCloud is empty. The arguments are this iPhone's theme, record and achievement counts (ungrouped digits)")
+                comment: "Turn-on-iCloud warning when iCloud is empty. The arguments are this iPhone's theme, record and achievement counts as digit text (ungrouped in Japanese, grouped in English)")
         } else {
             loss = String(
                 localized: "このまま実行すると、このiPhoneのテーマ・記録・設定はすべて削除され、空の状態からiCloudの同期を始めます。",
@@ -457,14 +457,22 @@ enum StorageTransferOverwriteCopy {
         localized: "iCloudには、このアプリの記録と成果が1件も見つかりませんでした。", table: "Storage",
         comment: "First sentence of the warning shown when iCloud holds none of the user's records")
 
-    /// The three counts a user recognizes, as ungrouped digits. They are
-    /// passed as text, not as Int: the Japanese has always printed 「記録1234」,
-    /// and a localized Int would group it as 「記録1,234」. English therefore
-    /// labels each count ("Records 1234") instead of pluralizing a noun.
-    static func countArguments(_ preview: StorageTransferCloudPreview) -> (String, String, String) {
+    /// The three counts a user recognizes, as text in `locale`'s digits. They
+    /// are passed as text, not as Int: the Japanese has always printed
+    /// 「記録1234」, and an interpolated Int would group it as 「記録1,234」, so
+    /// Japanese keeps ungrouped digits. Every other language groups them the
+    /// way its readers expect ("Records 1,234"). English labels each count
+    /// instead of pluralizing a noun, so no plural variation is needed.
+    static func countArguments(
+        _ preview: StorageTransferCloudPreview,
+        locale: Locale = PomoGemLocale.current
+    ) -> (String, String, String) {
         let counts = preview.recordCounts
-        return (String(counts["Subject"] ?? 0), String(counts["StudySession"] ?? 0),
-                String(counts["AchievementStone"] ?? 0))
+        func digits(_ key: String) -> String {
+            let value = counts[key] ?? 0
+            return PomoGemLocale.composesJapanese(locale) ? String(value) : PomoGemLocale.grouped(value, locale: locale)
+        }
+        return (digits("Subject"), digits("StudySession"), digits("AchievementStone"))
     }
 
     /// W6. The iCloud row when the server holds records but no transfer
@@ -512,7 +520,7 @@ enum StorageTransferOverwriteCopy {
     private static func counts(_ preview: StorageTransferCloudPreview) -> String {
         let (themes, records, achievements) = countArguments(preview)
         return String(localized: "テーマ\(themes)・記録\(records)・成果\(achievements)", table: "Storage",
-                      comment: "Counts in a comparison row: themes, records (focus sessions) and achievements, as ungrouped digits")
+                      comment: "Counts in a comparison row: themes, records (focus sessions) and achievements, as digit text (ungrouped in Japanese, grouped in English)")
     }
 }
 
