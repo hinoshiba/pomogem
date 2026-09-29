@@ -893,7 +893,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Your jar always fills every 2.50 kg (250 min of focus), and after its full-jar glow it moves on to the next jar. Your total never disappears: it stays separately as long-term stages of 2.50 kg → 25 kg → 250 kg…. Both grow with focus time, not with the number of sessions: 1 minute of focus = %lld g."
+            "value" : "Your jar always fills every 2.50 kg (250 min of focus), and after its full-jar glow it moves on to the next jar. Your total never disappears: it stays separately as long-term stages of 2.50 kg → 25 kg → 250 kg and beyond. Both grow with focus time, not with the number of sessions: 1 minute of focus = %lld g."
           }
         },
         "ja" : {
