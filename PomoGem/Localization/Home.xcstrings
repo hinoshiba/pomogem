@@ -1419,7 +1419,7 @@
       }
     },
     "テーマ" : {
-      "comment" : "Caption above the theme menu of the manual-entry and achievement sheets\nManual entry confirmation row: the theme\nManual entry: stands in for the theme in the confirm button's VoiceOver hint while none is chosen",
+      "comment" : "The word theme, alone: the caption above the sheets' theme menu, the manual-entry confirmation row, and the stand-in for a missing theme name",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2730,7 +2730,7 @@
       }
     },
     "未選択" : {
-      "comment" : "Manual entry confirmation row value while no theme is chosen\nVoiceOver: a theme menu while no theme is chosen, read after 「テーマ、」",
+      "comment" : "No theme chosen yet: read after テーマ、 by VoiceOver and shown in the manual-entry confirmation row",
       "localizations" : {
         "en" : {
           "stringUnit" : {
