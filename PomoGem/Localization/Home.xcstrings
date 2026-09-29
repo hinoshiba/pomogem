@@ -200,6 +200,9 @@
     "テーマを選ぶと、集中を始められます" : {
       "comment" : "Toast: a widget, link or Siri asked to start a focus before any theme exists"
     },
+    "ポモジェムPro" : {
+      "comment" : "Eyebrow over the custom-duration sheet: the product name, as on the paywall; keep its case"
+    },
     "ポモジェムProの説明を開きます" : {
       "comment" : "VoiceOver hint on the fusion sheet's Pro month-label link"
     },

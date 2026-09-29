@@ -149,9 +149,6 @@
     "スクリーンタイムの%@は、完走した回数に含みません" : {
       "comment" : "Log: Screen Time learning in the period is not counted as completed timers; the argument is a duration"
     },
-    "テーマ" : {
-      "comment" : "Eyebrow over テーマの構成"
-    },
     "テーマ別" : {
       "comment" : "Heading of the per-theme time breakdown of a day"
     },
@@ -194,9 +191,6 @@
     "棒を選ぶと、その日の記録を一件ずつ見られます。" : {
 
     },
-    "毎月のまとめ" : {
-      "comment" : "Eyebrow over 月の振り返り (monthly Wrapped recaps)"
-    },
     "直近12か月を、月ごとにふり返れます。" : {
 
     },
@@ -213,7 +207,7 @@
       "comment" : "VoiceOver: a rainbow gem"
     },
     "記念石" : {
-      "comment" : "Eyebrow over an achievement stone being edited\nEyebrow over 記念石アーカイブ"
+      "comment" : "Eyebrow over an achievement stone being edited"
     },
     "記録を読み込み中" : {
       "comment" : "VoiceOver: Log is loading"
@@ -222,7 +216,7 @@
 
     },
     "質量" : {
-      "comment" : "Day summary tile: total mass\nEyebrow over the chart 質量の推移"
+      "comment" : "Day summary tile: total mass"
     },
     "通常の粒" : {
       "comment" : "VoiceOver: a normal gem"

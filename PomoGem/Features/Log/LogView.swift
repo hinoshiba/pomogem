@@ -1490,7 +1490,9 @@ struct LogView: View {
         return PomoGemCard {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 4) {
-                    SectionEyebrow(text: String(localized: "質量", table: "Log", comment: "Eyebrow over the chart 質量の推移"))
+                    // 記録's cards have no kicker: the English ones were
+                    // decoration, and in Japanese a kicker only repeated the
+                    // title (「質量」 over 「質量の推移」).
                     Text("質量の推移")
                         .pomogemSectionTitle()
                 }
@@ -1582,7 +1584,6 @@ struct LogView: View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 17) {
                 VStack(alignment: .leading, spacing: 4) {
-                    SectionEyebrow(text: String(localized: "テーマ", table: "Log", comment: "Eyebrow over テーマの構成"))
                     Text("テーマの構成")
                         .pomogemSectionTitle()
                 }
@@ -1666,7 +1667,6 @@ struct LogView: View {
             PomoGemCard {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
-                        SectionEyebrow(text: String(localized: "記念石", table: "Log", comment: "Eyebrow over 記念石アーカイブ"))
                         Text("記念石アーカイブ")
                             .pomogemSectionTitle()
                         Text(achievementArchiveDescription(count: stones.count))
@@ -1740,7 +1740,6 @@ struct LogView: View {
             PomoGemCard {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
-                        SectionEyebrow(text: String(localized: "毎月のまとめ", table: "Log", comment: "Eyebrow over 月の振り返り (monthly Wrapped recaps)"))
                         // Not 「月ごとの瓶」: that is 積み上がり's 年月 shelf, a
                         // different view (history-11).
                         Text("月の振り返り", tableName: "Log", comment: "Log section title: the monthly Wrapped recaps")

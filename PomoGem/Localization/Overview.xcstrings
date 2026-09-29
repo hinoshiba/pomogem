@@ -175,8 +175,8 @@
     "完走した回数" : {
       "comment" : "Weekly card tile: timers that ran to their end this week"
     },
-    "年表" : {
-      "comment" : "Eyebrow over 年月をたどる (the timeline of months and years)"
+    "年月の瓶" : {
+      "comment" : "Eyebrow over 年月をたどる: the section's name, as the Home menu's 積み上がり row lists it"
     },
     "日ごとの記録" : {
       "comment" : "Heading of a month's list of days"
