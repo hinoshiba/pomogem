@@ -624,7 +624,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "iCloud's deletion marker hasn't been checked yet. It will be checked again the next time you're online (until then, old records can't be fully kept from coming back)"
+            "value" : "iCloud's deletion marker hasn't been checked yet. It will be checked again the next time you're online. Old records may still come back; this can't be fully prevented."
           }
         },
         "ja" : {
@@ -2532,7 +2532,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The deletion has not been completed. Adding records stays stopped. Connect to iCloud and try again."
+            "value" : "The deletion has not been completed. You still can't add records. Connect to iCloud and try again."
           }
         },
         "ja" : {
@@ -3009,7 +3009,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Once the check is done, this focus will be added to your jar."
+            "value" : "Once the check is done, this focus session will be added to your jar."
           }
         },
         "ja" : {
@@ -3801,7 +3801,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Focus has ended. Once the check is done, this focus will be added to your jar."
+            "value" : "Focus has ended. Once the check is done, this session will be added to your jar."
           }
         },
         "ja" : {

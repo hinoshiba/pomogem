@@ -128,7 +128,11 @@ final class LaunchLocalizationTests: XCTestCase {
             ("このインストールでiCloud保存を選んだApple Accountと一致しません。元のApple Accountへ戻すまで保存領域は開きません。",
              ["won't open until"]),
             ("削除は完了扱いになっていません。記録の追加は停止したままです。iCloudに接続して再試行してください。",
-             ["has not been completed", "stays stopped"]),
+             ["has not been completed", "still can't add records"]),
+            // The Japanese states the risk without a time limit, so the English
+            // must not narrow it to "until the next check".
+            ("iCloudの削除世代を未確認です。次回オンライン時に再照合します（古い記録の再流入を完全には防げません）",
+             ["hasn't been checked yet", "may still come back", "can't be fully prevented"]),
             ("記録を保護するため、別の保存先には切り替えていません。iCloudと空き容量を確認してください。",
              ["has not switched"]),
             ("iCloudの記録を使う場合は、下の保存先の設定で端末の記録が置き換わることを確認して切り替えられます。端末の記録でiCloudを置き換える操作は現在利用できません。アプリを削除すると、このiPhoneだけに保存した記録は失われます。",
@@ -190,7 +194,9 @@ final class LaunchLocalizationTests: XCTestCase {
         )
         XCTAssertEqual(try english("残り %@", "12:34"), "12:34 left")
         XCTAssertEqual(try english("確認が済むと、この集中を瓶に積みます。"),
-                       "Once the check is done, this focus will be added to your jar.")
+                       "Once the check is done, this focus session will be added to your jar.")
+        XCTAssertEqual(try english("集中が終わりました。確認が済むと、この集中を瓶に積みます。"),
+                       "Focus has ended. Once the check is done, this session will be added to your jar.")
 
         XCTAssertEqual(
             String(localized: "\("Math")・残り約\(25)分。", table: "Launch", bundle: bundle, locale: en),
