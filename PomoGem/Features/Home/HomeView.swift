@@ -454,8 +454,8 @@ struct HomeView: View {
     /// re-runs only the reader (device-verify-2 P4).
     ///
     /// Each read decodes the receipts and re-runs the projection, so a pass
-    /// reads it once and hands the value down (`jarCard`,
-    /// `largeTextFusionProgressCard`).
+    /// reads it once, in `jarStageSnapshot`, and hands the snapshot to both
+    /// readers (the jar and its large-text card).
     private var landedTotalsInputs: JarLandedTotalsInputs {
         JarLandedTotalsInputs(
             roots: acceptedAggregateRoots,
@@ -732,10 +732,13 @@ struct HomeView: View {
             GeometryReader { proxy in
                 let jarHeight = homeJarHeight(availableHeight: proxy.size.height)
                 let cardPlacement = aggregateCardPlacement(jarHeight: jarHeight)
+                // One projection read for the jar and its large-text
+                // companion; both readers take their values from it.
+                let stage = jarStageSnapshot
                 ScrollViewReader { scrollProxy in
                 ScrollView {
                     VStack(spacing: 0) {
-                        jarCard(height: jarHeight, cardPlacement: cardPlacement)
+                        jarCard(height: jarHeight, cardPlacement: cardPlacement, stage: stage)
                             .id("home.jar")
                         if showsAggregateInspectionSlot(cardPlacement) {
                             aggregateInspectionSlot
@@ -743,13 +746,14 @@ struct HomeView: View {
                                 .id(Self.aggregateInspectionSlotID)
                         }
                         if showsLargeTextFusionProgress {
-                            let isLowerBound = localProjectionNeedsMaintenance
+                            let isLowerBound = stage.localProjectionNeedsMaintenance
                             // Counts a gem when it lands, like the readout it
-                            // repeats; a landing re-runs only this reader.
-                            JarLandedTotalsReader(state: jarStageState, inputs: landedTotalsInputs) { hud in
+                            // repeats; a landing re-runs only this reader,
+                            // which reads nothing but the snapshot.
+                            JarLandedTotalsReader(state: jarStageState, inputs: stage.landedInputs) { hud in
                                 if let state = largeTextFusionProgressState(hud, isLowerBound: isLowerBound) {
                                     Spacer(minLength: 12)
-                                    largeTextFusionProgressCard(state)
+                                    largeTextFusionProgressCard(state, coreColorHex: stage.lifetimeCoreColorHex)
                                 }
                             }
                         }
@@ -1348,14 +1352,14 @@ struct HomeView: View {
         )
     }
 
+    /// The reader adds the landed totals to Home's `stage` and re-runs only
+    /// this stage when a gem lands.
     private func jarCard(
         height: CGFloat,
-        cardPlacement: AggregateCardPlacementPolicy.Placement
+        cardPlacement: AggregateCardPlacementPolicy.Placement,
+        stage: JarStageSnapshot
     ) -> some View {
-        // One projection read for the whole jar; the reader adds the landed
-        // totals and re-runs only this stage when a gem lands.
-        let stage = jarStageSnapshot
-        return JarLandedTotalsReader(state: jarStageState, inputs: stage.landedInputs) { hud in
+        JarLandedTotalsReader(state: jarStageState, inputs: stage.landedInputs) { hud in
             jarStage(height: height, cardPlacement: cardPlacement, stage: stage, hud: hud)
         }
     }
@@ -1985,17 +1989,20 @@ struct HomeView: View {
         )
     }
 
+    /// Runs inside `JarLandedTotalsReader`, so its colour comes from Home's
+    /// snapshot: `lifetimeCoreColorHex` re-derives the sessions on each read.
     private func largeTextFusionProgressCard(
-        _ state: JarLifetimeCoreState
+        _ state: JarLifetimeCoreState,
+        coreColorHex: String
     ) -> some View {
         PomoGemCard {
             HStack(alignment: .top, spacing: 13) {
                 Image(systemName: "hourglass.bottomhalf.filled")
                     .font(.title2.weight(.black))
-                    .foregroundStyle(Color(hex: lifetimeCoreColorHex))
+                    .foregroundStyle(Color(hex: coreColorHex))
                     .frame(width: 44, height: 44)
                     .background(
-                        Color(hex: lifetimeCoreColorHex).opacity(0.13),
+                        Color(hex: coreColorHex).opacity(0.13),
                         in: Circle()
                     )
                     .accessibilityHidden(true)
