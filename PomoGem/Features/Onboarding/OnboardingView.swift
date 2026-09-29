@@ -829,6 +829,18 @@ private struct SubjectSetupPage: View {
     @State private var customSubjectFeedback: String?
     @FocusState private var customSubjectFocused: Bool
 
+    private var stacksCustomSubjectInput: Bool {
+        dynamicTypeSize.isAccessibilitySize
+    }
+
+    /// One layout that switches, so the text field keeps its identity (and
+    /// its focus) when the text size crosses into the accessibility sizes.
+    private var customSubjectInputLayout: AnyLayout {
+        stacksCustomSubjectInput
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 8))
+    }
+
     private var presetNames: Set<String> {
         Set(SubjectSuggestionCatalog.presets.map(\.name))
     }
@@ -980,7 +992,10 @@ private struct SubjectSetupPage: View {
                         .foregroundStyle(PomoGemTheme.muted)
                     // launch-07: no quota line for a one-theme step. The
                     // message below still appears when no slot is left.
-                    HStack(spacing: 8) {
+                    // At accessibility sizes the field and a full-width
+                    // button stack: side by side, "Choose" left the typed
+                    // name about five letters of room on a 375 pt screen.
+                    customSubjectInputLayout {
                         TextField(SubjectSuggestionCatalog.inputPlaceholder, text: $customSubjectName)
                             .focused($customSubjectFocused)
                             .textInputAutocapitalization(.never)
@@ -994,16 +1009,26 @@ private struct SubjectSetupPage: View {
                             .padding(.horizontal, 14)
                             .frame(minHeight: 50)
                             .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 13))
-                        Button(String(localized: "選択", table: "Onboarding",
-                                      comment: "Onboarding theme page: choose the typed theme name"), action: addCustomSubject)
-                            .font(.subheadline.weight(.bold))
-                            // Its one word stays whole ("Choose" is wider than
-                            // 「選択」); the text field gives up the width.
-                            .fixedSize(horizontal: true, vertical: false)
-                            .frame(minWidth: 64, minHeight: 50)
-                            .background(PomoGemTheme.raised, in: RoundedRectangle(cornerRadius: 13))
-                            .buttonStyle(PomoGemBareButtonStyle())
-                            .disabled(!canAddCustomSubject)
+                        Button(action: addCustomSubject) {
+                            Text("選択", tableName: "Onboarding",
+                                 comment: "Onboarding theme page: choose the typed theme name")
+                                .font(.subheadline.weight(.bold))
+                                .padding(.horizontal, 14)
+                                .frame(
+                                    minWidth: 64,
+                                    maxWidth: stacksCustomSubjectInput ? .infinity : nil,
+                                    minHeight: 50
+                                )
+                                .contentShape(RoundedRectangle(cornerRadius: 13))
+                        }
+                        .buttonStyle(PomoGemBareButtonStyle())
+                        .background(PomoGemTheme.raised, in: RoundedRectangle(cornerRadius: 13))
+                        // Side by side, the whole chip keeps its ideal width,
+                        // so its one word stays inside it ("Choose" is wider
+                        // than 「選択」) and the text field gives up the width.
+                        .fixedSize(horizontal: !stacksCustomSubjectInput, vertical: false)
+                        .layoutPriority(1)
+                        .disabled(!canAddCustomSubject)
                     }
 
                     Text(customSubjectLengthMessage)
