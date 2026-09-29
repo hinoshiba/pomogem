@@ -216,6 +216,11 @@ struct FusionRewardBridgeState: Equatable, Sendable {
 /// from 10/10 to 1/10. The just-finished effort remains certain, so the partial
 /// state celebrates only that particle until the hierarchy is exact again.
 struct FusionRewardBridgeDisplayState: Equatable, Sendable {
+    /// Not shown anywhere (「NEXT CRYSTAL」「CRYSTAL SYNC」): the completion
+    /// card lost its English eyebrow when it was rebuilt around this focus's
+    /// own gem (Docs/GemExperienceDesign.md, round 15), and nothing else reads
+    /// it. Left in place, and unlocalized, only because the card belongs to
+    /// the gem session and older branches still read it; drop it with them.
     let eyebrow: String
     let progressLabel: String
     let nextStepLabel: String
@@ -289,6 +294,8 @@ enum FusionRewardBridgePresentation {
 /// This lives beside the count-based bridge so a receipt written by an older
 /// build can still render its original, internally consistent payload.
 struct EffortProgressDisplayState: Equatable, Sendable {
+    /// Not shown anywhere (「TIME CORE」「TIME CORE SYNC」), for the same
+    /// reason as `FusionRewardBridgeDisplayState.eyebrow`.
     let eyebrow: String
     let progressLabel: String
     let nextStepLabel: String
