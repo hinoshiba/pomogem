@@ -1814,6 +1814,16 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             waitForHittable(demoLauncherForVisualAudit, timeout: 6),
             "The demo launcher must be visible and operable before it is tapped"
         )
+        // Home enables the start button only once the last gem's landing has
+        // settled; a tap before that is ignored and no focus starts.
+        let enabled = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND isEnabled == true"),
+            object: demoLauncherForVisualAudit
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [enabled], timeout: 10), .completed,
+            "The start button must come back once the last gem has landed"
+        )
         demoLauncherForVisualAudit.tap()
 
         // A deliberately unselected migrated fixture may require the same
