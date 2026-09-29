@@ -373,13 +373,19 @@ struct AccumulationPlanView: View {
                 Divider().overlay(PomoGemTheme.glassEdge.opacity(0.12))
 
                 VStack(alignment: .leading, spacing: 7) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Label(String(localized: "長期の時間の核", table: "Planning", comment: "Plan: the long-term time core milestones (2.5 kg, 25 kg, 250 kg…)"), systemImage: "sparkles")
-                            .font(.caption.weight(.bold))
-                        Spacer()
-                        Text(majorMilestoneStatus)
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(Color(hex: "#5DE0BD"))
+                    // Side by side while both fit; with large text the status
+                    // goes under the title, which otherwise broke into
+                    // 「Lon-」「g-」「Ter…」 beside it.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .firstTextBaseline) {
+                            longTermCoreTitle
+                            Spacer()
+                            longTermCoreStatus
+                        }
+                        VStack(alignment: .leading, spacing: 3) {
+                            longTermCoreTitle
+                            longTermCoreStatus
+                        }
                     }
 
                     if let jarPosition {
@@ -413,6 +419,17 @@ struct AccumulationPlanView: View {
         .accessibilityIdentifier("planning.accumulation.mass-milestone")
     }
 
+    private var longTermCoreTitle: some View {
+        Label(String(localized: "長期の時間の核", table: "Planning", comment: "Plan: the long-term time core milestones (2.5 kg, 25 kg, 250 kg…)"), systemImage: "sparkles")
+            .font(.caption.weight(.bold))
+    }
+
+    private var longTermCoreStatus: some View {
+        Text(majorMilestoneStatus)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(Color(hex: "#5DE0BD"))
+    }
+
     private var jarTotalLabel: some View {
         Text("瓶の合計", tableName: "Planning", comment: "Label: today's jar mass plus the mass the plan adds")
             .font(.caption)
@@ -426,23 +443,40 @@ struct AccumulationPlanView: View {
             .foregroundStyle(PomoGemTheme.amber)
     }
 
+    private var projectionHeading: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            SectionEyebrow(text: "SIMULATED ACCUMULATION")
+            Text("この計画で積む分", tableName: "Planning", comment: "Title of the card that previews only what the plan adds")
+                .pomogemSectionTitle(size: 21)
+        }
+    }
+
+    private func projectionTotals(alignment: HorizontalAlignment) -> some View {
+        VStack(alignment: alignment, spacing: 2) {
+            Text(formattedMass(projection.grams))
+                .font(.system(.headline, design: .rounded, weight: .heavy))
+                .foregroundStyle(PomoGemTheme.amber)
+            Text(DurationPresentation.minutesLabel(projection.focusMinutes))
+                .font(.caption.weight(.bold))
+                .foregroundStyle(PomoGemTheme.muted)
+        }
+    }
+
     private var projectionVisual: some View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        SectionEyebrow(text: "SIMULATED ACCUMULATION")
-                        Text("この計画で積む分", tableName: "Planning", comment: "Title of the card that previews only what the plan adds")
-                            .pomogemSectionTitle(size: 21)
+                // The totals sit beside the title while both fit; with large
+                // text they go under it, so the eyebrow is no longer
+                // squeezed into 「ACCUMULATI」「ON」 beside them.
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline) {
+                        projectionHeading
+                        Spacer()
+                        projectionTotals(alignment: .trailing)
                     }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(formattedMass(projection.grams))
-                            .font(.system(.headline, design: .rounded, weight: .heavy))
-                            .foregroundStyle(PomoGemTheme.amber)
-                        Text(DurationPresentation.minutesLabel(projection.focusMinutes))
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(PomoGemTheme.muted)
+                    VStack(alignment: .leading, spacing: 8) {
+                        projectionHeading
+                        projectionTotals(alignment: .leading)
                     }
                 }
 
