@@ -349,6 +349,11 @@ private struct WrappedJar: View {
                     Text("ひと月のまとまり", tableName: "Log", comment: "Month in Review jar: caption above the month's one combined gem")
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(PomoGemTheme.muted)
+                        // Wraps inside the jar at large text sizes instead
+                        // of ending in 「…」.
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 12)
                     MonthlyAggregatePebble(sessions: sessions)
                         .frame(width: 112, height: 112)
                     Text("×\(sessions.count)", tableName: "Log", comment: "How many gems a crystal holds, e.g. ×10")

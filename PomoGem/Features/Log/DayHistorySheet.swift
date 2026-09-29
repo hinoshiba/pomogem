@@ -126,14 +126,18 @@ struct DayHistorySheet: View {
     }
 
     private func summary(_ detail: AccumulationTimelineDayDetail) -> some View {
+        // Tiles in a row share one height: in English a value such as
+        // "6 hr 15 min" can wrap to two lines beside "15 gems".
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 10) {
                 timeMetric(detail)
                 countMetrics(detail)
             }
+            .fixedSize(horizontal: false, vertical: true)
             VStack(spacing: 10) {
                 timeMetric(detail)
                 HStack(spacing: 10) { countMetrics(detail) }
+                    .fixedSize(horizontal: false, vertical: true)
             }
             VStack(spacing: 10) {
                 timeMetric(detail)
@@ -359,7 +363,7 @@ struct HistoryMetricTile: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(13)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 16))
     }
 }

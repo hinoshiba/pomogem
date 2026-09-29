@@ -213,14 +213,22 @@ struct AccumulationPlanView: View {
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Label(title, systemImage: symbol)
-                        .font(.subheadline.weight(.semibold))
-                    Spacer(minLength: 8)
-                    Text(value)
-                        .font(.system(.subheadline, design: .rounded, weight: .heavy))
-                        .monospacedDigit()
-                        .foregroundStyle(PomoGemTheme.amber)
+                // Title and value on one line while they fit; otherwise
+                // the value goes under the title, so a long English title
+                // ("Focus Sessions per Week") wraps between words instead
+                // of breaking one.
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Label(title, systemImage: symbol)
+                            .font(.subheadline.weight(.semibold))
+                        Spacer(minLength: 8)
+                        controlValue(value)
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label(title, systemImage: symbol)
+                            .font(.subheadline.weight(.semibold))
+                        controlValue(value)
+                    }
                 }
                 control()
                     .frame(maxWidth: .infinity, alignment: .trailing)
@@ -228,26 +236,29 @@ struct AccumulationPlanView: View {
         }
     }
 
+    private func controlValue(_ value: String) -> some View {
+        Text(value)
+            .font(.system(.subheadline, design: .rounded, weight: .heavy))
+            .monospacedDigit()
+            .foregroundStyle(PomoGemTheme.amber)
+    }
+
     private var timeTravelCard: some View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 13) {
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        SectionEyebrow(text: "TIME TRAVEL PREVIEW")
-                        Text(previewPeriodTitle)
-                            .pomogemSectionTitle(size: 23)
+                // The badge sits beside the title while both fit; with large
+                // text it moves above them, so "Projection" is never broken
+                // into 「Pro-」「jec-」「tion」.
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline) {
+                        previewTitle
+                        Spacer()
+                        projectionBadge
                     }
-                    Spacer()
-                    Text("予測", tableName: "Planning", comment: "Small badge beside the previewed month: this is a projection")
-                        .font(.caption2.weight(.black))
-                        .tracking(0.8)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 5)
-                        .foregroundStyle(Color(hex: "#5DE0BD"))
-                        .background(
-                            Color(hex: "#5DE0BD").opacity(0.13),
-                            in: Capsule()
-                        )
+                    VStack(alignment: .leading, spacing: 8) {
+                        projectionBadge
+                        previewTitle
+                    }
                 }
 
                 Slider(
@@ -274,6 +285,27 @@ struct AccumulationPlanView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    private var previewTitle: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            SectionEyebrow(text: "TIME TRAVEL PREVIEW")
+            Text(previewPeriodTitle)
+                .pomogemSectionTitle(size: 23)
+        }
+    }
+
+    private var projectionBadge: some View {
+        Text("予測", tableName: "Planning", comment: "Small badge beside the previewed month: this is a projection")
+            .font(.caption2.weight(.black))
+            .tracking(0.8)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .foregroundStyle(Color(hex: "#5DE0BD"))
+            .background(
+                Color(hex: "#5DE0BD").opacity(0.13),
+                in: Capsule()
+            )
     }
 
     private var massMilestoneCard: some View {
@@ -315,15 +347,19 @@ struct AccumulationPlanView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text("瓶の合計", tableName: "Planning", comment: "Label: today's jar mass plus the mass the plan adds")
-                            .font(.caption)
-                            .foregroundStyle(PomoGemTheme.muted)
-                        Spacer()
-                        Text(jarTotalValue)
-                            .font(.system(.title2, design: .rounded, weight: .heavy))
-                            .monospacedDigit()
-                            .foregroundStyle(PomoGemTheme.amber)
+                    // Label and total side by side while they fit; with large
+                    // text the total goes under its label rather than
+                    // splitting "3.68 t" over two lines.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .firstTextBaseline) {
+                            jarTotalLabel
+                            Spacer()
+                            jarTotalText
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            jarTotalLabel
+                            jarTotalText
+                        }
                     }
                     .accessibilityElement(children: .combine)
                     if let startBreakdown {
@@ -375,6 +411,19 @@ struct AccumulationPlanView: View {
             }
         }
         .accessibilityIdentifier("planning.accumulation.mass-milestone")
+    }
+
+    private var jarTotalLabel: some View {
+        Text("瓶の合計", tableName: "Planning", comment: "Label: today's jar mass plus the mass the plan adds")
+            .font(.caption)
+            .foregroundStyle(PomoGemTheme.muted)
+    }
+
+    private var jarTotalText: some View {
+        Text(jarTotalValue)
+            .font(.system(.title2, design: .rounded, weight: .heavy))
+            .monospacedDigit()
+            .foregroundStyle(PomoGemTheme.amber)
     }
 
     private var projectionVisual: some View {

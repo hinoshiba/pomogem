@@ -1558,6 +1558,10 @@ struct LogView: View {
                         }
                     }
                     .frame(height: 180)
+                    // The plot keeps a fixed height, so axis labels past
+                    // AX1 overlapped one another ("4.0 kg" on "3.0 kg",
+                    // "S MT WT F S"). VoiceOver reads the chart descriptor.
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                     .chartOverlay { proxy in
                         GeometryReader { geometry in
                             Rectangle()
@@ -1788,21 +1792,13 @@ struct LogView: View {
                         Button {
                             selectedWrappedMonth = month
                         } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "sparkles.rectangle.stack.fill")
-                                    .foregroundStyle(PomoGemTheme.amber)
-                                    .frame(width: 28)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(month.title)
-                                        .font(.subheadline.weight(.bold))
-                                    Text(summary.rowLabel(formatMinutes: formatMinutes))
-                                        .font(.caption)
-                                        .foregroundStyle(PomoGemTheme.muted)
-                                }
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
-                                    .foregroundStyle(PomoGemTheme.muted)
+                            // The decorative icon steps aside when the row
+                            // is too narrow, so a long month name such as
+                            // "September 2026" at large text sizes wraps
+                            // between words instead of breaking "Sep-".
+                            ViewThatFits(in: .horizontal) {
+                                monthRow(month: month, summary: summary, showsIcon: true)
+                                monthRow(month: month, summary: summary, showsIcon: false)
                             }
                             .frame(minHeight: 44)
                             .contentShape(Rectangle())
@@ -1838,6 +1834,27 @@ struct LogView: View {
                     .accessibilityIdentifier(HistoryDrillDownAccessibilityID.pastHistoryFromMonths)
                 }
             }
+        }
+    }
+
+    private func monthRow(month: WrappedMonth, summary: LogMonthSummary, showsIcon: Bool) -> some View {
+        HStack(spacing: 12) {
+            if showsIcon {
+                Image(systemName: "sparkles.rectangle.stack.fill")
+                    .foregroundStyle(PomoGemTheme.amber)
+                    .frame(width: 28)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(month.title)
+                    .font(.subheadline.weight(.bold))
+                Text(summary.rowLabel(formatMinutes: formatMinutes))
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
         }
     }
 
@@ -2561,9 +2578,17 @@ struct LogAggregateArchiveItem: Identifiable, Equatable, Sendable {
 
     var periodLabel: String {
         let calendar = Calendar.autoupdatingCurrent
-        let start = periodStart.formatted(.dateTime.year().month().day())
+        let start = Self.unbreakable(periodStart.formatted(.dateTime.year().month().day()))
         guard !calendar.isDate(periodStart, inSameDayAs: periodEnd) else { return start }
-        return "\(start) – \(periodEnd.formatted(.dateTime.year().month().day()))"
+        return "\(start) – \(Self.unbreakable(periodEnd.formatted(.dateTime.year().month().day())))"
+    }
+
+    /// Keeps one date on one line: English dates have spaces ("Sep 27,
+    /// 2026"), and a narrow row broke them as 「Sep 27, 2026 – Sep」 over
+    /// 「28, 2026」. Now the row can only break between the two dates.
+    /// Japanese dates (2026/9/27) have no spaces, so nothing changes there.
+    private static func unbreakable(_ date: String) -> String {
+        date.replacingOccurrences(of: " ", with: "\u{00A0}")
     }
 
     var formattedMass: String {
@@ -2576,27 +2601,37 @@ struct LogAggregateArchiveItem: Identifiable, Equatable, Sendable {
 private struct AggregateArchiveRow: View {
     let item: LogAggregateArchiveItem
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         VStack(alignment: .leading, spacing: 13) {
-            HStack(alignment: .center, spacing: 13) {
-                AggregateArchiveSwatch(item: item)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("×\(item.pebbleCount) の結晶", tableName: "Log", comment: "Crystal archive row title; the argument is how many gems it holds")
-                        .font(.system(.headline, design: .rounded, weight: .heavy))
-                    Text(item.periodLabel)
-                        .font(.caption2)
-                        .foregroundStyle(PomoGemTheme.muted)
+            if dynamicTypeSize.isAccessibilitySize {
+                // One piece per line: beside the swatch and the mass, the
+                // title and the dates were squeezed a word per line.
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .center, spacing: 13) {
+                        AggregateArchiveSwatch(item: item)
+                        title
+                    }
+                    period
+                    mass
+                    origin
                 }
+            } else {
+                HStack(alignment: .center, spacing: 13) {
+                    AggregateArchiveSwatch(item: item)
 
-                Spacer(minLength: 6)
+                    VStack(alignment: .leading, spacing: 3) {
+                        title
+                        period
+                    }
 
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(item.formattedMass)
-                        .font(.system(.subheadline, design: .rounded, weight: .heavy))
-                    Text("元 \(item.pebbleCount)粒", tableName: "Log", comment: "Crystal archive row: how many gems the crystal was made from")
-                        .font(.caption2)
-                        .foregroundStyle(PomoGemTheme.muted)
+                    Spacer(minLength: 6)
+
+                    VStack(alignment: .trailing, spacing: 2) {
+                        mass
+                        origin
+                    }
                 }
             }
 
@@ -2634,6 +2669,28 @@ private struct AggregateArchiveRow: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
+    }
+
+    private var title: some View {
+        Text("×\(item.pebbleCount) の結晶", tableName: "Log", comment: "Crystal archive row title; the argument is how many gems it holds")
+            .font(.system(.headline, design: .rounded, weight: .heavy))
+    }
+
+    private var period: some View {
+        Text(item.periodLabel)
+            .font(.caption2)
+            .foregroundStyle(PomoGemTheme.muted)
+    }
+
+    private var mass: some View {
+        Text(item.formattedMass)
+            .font(.system(.subheadline, design: .rounded, weight: .heavy))
+    }
+
+    private var origin: some View {
+        Text("元 \(item.pebbleCount)粒", tableName: "Log", comment: "Crystal archive row: how many gems the crystal was made from")
+            .font(.caption2)
+            .foregroundStyle(PomoGemTheme.muted)
     }
 
     private var accessibilityDescription: String {
@@ -3277,42 +3334,30 @@ private struct AchievementEditorSheet: View {
 private struct AchievementHistoryRow: View {
     let stone: AchievementStone
 
-    var body: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                Color(hex: stone.kind.gemEdgeHex),
-                                Color(hex: stone.kind.gemBaseHex)
-                            ],
-                            center: .topLeading,
-                            startRadius: 0,
-                            endRadius: 30
-                        )
-                    )
-                Circle()
-                    .stroke(Color(hex: stone.kind.gemEdgeHex), lineWidth: 2)
-                Text(stone.kind.shortMark)
-                    .font(.system(size: stone.kind == .perfectScore ? 8 : 15, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: 34, height: 34)
-            .shadow(color: Color(hex: stone.kind.gemGlowHex).opacity(0.42), radius: 8)
-            .accessibilityHidden(true)
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(stone.displayTitle)
-                    .font(.subheadline.weight(.semibold))
-                Text(ListText.compact([stone.displaySubjectName, stone.kind.title]))
-                    .font(.caption)
-                    .foregroundStyle(PomoGemTheme.muted)
+    var body: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                // The date goes under the names: beside them, large text
+                // squeezed an English date into 「Sep」「28,」「2026」 and the
+                // title into a word per line.
+                HStack(alignment: .top, spacing: 12) {
+                    gem
+                    VStack(alignment: .leading, spacing: 3) {
+                        names
+                        date
+                    }
+                    Spacer(minLength: 0)
+                }
+            } else {
+                HStack(spacing: 12) {
+                    gem
+                    names
+                    Spacer()
+                    date
+                }
             }
-            Spacer()
-            Text(stone.achievedAt.formatted(date: .abbreviated, time: .omitted))
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(PomoGemTheme.muted)
         }
         .frame(minHeight: 52)
         .contentShape(Rectangle())
@@ -3322,5 +3367,46 @@ private struct AchievementHistoryRow: View {
             table: "Log",
             comment: "VoiceOver milestone row: theme, kind, title, date"
         ))
+    }
+
+    private var gem: some View {
+        ZStack {
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(hex: stone.kind.gemEdgeHex),
+                            Color(hex: stone.kind.gemBaseHex)
+                        ],
+                        center: .topLeading,
+                        startRadius: 0,
+                        endRadius: 30
+                    )
+                )
+            Circle()
+                .stroke(Color(hex: stone.kind.gemEdgeHex), lineWidth: 2)
+            Text(stone.kind.shortMark)
+                .font(.system(size: stone.kind == .perfectScore ? 8 : 15, weight: .heavy, design: .rounded))
+                .foregroundStyle(.white)
+        }
+        .frame(width: 34, height: 34)
+        .shadow(color: Color(hex: stone.kind.gemGlowHex).opacity(0.42), radius: 8)
+        .accessibilityHidden(true)
+    }
+
+    private var names: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(stone.displayTitle)
+                .font(.subheadline.weight(.semibold))
+            Text(ListText.compact([stone.displaySubjectName, stone.kind.title]))
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+        }
+    }
+
+    private var date: some View {
+        Text(stone.achievedAt.formatted(date: .abbreviated, time: .omitted))
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(PomoGemTheme.muted)
     }
 }
