@@ -863,32 +863,14 @@ struct RootView: View {
             // Transient messages share the top edge with the persistence
             // notice. At the bottom, a toast sat on Home's start button (the
             // primary action right after every drop) and took its taps.
-            if router.toast != nil || showsPersistenceSafetyNotice {
-                VStack(spacing: 8) {
-                    if let activePersistenceSafetyNotice, showsPersistenceSafetyNotice {
-                        Label(activePersistenceSafetyNotice, systemImage: "icloud.slash")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(PomoGemTheme.text)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 9)
-                            .background(.ultraThinMaterial, in: Capsule())
-                            .accessibilityIdentifier("root.persistence-safety-notice")
-                            .padding(.horizontal, 16)
-                            .allowsHitTesting(false)
-                    }
-                    if let toast = router.toast {
-                        ToastOverlay(message: toast)
-                            // Clear the navigation bar (Home's メニュー) unless
-                            // the notice above already pushes it down.
-                            .padding(.top, showsPersistenceSafetyNotice ? 0 : 44)
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                            .allowsHitTesting(false)
-                    }
-                    Spacer(minLength: 0)
-                }
-                .padding(.top, 8)
-                .zIndex(30)
-            }
+            // Their own view observes `router.toast`, so a toast — every gem
+            // landing shows one — no longer re-runs this body and its store
+            // fingerprints (device-verify-2 P4).
+            RootTransientMessages(
+                router: router,
+                persistenceSafetyNotice: showsPersistenceSafetyNotice ? activePersistenceSafetyNotice : nil
+            )
+            .zIndex(30)
 
             if completeDeletion.hasStarted {
                 CompleteDataDeletionBlockingView(controller: completeDeletion)
@@ -3189,6 +3171,40 @@ struct RootView: View {
             "通知だけ更新できませんでした。通信状態を確認し、設定で通知時刻をもう一度保存してください",
             symbol: "bell.badge.exclamationmark"
         )
+    }
+}
+
+/// The toast and the persistence notice at the top edge (see RootView).
+private struct RootTransientMessages: View {
+    let router: AppRouter
+    let persistenceSafetyNotice: String?
+
+    var body: some View {
+        if router.toast != nil || persistenceSafetyNotice != nil {
+            VStack(spacing: 8) {
+                if let persistenceSafetyNotice {
+                    Label(persistenceSafetyNotice, systemImage: "icloud.slash")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(PomoGemTheme.text)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .accessibilityIdentifier("root.persistence-safety-notice")
+                        .padding(.horizontal, 16)
+                        .allowsHitTesting(false)
+                }
+                if let toast = router.toast {
+                    ToastOverlay(message: toast)
+                        // Clear the navigation bar (Home's メニュー) unless
+                        // the notice above already pushes it down.
+                        .padding(.top, persistenceSafetyNotice != nil ? 0 : 44)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .allowsHitTesting(false)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 8)
+        }
     }
 }
 

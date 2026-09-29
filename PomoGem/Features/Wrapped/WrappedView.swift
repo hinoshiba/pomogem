@@ -93,7 +93,7 @@ struct WrappedView: View {
                 .padding(.horizontal, 22)
 
                 Spacer(minLength: 4)
-                SectionEyebrow(text: "MONTHLY WRAPPED")
+                SectionEyebrow(text: String(localized: "月の振り返り", table: "Log", comment: "Eyebrow over the month title of a Wrapped recap (2026年9月の瓶)"))
                 Text("\(month.title)の瓶")
                     .pomogemSectionTitle(size: 36)
                     .multilineTextAlignment(.center)

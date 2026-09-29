@@ -527,6 +527,16 @@ final class EngagementOverviewUITests: XCTestCase {
             ),
             "Closing the recovered card must land exactly the one persisted 250g pebble"
         )
+        // Home releases the receipt a moment after the gem strikes, once the
+        // landing has settled (device-verify-2 P4); the start button works
+        // again then. A process that ends before that keeps the receipt and
+        // drops the gem again, as during the fall.
+        let released = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND isEnabled == true"),
+            object: app.buttons["home.focus-launcher"]
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [released], timeout: 5), .completed,
+                       "The landed gem's receipt must be released")
         app.terminate()
         app.launch()
 

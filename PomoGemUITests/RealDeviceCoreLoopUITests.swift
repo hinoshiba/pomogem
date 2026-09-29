@@ -764,7 +764,7 @@ final class RealDeviceCoreLoopUITests: XCTestCase {
         // view; XCTest still calls a row under it hittable, and a tap there
         // starts the share. Every control is scrolled clear of it first.
         let primary = app.descendants(matching: .any)["share.primary-action"].firstMatch
-        // The segment reads 「動くGIF、NEW」 while its badge is up.
+        // The segment reads 「動くGIF、新機能」 while its badge is up.
         let gif = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "動くGIF")).firstMatch
         if !gif.exists {
             let adjustments = app.buttons["調整"]

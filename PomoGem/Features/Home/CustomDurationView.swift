@@ -20,7 +20,16 @@ struct CustomDurationView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     VStack(spacing: 8) {
-                        SectionEyebrow(text: "POMOGEM PRO")
+                        // The product's name as Settings and the paywall
+                        // spell it; the sheet's only English eyebrow before.
+                        SectionEyebrow(
+                            text: String(
+                                localized: "ポモジェムPro",
+                                table: "Home",
+                                comment: "Eyebrow over the custom-duration sheet: the product name, as on the paywall; keep its case"
+                            ),
+                            isUppercased: false
+                        )
                         Text("集中時間を選ぶ")
                             .font(.system(.title2, design: .rounded, weight: .bold))
                         Text("1分0秒〜360分0秒")

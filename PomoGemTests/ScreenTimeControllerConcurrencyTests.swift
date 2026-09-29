@@ -939,6 +939,8 @@ final class ScreenTimeIntegrationLifecycleTests: XCTestCase {
         let controller: ScreenTimeController
         let contextKey: String
         let dataEpochID: UUID?
+        var refreshInterval: Duration = .seconds(3)
+        var bindingRetryInterval: Duration = .seconds(30)
 
         var body: some View {
             Group {
@@ -947,7 +949,8 @@ final class ScreenTimeIntegrationLifecycleTests: XCTestCase {
                         .modifier(ScreenTimeIntegrationModifier(
                             isReady: true, timerPresented: false,
                             contextKey: contextKey, dataEpochID: dataEpochID,
-                            controller: controller
+                            controller: controller, refreshInterval: refreshInterval,
+                            bindingRetryInterval: bindingRetryInterval
                         ))
                         .onDisappear { probe.onUnmounted?() }
                 } else {
@@ -1113,6 +1116,153 @@ final class ScreenTimeIntegrationLifecycleTests: XCTestCase {
         XCTAssertFalse(controller.isBound(contextKey: owner, dataEpochID: epoch))
         XCTAssertTrue(ScreenTimeOwnerBoundaryPolicy.retiresLease(for: .storageTransferRelaunch),
                       "The other call site relies on the same rule")
+    }
+
+    /// Counts Family Controls status reads: every foreground pass makes some
+    /// (reload, the revocation check, the shield), and nothing else does here.
+    private final class StatusReads: @unchecked Sendable {
+        private let lock = NSLock()
+        private var reads = 0
+        var count: Int { lock.lock(); defer { lock.unlock() }; return reads }
+        func read() -> AuthorizationStatus { lock.lock(); reads += 1; lock.unlock(); return .notDetermined }
+    }
+
+    /// device-verify-2 P6. With nothing set up, the loop used to re-read the
+    /// ledger and the status every three seconds (96 ms per 30 s on an
+    /// iPhone 12 mini). It now stops after the activation pass, resumes when
+    /// the ledger gains something to watch, and stops again when it is gone.
+    func testForegroundLoopIdlesWhileScreenTimeIsNotSetUp() async throws {
+        let owner = AccountScopedLocalState.defaultsKey(base: "screen-time-owner")
+        let epoch = UUID()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        directories.append(directory)
+        let store = ScreenTimeStore(directory: directory)
+        try store.update { state in
+            state.contextKey = owner
+            state.dataEpochID = epoch
+            state.contextIsActive = true
+        }
+        let reads = StatusReads()
+        let controller = ScreenTimeController(
+            store: store, currentContextKey: { owner }, monitoring: Driver(store: store),
+            authorization: { reads.read() }
+        )
+        let probe = MountProbe()
+        let scene = try XCTUnwrap(
+            UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        )
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = UIHostingController(rootView: Host(
+            probe: probe, controller: controller, contextKey: owner, dataEpochID: epoch,
+            refreshInterval: .milliseconds(50)
+        ))
+        window.isHidden = false
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+        }
+        try await waitUntil("the activation pass binds the context") {
+            controller.isBound(contextKey: owner, dataEpochID: epoch)
+        }
+        try await controller.waitForPendingOperations()
+        XCTAssertFalse(controller.needsForegroundRefresh)
+        try await Task.sleep(for: .milliseconds(200))
+        let idle = reads.count
+        try await Task.sleep(for: .milliseconds(600))
+        XCTAssertEqual(reads.count, idle, "About 12 passes of 50 ms would have read the status again")
+
+        // A save switching recording on: the loop resumes.
+        try store.update { $0.configuration.enabled = true }
+        controller.reload()
+        XCTAssertTrue(controller.needsForegroundRefresh)
+        let resumed = reads.count
+        try await waitUntil("the loop passes again") { reads.count >= resumed + 6 }
+
+        // Switched off again, nothing left to import: it idles once more.
+        try store.update { $0.configuration.enabled = false }
+        controller.reload()
+        XCTAssertFalse(controller.needsForegroundRefresh)
+        try await Task.sleep(for: .milliseconds(200))
+        let idleAgain = reads.count
+        try await Task.sleep(for: .milliseconds(600))
+        XCTAssertEqual(reads.count, idleAgain)
+    }
+
+    /// Review of #58. A binding that fails at activation (an unreadable
+    /// ledger, a lock that timed out) used to be retried by the next
+    /// three-second pass. Once the loop idled while nothing was set up, it
+    /// waited instead for a report only a bound controller can make, so a
+    /// configured user had no imports, no shield backstop and no revocation
+    /// check until the next activation. It now retries on a slow timer.
+    func testForegroundLoopRetriesAFailedBindingWithoutANewActivation() async throws {
+        let owner = AccountScopedLocalState.defaultsKey(base: "screen-time-owner")
+        let epoch = UUID()
+        let store = try makeStore(owner: owner, epoch: epoch)
+        let path = try XCTUnwrap(directories.last).appendingPathComponent("ScreenTime/ledger.json")
+        let original = try Data(contentsOf: path)
+        try Data("corrupt".utf8).write(to: path)
+        let controller = ScreenTimeController(
+            store: store, currentContextKey: { owner }, monitoring: Driver(store: store),
+            authorization: { .approved }
+        )
+        let probe = MountProbe()
+        let scene = try XCTUnwrap(
+            UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        )
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = UIHostingController(rootView: Host(
+            probe: probe, controller: controller, contextKey: owner, dataEpochID: epoch,
+            refreshInterval: .milliseconds(50), bindingRetryInterval: .milliseconds(300)
+        ))
+        window.isHidden = false
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+        }
+        try await waitUntil("the activation pass fails to bind") { controller.bindingError != nil }
+        XCTAssertFalse(controller.isBound(contextKey: owner, dataEpochID: epoch))
+        XCTAssertFalse(controller.needsForegroundRefresh)
+
+        // The ledger reads again; no activation, reload or save follows.
+        try original.write(to: path)
+        try await waitUntil("a retry binds while the app stays in the foreground") {
+            controller.isBound(contextKey: owner, dataEpochID: epoch)
+        }
+        XCTAssertNil(controller.bindingError)
+        try await controller.waitForPendingOperations()
+        XCTAssertTrue(controller.needsForegroundRefresh, "Recording is on: the three-second loop runs again")
+    }
+
+    func testForegroundRefreshIsNeededExactlyWhileTheLedgerHoldsSomethingToWatch() {
+        var state = ScreenTimeState()
+        XCTAssertFalse(ScreenTimeForegroundRefreshPolicy.needsPeriodicRefresh(state))
+        state.negativeGemCount = 4
+        XCTAssertFalse(ScreenTimeForegroundRefreshPolicy.needsPeriodicRefresh(state),
+                       "Black stones already counted need no watching")
+
+        var recording = state
+        recording.configuration.enabled = true
+        XCTAssertTrue(ScreenTimeForegroundRefreshPolicy.needsPeriodicRefresh(recording))
+
+        var shield = state
+        shield.configuration.shieldsDistractionDuringFocusEnabled = true
+        XCTAssertTrue(ScreenTimeForegroundRefreshPolicy.needsPeriodicRefresh(shield))
+
+        // Recording switched off with receipts still to import.
+        var unimported = state
+        var run = ScreenTimeRun(
+            lane: .learning, dayStart: start, dayEnd: start.addingTimeInterval(86_400),
+            startedAt: start, timeZoneID: "UTC", includesPastActivity: false, themeID: UUID()
+        )
+        run.active = false
+        run.highestThreshold = 2
+        unimported.runs = [run]
+        XCTAssertTrue(ScreenTimeForegroundRefreshPolicy.needsPeriodicRefresh(unimported))
+        unimported.acknowledge(Set((1...2).map {
+            ScreenTimePolicy.receiptID(epoch: unimported.epoch, runID: run.id, threshold: $0)
+        }))
+        XCTAssertTrue(unimported.runs.isEmpty)
+        XCTAssertFalse(ScreenTimeForegroundRefreshPolicy.needsPeriodicRefresh(unimported))
     }
 }
 
