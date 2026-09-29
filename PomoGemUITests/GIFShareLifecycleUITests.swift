@@ -378,6 +378,80 @@ final class GIFShareLifecycleUITests: XCTestCase {
         saveScreenshot("share-photo-save-outcome-scrolled-top")
     }
 
+    /// Review of #58. The outcome stays above the シェア button until the
+    /// next action, so it used to shorten the preview for good. An edit
+    /// starts a new card: it clears the line and gives the room back.
+    func testAnEditClearsTheLastOutcomeFromTheBar() {
+        addShareableSession()
+        openMenuAction(containing: "動く瓶をシェア")
+        XCTAssertTrue(app.navigationBars["カードにする"].waitForExistence(timeout: 8))
+        includeSelfReportedDirectlyIfOffered()
+        expandAdjustmentsIfNeeded()
+
+        let status = copyCaptionAndWaitForTheOutcome()
+        assertOnScreenInTheActionBar(status)
+        let barWithOutcome = shareActionBar.frame.height
+        let statusHeight = status.frame.height
+
+        tapHashtagChip("#ポモドーロ")
+        XCTAssertTrue(waitForNonExistence(status, timeout: 5), "An edit clears the last outcome")
+        let barWithout = shareActionBar.frame.height
+        XCTAssertLessThan(barWithout, barWithOutcome, "The preview gets its room back")
+        // The one-line outcome took its own height (and the 8 pt above the
+        // button), not a fixed box around it.
+        XCTAssertLessThanOrEqual(barWithOutcome - barWithout, statusHeight + 12,
+                                 "outcome \(statusHeight) pt grew the bar by \(barWithOutcome - barWithout) pt")
+    }
+
+    /// Review of #58. At accessibility sizes only the シェア button stays
+    /// capped (AX2); the outcome above it is read at the person's own size,
+    /// scrolling inside a bounded height when it is long, so the bar still
+    /// leaves the preview most of the screen.
+    func testAtAccessibility5TheOutcomeKeepsItsSizeAndTheBarStaysBounded() {
+        app.terminate()
+        app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1"
+        app.launch()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
+        addShareableSession()
+        openMenuAction(containing: "動く瓶をシェア")
+        XCTAssertTrue(app.navigationBars["カードにする"].waitForExistence(timeout: 8))
+        includeSelfReportedDirectlyIfOffered()
+        expandAdjustmentsIfNeeded()
+
+        let status = copyCaptionAndWaitForTheOutcome()
+        assertOnScreenInTheActionBar(status)
+        let window = app.windows.firstMatch.frame
+        XCTAssertLessThanOrEqual(shareActionBar.frame.height, window.height / 2,
+                                 "bar=\(shareActionBar.frame) window=\(window)")
+        saveScreenshot("share-outcome-ax5")
+
+        tapHashtagChip("#ポモドーロ")
+        XCTAssertTrue(waitForNonExistence(status, timeout: 5), "An edit clears the last outcome")
+        saveScreenshot("share-outcome-cleared-ax5")
+    }
+
+    private func copyCaptionAndWaitForTheOutcome() -> XCUIElement {
+        let copyCaption = app.buttons["share.copy-caption"]
+        XCTAssertTrue(scrollUntilHittable(copyCaption, avoiding: shareActionBar))
+        copyCaption.tap()
+        let status = app.staticTexts["share.status"]
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        XCTAssertTrue(status.label.contains("コピーしました"), status.label)
+        return status
+    }
+
+    private func tapHashtagChip(_ label: String) {
+        let chip = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", label)).firstMatch
+        XCTAssertTrue(scrollUntilHittable(chip, avoiding: shareActionBar), "Missing hashtag chip: \(label)")
+        let wasSelected = chip.isSelected
+        chip.tap()
+        let toggled = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "selected == %@", NSNumber(value: !wasSelected)),
+            object: chip
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [toggled], timeout: 3), .completed, "The chip must toggle: \(label)")
+    }
+
     private func assertOnScreenInTheActionBar(
         _ element: XCUIElement,
         file: StaticString = #filePath,

@@ -404,6 +404,9 @@ struct ShareComposerView: View {
         .onChange(of: includeManual) { oldValue, value in
             persistSharePreference(from: oldValue, to: value)
         }
+        .onChange(of: format) { _, _ in clearOutcomeAfterEdit() }
+        .onChange(of: selectedHashtags) { _, _ in clearOutcomeAfterEdit() }
+        .onChange(of: customHashtagInput) { _, _ in clearOutcomeAfterEdit() }
         .onChange(of: resolvedSharePreference) { _, value in
             guard includeManual != value else { return }
             includeManual = value
@@ -462,10 +465,10 @@ struct ShareComposerView: View {
     private var shareActionBar: some View {
         VStack(spacing: 8) {
             if shareCompleted {
-                shareSuccessBanner
+                boundedShareOutcome { shareSuccessBanner }
                     .transition(.scale(scale: 0.96).combined(with: .opacity))
             } else if let statusMessage {
-                shareStatusLine(statusMessage)
+                boundedShareOutcome { shareStatusLine(statusMessage) }
                     .transition(.opacity)
             }
             Button {
@@ -474,6 +477,10 @@ struct ShareComposerView: View {
                 shareLaunchLabel
             }
             .buttonStyle(PomoGemPrimaryButtonStyle())
+            // Keep the pinned button well under half of a 667 pt screen at
+            // AX5, as the timer's pinned controls do. Only the button: the
+            // outcome above it is read at the person's own size.
+            .dynamicTypeSize(...DynamicTypeSize.accessibility2)
             // One render at a time: a photo save renders the same
             // cards on the main actor.
             .disabled(isRendering || isSaving || !selection.hasShareableContent)
@@ -484,9 +491,6 @@ struct ShareComposerView: View {
                     : "瓶と質量の画像、公式サイトURL、選択中のハッシュタグをシステム共有画面に渡します"
             )
         }
-        // Keep the pinned bar well under half of a 667 pt screen at AX5, as
-        // the timer's pinned controls do; the outcome line included.
-        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .padding(.horizontal, 20)
         .padding(.top, 10)
         .padding(.bottom, 8)
@@ -496,6 +500,45 @@ struct ShareComposerView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("share.action-bar")
+    }
+
+    /// The tallest the outcome may make the pinned bar. A long one (an error
+    /// with the system's reason, 「共有できました」 with its 完了 at AX5)
+    /// scrolls in place instead of pushing the preview off a small screen.
+    private static let maximumOutcomeHeight: CGFloat = 160
+
+    /// The outcome at the person's own text size, whole when it fits and
+    /// scrolling inside `maximumOutcomeHeight` when it does not. Not a
+    /// `.frame(maxHeight:)`, which would always take the whole 160 pt and
+    /// float a one-line outcome in the middle of it.
+    private func boundedShareOutcome<Outcome: View>(
+        @ViewBuilder _ outcome: () -> Outcome
+    ) -> some View {
+        let outcome = outcome()
+        let cap = ShareOutcomeHeightCap(maximumHeight: Self.maximumOutcomeHeight)
+        return cap {
+            ViewThatFits(in: .vertical) {
+                outcome
+                ScrollView {
+                    outcome
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .scrollIndicatorsFlash(onAppear: true)
+            }
+        }
+    }
+
+    /// An edit starts a new card, so the last outcome (a copy, a cancelled
+    /// share, a failure, 「共有できました」) no longer describes what is on
+    /// screen; left pinned above the button it only shortens the preview
+    /// (review of #58). VoiceOver has already announced it. The controls
+    /// are disabled while a card renders, so a progress line is never cut.
+    private func clearOutcomeAfterEdit() {
+        guard !isRendering, !isSaving, shareCompleted || statusMessage != nil else { return }
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
+            shareCompleted = false
+            statusMessage = nil
+        }
     }
 
     private func shareStatusLine(_ message: String) -> some View {
@@ -696,7 +739,15 @@ struct ShareComposerView: View {
     }
 
     private var shareInclusionControl: some View {
-        Toggle(isOn: $includeManual) {
+        // Cleared here rather than on every change of `includeManual`: a
+        // save that fails puts the switch back and says so in the bar.
+        Toggle(isOn: Binding(
+            get: { includeManual },
+            set: { value in
+                clearOutcomeAfterEdit()
+                includeManual = value
+            }
+        )) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("自己申告を含める")
                     .font(.subheadline.weight(.semibold))
@@ -1026,6 +1077,7 @@ struct ShareComposerView: View {
     /// leave the screen, so VoiceOver is told what the card now holds.
     @MainActor
     private func includeSelfReportedFocusHere() {
+        clearOutcomeAfterEdit()
         includeManual = true
         guard UIAccessibility.isVoiceOverRunning else { return }
         Task { @MainActor in
@@ -2022,6 +2074,29 @@ struct ShareComposerView: View {
         }
         guard UIAccessibility.isVoiceOverRunning else { return }
         UIAccessibility.post(notification: .announcement, argument: message)
+    }
+}
+
+/// Offers its content at most `maximumHeight` and takes the content's own
+/// height: a short outcome stays one line tall, a long one gets the cap (and
+/// the share bar's `ViewThatFits` switches it to its scrolling form).
+private struct ShareOutcomeHeightCap: Layout {
+    let maximumHeight: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let content = subviews.first else { return .zero }
+        return content.sizeThatFits(capped(proposal))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
+    }
+
+    private func capped(_ proposal: ProposedViewSize) -> ProposedViewSize {
+        ProposedViewSize(
+            width: proposal.width,
+            height: min(proposal.height ?? maximumHeight, maximumHeight)
+        )
     }
 }
 
