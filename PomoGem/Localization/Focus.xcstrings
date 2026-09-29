@@ -1001,7 +1001,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Paused. Allow an end notification for after you resume"
+            "value" : "Paused. Allow a notification for when the timer ends"
           }
         },
         "ja" : {
@@ -2236,7 +2236,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Stop End Alert"
+            "value" : "Stop Alert"
           }
         },
         "ja" : {

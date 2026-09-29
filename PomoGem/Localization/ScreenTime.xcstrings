@@ -128,7 +128,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Over %lld min"
+            "value" : "%lld+ min"
           }
         },
         "ja" : {
@@ -468,7 +468,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Your app selection, usage not yet added, and black stones save on this iPhone only. They aren't included in JSON exports or carried over when you switch storage."
+            "value" : "Your app selection, usage not yet added, and black stones are saved only on this iPhone. They aren't included in JSON exports or carried over when you switch storage."
           }
         },
         "ja" : {
@@ -1992,7 +1992,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Check: study-app recording has stopped"
+            "value" : "Needs attention: study-app recording has stopped"
           }
         },
         "ja" : {
@@ -2009,7 +2009,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Check: recording has stopped"
+            "value" : "Needs attention: recording has stopped"
           }
         },
         "ja" : {
@@ -2026,7 +2026,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Check: the theme to record to was deleted"
+            "value" : "Needs attention: the theme for study apps was deleted"
           }
         },
         "ja" : {
@@ -2094,7 +2094,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Where your records are stored has changed. Please open it again."
+            "value" : "Where your records are stored has changed. Please open PomoGem again."
           }
         },
         "ja" : {

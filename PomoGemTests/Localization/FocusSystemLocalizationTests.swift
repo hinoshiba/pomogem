@@ -179,6 +179,11 @@ final class FocusSystemLocalizationTests: XCTestCase {
             try english("画面を離れたので、この回は自己申告あつかいになった", table: "Common"),
             "You left the screen, so this session counts as self-reported."
         )
+        XCTAssertEqual(try english("終了アラートを止める", table: "Focus"), "Stop Alert")
+        XCTAssertEqual(
+            try english("一時停止中です。再開後の終了通知を許可", table: "Focus"),
+            "Paused. Allow a notification for when the timer ends"
+        )
     }
 
     // MARK: Completion facts
@@ -271,6 +276,15 @@ final class FocusSystemLocalizationTests: XCTestCase {
         )
         XCTAssertEqual(try english("スクリーンタイムへのアクセスを許可してください。", table: "ScreenTime"), "Please allow access to Screen Time.")
         XCTAssertEqual(try english("集中中は気が散るアプリを開けないようにする", table: "ScreenTime"), "Block Distracting Apps During Focus")
+        XCTAssertEqual(String(localized: "\(Int.max)分以上", table: "ScreenTime", bundle: bundle, locale: en),
+                       "\(Int.max.formatted(.number.locale(en)))+ min")
+        XCTAssertEqual(
+            try english("アプリの選択、未取り込みの利用記録、黒い石は、このiPhoneだけに保存します。JSON書き出しや保存先の切り替えでは引き継ぎません。",
+                        table: "ScreenTime"),
+            "Your app selection, usage not yet added, and black stones are saved only on this iPhone. "
+                + "They aren't included in JSON exports or carried over when you switch storage."
+        )
+        XCTAssertEqual(try english("要確認：自動記録が止まっています", table: "ScreenTime"), "Needs attention: recording has stopped")
     }
 
     func testScreenTimeArrivalToastsInBothLanguages() throws {
