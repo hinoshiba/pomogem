@@ -156,12 +156,12 @@ enum EffortConstellationPresentation {
     static func formattedMass(_ grams: Int) -> String {
         let safe = max(0, grams)
         if safe >= 1_000_000 {
-            return String(format: "%.2ft", Double(safe) / 1_000_000)
+            return MassText.tonnes(fromGrams: safe, fractionDigits: 2)
         }
         if safe >= 1_000 {
-            return String(format: safe >= 10_000 ? "%.1fkg" : "%.2fkg", Double(safe) / 1_000)
+            return MassText.kilograms(fromGrams: safe, fractionDigits: safe >= 10_000 ? 1 : 2)
         }
-        return "\(safe)g"
+        return MassText.grams(value: safe)
     }
 
     /// VoiceOver uses the same mass-derived duration horizon as Home. A partial

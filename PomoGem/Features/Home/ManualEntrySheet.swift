@@ -131,7 +131,7 @@ struct ManualEntrySheet: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            SectionEyebrow(text: "SELF-REPORTED")
+            SectionEyebrow(text: String(localized: "自己申告", table: "Home", comment: "Eyebrow over the manual-entry sheet title 手動で積む: the entry counts as self-reported"))
             Text("手動で積む")
                 .font(PomoGemTheme.brand(26))
                 .accessibilityAddTraits(.isHeader)
@@ -187,7 +187,7 @@ struct ManualEntrySheet: View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 4) {
-                    SectionEyebrow(text: "CONFIRM")
+                    SectionEyebrow(text: String(localized: "確認", table: "Home", comment: "Eyebrow over the manual-entry confirmation card"))
                     Text("この内容で積みますか？")
                         .font(PomoGemTheme.brand(21))
                         .accessibilityAddTraits(.isHeader)
@@ -197,7 +197,7 @@ struct ManualEntrySheet: View {
                 VStack(spacing: 10) {
                     confirmationRow(title: "テーマ", value: selectedSubject?.safeDisplayName ?? "未選択")
                     confirmationRow(title: "時間", value: durationTitle(duration))
-                    confirmationRow(title: "加算", value: "+\(duration.grams)g")
+                    confirmationRow(title: "加算", value: MassText.addedGrams(duration.grams))
                     confirmationRow(
                         title: "保存後",
                         value: "この端末で本日あと\(availability.remainingEntriesAfterSaving)回"
@@ -406,7 +406,7 @@ private struct ManualButton: View {
         Button(action: action) {
             VStack(spacing: 5) {
                 Text(title).font(.system(.headline, design: .rounded, weight: .bold))
-                Text("+\(grams)g")
+                Text(MassText.addedGrams(grams))
                     .font(.caption)
                     .foregroundStyle(
                         selected

@@ -110,6 +110,58 @@ final class LocalizationFormattingTests: XCTestCase {
         }
     }
 
+    /// device-verify-2 P7: one Japanese style for every displayed mass, no
+    /// space before the unit and digits grouped. The menu read 「250 g」 and
+    /// the manual entry's confirmation 「+1200g」 beside 「+1,200g」 on its tile.
+    func testValueMassHelpersUseOneJapaneseStyle() {
+        XCTAssertEqual(MassText.grams(value: 250, locale: ja), "250g")
+        XCTAssertEqual(MassText.grams(value: 1_200, locale: ja), "1,200g")
+        XCTAssertEqual(MassText.grams(value: 0, locale: ja), "0g")
+        XCTAssertEqual(MassText.addedGrams(250, locale: ja), "+250g")
+        XCTAssertEqual(MassText.addedGrams(1_200, locale: ja), "+1,200g")
+        XCTAssertEqual(MassText.addedGrams(3_600, locale: ja), "+3,600g")
+
+        XCTAssertEqual(MassText.kilograms(fromGrams: 2_600, fractionDigits: 1, locale: ja), "2.6kg")
+        XCTAssertEqual(MassText.kilograms(fromGrams: 2_600, fractionDigits: 2, locale: ja), "2.60kg")
+        XCTAssertEqual(MassText.kilograms(fromGrams: 3_000, fractionDigits: 0, locale: ja), "3kg")
+        XCTAssertEqual(MassText.kilograms(fromGrams: 1_234_500, fractionDigits: 1, locale: ja), "1,234.5kg")
+        // Halves round away from zero, as a person rounds.
+        XCTAssertEqual(MassText.kilograms(fromGrams: 2_450, fractionDigits: 1, locale: ja), "2.5kg")
+        XCTAssertEqual(MassText.kilograms(fromGrams: 2_250, fractionDigits: 1, locale: ja), "2.3kg")
+
+        XCTAssertEqual(MassText.kilograms(fromGrams: 2_500, fractionDigits: 0...2, locale: ja), "2.5kg")
+        XCTAssertEqual(MassText.kilograms(fromGrams: 3_000, fractionDigits: 0...2, locale: ja), "3kg")
+        XCTAssertEqual(MassText.kilograms(fromGrams: 2_534, fractionDigits: 0...2, locale: ja), "2.53kg")
+
+        XCTAssertEqual(MassText.tonnes(fromGrams: 2_500_000, fractionDigits: 2, locale: ja), "2.50t")
+        XCTAssertEqual(MassText.tonnes(fromGrams: 12_345_000, fractionDigits: 1, locale: ja), "12.3t")
+        XCTAssertEqual(MassText.tonnes(fromGrams: 1_234_560_000, fractionDigits: 1, locale: ja), "1,234.6t")
+
+        // The screens that format masses (記録, 年月, 積み上がり, the plan).
+        XCTAssertEqual(HistoryMassText.text(999), "999g")
+        XCTAssertEqual(HistoryMassText.text(2_600), "2.6kg")
+        XCTAssertEqual(HistoryMassText.text(3_680_000), "3.7t")
+        XCTAssertEqual(EffortConstellationPresentation.formattedMass(9_870), "9.87kg")
+        XCTAssertEqual(EffortConstellationPresentation.formattedMass(12_345), "12.3kg")
+        XCTAssertEqual(EffortConstellationPresentation.formattedMass(2_500_000), "2.50t")
+        XCTAssertEqual(EffortProgressPresentation.formattedMass(grams: 2_500), "2.5kg")
+        XCTAssertEqual(EffortProgressPresentation.formattedMass(grams: 1_234_000), "1,234kg")
+
+        // Home's readout and its menu's 累計 show one lifetime total the same
+        // way; the readout sets the unit apart.
+        for (grams, number, text) in [
+            (250, "250", "250g"),
+            (2_600, "2.6", "2.6kg"),
+            (3_000, "3.0", "3.0kg"),
+            (2_634, "2.63", "2.63kg"),
+            (1_234_500, "1,234.5", "1,234.5kg")
+        ] {
+            XCTAssertEqual(HomeLifetimeMassText.readoutNumber(grams, locale: ja), number)
+            XCTAssertEqual(HomeLifetimeMassText.text(grams, locale: ja), text)
+        }
+        XCTAssertEqual(MassText.kilogramsNumber(fromGrams: 2_450, fractionDigits: 1...1, locale: ja), "2.5")
+    }
+
     /// VoiceOver masses read like the share card's (grouped) and the jar's
     /// (below 1 kg, where both agree) labels.
     func testSpokenMassMatchesTheExistingLabels() {

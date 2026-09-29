@@ -121,7 +121,7 @@ struct AccumulationPlanView: View {
                     .frame(width: 34)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 6) {
-                    SectionEyebrow(text: "SIMULATED · READ ONLY")
+                    SectionEyebrow(text: String(localized: "試算・保存されません", table: "Planning", comment: "Eyebrow over これは予測です: the plan is a simulation and nothing is saved"))
                     Text("これは予測です")
                         .pomogemSectionTitle(size: 21)
                     Text("ここで動かす瓶や数値は、実際の学習記録・保存領域・ウィジェットには保存されません。画面を閉じると入力も消えます。")
@@ -139,7 +139,7 @@ struct AccumulationPlanView: View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
-                    SectionEyebrow(text: "YOUR ROUTINE")
+                    SectionEyebrow(text: String(localized: "ペース", table: "Planning", comment: "Eyebrow over 続け方を選ぶ (focuses per week)"))
                     Text("続け方を選ぶ")
                         .pomogemSectionTitle(size: 21)
                     Text("1回の集中を完走する想定で、週あたりの回数から試算します。")
@@ -232,7 +232,7 @@ struct AccumulationPlanView: View {
             VStack(alignment: .leading, spacing: 13) {
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 3) {
-                        SectionEyebrow(text: "TIME TRAVEL PREVIEW")
+                        SectionEyebrow(text: String(localized: "未来の瓶", table: "Planning", comment: "Eyebrow over the previewed month (e.g. 3年後) of the plan timeline"))
                         Text(previewPeriodTitle)
                             .pomogemSectionTitle(size: 23)
                     }
@@ -296,7 +296,7 @@ struct AccumulationPlanView: View {
                     .accessibilityHidden(true)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        SectionEyebrow(text: "BOTTLE CYCLE")
+                        SectionEyebrow(text: String(localized: "瓶の杯数", table: "Planning", comment: "Eyebrow over how many times the jar has filled at the previewed month"))
                         Text(bottleCycleTitle)
                             .pomogemSectionTitle()
                         Text(bottleCycleStatus)
@@ -356,7 +356,7 @@ struct AccumulationPlanView: View {
                     }
                 }
 
-                Text("瓶は2.50kg（集中250分相当）ごとに必ず満ち、満杯の光を見届けてから次の1杯へ進みます。累計は消えず、2.50kg → 25kg → 250kg…の長期段階として別に残ります。回数ではなく、集中1分＝\(Constants.Mass.gramsPerMinute)gで両方が進みます。", tableName: "Planning", comment: "Plan: how the jar fills; the argument is grams per minute")
+                Text("瓶は2.50kg（集中250分相当）ごとに必ず満ち、満杯の光を見届けてから次の1杯へ進みます。累計は消えず、2.50kg → 25kg → 250kg…の長期段階として別に残ります。回数ではなく、集中1分＝\(MassText.grams(value: Constants.Mass.gramsPerMinute))で両方が進みます。", tableName: "Planning", comment: "Plan: how the jar fills; the argument is the mass of one minute (10g)")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -384,7 +384,7 @@ struct AccumulationPlanView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 3) {
-                        SectionEyebrow(text: "SIMULATED ACCUMULATION")
+                        SectionEyebrow(text: String(localized: "試算", table: "Planning", comment: "Eyebrow over この計画で積む分 (simulated mass)"))
                         Text("この計画で積む分", tableName: "Planning", comment: "Title of the card that previews only what the plan adds")
                             .pomogemSectionTitle(size: 21)
                     }
@@ -480,7 +480,7 @@ struct AccumulationPlanView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Label("試算の前提", systemImage: "info.circle.fill")
                     .font(.subheadline.weight(.bold))
-                Text("1年を平均365.25日として週回数を換算し、1回の完走を1粒、集中1分を\(Constants.Mass.gramsPerMinute)gとして計算します。2.50kgごとの瓶の満杯、長期の質量段階、瓶の光は実画面と同じ計算です。10個ずつまとめるため、長期間でも描画する可動体は\(Constants.Jar.maxPhysicsBodies)体以内です。", tableName: "Planning", comment: "Plan: calculation assumptions; the arguments are grams per minute and the physics body limit")
+                Text("1年を平均365.25日として週回数を換算し、1回の完走を1粒、集中1分を\(MassText.grams(value: Constants.Mass.gramsPerMinute))として計算します。2.50kgごとの瓶の満杯、長期の質量段階、瓶の光は実画面と同じ計算です。10個ずつまとめるため、長期間でも描画する可動体は\(Constants.Jar.maxPhysicsBodies)体以内です。", tableName: "Planning", comment: "Plan: calculation assumptions; the arguments are the mass of one minute (10g) and the physics body limit")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -662,12 +662,12 @@ struct AccumulationPlanView: View {
 
     private func formattedMass(_ grams: Int) -> String {
         if grams >= 1_000_000 {
-            return String(format: "%.2ft", Double(grams) / 1_000_000)
+            return MassText.tonnes(fromGrams: grams, fractionDigits: 2)
         }
         if grams >= 1_000 {
-            return String(format: "%.1fkg", Double(grams) / 1_000)
+            return MassText.kilograms(fromGrams: grams, fractionDigits: 1)
         }
-        return "\(grams)g"
+        return MassText.grams(value: grams)
     }
 
     @MainActor
