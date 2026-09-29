@@ -34,15 +34,20 @@ enum StorageTransferError: Error, LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .invalidJournal, .staleTransaction, .unsafePath:
-            "保存先の切り替え状況を安全に確認できません。元のデータを保護しています。"
+            String(localized: "保存先の切り替え状況を安全に確認できません。元のデータを保護しています。", table: "Storage",
+                   comment: "Storage switch: its saved progress could not be verified")
         case .snapshotMismatch:
-            "コピーしたデータが元のデータと一致しません。保存先はまだ切り替えていません。"
+            String(localized: "コピーしたデータが元のデータと一致しません。保存先はまだ切り替えていません。", table: "Storage",
+                   comment: "Storage switch: the copy does not match the original")
         case .activeTimer:
-            "実行中・一時停止中のタイマーを終了してから、保存先を切り替えてください。"
+            String(localized: "実行中・一時停止中のタイマーを終了してから、保存先を切り替えてください。", table: "Storage",
+                   comment: "Storage switch refused while a timer is running or paused")
         case .incompleteCloudCopy:
-            "iCloudの全データを確認できませんでした。通信状態を確認して再試行してください。"
+            String(localized: "iCloudの全データを確認できませんでした。通信状態を確認して再試行してください。", table: "Storage",
+                   comment: "Storage switch: not every iCloud record could be read")
         case .recoveryCopyRequired:
-            "iCloudに復旧用コピーを保存できていないため、データの置き換えは開始していません。"
+            String(localized: "iCloudに復旧用コピーを保存できていないため、データの置き換えは開始していません。", table: "Storage",
+                   comment: "Replacement not started: the recovery copy is not saved in iCloud yet")
         }
     }
 }

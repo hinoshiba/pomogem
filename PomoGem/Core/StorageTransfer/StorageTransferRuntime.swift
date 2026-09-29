@@ -21,15 +21,22 @@ enum StorageTransferRuntimeError: Error, LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .relaunchRequired:
-            "データを安全に切り替えるため、Appスイッチャーでポモジェムを一度終了し、もう一度開いてください。アプリ自体は削除しないでください。"
+            SentenceText.join([
+                String(localized: "データを安全に切り替えるため、Appスイッチャーでポモジェムを一度終了し、もう一度開いてください。",
+                       table: "Storage", comment: "Relaunch screen: the switch continues after a quit and reopen"),
+                StorageTransferProgressCopy.keepTheApp
+            ])
         case .remoteRecoveryRequired:
-            "iCloudで未完了のデータ切り替えが見つかりました。復旧が完了するまで通常の同期を停止しています。"
+            String(localized: "iCloudで未完了のデータ切り替えが見つかりました。復旧が完了するまで通常の同期を停止しています。",
+                   table: "Storage", comment: "Launch: an unfinished data switch was found in iCloud")
         case .datasetRefreshRequired:
             // Still raised by the launch host for an offline receipt whose
             // lineage cannot be matched, and by the binding guard below.
-            "iCloudのデータとこの端末の記録の対応を確認できませんでした。古いデータを送信しないよう同期を停止しています。どちらの記録も削除していません。"
+            String(localized: "iCloudのデータとこの端末の記録の対応を確認できませんでした。古いデータを送信しないよう同期を停止しています。どちらの記録も削除していません。",
+                   table: "Storage", comment: "Launch: iCloud's data and this device's records could not be matched")
         case .datasetReplacedRemotely:
-            "iCloudのデータが別の記録に置き換えられています。この端末の記録を送らないよう同期を止めています。"
+            String(localized: "iCloudのデータが別の記録に置き換えられています。この端末の記録を送らないよう同期を止めています。",
+                   table: "Storage", comment: "Launch: iCloud's data was replaced from another device")
         case .cloudLineageUnavailable:
             // review-2-5. The stop reason states only what was observed. The
             // sentence that names a control belongs to the SCREEN, which knows
@@ -38,17 +45,26 @@ enum StorageTransferRuntimeError: Error, LocalizedError, Equatable {
             // A refusal may never promise an action the build ships disabled.
             StorageTransferLineageCopy.stopReason
         case .localLedgerMissing:
-            "この端末に、いまのiCloudデータを受け取った記録がありません。古いデータを混ぜないよう同期を停止しています。"
+            String(localized: "この端末に、いまのiCloudデータを受け取った記録がありません。古いデータを混ぜないよう同期を停止しています。",
+                   table: "Storage", comment: "Launch: this device has no record of receiving iCloud's current data")
         case .cloudEnvironmentMismatch:
-            "この端末の記録は、いまのアプリとは別のiCloud環境（開発用／配布用）で作られたものです。iCloudのデータは置き換えられていません。どちらの記録も削除せず、同期だけを停止しています。"
+            String(localized: "この端末の記録は、いまのアプリとは別のiCloud環境（開発用／配布用）で作られたものです。iCloudのデータは置き換えられていません。どちらの記録も削除せず、同期だけを停止しています。",
+                   table: "Storage", comment: "Launch: this device's records belong to a different iCloud environment")
         case .leftoverLocalStores:
-            "以前のiCloud用データがこの端末に残っているため、iCloudの利用を開始できません。記録が混ざらないよう停止しました。残っているデータを整理してから、もう一度お試しください。"
+            String(localized: "以前のiCloud用データがこの端末に残っているため、iCloudの利用を開始できません。記録が混ざらないよう停止しました。残っているデータを整理してから、もう一度お試しください。",
+                   table: "Storage", comment: "Launch: earlier iCloud data is still on this device")
         case .cloudCopyStillPending:
-            "iCloudのデータとこの端末のコピーがまだ一致しません。記録は保護されています。通信を確認して、もう一度お試しください。ほかの端末でポモジェムを使っている場合は、その端末を閉じてからお試しください。"
+            String(localized: "iCloudのデータとこの端末のコピーがまだ一致しません。記録は保護されています。通信を確認して、もう一度お試しください。ほかの端末でポモジェムを使っている場合は、その端末を閉じてからお試しください。",
+                   table: "Storage", comment: "Storage switch: iCloud and this device's copy do not match yet")
         case .cloudCopyStillArriving:
-            "iCloudからの受信に時間がかかっています。記録は保護されています。通信の安定した場所で、Appスイッチャーでポモジェムを終了してもう一度開くと、続きから確認します。アプリ自体は削除しないでください。"
+            SentenceText.join([
+                String(localized: "iCloudからの受信に時間がかかっています。記録は保護されています。通信の安定した場所で、Appスイッチャーでポモジェムを終了してもう一度開くと、続きから確認します。",
+                       table: "Storage", comment: "Relaunch screen: receiving iCloud's data is taking a while"),
+                StorageTransferProgressCopy.keepTheApp
+            ])
         case .recoveryNeedsReview:
-            "中断時のデータを安全に自動復旧できません。復旧用コピーを保護し、削除を停止しています。"
+            String(localized: "中断時のデータを安全に自動復旧できません。復旧用コピーを保護し、削除を停止しています。",
+                   table: "Storage", comment: "Launch: an interrupted switch cannot be recovered automatically")
         }
     }
 }

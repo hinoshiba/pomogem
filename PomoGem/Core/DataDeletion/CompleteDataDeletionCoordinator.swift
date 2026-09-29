@@ -63,7 +63,8 @@ final class CompleteDataDeletionCoordinator {
             guard fence.transactionID == marker.transactionID,
                   fence.generationID == marker.requestedGenerationID else {
                 throw CompleteDataDeletionError.invalidState(
-                    "iCloudの削除世代がローカルの削除要求と一致しません"
+                    String(localized: "iCloudの削除世代がローカルの削除要求と一致しません", table: "Storage",
+                           comment: "Diagnostic after “the resume information is invalid:”")
                 )
             }
             marker.fence = fence
@@ -117,7 +118,8 @@ final class CompleteDataDeletionCoordinator {
                           fence.generationID == marker.requestedGenerationID
                     else {
                         throw CompleteDataDeletionError.invalidState(
-                            "iCloudの削除世代がローカルの削除要求と一致しません"
+                            String(localized: "iCloudの削除世代がローカルの削除要求と一致しません", table: "Storage",
+                                   comment: "Diagnostic after “the resume information is invalid:”")
                         )
                     }
                     marker.fence = fence
@@ -135,7 +137,9 @@ final class CompleteDataDeletionCoordinator {
                     let remaining = try await localModelStore.deleteAllModels()
                     guard remaining == .zero else {
                         throw CompleteDataDeletionError.invalidState(
-                            "SwiftDataに\(remaining.total)件のレコードが残っています"
+                            String(localized: "SwiftDataに\(String(remaining.total))件のレコードが残っています",
+                                   table: "Storage",
+                                   comment: "Diagnostic after “the resume information is invalid:”. %@ is the number of rows left (ungrouped digits)")
                         )
                     }
                     try await advance(&marker, to: .deletePrivateCloudData)
@@ -159,7 +163,8 @@ final class CompleteDataDeletionCoordinator {
                           committed.generationID == marker.requestedGenerationID
                     else {
                         throw CompleteDataDeletionError.invalidState(
-                            "iCloudが削除完了世代を確定していません"
+                            String(localized: "iCloudが削除完了世代を確定していません", table: "Storage",
+                                   comment: "Diagnostic after “the resume information is invalid:”")
                         )
                     }
                     marker.fence = committed
@@ -169,7 +174,8 @@ final class CompleteDataDeletionCoordinator {
                     let fence = try requiredFence(in: marker)
                     guard fence.state == .committed else {
                         throw CompleteDataDeletionError.invalidState(
-                            "未確定の削除世代は端末へ受領記録できません"
+                            String(localized: "未確定の削除世代は端末へ受領記録できません", table: "Storage",
+                                   comment: "Diagnostic after “the resume information is invalid:”")
                         )
                     }
                     let receipt = CompleteDataDeletionGenerationReceipt(
@@ -183,13 +189,15 @@ final class CompleteDataDeletionCoordinator {
                     let fence = try requiredFence(in: marker)
                     guard fence.state == .committed else {
                         throw CompleteDataDeletionError.invalidState(
-                            "削除完了状態に未確定の世代が残っています"
+                            String(localized: "削除完了状態に未確定の世代が残っています", table: "Storage",
+                                   comment: "Diagnostic after “the resume information is invalid:”")
                         )
                     }
                     let localReceipt = try await stateStore.loadGenerationReceipt()
                     guard localReceipt?.matches(fence) == true else {
                         throw CompleteDataDeletionError.invalidState(
-                            "端末の削除世代受領記録を確認できません"
+                            String(localized: "端末の削除世代受領記録を確認できません", table: "Storage",
+                                   comment: "Diagnostic after “the resume information is invalid:”")
                         )
                     }
 
@@ -222,7 +230,8 @@ final class CompleteDataDeletionCoordinator {
     ) async throws {
         guard nextPhase > marker.phase else {
             throw CompleteDataDeletionError.invalidState(
-                "削除フェーズを逆行できません"
+                String(localized: "削除フェーズを逆行できません", table: "Storage",
+                       comment: "Diagnostic after “the resume information is invalid:”")
             )
         }
         marker.phase = nextPhase
@@ -263,7 +272,8 @@ final class CompleteDataDeletionCoordinator {
     ) throws -> CompleteDataDeletionFence {
         guard let fence = marker.fence else {
             throw CompleteDataDeletionError.invalidState(
-                "削除世代fenceがありません"
+                String(localized: "削除世代fenceがありません", table: "Storage",
+                       comment: "Diagnostic after “the resume information is invalid:”. Keep fence untranslated")
             )
         }
         return fence
@@ -274,12 +284,14 @@ final class CompleteDataDeletionCoordinator {
     ) throws {
         guard marker.formatVersion == CompleteDataDeletionPendingMarker.formatVersion else {
             throw CompleteDataDeletionError.invalidState(
-                "未対応のpending marker形式です"
+                String(localized: "未対応のpending marker形式です", table: "Storage",
+                       comment: "Diagnostic after “the resume information is invalid:”. Keep pending marker untranslated")
             )
         }
         guard marker.failureCount >= 0, marker.deletedCloudZoneCount >= 0 else {
             throw CompleteDataDeletionError.invalidState(
-                "pending markerの件数が不正です"
+                String(localized: "pending markerの件数が不正です", table: "Storage",
+                       comment: "Diagnostic after “the resume information is invalid:”. Keep pending marker untranslated")
             )
         }
         if let fence = marker.fence {
@@ -288,12 +300,14 @@ final class CompleteDataDeletionCoordinator {
                   fence.generationID == marker.requestedGenerationID
             else {
                 throw CompleteDataDeletionError.invalidState(
-                    "pending markerとgeneration fenceが一致しません"
+                    String(localized: "pending markerとgeneration fenceが一致しません", table: "Storage",
+                           comment: "Diagnostic after “the resume information is invalid:”. Keep the English terms")
                 )
             }
         } else if marker.phase > .establishRemoteFence {
             throw CompleteDataDeletionError.invalidState(
-                "削除再開に必要なgeneration fenceがありません"
+                String(localized: "削除再開に必要なgeneration fenceがありません", table: "Storage",
+                       comment: "Diagnostic after “the resume information is invalid:”. Keep generation fence untranslated")
             )
         }
     }

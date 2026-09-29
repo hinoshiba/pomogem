@@ -49,7 +49,8 @@ struct PomoGemStorageSnapshot: Codable, Sendable, Equatable {
         case cloudStoreNotFrozen, destinationNotEmpty, digestMismatch, unsafeFile
         case relationshipMismatch, verificationFailed
         var errorDescription: String? {
-            "保存データを安全に移せませんでした。元のデータを保持しています。"
+            String(localized: "保存データを安全に移せませんでした。元のデータを保持しています。", table: "Storage",
+                   comment: "Storage switch: the snapshot of the saved data failed a safety check")
         }
     }
 

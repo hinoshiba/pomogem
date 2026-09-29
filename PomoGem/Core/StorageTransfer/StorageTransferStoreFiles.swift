@@ -5,7 +5,8 @@ import Foundation
 enum StorageTransferStoreFileError: Error, LocalizedError, Equatable {
     case unsafeArtifact, incompleteFamily, changedArtifact, invalidManifest, limitExceeded
     var errorDescription: String? {
-        "保存領域のコピーを安全に確認できませんでした。元のデータを保持して切り替えを停止しました。"
+        String(localized: "保存領域のコピーを安全に確認できませんでした。元のデータを保持して切り替えを停止しました。",
+               table: "Storage", comment: "Storage switch stopped: the copy of the data store could not be verified")
     }
 }
 

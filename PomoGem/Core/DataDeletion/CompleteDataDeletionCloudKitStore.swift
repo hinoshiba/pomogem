@@ -11,15 +11,20 @@ enum CompleteDataDeletionCloudError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingResult:
-            return "CloudKitが削除処理の個別結果を返しませんでした。"
+            return String(localized: "CloudKitが削除処理の個別結果を返しませんでした。", table: "Storage",
+                          comment: "Data deletion error: CloudKit returned no per-item result")
         case .malformedFence:
-            return "CloudKitの削除世代情報を検証できませんでした。"
+            return String(localized: "CloudKitの削除世代情報を検証できませんでした。", table: "Storage",
+                          comment: "Data deletion error: the deletion marker in CloudKit could not be verified")
         case .concurrentDeletion:
-            return "別の端末でデータ削除が進行中です。"
+            return String(localized: "別の端末でデータ削除が進行中です。", table: "Storage",
+                          comment: "Data deletion error: another device is deleting the data")
         case .fenceConflict:
-            return "CloudKitの削除世代が処理中に変更されました。"
+            return String(localized: "CloudKitの削除世代が処理中に変更されました。", table: "Storage",
+                          comment: "Data deletion error: the deletion marker in CloudKit changed meanwhile")
         case .zoneDeletionDidNotConverge:
-            return "CloudKitのユーザーデータ領域を空にできませんでした。"
+            return String(localized: "CloudKitのユーザーデータ領域を空にできませんでした。", table: "Storage",
+                          comment: "Data deletion error: the user's data zones in CloudKit could not be emptied")
         }
     }
 }
