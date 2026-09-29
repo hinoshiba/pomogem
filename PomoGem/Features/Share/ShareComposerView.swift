@@ -754,21 +754,46 @@ struct ShareComposerView: View {
     }
 
     private var shareInclusionControl: some View {
-        Toggle(isOn: $includeManual) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("自己申告を含める", tableName: "Share")
-                    .font(.subheadline.weight(.semibold))
-                Text("集中の自己申告を切替。記念石は常に「自己申告」と表示します", tableName: "Share",
-                     comment: "Share composer: subtitle of the Include Self-Reported toggle")
-                    .font(.caption)
-                    .foregroundStyle(PomoGemTheme.muted)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                // At accessibility sizes the switch goes under its title. Beside
+                // it, the title had only a narrow column, and on a 375 pt iPhone
+                // "Include Self-Reported" was hyphenated mid-word. The switch
+                // keeps the label for VoiceOver, so the visible copy is hidden
+                // from it and the control is still read once.
+                VStack(alignment: .leading, spacing: 10) {
+                    shareInclusionLabel
+                        .accessibilityHidden(true)
+                    shareInclusionToggle
+                        .labelsHidden()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                shareInclusionToggle
             }
+        }
+        .padding(16)
+        .background(PomoGemTheme.raised, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var shareInclusionToggle: some View {
+        Toggle(isOn: $includeManual) {
+            shareInclusionLabel
         }
         .disabled(isRendering || isSaving)
         .tint(PomoGemTheme.amber)
         .accessibilityIdentifier("share.include-self-reported")
-        .padding(16)
-        .background(PomoGemTheme.raised, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var shareInclusionLabel: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("自己申告を含める", tableName: "Share")
+                .font(.subheadline.weight(.semibold))
+            Text("集中の自己申告を切替。記念石は常に「自己申告」と表示します", tableName: "Share",
+                 comment: "Share composer: subtitle of the Include Self-Reported toggle")
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+        }
     }
 
     private var sharePhotoSaveButton: some View {

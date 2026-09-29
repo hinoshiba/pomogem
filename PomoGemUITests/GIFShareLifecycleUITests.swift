@@ -417,6 +417,19 @@ final class GIFShareLifecycleUITests: XCTestCase {
         XCTAssertTrue(scrollUntilHittable(include, avoiding: primaryShare, searchingTowardTop: true))
         tapUntilGone(include, "Including self-reported time must retire the inline button")
         XCTAssertTrue(waitForNonExistence(notice, timeout: 8))
+        // At AX5 the switch sits under its title: beside it, the English
+        // title was hyphenated mid-word on a 375 pt iPhone. It must still be
+        // reachable, and show the choice the inline button just made.
+        let adjustments = app.buttons["調整"]
+        XCTAssertTrue(scrollUntilHittable(adjustments, avoiding: primaryShare))
+        adjustments.tap()
+        let includeSwitch = app.switches["share.include-self-reported"]
+        XCTAssertTrue(
+            scrollUntilHittable(includeSwitch, avoiding: primaryShare),
+            "The self-reported switch must be reachable at AX5"
+        )
+        XCTAssertEqual(String(describing: includeSwitch.value ?? ""), "1")
+        attachScreenshot(named: "AX5 Share — self-reported switch under its title")
         app.navigationBars["カードにする"].buttons["閉じる"].tap()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
 
