@@ -87,7 +87,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "25, 45, 60 and 90 min timers are free"
+            "value" : "25, 45, 60 and 90 min timers are free"
           }
         },
         "ja" : {
@@ -876,7 +876,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This is optional. It adds 0 g and no record. Tap “Next” to skip it."
+            "value" : "This is optional. It adds 0 g and no record. Tap “Next” to skip it."
           }
         },
         "ja" : {
@@ -1165,7 +1165,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "One draw for every 250 g of timed focus. Any remainder carries over to next time. %@"
+            "value" : "One draw for every 250 g of timed focus. Any remainder carries over to next time. %@"
           }
         },
         "ja" : {
@@ -1512,7 +1512,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "In a real focus, 25 minutes leaves a gem this size (250 g) in your jar."
+            "value" : "In a real focus, 25 minutes leaves a gem this size (250 g) in your jar."
           }
         },
         "ja" : {

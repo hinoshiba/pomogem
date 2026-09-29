@@ -233,16 +233,47 @@ final class OnboardingPaywallModelsLocalizationTests: XCTestCase {
         XCTAssertEqual(try english("Models", "自己申告"), "Self-reported")
         XCTAssertEqual(try english("Models", "抽選しない"), "No Draws")
         XCTAssertEqual(try english("Models", "リング＋時間"), "Ring + Time")
-        XCTAssertEqual(try english("Models", "250gごとの抽選%lld回", 2), "2 draws (one per 250 g)")
+        XCTAssertEqual(try english("Models", "250gごとの抽選%lld回", 2), "2 draws (one per 250\u{00A0}g)")
         XCTAssertEqual(
             try english("Models", "250gごとの抽選%lld回（%@）", 3, "Standard 2 · Gold 1"),
-            "3 draws (one per 250 g): Standard 2 · Gold 1"
+            "3 draws (one per 250\u{00A0}g): Standard 2 · Gold 1"
         )
         XCTAssertEqual(
             try english("Models", "250gごとの抽選で金が%lld回続けて出なかった場合、次の抽選は金の粒になります。虹はこの回数をリセットしません。",
                         Constants.Gacha.pityMissCount),
-            "If 20 draws in a row (one per 250 g) bring no gold, the next draw is a gold gem. A rainbow gem doesn’t reset this count."
+            "If 20 draws in a row (one per 250\u{00A0}g) bring no gold, the next draw is a gold gem. A rainbow gem doesn’t reset this count."
         )
+        XCTAssertEqual(try english("Models", "集中時間は1分から360分の範囲で指定してください。"), "Choose a focus length from 1 to 360\u{00A0}min.")
+    }
+
+    /// A number and its unit never break across lines ("(250 / g)" at AX5 on
+    /// a 375 pt screen): the visible English values join them with U+00A0.
+    /// VoiceOver-only values ("0 grams") keep an ordinary space.
+    func testVisibleUnitsDoNotBreakFromTheirNumberInEnglish() throws {
+        XCTAssertEqual(
+            try english("Onboarding", "本番では、25分の集中でこの大きさの一粒（250g）が瓶に残ります。"),
+            "In a real focus, 25 minutes leaves a gem this size (250\u{00A0}g) in your jar."
+        )
+        XCTAssertEqual(
+            try english("Onboarding", "任意の体験です。0g・記録には入りません。「次へ」で省略できます。"),
+            "This is optional. It adds 0\u{00A0}g and no record. Tap “Next” to skip it."
+        )
+        XCTAssertEqual(try english("Onboarding", "25・45・60・90分のタイマーは無料"), "25, 45, 60 and 90\u{00A0}min timers are free")
+        XCTAssertEqual(
+            try english("Paywall", "無料の25・45・60・90分のほか、%@を秒単位で選べます", "1–360 min"),
+            "Besides the free 25, 45, 60 and 90\u{00A0}min timers, choose any length from 1–360 min, down to the second"
+        )
+        for table in ["Onboarding", "Paywall", "Models"] {
+            let catalog = try LocalizationCatalogFile(table: table, relativePath: "PomoGem/Localization/\(table).xcstrings")
+            for (key, entry) in catalog.strings where !(entry["comment"] as? String ?? "").hasPrefix("VoiceOver") {
+                for unit in LocalizationCatalogFile.localizations(of: entry)["en"].map({ LocalizationCatalogFile.units(of: $0) }) ?? [] {
+                    XCTAssertNil(
+                        unit.value.range(of: #"\d (g|min)\b"#, options: .regularExpression),
+                        "\(table): \(key) \(unit.label) splits a number from its unit: \(unit.value)"
+                    )
+                }
+            }
+        }
     }
 
     /// Every key this package owns has an English value (the strict check in

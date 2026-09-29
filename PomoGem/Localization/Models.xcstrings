@@ -27,13 +27,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld draw (one per 250 g)"
+                  "value" : "%lld draw (one per 250 g)"
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld draws (one per 250 g)"
+                  "value" : "%lld draws (one per 250 g)"
                 }
               }
             }
@@ -53,7 +53,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$lld draws (one per 250 g): %2$@"
+            "value" : "%1$lld draws (one per 250 g): %2$@"
           }
         },
         "ja" : {
@@ -73,13 +73,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "If %lld draw in a row (one per 250 g) brings no gold, the next draw is a gold gem. A rainbow gem doesn’t reset this count."
+                  "value" : "If %lld draw in a row (one per 250 g) brings no gold, the next draw is a gold gem. A rainbow gem doesn’t reset this count."
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "If %lld draws in a row (one per 250 g) bring no gold, the next draw is a gold gem. A rainbow gem doesn’t reset this count."
+                  "value" : "If %lld draws in a row (one per 250 g) bring no gold, the next draw is a gold gem. A rainbow gem doesn’t reset this count."
                 }
               }
             }
@@ -1170,7 +1170,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Choose a focus length from 1 to 360 min."
+            "value" : "Choose a focus length from 1 to 360 min."
           }
         },
         "ja" : {
