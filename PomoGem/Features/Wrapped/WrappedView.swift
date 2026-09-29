@@ -96,7 +96,7 @@ struct WrappedView: View {
                 .padding(.horizontal, 22)
 
                 Spacer(minLength: 4)
-                SectionEyebrow(text: "MONTHLY WRAPPED")
+                SectionEyebrow(text: String(localized: "MONTHLY WRAPPED", table: "Log", comment: "Eyebrow above the Month in Review title (shown uppercased). en: 'Month in Review', the feature's name; never 'Wrapped'."))
                 // The 36 pt display title stops growing at AX3. Past that, a
                 // long English month is wider than an iPhone SE line and
                 // breaks inside the word ("Septembe" / "r 2026"); at AX3 it

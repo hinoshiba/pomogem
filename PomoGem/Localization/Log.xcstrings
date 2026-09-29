@@ -399,6 +399,23 @@
         }
       }
     },
+    "MONTHLY WRAPPED" : {
+      "comment" : "Eyebrow above the Month in Review title (shown uppercased). en: 'Month in Review', the feature's name; never 'Wrapped'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Month in Review"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MONTHLY WRAPPED"
+          }
+        }
+      }
+    },
     "OK" : {
       "comment" : "Dismisses the milestone error alert",
       "localizations" : {
@@ -461,6 +478,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "iCloudを再集計中です。この端末で確認できた記録だけを表示しています。"
+          }
+        }
+      }
+    },
+    "log.month-review.eyebrow" : {
+      "comment" : "Eyebrow above the 月の振り返り (Month in Review) title on the Log card (shown uppercased). en: a category word like the other Log eyebrows (Mass, Themes, Milestones) that does not repeat the title; never 'Wrapped'.",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Months"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MONTHLY WRAPPED"
           }
         }
       }

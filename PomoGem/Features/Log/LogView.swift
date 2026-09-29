@@ -1781,7 +1781,10 @@ struct LogView: View {
             PomoGemCard {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
-                        SectionEyebrow(text: "MONTHLY WRAPPED")
+                        // Its own key: the same Japanese eyebrow sits over
+                        // Month in Review itself, where English names the
+                        // feature. Here the title below already does.
+                        SectionEyebrow(text: String(localized: "log.month-review.eyebrow", defaultValue: "MONTHLY WRAPPED", table: "Log", comment: "Eyebrow above the 月の振り返り (Month in Review) title on the Log card (shown uppercased). en: a category word like the other Log eyebrows (Mass, Themes, Milestones) that does not repeat the title; never 'Wrapped'."))
                         // Not 「月ごとの瓶」: that is 積み上がり's 年月 shelf, a
                         // different view (history-11).
                         Text("月の振り返り", tableName: "Log", comment: "Log section title: the monthly Wrapped recaps")

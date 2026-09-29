@@ -94,6 +94,18 @@ final class LogProgressLocalizationTests: XCTestCase {
         XCTAssertEqual(try english("記念石アーカイブ", table: "Log"), "Milestone Stone Archive")
         XCTAssertEqual(try english("結晶アーカイブ", table: "Log"), "Crystal Archive")
         XCTAssertEqual(try english("SUBJECTS", table: "Log"), "Themes", "the eyebrow says themes, never subjects")
+        XCTAssertEqual(try english("MONTHLY WRAPPED", table: "Log"), "Month in Review", "Month in Review's eyebrow names the feature, never Wrapped")
+        XCTAssertEqual(
+            try english("log.month-review.eyebrow", table: "Log"),
+            "Months",
+            "on the Log card the title below already says Month in Review"
+        )
+        let japanese = try LocalizationTestSupport.bundle(for: "ja")
+        XCTAssertEqual(
+            japanese.localizedString(forKey: "log.month-review.eyebrow", value: "<missing>", table: "Log"),
+            "MONTHLY WRAPPED",
+            "the Log card's eyebrow is unchanged in Japanese"
+        )
         XCTAssertEqual(try english("%@〜%@", table: "Log", "Sun, Sep 20", "Sat, Sep 26"), "Sun, Sep 20 – Sat, Sep 26")
         XCTAssertEqual(
             try english("この期間は記録が多いため、最新%lld件の表示分です。", table: "Log", 2_048),
