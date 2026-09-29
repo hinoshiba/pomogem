@@ -240,7 +240,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Receiving data from iCloud. This can take a few minutes. Please keep this screen open"
+            "value" : "Receiving data from iCloud. This can take a few minutes. Please keep this screen open."
           }
         },
         "ja" : {
@@ -767,7 +767,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Replacing the iCloud data. If you close the app, it picks up where it left off the next time you open it"
+            "value" : "Replacing the iCloud data. If you close the app, it picks up where it left off the next time you open it."
           }
         },
         "ja" : {
@@ -920,7 +920,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Canceling the iCloud switch can't be safely confirmed. The saved cancellation is protected. Check your connection and try again."
+            "value" : "Canceling the iCloud switch can't be safely confirmed. The saved cancellation record is protected. Check your connection and try again."
           }
         },
         "ja" : {
@@ -1981,7 +1981,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The records on this device were created in a different iCloud environment (development or release) from this version of the app. This screen hasn't deleted any records on this device or in iCloud. Open them again with the same build of PomoGem you created them with, or follow the steps from Support."
+            "value" : "The records on this device were created in a different iCloud environment (development or release) from this version of the app. This screen hasn't deleted any records on this device or in iCloud. Reopen the app with the same build of PomoGem that created the records, or check the steps from Support."
           }
         },
         "ja" : {
@@ -3001,7 +3001,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Recovery copy saved to iCloud. Starting to replace the data"
+            "value" : "Recovery copy saved to iCloud. Starting to replace the data."
           }
         },
         "ja" : {
@@ -3273,7 +3273,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Total rows on this device remain after deletion"
+            "value" : "Summary rows on this device remain after deletion"
           }
         },
         "ja" : {
