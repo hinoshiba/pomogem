@@ -119,6 +119,14 @@ enum JarAccessibilityPresentation {
         return "\(massDescription)。瓶の整理：\(pebbleCount)粒\(aggregate)\(legacyAggregate)\(rareSuffix)\(fusion)。記念石\(achievementCount)個"
     }
 
+    /// device-verify-2 P2 (review of #56): before Home has read its records
+    /// it knows no total, and its readout shows none. Never 「0グラム」 or
+    /// 「瓶の整理：0粒」 for a jar that is only still loading.
+    static var loadingValue: String {
+        String(localized: "これまでの記録を読み込み中", table: "Jar",
+               comment: "VoiceOver, jar value before Home has read its focus records")
+    }
+
     /// sync-03: the lifetime mass Home's headline shows while iCloud is
     /// checked (`PendingMassPresentationPolicy`).
     struct PendingMass: Equatable {
@@ -154,6 +162,8 @@ struct JarSpriteView: View {
     /// sync-03 (icloud-life): VoiceOver only; the jar's visuals are unchanged.
     let pendingMass: JarAccessibilityPresentation.PendingMass?
     let fusionProgressDescription: String?
+    /// device-verify-2 P2: Home has not read its records yet (VoiceOver only).
+    let isLoadingRecords: Bool
     let isMotionEnabled: Bool
     let inspectableAggregateID: UUID?
     let onJarTapAccepted: (() -> Void)?
@@ -202,6 +212,7 @@ struct JarSpriteView: View {
         projectionIsUnverified: Bool = false,
         pendingMass: JarAccessibilityPresentation.PendingMass? = nil,
         fusionProgressDescription: String? = nil,
+        isLoadingRecords: Bool = false,
         isMotionEnabled: Bool = true,
         inspectableAggregateID: UUID? = nil,
         onJarTapAccepted: (() -> Void)? = nil,
@@ -229,6 +240,7 @@ struct JarSpriteView: View {
         self.projectionIsUnverified = projectionIsUnverified
         self.pendingMass = pendingMass
         self.fusionProgressDescription = fusionProgressDescription
+        self.isLoadingRecords = isLoadingRecords
         self.isMotionEnabled = isMotionEnabled
         self.inspectableAggregateID = inspectableAggregateID
         self.onJarTapAccepted = onJarTapAccepted
@@ -776,21 +788,26 @@ struct JarSpriteView: View {
     }
 
     private var accessibilityValue: String {
-        let studyValue = JarAccessibilityPresentation.value(
-            totalGrams: totalGrams,
-            pebbleCount: pebbleCount,
-            achievementCount: achievementCount,
-            aggregateCount: aggregateCount,
-            legacyAggregateCount: legacyAggregateCount,
-            representedPebbleCount: representedPebbleCount,
-            goldPebbleCount: goldPebbleCount,
-            prismPebbleCount: prismPebbleCount,
-            fusionProgressDescription: fusionProgressDescription,
-            projectionIsLowerBound: projectionIsLowerBound,
-            projectionIsUnverified: projectionIsUnverified,
-            pendingMass: pendingMass,
-            isCloudOfflineSession: isCloudOfflineSession
-        )
+        let studyValue: String
+        if isLoadingRecords {
+            studyValue = JarAccessibilityPresentation.loadingValue
+        } else {
+            studyValue = JarAccessibilityPresentation.value(
+                totalGrams: totalGrams,
+                pebbleCount: pebbleCount,
+                achievementCount: achievementCount,
+                aggregateCount: aggregateCount,
+                legacyAggregateCount: legacyAggregateCount,
+                representedPebbleCount: representedPebbleCount,
+                goldPebbleCount: goldPebbleCount,
+                prismPebbleCount: prismPebbleCount,
+                fusionProgressDescription: fusionProgressDescription,
+                projectionIsLowerBound: projectionIsLowerBound,
+                projectionIsUnverified: projectionIsUnverified,
+                pendingMass: pendingMass,
+                isCloudOfflineSession: isCloudOfflineSession
+            )
+        }
         guard let obstacles = scene.screenTimeObstacleAccessibilityDescription else {
             return studyValue
         }
@@ -798,6 +815,8 @@ struct JarSpriteView: View {
     }
 
     private var accessibilityHint: String {
+        // Still loading, not empty: 「まだ粒はありません」 would say otherwise.
+        guard !isLoadingRecords else { return "" }
         guard hasPhysicalContent else {
             return "まだ粒はありません。集中を完走するか成果を積むと、瓶に粒が入ります"
         }

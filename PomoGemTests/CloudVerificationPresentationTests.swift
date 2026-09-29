@@ -140,6 +140,147 @@ final class CloudVerificationPresentationTests: XCTestCase {
         XCTAssertEqual(VerifiedMassRecordStore.load(defaults: defaults), made)
     }
 
+    // MARK: While Home re-derives (device-verify-2 P2)
+
+    private typealias Continuity = LifetimeReadoutContinuityPolicy
+
+    private func readout(grams: Int?, pebbles: Int, loose: Int, lowerBound: Bool = false,
+                         pending: Bool = true) -> Continuity.Readout {
+        Continuity.Readout(isCloudVerificationPending: pending, jarGrams: grams, jarCoreGrams: grams ?? 0,
+                           jarPebbles: pebbles, jarLoosePebbles: loose, menuGrams: grams, menuPebbles: pebbles,
+                           isLowerBound: lowerBound, jarIsEmpty: false, coreColorHex: "#C8553D",
+                           coreColorShares: [GemColorShare(hex: "#C8553D", fraction: 1)])
+    }
+
+    private func source(settled: Bool = false, failed: Bool = false, last: Continuity.Settled?,
+                        epochID: UUID?, pending: Bool) -> Continuity.Source {
+        Continuity.source(inputsAreSettled: settled, lastReadFailed: failed, lastSettled: last,
+                          currentEpochID: epochID, isCloudVerificationPending: pending)
+    }
+
+    /// On the phone, after a return to the app, Home said 「再集計中」 over
+    /// 「この端末で確認済み 0粒」 for about a second and the time core
+    /// vanished. Each change of the presentation generation withholds Home's
+    /// page until it is read again, and the headline was derived from that
+    /// empty page — with the old page's coverage flag, even as an exact zero.
+    func testAWithheldPageNeverBecomesAnEmptyTotal() {
+        let held = sessions(128)
+        let lastVerified = record(grams: 1_000_000, pebbles: 4_000, epochID: epoch, frontier: held[0])
+        let empty = HomeProjectionPolicy.Totals(grams: 0, pebbleCount: 0)
+        // What the headline made of the withheld page before this fix.
+        XCTAssertEqual(Mass.headline(lastVerified: lastVerified, currentEpochID: epoch, deviceSessions: [],
+                                     deviceTotals: empty, deviceCoversEverySession: true),
+                       .device(grams: 0, pebbleCount: 0), "The earlier page's coverage flag: an exact 0 g")
+        XCTAssertEqual(Mass.headline(lastVerified: lastVerified, currentEpochID: epoch, deviceSessions: [],
+                                     deviceTotals: empty, deviceCoversEverySession: false),
+                       .hidden, "Its frontier is not on an empty page: 「再集計中」 despite a verified total")
+
+        // A page of an earlier generation proves no coverage...
+        XCTAssertFalse(Mass.deviceCoversEverySession(pageIsCurrent: false, pageIsComplete: true,
+                                                     membershipIsComplete: true, acceptedAggregateCount: 0,
+                                                     candidateCount: 0, presentedCount: 0))
+        XCTAssertTrue(Mass.deviceCoversEverySession(pageIsCurrent: true, pageIsComplete: true,
+                                                    membershipIsComplete: true, acceptedAggregateCount: 0,
+                                                    candidateCount: 3, presentedCount: 3))
+        for (complete, membership, aggregates, candidates) in [(false, true, 0, 3), (true, false, 0, 3),
+                                                               (true, true, 1, 3), (true, true, 0, 200)] {
+            XCTAssertFalse(Mass.deviceCoversEverySession(pageIsCurrent: true, pageIsComplete: complete,
+                                                         membershipIsComplete: membership,
+                                                         acceptedAggregateCount: aggregates,
+                                                         candidateCount: candidates, presentedCount: 3))
+        }
+
+        // ...and until the new page is read, the jar keeps what it showed.
+        let shown = readout(grams: 1_000_500, pebbles: 4_002, loose: 128)
+        let settled = Continuity.Settled(readout: shown, epochID: epoch)
+        XCTAssertEqual(source(last: settled, epochID: epoch, pending: true), .held(shown))
+        XCTAssertEqual(source(settled: true, last: settled, epochID: epoch, pending: true), .settled,
+                       "Once the page is read, the live readout replaces the held one, and is remembered")
+    }
+
+    /// A held readout is presentation only, and only for the same data.
+    func testAHeldReadoutNeverOutlivesItsData() {
+        let settled = Continuity.Settled(readout: readout(grams: 750, pebbles: 3, loose: 3), epochID: epoch)
+        XCTAssertEqual(source(last: settled, epochID: UUID(), pending: true), .live,
+                       "Records were reset since: the new epoch's value is re-derived, never carried over")
+        let hidden = Continuity.Settled(readout: readout(grams: nil, pebbles: 128, loose: 128), epochID: nil)
+        guard case let .held(kept) = source(last: hidden, epochID: nil, pending: true) else {
+            return XCTFail("A settled 「再集計中」 is held too")
+        }
+        XCTAssertEqual(kept.jarPebbles, 128, "A settled 「再集計中」 keeps its count, not the empty page's 0粒")
+    }
+
+    /// Review of #56. Before this Home has presented anything from settled
+    /// inputs — every launch, and every remount after the background grace —
+    /// it has no readout to hold. It said 「再集計中」 over 「この端末で確認済み
+    /// 0粒」 until the first read; now it shows no number at all.
+    func testBeforeTheFirstReadHomeShowsNoNumber() {
+        for pending in [true, false] {
+            XCTAssertEqual(source(last: nil, epochID: epoch, pending: pending), .loading)
+            let loading = Continuity.Readout.loading(isCloudVerificationPending: pending, coreColorHex: "#C8553D")
+            XCTAssertTrue(loading.isLoading)
+            XCTAssertNil(loading.jarGrams)
+            XCTAssertNil(loading.menuGrams)
+            XCTAssertFalse(loading.jarIsEmpty, "Not yet read is not an empty jar: no 「まだ空っぽ」")
+            XCTAssertNil(loading.fusionProgressTotals, "No rail, no fusion progress, no large-text card")
+            XCTAssertEqual(loading.jarCoreGrams, 0, "No time core before the jar has its gems")
+        }
+        XCTAssertEqual(source(settled: true, last: nil, epochID: epoch, pending: true), .settled,
+                       "The first read that lands is presented and remembered")
+        let spoken = JarAccessibilityPresentation.loadingValue
+        XCTAssertFalse(spoken.contains("0"), spoken)
+        XCTAssertFalse(spoken.contains("再集計中"), spoken)
+    }
+
+    /// Review of #56. Verification completing retires Home's page too. A
+    /// readout recorded while iCloud was checked — for a long history 「再集計中」
+    /// beside a device count — was held under the verified wording: 「128粒」
+    /// read as the exact total and VoiceOver said 「32.00キログラム以上、集計
+    /// 整理中」. A held readout keeps 「iCloudを確認中」 until the new page lands,
+    /// and a verified one takes it as soon as trust is revoked.
+    func testAHeldReadoutKeepsTheWordingOfWhatItKnows() {
+        let pendingHidden = Continuity.Settled(readout: readout(grams: nil, pebbles: 128, loose: 128), epochID: epoch)
+        guard case let .held(afterVerification) = source(last: pendingHidden, epochID: epoch, pending: false) else {
+            return XCTFail("Verification completed: the pending readout is held until the page is read")
+        }
+        XCTAssertTrue(afterVerification.isCloudVerificationPending,
+                      "Still 「iCloudを確認中」 and 「この端末で確認済み 128粒」, not a bare 「128粒」")
+        XCTAssertNil(afterVerification.fusionProgressTotals, "No fusion progress from a pending count")
+
+        let verified = Continuity.Settled(
+            readout: readout(grams: 50_000, pebbles: 200, loose: 128, lowerBound: false, pending: false),
+            epochID: epoch
+        )
+        guard case let .held(afterRevocation) = source(last: verified, epochID: epoch, pending: true) else {
+            return XCTFail("Trust revoked: the verified readout is held")
+        }
+        XCTAssertTrue(afterRevocation.isCloudVerificationPending,
+                      "The last verified total, as what this device confirmed under 「iCloudを確認中」")
+        XCTAssertEqual(afterRevocation.jarGrams, 50_000)
+        XCTAssertNil(afterRevocation.fusionProgressTotals)
+
+        guard case let .held(reread) = source(last: verified, epochID: epoch, pending: false) else {
+            return XCTFail("A verified re-read holds the verified readout")
+        }
+        XCTAssertFalse(reread.isCloudVerificationPending)
+        XCTAssertEqual(reread.fusionProgressTotals, .init(grams: 50_000, pebbleCount: 200),
+                       "The rail, the jar's VoiceOver progress and the large-text card follow the held headline")
+    }
+
+    /// Review of #56. A failed read leaves nothing in flight that would
+    /// replace a held readout, so Home says what its inputs prove instead of
+    /// keeping an old total on screen for good.
+    func testAFailedReadFallsBackToWhatTheInputsProve() {
+        let settled = Continuity.Settled(readout: readout(grams: 750, pebbles: 3, loose: 3), epochID: epoch)
+        for pending in [true, false] {
+            XCTAssertEqual(source(failed: true, last: settled, epochID: epoch, pending: pending), .live)
+            XCTAssertEqual(source(failed: true, last: nil, epochID: epoch, pending: pending), .live,
+                           "Not loading for good either")
+        }
+        XCTAssertEqual(source(settled: true, failed: true, last: settled, epochID: epoch, pending: true), .settled,
+                       "A current page whose re-read failed is presented as it is: a lower bound")
+    }
+
     // MARK: History filter — policy
 
     private typealias Summary = SyncHistoryTransactionSummary
