@@ -275,6 +275,7 @@ struct ManualEntrySheet: View {
                         String(localized: "確認して積む", table: "Home", comment: "Manual entry: the button that saves the entry"),
                         systemImage: "plus.circle.fill"
                     )
+                    .labelStyle(TitleOnlyAtAccessibilitySizesLabelStyle())
                 }
             }
             .buttonStyle(PomoGemPrimaryButtonStyle())
@@ -513,5 +514,22 @@ private struct ManualButton: View {
                 )
         )
         .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+/// The primary buttons of the manual-entry and achievement sheets. At
+/// accessibility sizes their symbol took about a third of the button, and
+/// on an iPhone SE at AX5 English broke a word mid-way ("Achieve-ment"); the
+/// title alone gets the full width there. The symbol is decorative.
+struct TitleOnlyAtAccessibilitySizesLabelStyle: LabelStyle {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    @ViewBuilder
+    func makeBody(configuration: Configuration) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            configuration.title
+        } else {
+            Label(configuration)
+        }
     }
 }

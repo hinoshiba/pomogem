@@ -87,13 +87,21 @@ struct AchievementEntrySheet: View {
             }
             }
             .background(NightBackground())
-            .navigationTitle(
-                selectedKind == nil
-                    ? Text("成果を選ぶ", tableName: "Home", comment: "Achievement sheet title, first step: pick the kind of achievement")
-                    : Text("記念石にする", tableName: "Home", comment: "Achievement sheet title, second step: the details of the milestone stone")
-            )
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                // The details step has 戻る beside the title, and English
+                // ("Make a Milestone Stone") was cut off between it and
+                // 閉じる on an iPhone SE. The shown title may shrink a little
+                // instead; the navigation title above still names the bar.
+                ToolbarItem(placement: .principal) {
+                    title
+                        .font(.headline)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+                        .accessibilityAddTraits(.isHeader)
+                }
                 if selectedKind != nil {
                     ToolbarItem(placement: .topBarLeading) {
                         Button(String(localized: "戻る", table: "Home", comment: "Achievement sheet: back to the kind of achievement")) {
@@ -110,6 +118,12 @@ struct AchievementEntrySheet: View {
                 }
             }
         }
+    }
+
+    private var title: Text {
+        selectedKind == nil
+            ? Text("成果を選ぶ", tableName: "Home", comment: "Achievement sheet title, first step: pick the kind of achievement")
+            : Text("記念石にする", tableName: "Home", comment: "Achievement sheet title, second step: the details of the milestone stone")
     }
 
     private var kindStep: some View {
@@ -273,6 +287,7 @@ struct AchievementEntrySheet: View {
                         String(localized: "この成果を積む", table: "Home", comment: "Achievement sheet save button"),
                         systemImage: "medal.fill"
                     )
+                    .labelStyle(TitleOnlyAtAccessibilitySizesLabelStyle())
                 }
             }
             .buttonStyle(PomoGemPrimaryButtonStyle())

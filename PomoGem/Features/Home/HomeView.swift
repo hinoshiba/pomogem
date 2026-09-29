@@ -2396,7 +2396,10 @@ struct HomeView: View {
                             )
                     )
                     .font(.system(.caption, design: .rounded, weight: .bold))
-                    .lineLimit(2)
+                    // English is longer ("English · +250 g when you finish"):
+                    // on an iPhone SE at AX5 two lines cut it off, while the
+                    // Japanese needs two. Default sizes keep two lines.
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
                 }
 
                 Spacer(minLength: 4)
@@ -2976,29 +2979,30 @@ struct HomeView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack(spacing: 13) {
-                Image(systemName: symbol)
-                    .font(.body.weight(.semibold))
-                    // The symbol sits in a fixed 28 pt column so the titles
-                    // line up. At accessibility sizes it grew past that
-                    // column and the row's rounded clip cut its left side
-                    // off (the ▶ and ⚙ glyphs on an iPhone SE at AX5); the
-                    // title and detail beside it keep growing.
-                    .dynamicTypeSize(...DynamicTypeSize.xLarge)
-                    .foregroundStyle(PomoGemTheme.amber)
-                    .frame(width: 28)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.system(.body, design: .rounded, weight: .bold))
-                    Text(detail)
-                        .font(.caption)
-                        .foregroundStyle(PomoGemTheme.muted)
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    // The symbol and the chevron take a row of their own, so
+                    // the title and detail get the row's full width. Beside
+                    // them the text column was about 230 pt on an iPhone SE
+                    // at AX5, narrower than one long word, and English broke
+                    // words mid-way ("Notifica-tions", "#Pomo-Gem").
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            menuActionSymbol(symbol)
+                            Spacer(minLength: 8)
+                            menuActionChevron
+                        }
+                        menuActionText(title: title, detail: detail)
+                    }
+                    .padding(.vertical, 10)
+                } else {
+                    HStack(spacing: 13) {
+                        menuActionSymbol(symbol)
+                        menuActionText(title: title, detail: detail)
+                        Spacer(minLength: 8)
+                        menuActionChevron
+                    }
                 }
-                .multilineTextAlignment(.leading)
-                Spacer(minLength: 8)
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(PomoGemTheme.muted)
             }
             .foregroundStyle(PomoGemTheme.text)
             .padding(.horizontal, 14)
@@ -3007,6 +3011,36 @@ struct HomeView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(PomoGemRowButtonStyle(cornerRadius: 16))
+    }
+
+    private func menuActionSymbol(_ symbol: String) -> some View {
+        Image(systemName: symbol)
+            .font(.body.weight(.semibold))
+            // The symbol sits in a fixed 28 pt column so the titles
+            // line up. At accessibility sizes it grew past that
+            // column and the row's rounded clip cut its left side
+            // off (the ▶ and ⚙ glyphs on an iPhone SE at AX5); the
+            // title and detail keep growing.
+            .dynamicTypeSize(...DynamicTypeSize.xLarge)
+            .foregroundStyle(PomoGemTheme.amber)
+            .frame(width: 28)
+    }
+
+    private func menuActionText(title: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.system(.body, design: .rounded, weight: .bold))
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+        }
+        .multilineTextAlignment(.leading)
+    }
+
+    private var menuActionChevron: some View {
+        Image(systemName: "chevron.right")
+            .font(.caption.weight(.bold))
+            .foregroundStyle(PomoGemTheme.muted)
     }
 
     private func postDropCard(_ offer: BreakOffer) -> some View {
