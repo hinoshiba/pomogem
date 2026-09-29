@@ -537,7 +537,6 @@
     },
     "settings.focus-leave.nudge-count" : {
       "comment" : "How many leave-pause notifications at most (5), inside the switch subtitle. English: '%lld notification' / '%lld notifications'.",
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "variations" : {
@@ -567,7 +566,6 @@
     },
     "settings.rare.pity-misses" : {
       "comment" : "How many draws in a row without gold guarantee the next one (20), inside the gold gem detail. English: '%lld miss in a row' / '%lld misses in a row'.",
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "variations" : {
@@ -597,7 +595,6 @@
     },
     "settings.theme-deletion.record-count" : {
       "comment" : "How many past records use the theme being deleted, inside the deletion message. English: '%lld past record' / '%lld past records'.",
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "variations" : {
@@ -3053,7 +3050,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Subtle never changes your gems' weight or count, fusions or cuts. When Reduce Motion is on, the jar always uses Subtle. This setting is saved only on this iPhone and doesn't sync with iCloud."
+            "value" : "Subtle never changes your gems' weight or count, fusions or cuts. When Reduce Motion is on, the jar always uses Subtle. Changes here save on this iPhone only and don't sync with iCloud."
           }
         },
         "ja" : {
@@ -3953,7 +3950,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Natural odds: regular gem %1$@, gold %2$@, rainbow %3$@. In Standard and Subtle, timed sessions get one draw for every 250 g you add, and any remainder under 250 g carries over to the next one. Six 10-min sessions, two 25-min sessions plus one 10-min session, and one 60-min session all come to 600 g, so each gives 2 draws and a 100 g remainder. %4$@ Subtle keeps the gem kind in your history but adds no extra glow, special sound or special haptics. With No Draws, no random numbers are used and no mass is saved up for draws. The existing remainder and gold guarantee pause where they are, and resume from there when you switch back to Standard or Subtle. In every mode, mass, fusions, crystals, achievements and features are the same, and the gold and rainbow gems you already have, your records and your shares don't change. Reduce Motion on your iPhone doesn't stop draws; it only reduces movement."
+            "value" : "Natural odds: regular gem %1$@, gold %2$@, rainbow %3$@. In Standard and Quiet, timed sessions get one draw for every 250 g you add, and any remainder under 250 g carries over to the next one. Six 10-min sessions, two 25-min sessions plus one 10-min session, and one 60-min session all come to 600 g, so each gives 2 draws and a 100 g remainder. %4$@ Quiet keeps the gem kind in your history but adds no extra glow, special sound or special haptics. With No Draws, no random numbers are used and no mass is saved up for draws. The existing remainder and gold guarantee pause where they are, and resume from there when you switch back to Standard or Quiet. In every mode, mass, fusions, crystals, achievements and features are the same, and the gold and rainbow gems you already have, your records and your shares don't change. Reduce Motion on your iPhone doesn't stop draws; it only reduces movement."
           }
         },
         "ja" : {

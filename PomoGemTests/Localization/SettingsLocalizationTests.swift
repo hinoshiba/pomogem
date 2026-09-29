@@ -162,6 +162,26 @@ final class SettingsLocalizationTests: XCTestCase {
         )
     }
 
+    /// The rare gem footer names the modes as the picker shows them
+    /// (`RareRewardMode.title`, Models table: Standard, Quiet, No Draws). The
+    /// jar's effect intensity is a separate control, and its gentler option
+    /// reads Subtle, so the two 控えめ never share an English name.
+    func testRareGemFooterNamesTheModesAsThePickerDoes() throws {
+        let footer = try english(
+            "自然確率は、いつもの粒 %@、金 %@、虹 %@。標準と控えめでは、実測タイマーで250g積むごとに1回抽選し、250g未満の端数は次回へ繰り越します。10分を6回、25分を2回と10分を1回、60分を1回はいずれも600gなので、抽選2回と100gの端数で同じです。%@ 控えめは種類を履歴に残しますが、追加の発光・専用音・専用触覚を使いません。抽選しない間は乱数を使わず、その間の質量を抽選用に貯めません。既存の端数と金の保証は同じ位置で停止し、標準または控えめに戻すとそこから再開します。どのモードでも質量・融合・結晶・成果・機能は同じで、既に獲得した金・虹、記録、シェアも変わりません。端末の「視差効果を減らす」は抽選を止めず、動きだけを抑えます。",
+            "94%", "5%", "1%", "Gold is guaranteed."
+        )
+        XCTAssertTrue(footer.hasPrefix("Natural odds: regular gem 94%, gold 5%, rainbow 1%. In Standard and Quiet,"), footer)
+        XCTAssertTrue(footer.contains("Gold is guaranteed. Quiet keeps the gem kind"), footer)
+        XCTAssertTrue(footer.contains("switch back to Standard or Quiet."), footer)
+        XCTAssertFalse(footer.contains("Subtle"), footer)
+        XCTAssertEqual(try english("控えめ"), "Subtle", "The effect intensity option, not the rare gem mode")
+
+        let jarFooter = try english("控えめにしても、粒の重さや数、融合、カットは変わりません。「視差効果を減らす」がオンのときは、常に控えめで表示します。この設定はこのiPhoneだけに保存され、iCloudでは同期しません。")
+        XCTAssertTrue(jarFooter.hasPrefix("Subtle never changes"), jarFooter)
+        XCTAssertTrue(jarFooter.contains("save on this iPhone only and don't sync with iCloud"), jarFooter)
+    }
+
     /// Same Japanese, different English: the semantic keys keep the Japanese
     /// exactly as before and give each place its own English.
     func testSemanticKeysKeepTheirJapaneseAndSplitTheEnglish() throws {
