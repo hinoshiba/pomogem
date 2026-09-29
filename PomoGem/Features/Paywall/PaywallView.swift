@@ -160,16 +160,7 @@ struct PaywallView: View {
     private var currentEntitlementCard: some View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .center, spacing: 12) {
-                    Label {
-                        Text("ポモジェムPro", tableName: "Paywall", comment: "Paywall card title: the product name, on the buy card and once Pro is owned")
-                    } icon: {
-                        Image(systemName: "checkmark.seal.fill")
-                            .accessibilityHidden(true)
-                    }
-                        .font(.headline)
-                        .foregroundStyle(PomoGemTheme.amber)
-                    Spacer()
+                cardHeader(symbol: "checkmark.seal.fill", alignment: .center) {
                     Text("購入済み", tableName: "Paywall", comment: "Paywall badge: Pro is already purchased")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(PomoGemTheme.background)
@@ -210,15 +201,7 @@ struct PaywallView: View {
     private func productCard(_ product: Product) -> some View {
         PomoGemCard {
             VStack(spacing: 18) {
-                HStack(spacing: 12) {
-                    Label {
-                        Text("ポモジェムPro", tableName: "Paywall", comment: "Paywall card title: the product name, on the buy card and once Pro is owned")
-                    } icon: {
-                        Image(systemName: "sparkles")
-                    }
-                        .font(.headline)
-                        .foregroundStyle(PomoGemTheme.amber)
-                    Spacer()
+                cardHeader(symbol: "sparkles") {
                     Text("買い切り", tableName: "Paywall", comment: "Paywall badge: one-time purchase (no subscription)")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(PomoGemTheme.amber)
@@ -265,6 +248,38 @@ struct PaywallView: View {
                     .foregroundStyle(PomoGemTheme.muted)
                     .multilineTextAlignment(.center)
             }
+        }
+    }
+
+    /// The product name and a badge on one line, as before; stacked when
+    /// they do not fit on one line. At accessibility sizes the row broke
+    /// both words letter by letter (「ポモジェ／ムPro」, "Po/mo/Ge/m"), and the
+    /// English badge "One-Time Purchase" is far wider than 「買い切り」.
+    private func cardHeader<Badge: View>(
+        symbol: String,
+        alignment: VerticalAlignment = .center,
+        @ViewBuilder badge: () -> Badge
+    ) -> some View {
+        let name = Label {
+            Text("ポモジェムPro", tableName: "Paywall", comment: "Paywall card title: the product name, on the buy card and once Pro is owned")
+        } icon: {
+            Image(systemName: symbol)
+                .accessibilityHidden(true)
+        }
+            .font(.headline)
+            .foregroundStyle(PomoGemTheme.amber)
+        let badge = badge()
+        return ViewThatFits(in: .horizontal) {
+            HStack(alignment: alignment, spacing: 12) {
+                name
+                Spacer()
+                badge
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                name
+                badge
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -622,6 +637,10 @@ private struct PaywallFeature: View {
             Text(verbatim: monthLabelExample)
                 .font(.system(.caption, design: .rounded, weight: .bold))
                 .monospacedDigit()
+                // "September 2026" is wider than 「2026年9月」: at accessibility
+                // sizes it shrinks instead of breaking the month in two.
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)

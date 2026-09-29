@@ -938,15 +938,22 @@ private struct SubjectSetupPage: View {
                                 Circle()
                                     .fill(Color(hex: preset.colorHex))
                                     .frame(width: 14, height: 14)
-                                Text(preset.displayName)
-                                    .font(.system(.body, design: .rounded, weight: .bold))
-                                    // A name is never split across lines; the
-                                    // one-column layout gives it the full
-                                    // width, and only a name wider than that
-                                    // shrinks a little.
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.7)
-                                    .layoutPriority(1)
+                                // A name is never split across lines; the
+                                // one-column layout gives it the full width,
+                                // and only a name wider than that shrinks a
+                                // little. A longer English name ("Customer
+                                // Support" at accessibility sizes) wraps at
+                                // its space instead of being cut off.
+                                ViewThatFits(in: .horizontal) {
+                                    Text(preset.displayName)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.7)
+                                    Text(preset.displayName)
+                                        .lineLimit(3)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                .font(.system(.body, design: .rounded, weight: .bold))
+                                .layoutPriority(1)
                                 Spacer(minLength: 4)
                                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                                     .foregroundStyle(isSelected ? PomoGemTheme.amber : PomoGemTheme.muted)
@@ -990,6 +997,9 @@ private struct SubjectSetupPage: View {
                         Button(String(localized: "選択", table: "Onboarding",
                                       comment: "Onboarding theme page: choose the typed theme name"), action: addCustomSubject)
                             .font(.subheadline.weight(.bold))
+                            // Its one word stays whole ("Choose" is wider than
+                            // 「選択」); the text field gives up the width.
+                            .fixedSize(horizontal: true, vertical: false)
                             .frame(minWidth: 64, minHeight: 50)
                             .background(PomoGemTheme.raised, in: RoundedRectangle(cornerRadius: 13))
                             .buttonStyle(PomoGemBareButtonStyle())

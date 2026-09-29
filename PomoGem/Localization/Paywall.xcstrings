@@ -602,7 +602,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Besides the free 25, 45, 60 and 90 min, choose any length from %@, to the second"
+            "value" : "Besides the free 25, 45, 60 and 90 min timers, choose any length from %@, down to the second"
           }
         },
         "ja" : {
