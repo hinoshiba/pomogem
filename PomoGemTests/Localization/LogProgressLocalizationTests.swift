@@ -108,7 +108,11 @@ final class LogProgressLocalizationTests: XCTestCase {
         )
         XCTAssertEqual(
             try english("瓶では新しい12個が動き、これまでの%lld個を振り返れます。行をタップすると編集・削除できます。", table: "Log", 1),
-            "The newest 12 move in your jar. Here you can look back on your 1 milestone stone. Tap a row to edit or delete it."
+            "Up to 12 of your newest milestone stones move in your jar. Here you can look back on your 1 milestone stone. Tap a row to edit or delete it."
+        )
+        XCTAssertEqual(
+            try english("瓶では新しい12個が動き、これまでの%lld個を振り返れます。行をタップすると編集・削除できます。", table: "Log", 40),
+            "Up to 12 of your newest milestone stones move in your jar. Here you can look back on all 40 of them. Tap a row to edit or delete it."
         )
         XCTAssertEqual(
             try english("%lld日分、期間合計%@。", table: "Log", 7, "1,250 grams"),

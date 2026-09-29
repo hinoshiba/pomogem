@@ -1981,13 +1981,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "The newest 12 move in your jar. The latest %lld is shown here. Tap a row to edit or delete it."
+                  "value" : "Up to 12 of your newest milestone stones move in your jar. The latest %lld is shown here. Tap a row to edit or delete it."
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "The newest 12 move in your jar. The latest %lld are shown here. Tap a row to edit or delete it."
+                  "value" : "Up to 12 of your newest milestone stones move in your jar. The latest %lld are shown here. Tap a row to edit or delete it."
                 }
               }
             }
@@ -2010,13 +2010,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "The newest 12 move in your jar. Here you can look back on your %lld milestone stone. Tap a row to edit or delete it."
+                  "value" : "Up to 12 of your newest milestone stones move in your jar. Here you can look back on your %lld milestone stone. Tap a row to edit or delete it."
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "The newest 12 move in your jar. Here you can look back on all %lld milestone stones. Tap a row to edit or delete it."
+                  "value" : "Up to 12 of your newest milestone stones move in your jar. Here you can look back on all %lld of them. Tap a row to edit or delete it."
                 }
               }
             }
