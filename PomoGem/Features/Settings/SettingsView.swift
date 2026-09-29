@@ -3100,6 +3100,7 @@ private struct CompleteDataDeletionConfirmationView: View {
     }
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var step: Step = .consequences
     @State private var understoodOtherDevices = false
     @State private var confirmationText = ""
@@ -3126,6 +3127,10 @@ private struct CompleteDataDeletionConfirmationView: View {
                     comment: "Complete data deletion: row, sheet title and final button (glossary: Delete Your Content)"
                 )
                 : String(localized: "最終確認", table: "Settings", comment: "Complete data deletion: title of the last step"))
+            // A large title at the accessibility sizes cuts the name to a few
+            // letters (Delete Your C…); the inline title keeps all of it, as
+            // the theme editor's does.
+            .navigationBarTitleDisplayMode(dynamicTypeSize.isAccessibilitySize ? .inline : .automatic)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(String(localized: "キャンセル", table: "Settings", comment: "Toolbar button")) { dismiss() }
