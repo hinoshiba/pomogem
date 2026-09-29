@@ -56,6 +56,33 @@ final class LogProgressLocalizationTests: XCTestCase {
         }
     }
 
+    /// Units written into these tables' own English sentences stay on the line
+    /// of their number ("0 g", "2.50 kg", "250 min"): at large text sizes an
+    /// ordinary space let the unit wrap onto a line of its own.
+    func testUnitsInEnglishSentencesKeepANoBreakSpace() throws {
+        let tableMap = try LocalizationTestSupport.tableMap()
+        guard tableMap.shippingLanguages.contains("en") else {
+            throw XCTSkip("English is not activated yet")
+        }
+        let brokenUnit = try NSRegularExpression(
+            pattern: #"(\d|%(\d\$)?(lld|@)) (g|kg|t|min|hr|grams?|minutes?)\b"#
+        )
+        for table in ["Log", "Planning", "Progress"] {
+            let path = try XCTUnwrap(tableMap.catalogs[table], "\(table) has no catalog")
+            let catalog = try LocalizationCatalogFile(table: table, relativePath: path)
+            for (key, entry) in catalog.strings {
+                guard let english = LocalizationCatalogFile.localizations(of: entry)["en"] else { continue }
+                for unit in LocalizationCatalogFile.units(of: english) {
+                    let range = NSRange(unit.value.startIndex..., in: unit.value)
+                    XCTAssertNil(
+                        brokenUnit.firstMatch(in: unit.value, range: range),
+                        "\(table): \(key) \(unit.label) puts an ordinary space before a unit: \(unit.value)"
+                    )
+                }
+            }
+        }
+    }
+
     // MARK: Log
 
     func testLogScreenInEnglish() throws {
@@ -164,6 +191,10 @@ final class LogProgressLocalizationTests: XCTestCase {
     }
 
     func testMilestoneEditorInEnglish() throws {
+        XCTAssertEqual(
+            try english("記念石は0gです。編集・削除しても、集中時間・質量・通常の粒数は変わりません。", table: "Log"),
+            "Milestone stones weigh 0\u{00A0}g. Editing or deleting one never changes your focus time, mass or number of regular gems."
+        )
         XCTAssertEqual(try english("成果を編集", table: "Log"), "Edit Achievement")
         XCTAssertEqual(try english("変更を保存", table: "Log"), "Save Changes")
         XCTAssertEqual(try english("この記念石を削除しますか？", table: "Log"), "Delete This Milestone Stone?")
@@ -212,6 +243,7 @@ final class LogProgressLocalizationTests: XCTestCase {
         )
         XCTAssertEqual(try english("最初の時間の核", table: "Progress"), "the first time core")
         XCTAssertEqual(try english("%@標準単位", table: "Progress", "1.0"), "1.0 standard units")
+        XCTAssertEqual(try english("%lldg相当", table: "Progress", 1_005), "1,005\u{00A0}g equivalent")
     }
 
     /// The composed labels keep their Japanese exactly (the presentation tests
@@ -246,6 +278,8 @@ final class LogProgressLocalizationTests: XCTestCase {
         XCTAssertEqual(try english("%lld段階到達 · 次 %@", table: "Planning", 1, "25 kg"), "1 stage reached · next 25 kg")
         XCTAssertEqual(try english("%lld回", table: "Planning", 1_300), "1,300 sessions")
         XCTAssertEqual(try english("%@t", table: "Planning", "3.68"), "3.68\u{00A0}t")
+        XCTAssertEqual(try english("最初の2.50kgへ", table: "Planning"), "Toward Your First 2.50\u{00A0}kg")
+        XCTAssertEqual(try english("瓶1杯 2.50kg · 集中250分相当", table: "Planning"), "A full jar: 2.50\u{00A0}kg · 250\u{00A0}min of focus")
         XCTAssertEqual(
             try english("ここで動かす瓶や数値は、実際の学習記録・保存領域・ウィジェットには保存されません。画面を閉じると入力も消えます。", table: "Planning"),
             "The jar and numbers you move here are never saved to your real records, your storage or your widgets. What you enter is cleared when you close this screen."

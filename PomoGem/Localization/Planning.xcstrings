@@ -357,7 +357,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Weekly sessions are converted with an average year of 365.25 days. Each completed session is 1 gem, and each minute of focus is %1$lld g. A full jar every 2.50 kg, the long-term mass stages and the jar's light are calculated just as on the real screens. Gems are grouped in tens, so even a long plan draws no more than %2$lld moving pieces."
+            "value" : "Weekly sessions are converted with an average year of 365.25 days. Each completed session is 1 gem, and each minute of focus is %1$lld g. A full jar every 2.50 kg, the long-term mass stages and the jar's light are calculated just as on the real screens. Gems are grouped in tens, so even a long plan draws no more than %2$lld moving pieces."
           }
         },
         "ja" : {
@@ -374,7 +374,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "60 min = 600 g = 25 min × 2 + 10 min = 10 min × 6"
+            "value" : "60 min = 600 g = 25 min × 2 + 10 min = 10 min × 6"
           }
         },
         "ja" : {
@@ -408,7 +408,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ to go · a full jar is 250 min of focus"
+            "value" : "%@ to go · a full jar is 250 min of focus"
           }
         },
         "ja" : {
@@ -726,7 +726,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sixty minutes is 600 grams, however you split it"
+            "value" : "Sixty minutes is 600 grams, however you split it"
           }
         },
         "ja" : {
@@ -776,7 +776,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Toward Your First 2.50 kg"
+            "value" : "Toward Your First 2.50 kg"
           }
         },
         "ja" : {
@@ -842,7 +842,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "A full jar: 2.50 kg · 250 min of focus"
+            "value" : "A full jar: 2.50 kg · 250 min of focus"
           }
         },
         "ja" : {
@@ -893,7 +893,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Your jar always fills every 2.50 kg (250 min of focus), and after its full-jar glow it moves on to the next jar. Your total never disappears: it stays separately as long-term stages of 2.50 kg → 25 kg → 250 kg and beyond. Both grow with focus time, not with the number of sessions: 1 minute of focus = %lld g."
+            "value" : "Your jar always fills every 2.50 kg (250 min of focus), and after its full-jar glow it moves on to the next jar. Your total never disappears: it stays separately as long-term stages of 2.50 kg → 25 kg → 250 kg and beyond. Both grow with focus time, not with the number of sessions: 1 minute of focus = %lld g."
           }
         },
         "ja" : {

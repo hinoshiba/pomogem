@@ -371,7 +371,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "+%lld g"
+            "value" : "+%lld g"
           }
         },
         "ja" : {
@@ -388,7 +388,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "+%1$lld g · %2$@"
+            "value" : "+%1$lld g · %2$@"
           }
         },
         "ja" : {
@@ -2423,7 +2423,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Milestone stones weigh 0 g. Editing or deleting one never changes your focus time, mass or number of regular gems."
+            "value" : "Milestone stones weigh 0 g. Editing or deleting one never changes your focus time, mass or number of regular gems."
           }
         },
         "ja" : {
