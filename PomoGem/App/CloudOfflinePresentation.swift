@@ -145,6 +145,11 @@ struct CloudOfflineBanner: View {
             .accessibilityLabel(Text("\(statusTitle)。詳細を表示", tableName: "Launch",
                                      comment: "VoiceOver: offline banner button. %@ is the sync status title"))
             .accessibilityIdentifier("cloud-offline-details")
+            // Without a priority the HStack splits the free width evenly
+            // between this button and the Spacer, so at accessibility sizes the
+            // status wrapped at half the row ("Saving / to device") while the
+            // other half stayed empty. The button now takes what it needs first.
+            .layoutPriority(1)
 
             Spacer(minLength: 0)
 
