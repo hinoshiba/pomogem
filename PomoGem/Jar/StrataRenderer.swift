@@ -127,6 +127,7 @@ struct JarStratumVisual: Identifiable, Equatable, Sendable {
     var aggregateDescriptor: PebbleDescriptor {
         let subjects = colorMix.enumerated().map { index, item in
             AggregateSubjectFraction(
+                // l10n-ignore: persisted sentinel name (data); VoiceOver names it through JarSubjectDisplayName
                 name: index == 0 ? "過去の集中" : "過去の集中 \(index + 1)",
                 colorHex: item.hex,
                 pebbleCount: NonnegativeIntPolicy.clamped(

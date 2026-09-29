@@ -9,11 +9,14 @@ enum JarSnapshotError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .sceneNotPresented:
-            "瓶の描画がまだ準備できていません。"
+            String(localized: "瓶の描画がまだ準備できていません。", table: "Jar",
+                   comment: "Jar snapshot error: the jar is not on screen yet, so it cannot be drawn into a share card")
         case .textureUnavailable:
-            "瓶の描画を取得できませんでした。"
+            String(localized: "瓶の描画を取得できませんでした。", table: "Jar",
+                   comment: "Jar snapshot error: the jar's drawing could not be captured")
         case .imageUnavailable:
-            "瓶の画像を生成できませんでした。"
+            String(localized: "瓶の画像を生成できませんでした。", table: "Jar",
+                   comment: "Jar snapshot error: the jar's image could not be created")
         }
     }
 }

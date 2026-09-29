@@ -577,7 +577,19 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
     var screenTimeObstacleAccessibilityDescription: String? {
         guard screenTimeObstacleUnitCount > 0 else { return nil }
-        return "寄り道の黒い石\(screenTimeObstaclePhysicalCount)個、10分の石\(screenTimeObstacleUnitCount.formatted())個分。勉強の積み上げには含まれません"
+        // l10n: VoiceOver's jar value (Docs/Localization.md), one key per
+        // count so each takes its plural form; the black stones' rendering is
+        // untouched (BRIEF rule 12).
+        let stones = String(localized: "寄り道の黒い石\(screenTimeObstaclePhysicalCount)個", table: "Jar",
+                            comment: "VoiceOver, the jar's black stones (time on apps the person wants to use less): how many stones")
+        let units = String(localized: "10分の石\(screenTimeObstacleUnitCount)個分", table: "Jar",
+                           comment: "VoiceOver, the jar's black stones: how many 10-minute stones they stand for (follows the stone count)")
+        return SentenceText.join([
+            String(localized: "\(stones)、\(units)。", table: "Jar",
+                   comment: "VoiceOver, the jar's black stones: the stone count, then the 10-minute stones they stand for. en: '%1$@, %2$@.'"),
+            String(localized: "勉強の積み上げには含まれません", table: "Jar",
+                   comment: "VoiceOver, the jar's black stones, last sentence (no final period): they never count toward study")
+        ])
     }
     private var studyPhysicalBodyCount: Int {
         livePebbles.filter { !$0.descriptor.isScreenTimeObstacle }.count
