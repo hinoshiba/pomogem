@@ -373,6 +373,12 @@ struct TimerRotationControls: View {
                         comment: "Small timer button that goes back to following the device's orientation (keep it short)"
                     ))
                         .font(.caption)
+                        // One unbroken word: at AX5 on a 375 pt screen the
+                        // header squeezed "Auto" into 「Aut / o」. The icons
+                        // beside it do not grow at all.
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
                         .frame(minWidth: 44, minHeight: 44)
                         .contentShape(Rectangle())
                 }
