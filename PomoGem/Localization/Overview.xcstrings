@@ -2,12 +2,12 @@
   "sourceLanguage" : "ja",
   "strings" : {
     "%@ = %@" : {
-      "comment" : "Time core legend step: a focus time equals a mass (10分 = 100g). en: '%1$@<no-break space>= %2$@', so a line breaks only after '='.",
+      "comment" : "Time core legend step on one line: a focus time equals a mass (10分 = 100g)",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$@ = %2$@"
+            "value" : "%1$@ = %2$@"
           }
         },
         "ja" : {
@@ -208,7 +208,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$@ %2$@, count %3$lld, holding %4$lld gems, %5$@"
+            "value" : "%1$@ %2$@, %3$lld in this tier, holding %4$lld gems, %5$@"
           }
         },
         "ja" : {
@@ -225,7 +225,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$@ %2$@, count %3$lld, gems held: %4$lld, %5$@"
+            "value" : "%1$@ %2$@, %3$lld in this tier, gems held: %4$lld, %5$@"
           }
         },
         "ja" : {
@@ -803,6 +803,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "iCloudを確認中・確認済み記録なし"
+          }
+        }
+      }
+    },
+    "overview.legend.step.wrapped" : {
+      "comment" : "Time core legend step on two lines, for a narrow chip: a focus time equals a mass (10分 = 100g). en: '%1$@' newline '= %2$@'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@\n= %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ = %@"
           }
         }
       }

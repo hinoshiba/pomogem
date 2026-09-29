@@ -1292,9 +1292,17 @@ struct AccumulationOverviewView: View {
 
                 Group {
                     if dynamicTypeSize.isAccessibilitySize {
-                        VStack(spacing: 7) { fusionLegendSteps }
+                        VStack(spacing: 7) { fusionLegendSteps(stacked: true) }
                     } else {
-                        HStack(spacing: 7) { fusionLegendSteps }
+                        // Side by side only while every chip can wrap between
+                        // whole words. Japanese may break between any two
+                        // words; English may not, and at xLarge on a 375 pt
+                        // screen the chips split into "10 / min" and
+                        // "Tim / e Cor / e". Then the chips stack as at AX sizes.
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 7) { fusionLegendSteps(stacked: false) }
+                            VStack(spacing: 7) { fusionLegendSteps(stacked: true) }
+                        }
                     }
                 }
                 .accessibilityElement(children: .ignore)
@@ -1399,16 +1407,47 @@ struct AccumulationOverviewView: View {
     }
 
     @ViewBuilder
-    private var fusionLegendSteps: some View {
+    private func fusionLegendSteps(stacked: Bool) -> some View {
         ForEach(Array(FusionLegendStep.allCases.enumerated()), id: \.element) { index, step in
-            if index > 0 { fusionArrow }
-            fusionStep(step)
+            if index > 0 { fusionArrow(stacked: stacked) }
+            if stacked {
+                fusionStep(step)
+                    .frame(maxWidth: .infinity)
+                    .accessibilityIdentifier(step.accessibilityIdentifier)
+            } else {
+                // The ideal width is the legend's widest word, not the
+                // one-line step, so the legend's ViewThatFits keeps the chips
+                // side by side exactly while each chip can wrap between words.
+                ZStack {
+                    Text(FusionLegendStep.unbreakableWords)
+                        .font(Self.fusionStepFont)
+                        .monospacedDigit()
+                        .fixedSize()
+                        .padding(.horizontal, 8)
+                        .frame(height: 0)
+                        .hidden()
+                    fusionStep(step)
+                        .frame(idealWidth: 0)
+                }
+                .frame(maxWidth: .infinity)
+                .accessibilityIdentifier(step.accessibilityIdentifier)
+            }
         }
     }
 
+    private static let fusionStepFont = Font.caption2.weight(.black)
+
+    /// One step on one line when it fits, or the step's two-line form. The
+    /// digits are tabular so the three time steps are equally wide and always
+    /// wrap alike ("10 min = 100 g" is narrower than "60 min = 600 g").
     private func fusionStep(_ step: FusionLegendStep) -> some View {
-        Text(step.title)
-            .font(.caption2.weight(.black))
+        ViewThatFits(in: .horizontal) {
+            Text(step.title)
+                .lineLimit(1)
+            Text(step.wrappedTitle)
+        }
+            .font(Self.fusionStepFont)
+            .monospacedDigit()
             .foregroundStyle(PomoGemTheme.text)
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
@@ -1417,14 +1456,10 @@ struct AccumulationOverviewView: View {
                     .fill(PomoGemTheme.card)
                     .overlay(Capsule().stroke(PomoGemTheme.glassEdge.opacity(0.22)))
             )
-            .frame(maxWidth: .infinity)
-            .accessibilityIdentifier(step.accessibilityIdentifier)
     }
 
-    private var fusionArrow: some View {
-        Image(systemName: dynamicTypeSize.isAccessibilitySize
-            ? "chevron.down"
-            : "chevron.right")
+    private func fusionArrow(stacked: Bool) -> some View {
+        Image(systemName: stacked ? "chevron.down" : "chevron.right")
             .font(.caption2.weight(.black))
             .foregroundStyle(PomoGemTheme.amber)
             .accessibilityHidden(true)
@@ -1770,23 +1805,75 @@ enum FusionLegendStep: CaseIterable, Hashable {
         }
     }
 
+    /// The same step for a chip too narrow for one line. Japanese keeps the
+    /// one-line text and wraps it as before; English breaks it deliberately
+    /// ("10 min" over "= 100 g") instead of wherever a space falls, which
+    /// split "10 min =" / "100 g" beside "25 min" / "= 250 g".
+    var wrappedTitle: String {
+        switch self {
+        case .tenMinutes: Self.equation(minutes: 10, wrapped: true)
+        case .twentyFiveMinutes: Self.equation(minutes: 25, wrapped: true)
+        case .sixtyMinutes: Self.equation(minutes: 60, wrapped: true)
+        case .timeCore: EffortConstellationPresentation.timeCoreTitle
+        }
+    }
+
     /// Minutes only (「60分」, not 「1時間」), as the legend has always read.
-    /// Each unit stays whole ("10 min", "100 g"), and the English format
-    /// joins "=" to the time, so a narrow chip always breaks as
-    /// "10 min =" over "100 g" (the Japanese has no spaces to break at).
-    private static func equation(minutes: Int) -> String {
+    /// Each unit stays whole ("10 min", "100 g"); the Japanese has no spaces.
+    private static func equation(minutes: Int, wrapped: Bool = false) -> String {
         let grams = minutes * Constants.Mass.gramsPerMinute
         let time = nonBreaking(DurationText.short(seconds: minutes * 60, units: .minutesSeconds))
         let mass = nonBreaking(MassText.grams("\(grams)"))
+        if wrapped {
+            return String(
+                localized: "overview.legend.step.wrapped",
+                defaultValue: "\(time) = \(mass)",
+                table: "Overview",
+                comment: "Time core legend step on two lines, for a narrow chip: a focus time equals a mass (10分 = 100g). en: '%1$@' newline '= %2$@'."
+            )
+        }
         return String(
             localized: "\(time) = \(mass)",
             table: "Overview",
-            comment: "Time core legend step: a focus time equals a mass (10分 = 100g). en: '%1$@<no-break space>= %2$@', so a line breaks only after '='."
+            comment: "Time core legend step on one line: a focus time equals a mass (10分 = 100g)"
         )
     }
 
     private static func nonBreaking(_ text: String) -> String {
         text.replacingOccurrences(of: " ", with: "\u{00A0}")
+    }
+
+    /// Every word of the legend that a line may not break inside, one per
+    /// line, so a Text of it is as wide as the widest one: "10 min" in
+    /// English, 「100g」 in Japanese, which may break between 「時間」「の」「核」.
+    static var unbreakableWords: String {
+        let locale = PomoGemLocale.current
+        return allCases
+            .flatMap { lineBreakRuns(of: $0.title, locale: locale) }
+            .joined(separator: "\n")
+    }
+
+    /// The runs of `text` between the places a line may break, by the
+    /// language's own line-breaking rules (no-break spaces hold a unit
+    /// together), without their surrounding spaces.
+    static func lineBreakRuns(of text: String, locale: Locale) -> [String] {
+        let string = text as NSString
+        let tokenizer = CFStringTokenizerCreate(
+            nil,
+            string,
+            CFRange(location: 0, length: string.length),
+            kCFStringTokenizerUnitLineBreak,
+            locale as CFLocale
+        )
+        var runs: [String] = []
+        while CFStringTokenizerAdvanceToNextToken(tokenizer).rawValue != 0 {
+            let range = CFStringTokenizerGetCurrentTokenRange(tokenizer)
+            let run = string
+                .substring(with: NSRange(location: range.location, length: range.length))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !run.isEmpty { runs.append(run) }
+        }
+        return runs
     }
 }
 

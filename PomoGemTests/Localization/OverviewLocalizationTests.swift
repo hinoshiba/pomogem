@@ -163,17 +163,43 @@ final class OverviewLocalizationTests: XCTestCase {
         XCTAssertEqual(try english("%lld粒・%@", 1, "10%"), "1 gem · 10%")
         XCTAssertEqual(try english("%lld粒・%@", 12, "40%"), "12 gems · 40%")
         XCTAssertEqual(try english("まとめた日：%@ 〜 %@", "Sep 1, 2026", "Sep 24, 2026"), "Combined Sep 1, 2026 – Sep 24, 2026")
+        XCTAssertEqual(
+            try english("%@の%@、%lld個、%lld粒を保持、%@", "×10", "Crystal", 4, 40, "10,000 grams"),
+            "×10 Crystal, 4 in this tier, holding 40 gems, 10,000 grams"
+        )
     }
 
-    /// The legend's "=" is glued to the time, so a narrow chip wraps as
-    /// "10 min =" over "100 g" and never splits a unit.
-    func testLegendStepKeepsUnitsWholeInEnglish() throws {
+    /// A legend chip reads "10 min = 100 g" on one line, or, when it is too
+    /// narrow, "10 min" over "= 100 g" in every chip alike. The Japanese of
+    /// both forms is the one line it always was.
+    func testLegendStepInBothForms() throws {
         let bundle = try LocalizationTestSupport.englishBundle()
-        let time = DurationText.short(seconds: 600, units: .minutesSeconds, locale: en)
-        let mass = MassText.grams("100", bundle: bundle, locale: en)
-        XCTAssertEqual(time, "10 min")
-        XCTAssertEqual(mass, "100 g")
-        XCTAssertEqual(try english("%@ = %@", "10\u{00A0}min", "100\u{00A0}g"), "10\u{00A0}min\u{00A0}= 100\u{00A0}g")
+        XCTAssertEqual(DurationText.short(seconds: 600, units: .minutesSeconds, locale: en), "10 min")
+        XCTAssertEqual(MassText.grams("100", bundle: bundle, locale: en), "100 g")
+        XCTAssertEqual(try english("%@ = %@", "10 min", "100 g"), "10 min = 100 g")
+        XCTAssertEqual(try english("overview.legend.step.wrapped", "10 min", "100 g"), "10 min\n= 100 g")
+        XCTAssertEqual(
+            FusionLegendStep.allCases.map(\.wrappedTitle),
+            ["10分 = 100g", "25分 = 250g", "60分 = 600g", "時間の核"]
+        )
+    }
+
+    /// The side-by-side legend is sized by the words a line may not break
+    /// inside: English keeps "10 min" and "Core" whole, Japanese may break
+    /// between words, so the chips stay side by side at larger sizes.
+    func testLegendWordsFollowEachLanguagesLineBreaks() {
+        let enUS = Locale(identifier: "en_US")
+        XCTAssertEqual(
+            FusionLegendStep.lineBreakRuns(of: "10\u{00A0}min = 100\u{00A0}g", locale: enUS),
+            ["10\u{00A0}min", "=", "100\u{00A0}g"]
+        )
+        XCTAssertEqual(FusionLegendStep.lineBreakRuns(of: "Time Core", locale: enUS), ["Time", "Core"])
+
+        let jaJP = Locale(identifier: "ja_JP")
+        XCTAssertEqual(FusionLegendStep.lineBreakRuns(of: "10分 = 100g", locale: jaJP), ["10分", "=", "100g"])
+        let core = FusionLegendStep.lineBreakRuns(of: "時間の核", locale: jaJP)
+        XCTAssertGreaterThan(core.count, 1, "\(core)")
+        XCTAssertEqual(core.joined(), "時間の核")
     }
 
     func testTimeCoreVoiceOverInEnglish() throws {
