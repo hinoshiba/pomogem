@@ -97,8 +97,13 @@ struct WrappedView: View {
 
                 Spacer(minLength: 4)
                 SectionEyebrow(text: "MONTHLY WRAPPED")
+                // The 36 pt display title stops growing at AX3. Past that, a
+                // long English month is wider than an iPhone SE line and
+                // breaks inside the word ("Septembe" / "r 2026"); at AX3 it
+                // still wraps between words.
                 Text("\(month.title)の瓶", tableName: "Log", comment: "Month in Review title; the argument is a month such as 2026年9月")
                     .pomogemSectionTitle(size: 36)
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility3)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 20)
                 Text("ひと粒ずつの手応えを、ひと月のまとまりでも眺める。", tableName: "Log")

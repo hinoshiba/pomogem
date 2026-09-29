@@ -1338,6 +1338,10 @@ struct LogView: View {
         .toolbarTitleDisplayMode(.large)
         .fullScreenCover(item: $selectedWrappedMonth) { month in
             WrappedView(month: month)
+                // Like the sheets below: a presentation does not inherit a
+                // Dynamic Type size set above it, so without this the UI-test
+                // AX5 launch showed Month in Review at the default size.
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
         }
         .sheet(item: $selectedDay) { day in
             DayHistorySheet(
