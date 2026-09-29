@@ -1430,9 +1430,13 @@ struct LogView: View {
                         summaryTiles(summary)
                     }
                 } else {
+                    // One height for the three tiles: an English label such
+                    // as "Completed sessions" wraps to two lines, and the
+                    // tiles should still line up as one row.
                     HStack(spacing: 10) {
                         summaryTiles(summary)
                     }
+                    .fixedSize(horizontal: false, vertical: true)
                 }
             }
             summaryComposition(summary)
@@ -2756,7 +2760,7 @@ private struct SummaryTile: View {
             Text(value).font(.system(.headline, design: .rounded, weight: .heavy)).lineLimit(1).minimumScaleFactor(0.72)
             Text(label).font(.caption2).foregroundStyle(PomoGemTheme.muted)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(13)
         .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 14))
         .accessibilityElement(children: .combine)
