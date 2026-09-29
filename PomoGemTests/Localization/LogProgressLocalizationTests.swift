@@ -141,7 +141,7 @@ final class LogProgressLocalizationTests: XCTestCase {
         XCTAssertEqual(HistoryMassText.text(250), "250g")
         XCTAssertEqual(HistoryMassText.text(2_500), "2.5kg")
         XCTAssertEqual(HistoryMassText.text(1_300_000), "1.3t")
-        XCTAssertEqual(try english("%@t", table: "Log", "1.2"), "1.2 t")
+        XCTAssertEqual(try english("%@t", table: "Log", "1.2"), "1.2\u{00A0}t", "a no-break space keeps the unit with its number")
     }
 
     func testMonthTitlesComeFromTheDateNotTheStoredLabel() throws {
@@ -241,7 +241,7 @@ final class LogProgressLocalizationTests: XCTestCase {
         )
         XCTAssertEqual(try english("%lld段階到達 · 次 %@", table: "Planning", 1, "25 kg"), "1 stage reached · next 25 kg")
         XCTAssertEqual(try english("%lld回", table: "Planning", 1_300), "1,300 sessions")
-        XCTAssertEqual(try english("%@t", table: "Planning", "3.68"), "3.68 t")
+        XCTAssertEqual(try english("%@t", table: "Planning", "3.68"), "3.68\u{00A0}t")
         XCTAssertEqual(
             try english("ここで動かす瓶や数値は、実際の学習記録・保存領域・ウィジェットには保存されません。画面を閉じると入力も消えます。", table: "Planning"),
             "The jar and numbers you move here are never saved to your real records, your storage or your widgets. What you enter is cleared when you close this screen."
