@@ -71,6 +71,9 @@
         }
       }
     },
+    "これまでの記録を読み込み中" : {
+      "comment" : "VoiceOver, jar value before Home has read its focus records"
+    },
     "勉強アプリの粒" : {
       "comment" : "VoiceOver, a gem from the time spent in study apps (Screen Time)"
     },

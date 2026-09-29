@@ -56,6 +56,27 @@ enum PendingMassPresentationPolicy {
         }
     }
 
+    /// Whether Home's own sum is the whole lifetime while pending: no
+    /// aggregate is accepted then, so only a complete candidate page that
+    /// fits in the jar's cap covers every session. A page of an earlier
+    /// presentation generation proves nothing about the current one (Home
+    /// withholds its sessions), and claiming coverage for it presented
+    /// 「この端末で確認済み 0粒」 as an exact total (device-verify-2 P2).
+    static func deviceCoversEverySession(
+        pageIsCurrent: Bool,
+        pageIsComplete: Bool,
+        membershipIsComplete: Bool,
+        acceptedAggregateCount: Int,
+        candidateCount: Int,
+        presentedCount: Int
+    ) -> Bool {
+        pageIsCurrent
+            && pageIsComplete
+            && membershipIsComplete
+            && acceptedAggregateCount == 0
+            && candidateCount == presentedCount
+    }
+
     static func headline(
         lastVerified: VerifiedMassRecord?,
         currentEpochID: UUID?,
@@ -105,6 +126,142 @@ enum PendingMassPresentationPolicy {
                                   isLowerBound: isLowerBound, epochID: epochID,
                                   frontierSessionID: frontier.id, frontierEndAt: frontier.endAt)
     }
+}
+
+/// device-verify-2 P2. What the jar's lifetime readout, its time core and the
+/// menu show while Home re-derives them.
+///
+/// Home reads its session page asynchronously, and every change of the
+/// presentation generation — trust revoked for an import or the app's own
+/// save, the rolling check, verification completing — retires the page it
+/// holds until the new one is read. The jar keeps its gems through that gap
+/// (`HomeView.syncScene`), but the readout was computed from the empty page:
+/// for about a second after a return to the app the phone said 「再集計中」
+/// over 「この端末で確認済み 0粒」 and the time core vanished, which is what
+/// sync-03 decided must never replace a value this device can show.
+///
+/// Every pass therefore takes its readout from one `Source`:
+/// - settled inputs (the page is current and no read is retiring a complete
+///   one) are presented live, and remembered;
+/// - while Home re-derives, the last remembered readout stays on screen as a
+///   whole — headline, count, time core and its colour, the crystals and
+///   fusion progress the jar describes — so no surface mixes it with the
+///   empty page. It is presented under 「iCloudを確認中」 when it was recorded
+///   so or Home is pending now: verification completing does not make a
+///   pending total a verified one, and once trust is revoked a verified total
+///   is only what this device confirmed;
+/// - before this Home has presented anything from settled inputs (a launch,
+///   or a remount after the background grace) it shows no number at all
+///   rather than 「再集計中」 or 0粒: the jar has no gems yet either;
+/// - after a failed read, what the inputs prove, as conservative as ever:
+///   nothing is in flight that would replace a held value.
+///
+/// A held readout never crosses into another reset epoch, and nothing is
+/// written, exported or shared from it: the verified-mass record reads
+/// settled inputs only, and the reward card freezes its values from live
+/// inputs, which the policies above keep conservative while unsettled.
+enum LifetimeReadoutContinuityPolicy {
+    /// Everything the jar and the menu say about the lifetime total.
+    struct Readout: Equatable, Sendable {
+        /// Presented as while iCloud is checked: 「iCloudを確認中」, 「この端末で
+        /// 確認済み N粒」 and the pending VoiceOver wording, no fusion progress.
+        var isCloudVerificationPending: Bool
+        /// Before this Home's first settled readout: no number is shown.
+        var isLoading = false
+        /// The jar's headline and VoiceOver mass; nil says 「再集計中」.
+        var jarGrams: Int?
+        /// The mass the jar's time core is drawn from.
+        var jarCoreGrams: Int
+        var jarPebbles: Int
+        /// The gems the jar's VoiceOver value counts as loose (瓶の整理).
+        var jarLoosePebbles: Int
+        /// The menu's mass and count, which count saved sessions at once.
+        var menuGrams: Int?
+        var menuPebbles: Int
+        var isLowerBound: Bool
+        var jarIsEmpty: Bool
+        var coreColorHex: String
+        var coreColorShares: [GemColorShare]
+        /// The crystals and rare gems the jar's VoiceOver value names.
+        var aggregateCount = 0
+        var legacyAggregateCount = 0
+        var goldPebbleCount = 0
+        var prismPebbleCount = 0
+
+        /// The landed totals the time core's progress is described from — the
+        /// pre-fusion rail, the jar's VoiceOver and the large-text card — so
+        /// they always describe the headline's snapshot. A verified readout's
+        /// only: nil while iCloud is checked and before the first read.
+        var fusionProgressTotals: HomeProjectionPolicy.Totals? {
+            guard !isCloudVerificationPending, !isLoading, let jarGrams else { return nil }
+            return .init(grams: jarGrams, pebbleCount: jarPebbles)
+        }
+
+        /// Before the first settled readout: nothing claimed, not even an
+        /// empty jar.
+        static func loading(isCloudVerificationPending: Bool, coreColorHex: String) -> Readout {
+            Readout(isCloudVerificationPending: isCloudVerificationPending, isLoading: true,
+                    jarGrams: nil, jarCoreGrams: 0, jarPebbles: 0, jarLoosePebbles: 0,
+                    menuGrams: nil, menuPebbles: 0, isLowerBound: true, jarIsEmpty: false,
+                    coreColorHex: coreColorHex, coreColorShares: [])
+        }
+    }
+
+    /// A readout presented from settled inputs, and the reset epoch it
+    /// describes.
+    struct Settled: Equatable, Sendable {
+        let readout: Readout
+        let epochID: UUID?
+    }
+
+    /// Where a pass takes its readout from.
+    enum Source: Equatable {
+        /// Settled inputs: present them, and remember what is presented.
+        case settled
+        /// Present the inputs as they are, without remembering them.
+        case live
+        /// Keep this readout on screen while Home re-derives it.
+        case held(Readout)
+        /// Nothing presented from settled inputs yet.
+        case loading
+    }
+
+    /// - Parameters:
+    ///   - inputsAreSettled: Home's page belongs to the current presentation
+    ///     generation and no read is retiring a complete one.
+    ///   - lastReadFailed: the latest read of the page failed and no other has
+    ///     started since.
+    static func source(
+        inputsAreSettled: Bool,
+        lastReadFailed: Bool,
+        lastSettled: Settled?,
+        currentEpochID: UUID?,
+        isCloudVerificationPending: Bool
+    ) -> Source {
+        if inputsAreSettled { return .settled }
+        // Nothing in flight would replace a held value: say what the inputs
+        // prove (「再集計中」 or a lower bound), never an old total for good.
+        if lastReadFailed { return .live }
+        guard let lastSettled else { return .loading }
+        // Records were reset since: the new epoch's value is re-derived.
+        guard lastSettled.epochID == currentEpochID else { return .live }
+        var readout = lastSettled.readout
+        readout.isCloudVerificationPending = readout.isCloudVerificationPending
+            || isCloudVerificationPending
+        return .held(readout)
+    }
+}
+
+/// Keeps `LifetimeReadoutContinuityPolicy.Settled` for Home without observing
+/// it. The jar's stage records the readout it presents, on each of Home's
+/// passes and on each landing, which re-runs only the stage (`JarStageReader`
+/// in HomeView); storing it in observed state would re-evaluate the whole of
+/// Home once more each time (device-verify-2 P4 measured that pass at about
+/// 100 ms on an iPhone 12 mini). The value is only read by a later pass that
+/// something else already invalidated.
+@MainActor
+final class SettledLifetimeReadoutBox {
+    var value: LifetimeReadoutContinuityPolicy.Settled?
 }
 
 /// The last lifetime total Home presented as verified, kept per account on
