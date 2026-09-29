@@ -1343,7 +1343,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This Apple Account doesn't match the one iCloud storage was chosen with on this installation. The data store won't open until you switch back to the original Apple Account."
+            "value" : "This is not the Apple Account that iCloud storage was set up with on this installation. The data store won't open until you switch back to the original Apple Account."
           }
         },
         "ja" : {
