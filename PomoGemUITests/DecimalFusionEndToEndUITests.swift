@@ -502,6 +502,12 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
     private func startDemoFocus() {
         XCTAssertTrue(demoLauncher.waitForExistence(timeout: 5))
         XCTAssertTrue(demoLauncher.isHittable)
+        // Home enables the start button only once the last gem's landing has
+        // settled; a tap before that is ignored and no focus starts.
+        XCTAssertTrue(
+            waitForCondition(timeout: 10) { self.demoLauncher.exists && self.demoLauncher.isEnabled },
+            "The start button must come back once the last gem has landed"
+        )
         demoLauncher.tap()
     }
 

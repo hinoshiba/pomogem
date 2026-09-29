@@ -253,11 +253,12 @@ enum LifetimeReadoutContinuityPolicy {
 }
 
 /// Keeps `LifetimeReadoutContinuityPolicy.Settled` for Home without observing
-/// it. Home records the readout it derives for the jar in the same pass;
-/// storing it in observed state would re-evaluate the whole of Home once more
-/// each time (device-verify-2 P4 measured that pass at about 100 ms on an
-/// iPhone 12 mini). The value is only read by a later pass that something
-/// else already invalidated.
+/// it. The jar's stage records the readout it presents, on each of Home's
+/// passes and on each landing, which re-runs only the stage (`JarStageReader`
+/// in HomeView); storing it in observed state would re-evaluate the whole of
+/// Home once more each time (device-verify-2 P4 measured that pass at about
+/// 100 ms on an iPhone 12 mini). The value is only read by a later pass that
+/// something else already invalidated.
 @MainActor
 final class SettledLifetimeReadoutBox {
     var value: LifetimeReadoutContinuityPolicy.Settled?

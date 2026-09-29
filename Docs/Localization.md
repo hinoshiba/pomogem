@@ -58,7 +58,9 @@
 | `DurationText.short(seconds:units:)` | 30秒・25分・1分30秒・1時間15分・1,234時間 | 30 sec · 25 min · 1 hr 15 min |
 | `DurationText.short(minutes:)` | 0分・25分・1時間15分 | 25 min |
 | `DurationText.spoken(…)` | shortと同じ | 1 hour, 15 minutes |
-| `MassText.grams(_:)`・`kilograms(_:)` | 250g・2.5kg（数値は各画面が今の書式で渡す） | 250 g · 2.5 kg |
+| `MassText.grams(value:)`・`addedGrams(_:)` | 250g・1,200g・+1,200g | 1,200 g · +1,200 g |
+| `MassText.kilograms(fromGrams:fractionDigits:)`・`tonnes(fromGrams:fractionDigits:)` | 2.6kg・2.50kg・1,234.5kg・2.50t（小数の桁は画面が決める） | 2.6 kg · 2.50 t |
+| `MassText.grams(_:)`・`kilograms(_:)` | 250g・2.5kg（呼び出し側が書式を整えた数値。上の4つを優先） | 250 g · 2.5 kg |
 | `MassText.spoken(grams:)`・`spoken(kilograms:fractionDigits:)` | 250グラム・2.5キログラム | 250 grams · 2.5 kilograms |
 | `DateText.yearMonth`・`year`・`monthDay`・`longDate`（どれも`Date`を受け取る） | 2026年9月・2026年・9月24日・2026年9月24日 | September 2026 · 2026 · Sep 24 · September 24, 2026 |
 | `ListText.compact`・`inSentence` | 通常3・金1／英語、数学、理科 | Standard 3 · Gold 1／English, Math, and Science |
@@ -80,6 +82,10 @@
   積み上がりの合計は`.hoursMinutes`です。端数は切り捨て、0は最小の単位（「0秒」「0分」）で表します。
   Live Activityの`FocusActivityConstants.durationLabel(seconds: 0)`だけは今「0分」を返すので、置き換えるときに確認してください
   （`Shared/FocusActivityAttributes.swift`はwidget extensionでもコンパイルされ、`DurationText`をそのまま使えます）。
+- 画面に出す質量はすべて`MassText`で書きます（device-verify-2 P7）。日本語は単位の前に空白を入れず、
+  桁を区切ります（「250g」「1,200g」「+1,200g」「1,234.5kg」）。手で組み立てた「250 g」「+1200g」が
+  画面ごとに混ざっていました。g・kg・tのどれを使い、小数を何桁にするかは画面が決めます。端数は四捨五入です。
+  `StringInterpolationLintTests.testShippingSourcesFormatMassesThroughMassText`が、手で組み立てた質量を検出します。
 - `CountText`と`MassText.spoken`は桁区切りを入れます（1,234）。1,000未満は今の表示と同じです。
   今1,000以上を区切らずに表示している画面は、置き換えで「1234粒」が「1,234粒」になる点を確認してください。
 - 月と年の区切り（`StrataMath.monthLabel`、`FairnessPolicy`、積み上がりの「年月」）はグレゴリオ暦で、
