@@ -223,6 +223,11 @@ final class OnboardingPaywallModelsLocalizationTests: XCTestCase {
         )
         XCTAssertEqual(try english("Paywall", "自動更新・無料トライアルはありません。"), "No auto-renewal and no free trial.")
         XCTAssertEqual(try english("Paywall", "購入情報を確認できませんでした。"), "Couldn’t verify the purchase.")
+        // The restore alert names what happened, not the button that did it.
+        XCTAssertEqual(
+            try english("Paywall", "購入を復元しました。Proの機能を使えます。"),
+            "Your purchase has been restored. You can use Pro features."
+        )
     }
 
     func testModelsInEnglish() throws {
