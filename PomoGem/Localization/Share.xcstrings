@@ -604,7 +604,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This month has many records, so this shows the newest %@. The card says “partial” too."
+            "value" : "This month has many records, so this shows the newest %@ records. The card says “partial” too."
           }
         },
         "ja" : {
@@ -1239,7 +1239,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sample +%@"
+            "value" : "+%@ not shown"
           }
         },
         "ja" : {

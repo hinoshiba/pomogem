@@ -144,6 +144,16 @@ final class ShareJarLocalizationTests: XCTestCase {
         XCTAssertEqual(try english("文字・数字・_ のみ、%lld文字まで。本文やURLは追加しません。", ShareHashtagPolicy.maximumBodyLength),
                        "Letters, numbers and _ only, up to 30 characters. Text and links can't be added here.")
         XCTAssertEqual(try english("%@%lld個", "Passed an exam", 2), "Passed an exam (2)")
+        // The corner chip is on the card alone, without the caption's
+        // "The jar shows a sample (not drawn: …)", so it says what is missing.
+        XCTAssertEqual(try english("代表表示 +%@", "57"), "+57 not shown")
+        XCTAssertEqual(
+            try english(
+                "この月は記録が多いため、最新%@件の表示分です。カードにも「表示分」と明記します。",
+                String(BoundedHistoryPolicy.periodSessionLimit)
+            ),
+            "This month has many records, so this shows the newest 2048 records. The card says “partial” too."
+        )
     }
 
     // MARK: Share card VoiceOver
