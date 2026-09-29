@@ -110,10 +110,13 @@ struct HomeView: View {
     /// disabled and a queued fusion celebration waits until some unrelated
     /// state change (formerly the three-second Screen Time pass) re-renders.
     @State private var pendingRewardReceiptRevision = 0
-    /// Screen Time drops retired, manual gems still falling (dev-D7) and the
-    /// stage's measured geometry. Only the jar's stage observes it, so a
-    /// landing no longer re-renders all of Home (device-verify-2 P4).
+    /// Screen Time drops retired, manual gems still falling (dev-D7), timer
+    /// gems landed while Home still holds their receipt, and the stage's
+    /// measured geometry. Only the jar's stage observes it, so a landing no
+    /// longer re-renders all of Home (device-verify-2 P4).
     @State private var jarStageState = JarStageState()
+    /// Home's own follow-up to a landing, run once the jar has settled.
+    @State private var landingSettle = LandingSettleScheduler()
     @State private var sceneInitialized = false
     /// Room for a tapped crystal's card under the bottle
     /// (`AggregateCardPlacementPolicy`), in the Home content's coordinates.
@@ -5300,7 +5303,7 @@ struct HomeView: View {
             }
             ScreenTimeGemDropStore.remove(descriptor.id)
             jarStageState.screenTimeDropRevision &+= 1
-            syncScene()
+            scheduleLandingSettle()
             return
         }
         var message: String
@@ -5329,8 +5332,12 @@ struct HomeView: View {
         if PendingRewardReceiptStore.load().contains(where: {
             $0.id == descriptor.id && $0.dropPhase == .awaitingLanding
         }) {
-            finishRewardDrop(sessionID: descriptor.id)
-            syncScene()
+            // In the readout at once. The receipt is released once the
+            // landing has settled: removing it writes UserDefaults, and any
+            // UserDefaults write re-renders Home through its `@AppStorage`
+            // properties (`_printChanges` lists them all as changed).
+            jarStageState.landedReceiptIDs.insert(descriptor.id)
+            scheduleLandingSettle()
             return
         }
         guard descriptor.source != .manual,
@@ -5339,6 +5346,49 @@ struct HomeView: View {
         if let receipt = prepareRewardReceipt(for: descriptor, dropPhase: nil) {
             scheduleRewardReceipt(receipt, delay: .milliseconds(1_650))
         }
+    }
+
+    /// device-verify-2 P4, after review. What a landing sets off in Home
+    /// itself re-renders all of Home and re-derives its sessions: releasing
+    /// a timer gem's receipt enables the start button and continues to Home,
+    /// rest or share, and `syncScene` re-reads the jar's page. Run inside
+    /// the landing callback, that is the full Home pass the device trace
+    /// caught as a 33 ms hitch on an iPhone 12 mini (there on a manual gem),
+    /// at the moment every completed focus ends on. The readout already
+    /// counts the gem (`JarStageState`); the rest waits until the landing has
+    /// settled, and a run of landings (a Screen Time import) settles once,
+    /// after the last. A process that ends within that moment keeps the
+    /// receipt, and the next launch drops the gem again, as it does for one
+    /// that ends during the fall.
+    /// Long enough for the landing's quick motion to be over (its camera
+    /// shake has decayed to about 5 % and its sparks have travelled most of
+    /// their way, `JarEffectsIntensity.landing`), short enough that the start
+    /// button and the card's rest or share follow without a felt pause.
+    private static let landingSettleDelay: Duration = .milliseconds(300)
+
+    private func scheduleLandingSettle() {
+        landingSettle.schedule(after: Self.landingSettleDelay) {
+            settleLandings()
+        }
+    }
+
+    private func settleLandings() {
+#if DEBUG
+        HomeRenderDiagnostics.recordLandingSettle()
+#endif
+        let receipts = PendingRewardReceiptStore.load()
+        // Released on an earlier settle (or by `syncScene`), and Home has
+        // re-read the receipts since: the readout no longer needs them.
+        let held = Set(receipts.map(\.id))
+        if !jarStageState.landedReceiptIDs.isSubset(of: held) {
+            jarStageState.landedReceiptIDs.formIntersection(held)
+        }
+        for receipt in receipts
+        where receipt.dropPhase == .awaitingLanding
+            && jarStageState.landedReceiptIDs.contains(receipt.id) {
+            finishRewardDrop(sessionID: receipt.id)
+        }
+        syncScene()
     }
 
     @discardableResult
@@ -6139,9 +6189,11 @@ private extension PendingStratumCelebration {
 /// (`JarLandedTotalsReader`). Home's own body must never read these
 /// properties, or it subscribes to them again.
 ///
-/// Receipts are not here: removing one also enables the start button and
-/// may present a queued celebration, so a timer landing re-renders Home by
-/// design.
+/// Receipts stay in Home's own state: removing one enables the start button
+/// and may present a queued celebration, which is Home's to re-render. A
+/// timer gem's landing is marked here instead (`landedReceiptIDs`), and Home
+/// releases the receipt once the landing has settled
+/// (`HomeView.landingSettleDelay`).
 @MainActor
 @Observable
 final class JarStageState {
@@ -6149,6 +6201,12 @@ final class JarStageState {
     /// readout counts them when they land, or after `manualLandingGrace` if
     /// the landing is never reported.
     var fallingManualSessionIDs = Set<UUID>()
+    /// Timer gems that have landed while Home still holds their receipt
+    /// (review of #58): the readout counts them at once, although Home's
+    /// pass still lists them as pending until it releases the receipt after
+    /// the landing. An ID stays until a later settle finds its receipt gone,
+    /// by which time Home has re-read the receipts.
+    var landedReceiptIDs = Set<UUID>()
     /// Bumped when a Screen Time gem's drop is retired from
     /// `ScreenTimeGemDropStore`, which lives in UserDefaults and is not
     /// observed: readers re-read the store when it changes.
@@ -6159,11 +6217,11 @@ final class JarStageState {
     var measuredStageTop: CGFloat = 0
 
     /// Everything not landed yet: the pending receipts and completion marker
-    /// Home resolved on its own pass, plus the falling manual entries and
-    /// queued Screen Time gems.
+    /// Home resolved on its own pass, less the timer gems that have landed
+    /// since, plus the falling manual entries and queued Screen Time gems.
     func unlandedSessionIDs(pendingOnHomePass: Set<UUID>) -> Set<UUID> {
         _ = screenTimeDropRevision
-        return pendingOnHomePass.union(HomeProjectionPolicy.unlandedSessionIDs(
+        return pendingOnHomePass.subtracting(landedReceiptIDs).union(HomeProjectionPolicy.unlandedSessionIDs(
             rewardReceipts: [],
             completionMarker: nil,
             screenTimeDrops: ScreenTimeGemDropStore.load(),
@@ -6204,6 +6262,23 @@ private struct JarLandedTotalsReader<Content: View>: View {
 
     var body: some View {
         content(inputs.landedTotals(with: state))
+    }
+}
+
+/// Runs Home's follow-up to a landing once the jar has settled
+/// (`HomeView.scheduleLandingSettle`). A plain reference kept in `@State`, so
+/// scheduling from the landing callback never invalidates Home. Each landing
+/// restarts the wait, so a run of gems settles once.
+@MainActor
+final class LandingSettleScheduler {
+    private var task: Task<Void, Never>?
+
+    func schedule(after delay: Duration, _ work: @escaping @MainActor () -> Void) {
+        task?.cancel()
+        task = Task { @MainActor in
+            do { try await Task.sleep(for: delay) } catch { return }
+            work()
+        }
     }
 }
 
@@ -7496,6 +7571,17 @@ enum HomeRenderDiagnostics {
         landingCount &+= 1
         bodyEvaluationCountAtLastLanding = bodyEvaluationCount
     }
+
+    /// Home's deferred follow-up to the landings (`settleLandings`) and
+    /// Home's body count as it starts: equal to the count at the landing
+    /// when the landing's own frames did not re-render Home.
+    private(set) static var landingSettleCount = 0
+    private(set) static var bodyEvaluationCountAtLastLandingSettle = 0
+
+    static func recordLandingSettle() {
+        landingSettleCount &+= 1
+        bodyEvaluationCountAtLastLandingSettle = bodyEvaluationCount
+    }
 }
 
 /// A stateful, explicit-UI-test-only readout of the live SpriteKit
@@ -7534,6 +7620,8 @@ private struct JarUITestPresentationProbe: View {
     @State private var homeBodyEvaluations = 0
     @State private var homeLandings = 0
     @State private var homeBodyEvaluationsAtLanding = 0
+    @State private var homeLandingSettles = 0
+    @State private var homeBodyEvaluationsAtSettle = 0
     @State private var jarHintFrame: CGRect?
     /// A resting crystal (×10 or larger) in window points, for a test that
     /// taps one to show its card; -1 while the jar holds none.
@@ -7567,7 +7655,7 @@ private struct JarUITestPresentationProbe: View {
 
     private var presentationValue: String {
         String(
-            format: "count=%d;maxY=%.3f;records=%@;bounceSequence=%d;bounceRise=%.3f;targetX=%.5f;targetY=%.5f;dropSequence=%d;dropFall=%.3f;dropLanded=%d;targetWindowX=%.1f;targetWindowY=%.1f;homeBodyEvaluations=%d;homeLandings=%d;homeBodyAtLanding=%d;jarHint=%@;crystalWindowX=%.1f;crystalWindowY=%.1f;hud=%@;core=%@;bottle=%@",
+            format: "count=%d;maxY=%.3f;records=%@;bounceSequence=%d;bounceRise=%.3f;targetX=%.5f;targetY=%.5f;dropSequence=%d;dropFall=%.3f;dropLanded=%d;targetWindowX=%.1f;targetWindowY=%.1f;homeBodyEvaluations=%d;homeLandings=%d;homeBodyAtLanding=%d;homeSettles=%d;homeBodyAtSettle=%d;jarHint=%@;crystalWindowX=%.1f;crystalWindowY=%.1f;hud=%@;core=%@;bottle=%@",
             count,
             Double(maximumY),
             records,
@@ -7583,6 +7671,8 @@ private struct JarUITestPresentationProbe: View {
             homeBodyEvaluations,
             homeLandings,
             homeBodyEvaluationsAtLanding,
+            homeLandingSettles,
+            homeBodyEvaluationsAtSettle,
             Self.corners(jarHintFrame),
             Double(crystalWindowX),
             Double(crystalWindowY),
@@ -7602,6 +7692,8 @@ private struct JarUITestPresentationProbe: View {
         homeBodyEvaluations = HomeRenderDiagnostics.bodyEvaluationCount
         homeLandings = HomeRenderDiagnostics.landingCount
         homeBodyEvaluationsAtLanding = HomeRenderDiagnostics.bodyEvaluationCountAtLastLanding
+        homeLandingSettles = HomeRenderDiagnostics.landingSettleCount
+        homeBodyEvaluationsAtSettle = HomeRenderDiagnostics.bodyEvaluationCountAtLastLandingSettle
         jarHintFrame = HomeRenderDiagnostics.jarHintWindowFrame
         hudFrame = HomeRenderDiagnostics.jarHUDWindowFrame
         coreFrame = HomeRenderDiagnostics.jarCoreWindowFrame

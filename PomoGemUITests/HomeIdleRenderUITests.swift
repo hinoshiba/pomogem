@@ -134,6 +134,79 @@ final class HomeIdleRenderUITests: XCTestCase {
                        "The landing re-rendered Home \(soonAfter - atLanding) times (\(atLanding) → \(soonAfter))")
     }
 
+    /// The twin for a completed focus, the landing people see most (review
+    /// of #58). Releasing the timer gem's receipt enables the start button
+    /// and continues past the card, which re-renders Home by design; it
+    /// used to run in the landing callback, on the frames where the gem
+    /// strikes. Now the readout counts the gem at once and Home's own work
+    /// waits until the landing has settled: no Home pass between the
+    /// landing and that settle, and the start button follows it.
+    func testATimerGemLandingDefersHomesOwnWorkPastTheLanding() {
+        let app = XCUIApplication()
+        app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
+        app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
+        app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "0"
+        PomoGemUITestLanguage.configureJapanese(app)
+        app.launch()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 10))
+        let probe = app.descendants(matching: .any)["jar.presentation.probe"]
+        XCTAssertTrue(probe.waitForExistence(timeout: 5))
+        XCTAssertEqual(field("homeLandings", probe), 0)
+
+        let launcher = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "12秒集中する")).firstMatch
+        let demo = app.buttons["12秒、DEMO"]
+        for _ in 0..<3 where !launcher.exists {
+            if !demo.exists {
+                app.buttons["home.duration-picker"].tap()
+                XCTAssertTrue(demo.waitForExistence(timeout: 4))
+            }
+            _ = waitUntilFrameSettles(demo, timeout: 3)
+            demo.tap()
+            _ = launcher.waitForExistence(timeout: 3)
+        }
+        XCTAssertTrue(launcher.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitUntilFrameSettles(launcher))
+        launcher.tap()
+        stopCompletionAlertIfPresented(in: app)
+        let dismissReward = app.buttons["休憩の提案を閉じる"]
+        XCTAssertTrue(dismissReward.waitForExistence(timeout: 30), "The demo focus completes and offers its card")
+        let jar = app.descendants(matching: .any)["瓶"]
+        let beforeLanding = jar.value as? String ?? ""
+        tapUntilGone(dismissReward)
+
+        // The gem falls from the top and lands; Home then settles it.
+        let settled = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value CONTAINS %@ AND value CONTAINS %@", "homeLandings=1;", "homeSettles=1;"),
+            object: probe
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [settled], timeout: 20), .completed,
+                       "probe=\(String(describing: probe.value))")
+        let atLanding = field("homeBodyAtLanding", probe) ?? -1
+        let atSettle = field("homeBodyAtSettle", probe) ?? -2
+        let summary = XCTAttachment(
+            string: "Home body evaluations: \(atLanding) at the landing, \(atSettle) when Home settled it"
+        )
+        summary.name = "home-body-evaluations-around-a-timer-landing"
+        summary.lifetime = .keepAlways
+        add(summary)
+        XCTAssertEqual(atSettle, atLanding,
+                       "The landing re-rendered Home \(atSettle - atLanding) times before it settled (\(atLanding) → \(atSettle))")
+
+        // Then the receipt is released: the start button works again (back
+        // on the default duration, so found by its identifier), and the jar
+        // has counted the gem since it landed (dev-D7).
+        let enabled = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND isEnabled == true"),
+            object: app.buttons["home.focus-launcher"]
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 8), .completed)
+        XCTAssertGreaterThan(field("homeBodyEvaluations", probe) ?? 0, atSettle,
+                             "Releasing the receipt re-renders Home once the landing has settled")
+        let counted = jar.value as? String ?? ""
+        XCTAssertTrue(counted.contains("記録した集中時間の質量："), counted)
+        XCTAssertNotEqual(counted, beforeLanding, "The jar counts the landed gem")
+    }
+
     private func bodyEvaluations(_ probe: XCUIElement) -> Int? {
         field("homeBodyEvaluations", probe)
     }
