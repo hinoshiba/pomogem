@@ -60,12 +60,33 @@ enum CloudKitOnlineAccountVerifier {
     }
 }
 
-enum CloudAccountVerificationStage: String, Equatable, Sendable {
-    case verification = "全体確認"
-    case accountStatus = "Apple Accountの状態"
-    case identityBeforeProbe = "Apple Accountの識別"
-    case privateDatabase = "iCloudへの接続"
-    case identityAfterProbe = "Apple Accountの再確認"
+enum CloudAccountVerificationStage: Equatable, Sendable {
+    case verification
+    case accountStatus
+    case identityBeforeProbe
+    case privateDatabase
+    case identityAfterProbe
+
+    /// The step named on the verification failure's 「確認箇所」 line.
+    var title: String {
+        switch self {
+        case .verification:
+            String(localized: "全体確認", table: "Launch",
+                   comment: "iCloud check failure, the step that failed: the whole verification")
+        case .accountStatus:
+            String(localized: "Apple Accountの状態", table: "Launch",
+                   comment: "iCloud check failure, the step that failed: reading the Apple Account status")
+        case .identityBeforeProbe:
+            String(localized: "Apple Accountの識別", table: "Launch",
+                   comment: "iCloud check failure, the step that failed: identifying the Apple Account")
+        case .privateDatabase:
+            String(localized: "iCloudへの接続", table: "Launch",
+                   comment: "iCloud check failure, the step that failed: connecting to the private iCloud database")
+        case .identityAfterProbe:
+            String(localized: "Apple Accountの再確認", table: "Launch",
+                   comment: "iCloud check failure, the step that failed: identifying the Apple Account again")
+        }
+    }
 }
 
 /// Carries only an allowlisted category, stage and numeric CloudKit code.
@@ -92,40 +113,45 @@ struct CloudAccountVerificationFailure: Error, LocalizedError, Equatable, Sendab
         let message: String
         switch kind {
         case .noAccount:
-            message = "Apple Accountへのサインインと、設定のiCloudでポモジェムの利用がオンになっていることを確認してください。"
+            message = String(localized: "Apple Accountへのサインインと、設定のiCloudでポモジェムの利用がオンになっていることを確認してください。", table: "Launch")
         case .restricted:
-            message = "この端末ではiCloudの利用が制限されています。スクリーンタイムや管理端末の設定を確認してください。"
+            message = String(localized: "この端末ではiCloudの利用が制限されています。スクリーンタイムや管理端末の設定を確認してください。", table: "Launch")
         case .temporarilyUnavailable:
-            message = "Apple Accountは現在iCloudを利用する準備ができていません。設定でApple Accountの確認を済ませ、しばらく待って再試行してください。"
+            message = String(localized: "Apple Accountは現在iCloudを利用する準備ができていません。設定でApple Accountの確認を済ませ、しばらく待って再試行してください。", table: "Launch")
         case .networkUnavailable:
-            message = "iCloudに接続できません。Wi-Fiやモバイル通信、ポモジェムの通信設定を確認して再試行してください。"
+            message = String(localized: "iCloudに接続できません。Wi-Fiやモバイル通信、ポモジェムの通信設定を確認して再試行してください。", table: "Launch")
         case .serviceUnavailable:
-            message = "iCloudのサービスが一時的に混み合っているか、利用できません。しばらく待って再試行してください。"
+            message = String(localized: "iCloudのサービスが一時的に混み合っているか、利用できません。しばらく待って再試行してください。", table: "Launch")
         case .configuration:
-            message = "このアプリのiCloud接続設定を確認できません。アプリを最新版へ更新し、解消しない場合はサポートへお問い合わせください。"
+            message = String(localized: "このアプリのiCloud接続設定を確認できません。アプリを最新版へ更新し、解消しない場合はサポートへお問い合わせください。", table: "Launch")
         case .permission:
-            message = "iCloudへのアクセスが許可されませんでした。設定でポモジェムのiCloud利用を確認し、解消しない場合はサポートへお問い合わせください。"
+            message = String(localized: "iCloudへのアクセスが許可されませんでした。設定でポモジェムのiCloud利用を確認し、解消しない場合はサポートへお問い合わせください。", table: "Launch")
         case .quota:
-            message = "iCloudの空き容量を確認し、容量を確保してから再試行してください。"
+            message = String(localized: "iCloudの空き容量を確認し、容量を確保してから再試行してください。", table: "Launch")
         case .identityUnstable:
-            message = "Apple Accountの識別を一度で確認できませんでした。そのまま再試行してください。"
+            message = String(localized: "Apple Accountの識別を一度で確認できませんでした。そのまま再試行してください。", table: "Launch")
         case .timedOut:
-            message = "iCloudの確認に時間がかかっています。通信状態を確認して再試行してください。"
+            message = String(localized: "iCloudの確認に時間がかかっています。通信状態を確認して再試行してください。", table: "Launch")
         case .unknown:
-            message = "iCloudの状態を確認できません。再試行し、解消しない場合はサポートへお問い合わせください。"
+            message = String(localized: "iCloudの状態を確認できません。再試行し、解消しない場合はサポートへお問い合わせください。", table: "Launch")
         }
-        let code = cloudKitCode.map { "・CloudKit \($0)" } ?? ""
-        let waitHint: String
+        // Codes and seconds are passed as text: they are identifiers and a
+        // wait, printed ungrouped exactly as before (3600, never 3,600).
+        let location = cloudKitCode.map { code in
+            String(localized: "確認箇所: \(stage.title)・CloudKit \(String(code))", table: "Launch",
+                   comment: "iCloud check failure, second line. %1$@ is the step that failed, %2$@ the numeric CloudKit error code")
+        } ?? String(localized: "確認箇所: \(stage.title)", table: "Launch",
+                    comment: "iCloud check failure, second line. %@ is the step that failed")
+        var lines = [message, location]
         if let retryAfter, retryAfter.isFinite, retryAfter > 0 {
             if retryAfter <= 3_600 {
-                waitHint = "\n再試行まで約\(Int(ceil(retryAfter)))秒お待ちください。"
+                lines.append(String(localized: "再試行まで約\(String(Int(ceil(retryAfter))))秒お待ちください。", table: "Launch",
+                                    comment: "iCloud asked the app to wait. %@ is a number of seconds (1-3600), printed ungrouped"))
             } else {
-                waitHint = "\niCloudが待機を指定しています。時間をおいて再試行してください。"
+                lines.append(String(localized: "iCloudが待機を指定しています。時間をおいて再試行してください。", table: "Launch"))
             }
-        } else {
-            waitHint = ""
         }
-        return "\(message)\n確認箇所: \(stage.rawValue)\(code)\(waitHint)"
+        return lines.joined(separator: "\n")
     }
 
     static func classify(
@@ -434,13 +460,13 @@ enum AppleAccountBoundaryResolutionError: LocalizedError, Equatable {
         case let .verification(failure):
             failure.errorDescription
         case .blocked(.identityUnavailable):
-            "Apple AccountとiCloudを確認できません。確認が済むまで同期を停止します。利用できる端末データがある場合はオフラインで続けられます。"
+            String(localized: "Apple AccountとiCloudを確認できません。確認が済むまで同期を停止します。利用できる端末データがある場合はオフラインで続けられます。", table: "Launch")
         case .blocked(.accountMismatch):
-            "このインストールでiCloud保存を選んだApple Accountと一致しません。元のApple Accountへ戻すまで保存領域は開きません。"
+            String(localized: "このインストールでiCloud保存を選んだApple Accountと一致しません。元のApple Accountへ戻すまで保存領域は開きません。", table: "Launch")
         case .blocked(.invalidVerifiedIdentity):
-            "Apple Accountの識別情報を安全に確認できませんでした。"
+            String(localized: "Apple Accountの識別情報を安全に確認できませんでした。", table: "Launch")
         case .blocked(.invalidStoredRegistry):
-            "端末内のApple Account対応情報を安全に検証できません。記録を保護するため保存領域は開きません。"
+            String(localized: "端末内のApple Account対応情報を安全に検証できません。記録を保護するため保存領域は開きません。", table: "Launch")
         }
     }
 }
@@ -584,32 +610,37 @@ enum CloudAccountAvailability: Equatable, Sendable {
 
     var title: String {
         switch self {
-        case .checking: "iCloudを確認中"
-        case .available: "iCloudに接続できます"
-        case .simulator: "iCloudは実機で確認できます"
-        case .noAccount: "Apple Accountへのサインインが必要です"
-        case .restricted: "この端末ではiCloudが制限されています"
-        case .temporarilyUnavailable: "iCloudへ一時的に接続できません"
-        case .unavailable: "iCloudの状態を確認できません"
+        case .checking: String(localized: "iCloudを確認中", table: "Launch", comment: "Settings iCloud status title")
+        case .available: String(localized: "iCloudに接続できます", table: "Launch", comment: "Settings iCloud status title")
+        case .simulator: String(localized: "iCloudは実機で確認できます", table: "Launch",
+                                comment: "Settings iCloud status title in the Simulator (development only)")
+        case .noAccount: String(localized: "Apple Accountへのサインインが必要です", table: "Launch",
+                                comment: "Settings iCloud status title")
+        case .restricted: String(localized: "この端末ではiCloudが制限されています", table: "Launch",
+                                 comment: "Settings iCloud status title")
+        case .temporarilyUnavailable: String(localized: "iCloudへ一時的に接続できません", table: "Launch",
+                                             comment: "Settings iCloud status title")
+        case .unavailable: String(localized: "iCloudの状態を確認できません", table: "Launch",
+                                  comment: "Settings iCloud status title")
         }
     }
 
     var detail: String {
         switch self {
         case .checking:
-            "実績と進行中タイマーの保存先を確認しています"
+            String(localized: "実績と進行中タイマーの保存先を確認しています", table: "Launch")
         case .available:
-            "実績・瓶・進行中タイマーを同じApple AccountのiPhone間で同期"
+            String(localized: "実績・瓶・進行中タイマーを同じApple AccountのiPhone間で同期", table: "Launch")
         case .simulator:
-            "このSimulator専用の保存領域を使い、iPhone実機のiCloudデータとは同期しません"
+            String(localized: "このSimulator専用の保存領域を使い、iPhone実機のiCloudデータとは同期しません", table: "Launch")
         case .noAccount:
-            "選択したiCloud保存を続けるには、Apple AccountへのサインインとiCloud接続が必要です"
+            String(localized: "選択したiCloud保存を続けるには、Apple AccountへのサインインとiCloud接続が必要です", table: "Launch")
         case .restricted:
-            "iCloud保存を続けるには、スクリーンタイムや管理端末のiCloud設定を確認してください"
+            String(localized: "iCloud保存を続けるには、スクリーンタイムや管理端末のiCloud設定を確認してください", table: "Launch")
         case .temporarilyUnavailable:
-            "iCloudとの通信を再確認してください。端末への記録は続けられます。この表示は同期完了を示すものではありません"
+            String(localized: "iCloudとの通信を再確認してください。端末への記録は続けられます。この表示は同期完了を示すものではありません", table: "Launch")
         case .unavailable:
-            "本人確認が完了するまで保存領域は開きません。iCloudと通信状態を確認してください"
+            String(localized: "本人確認が完了するまで保存領域は開きません。iCloudと通信状態を確認してください", table: "Launch")
         }
     }
 
@@ -797,9 +828,10 @@ struct CloudSyncSettingsSection: View {
         Section {
             Label {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("このiPhoneだけに保存")
+                    Text("このiPhoneだけに保存", tableName: "Launch",
+                         comment: "Settings: the current storage mode, named like the first-run option")
                         .font(.headline)
-                    Text("iCloudへの自動送信・自動切り替えはありません")
+                    Text("iCloudへの自動送信・自動切り替えはありません", tableName: "Launch")
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
                 }
@@ -808,14 +840,14 @@ struct CloudSyncSettingsSection: View {
                     .foregroundStyle(PomoGemTheme.amber)
             }
 
-            Text("iCloudの記録を使う場合は、下の保存先の設定で端末の記録が置き換わることを確認して切り替えられます。端末の記録でiCloudを置き換える操作は現在利用できません。アプリを削除すると、このiPhoneだけに保存した記録は失われます。")
+            Text("iCloudの記録を使う場合は、下の保存先の設定で端末の記録が置き換わることを確認して切り替えられます。端末の記録でiCloudを置き換える操作は現在利用できません。アプリを削除すると、このiPhoneだけに保存した記録は失われます。", tableName: "Launch")
                 .font(.caption)
                 .foregroundStyle(PomoGemTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
         } header: {
-            Text("保存方式")
+            Text("保存方式", tableName: "Launch", comment: "Settings section header: how records are stored")
         } footer: {
-            Text("保存先は自動で切り替わりません。切り替えには通信と、データの取り扱いの確認が必要です。")
+            Text("保存先は自動で切り替わりません。切り替えには通信と、データの取り扱いの確認が必要です。", tableName: "Launch")
         }
     }
 
@@ -824,19 +856,24 @@ struct CloudSyncSettingsSection: View {
         return Section {
             // The banner's own words, so the two never disagree about whether
             // sync is waiting for a connection or stopped until a decision.
-            Label(stopped ? "このiPhoneに保存・iCloud同期は停止中" : "このiPhoneに保存・iCloud同期は待機中",
+            Label(stopped
+                  ? String(localized: "このiPhoneに保存・iCloud同期は停止中", table: "Launch",
+                           comment: "Sync status title: saving on this iPhone; iCloud sync is stopped until a decision")
+                  : String(localized: "このiPhoneに保存・iCloud同期は待機中", table: "Launch",
+                           comment: "Sync status title: saving on this iPhone; iCloud sync waits for a connection"),
                   systemImage: "icloud.slash")
                 .font(.headline)
             Text(stopped
-                 ? "保存済みのテーマと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへは送信されません。通信が戻っても同期は自動では再開しません。再開する方法は、画面上部の「復旧手順」から確認できます。"
-                 : "保存済みのテーマと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへはまだ送信されません。通信回復後、同じアカウントとデータを確認してから同期を再開します。")
+                 ? String(localized: "保存済みのテーマと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへは送信されません。通信が戻っても同期は自動では再開しません。再開する方法は、画面上部の「復旧手順」から確認できます。", table: "Launch",
+                          comment: "「復旧手順」 is the offline banner's button title")
+                 : String(localized: "保存済みのテーマと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへはまだ送信されません。通信回復後、同じアカウントとデータを確認してから同期を再開します。", table: "Launch"))
                 .font(.caption)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("別端末でデータが置き換わっている場合は、端末の記録を保持して同期を停止します。保存先の切り替えは、接続と内容を確認できてから行ってください。")
+            Text("別端末でデータが置き換わっている場合は、端末の記録を保持して同期を停止します。保存先の切り替えは、接続と内容を確認できてから行ってください。", tableName: "Launch")
                 .font(.caption)
                 .fixedSize(horizontal: false, vertical: true)
         } header: {
-            Text("iCloudとデバイス")
+            Text("iCloudとデバイス", tableName: "Launch", comment: "Settings section header")
         }
     }
 
@@ -882,11 +919,15 @@ struct CloudSyncSettingsSection: View {
 
             DisclosureGroup {
                 VStack(alignment: .leading, spacing: 10) {
-                    syncStep(1, "同じApple Accountでサインイン")
-                    syncStep(2, "iCloudで、ポモジェムの利用をオン")
-                    syncStep(3, "新しい端末でアプリを開き、同期を待つ")
-                    syncStep(4, "進行中なら「この端末で続ける」を選ぶ")
-                    Text("同期は即時でない場合があります。タイマーの通知は最後に引き継いだ端末が担当しますが、元の端末がオフラインの場合は古い通知が一度届くことがあります。")
+                    syncStep(1, String(localized: "同じApple Accountでサインイン", table: "Launch",
+                                       comment: "Settings: step 1 of continuing on another iPhone"))
+                    syncStep(2, String(localized: "iCloudで、ポモジェムの利用をオン", table: "Launch",
+                                       comment: "Settings: step 2 of continuing on another iPhone"))
+                    syncStep(3, String(localized: "新しい端末でアプリを開き、同期を待つ", table: "Launch",
+                                       comment: "Settings: step 3 of continuing on another iPhone"))
+                    syncStep(4, String(localized: "進行中なら「この端末で続ける」を選ぶ", table: "Launch",
+                                       comment: "Settings: step 4 of continuing on another iPhone. 「この端末で続ける」 is the running-timer alert's button"))
+                    Text("同期は即時でない場合があります。タイマーの通知は最後に引き継いだ端末が担当しますが、元の端末がオフラインの場合は古い通知が一度届くことがあります。", tableName: "Launch")
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -894,7 +935,8 @@ struct CloudSyncSettingsSection: View {
                 }
                 .padding(.vertical, 8)
             } label: {
-                Text("別のiPhone・機種変更後に続けるには")
+                Text("別のiPhone・機種変更後に続けるには", tableName: "Launch",
+                     comment: "Settings: disclosure title for the steps to continue on another or a new iPhone")
                     .font(.headline.weight(.bold))
                     .foregroundStyle(Color.white)
                     .fixedSize(horizontal: false, vertical: true)
@@ -906,7 +948,7 @@ struct CloudSyncSettingsSection: View {
                 Button {
                     Task { await monitor.refresh() }
                 } label: {
-                    Label("iCloudの状態を再確認", systemImage: "arrow.clockwise")
+                    Label(String(localized: "iCloudの状態を再確認", table: "Launch"), systemImage: "arrow.clockwise")
                 }
             }
 
@@ -915,7 +957,7 @@ struct CloudSyncSettingsSection: View {
                     guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
                     openURL(url)
                 } label: {
-                    Label("この端末の設定を開く", systemImage: "gear")
+                    Label(String(localized: "この端末の設定を開く", table: "Launch"), systemImage: "gear")
                 }
             } else if showsQuotaIssue {
                 // No public link opens iCloud storage itself; this opens the
@@ -929,13 +971,14 @@ struct CloudSyncSettingsSection: View {
                 .accessibilityIdentifier("settings.icloud.quota.open-settings")
             }
         } header: {
-            Text("iCloudとデバイス")
+            Text("iCloudとデバイス", tableName: "Launch", comment: "Settings section header")
         } footer: {
             Group {
                 if monitor.availability == .simulator {
-                    Text("SimulatorではApple Accountの接続状態を確認できません。iCloud同期はiPhone実機で確認してください。")
+                    Text("SimulatorではApple Accountの接続状態を確認できません。iCloud同期はiPhone実機で確認してください。", tableName: "Launch",
+                         comment: "Settings footer in the Simulator (development only)")
                 } else {
-                    Text("通信が使えない場合も、前回確認済みの端末データがあれば利用を続けられます。初回の取得・保存先の切り替えには通信が必要です。この接続表示は、すべての記録の同期完了を示すものではありません。あなたのiCloudプライベートデータベースを使います。")
+                    Text("通信が使えない場合も、前回確認済みの端末データがあれば利用を続けられます。初回の取得・保存先の切り替えには通信が必要です。この接続表示は、すべての記録の同期完了を示すものではありません。あなたのiCloudプライベートデータベースを使います。", tableName: "Launch")
                 }
             }
             // Native List footers lower opacity a second time. An explicit
@@ -996,12 +1039,14 @@ struct CloudSyncSettingsSection: View {
         }
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
+        // The language of the surrounding sentence, with the user's region.
+        formatter.locale = PomoGemLocale.current
         return formatter.localizedString(for: date, relativeTo: now)
     }
 
     private func syncStep(_ number: Int, _ text: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 9) {
-            Text("\(number)")
+            Text(verbatim: "\(number)")
                 .font(.caption2.monospacedDigit().weight(.bold))
                 .foregroundStyle(PomoGemTheme.background)
                 .frame(width: 22, height: 22)
@@ -1011,6 +1056,7 @@ struct CloudSyncSettingsSection: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("手順\(number)、\(text)")
+        .accessibilityLabel(Text("手順\(number)、\(text)", tableName: "Launch",
+                                 comment: "VoiceOver: one numbered step. %1$lld is the step number, %2$@ the step"))
     }
 }

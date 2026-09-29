@@ -58,18 +58,27 @@ enum LaunchActivationWatchdogPolicy {
     /// Claims no account result. It reports no change to the stored records or
     /// the selected storage mode only when this process committed neither.
     static func blockedMessage(progress: LaunchProgress) -> String {
-        let interruption = """
-            起動を続けられませんでした。iPhoneの画面にiOSの確認（Apple Accountのサインインなど）が出ている場合は、\
-            先にそれを完了するか閉じてから「もう一度試す」を押してください。
-            """
+        // One catalog entry per statement, joined as sentences, so English
+        // gets its spaces and Japanese stays exactly as before.
+        let interruption = String(
+            localized: "起動を続けられませんでした。iPhoneの画面にiOSの確認（Apple Accountのサインインなど）が出ている場合は、先にそれを完了するか閉じてから「もう一度試す」を押してください。",
+            table: "Launch",
+            comment: "Launch watchdog: iOS may be showing its own prompt. 「もう一度試す」 is the Try Again button"
+        )
         switch progress {
         case .nothingCommitted:
-            return interruption + "記録や保存先の設定は変更していません。"
+            return SentenceText.join([
+                interruption,
+                String(localized: "記録や保存先の設定は変更していません。", table: "Launch")
+            ])
         case .storageWorkCommitted:
-            return interruption + """
-                記録は削除していません。ただしこの起動では保存先の準備が途中まで進んでいるため、\
-                アプリを終了して開き直すほうが確実です。
-                """
+            return SentenceText.join([
+                interruption,
+                String(
+                    localized: "記録は削除していません。ただしこの起動では保存先の準備が途中まで進んでいるため、アプリを終了して開き直すほうが確実です。",
+                    table: "Launch"
+                )
+            ])
         }
     }
 
