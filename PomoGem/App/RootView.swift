@@ -3110,65 +3110,79 @@ private struct CompleteDataDeletionBlockingView: View {
             Color.black.opacity(0.82)
                 .ignoresSafeArea()
 
-            VStack(spacing: 18) {
-                Image(systemName: statusSymbol)
-                    .font(.system(size: 42, weight: .light))
-                    .foregroundStyle(PomoGemTheme.amber)
-                    .accessibilityHidden(true)
-
-                Text(statusTitle)
-                    .font(PomoGemTheme.brand(23))
-                    .multilineTextAlignment(.center)
-
-                switch controller.status {
-                case let .running(phase):
-                    ProgressView(value: phase.progressFraction)
-                        .tint(PomoGemTheme.amber)
-                        .accessibilityLabel(phase.userFacingTitle)
-                    Text(phase.userFacingTitle)
-                        .foregroundStyle(PomoGemTheme.muted)
-                        .multilineTextAlignment(.center)
-
-                case let .failed(_, message):
-                    Text(message)
-                        .foregroundStyle(PomoGemTheme.muted)
-                        .multilineTextAlignment(.center)
-                    Text("削除は完了扱いになっていません。記録の追加は停止したままです。iCloudに接続して再試行してください。", tableName: "Launch")
-                        .font(.caption)
-                        .foregroundStyle(PomoGemTheme.muted)
-                        .multilineTextAlignment(.center)
-                    Button(String(localized: "削除を再試行", table: "Launch")) {
-                        controller.startOrRetry()
-                    }
-                    .buttonStyle(PomoGemPrimaryButtonStyle())
-                    .accessibilityHint(Text("保存済みの削除工程から再開します", tableName: "Launch",
-                                            comment: "VoiceOver hint for Retry Deletion"))
-
-                case .rebuildingPersistence:
-                    ProgressView()
-                        .tint(PomoGemTheme.amber)
-                        .accessibilityLabel(Text("空の保存領域を準備中", tableName: "Launch",
-                                                 comment: "VoiceOver: progress while the emptied store is rebuilt"))
-                    Text("ユーザー内容を削除した保存領域を閉じ、空の状態で作り直しています。古い端末からの再流入検知用に、内容を含まない削除世代記録1件だけをiCloudに残します。", tableName: "Launch")
-                        .foregroundStyle(PomoGemTheme.muted)
-                        .multilineTextAlignment(.center)
-
-                case .idle:
-                    EmptyView()
+            // At accessibility sizes the rebuilding paragraph and the failure
+            // message are taller than a small screen. The card stays centered
+            // when it fits and scrolls when it does not, so nothing is clipped
+            // or squeezed.
+            GeometryReader { proxy in
+                ScrollView {
+                    card
+                        .frame(maxWidth: .infinity, minHeight: proxy.size.height)
                 }
-
-                Link(destination: AppLinks.support) {
-                    Label(String(localized: "サポートを見る", table: "Launch"), systemImage: "questionmark.circle")
-                }
-                .buttonStyle(PomoGemSecondaryButtonStyle())
+                .scrollBounceBehavior(.basedOnSize)
             }
-            .frame(maxWidth: 480)
-            .padding(24)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24))
-            .padding(20)
         }
         .interactiveDismissDisabled()
         .accessibilityAddTraits(.isModal)
+    }
+
+    private var card: some View {
+        VStack(spacing: 18) {
+            Image(systemName: statusSymbol)
+                .font(.system(size: 42, weight: .light))
+                .foregroundStyle(PomoGemTheme.amber)
+                .accessibilityHidden(true)
+
+            Text(statusTitle)
+                .font(PomoGemTheme.brand(23))
+                .multilineTextAlignment(.center)
+
+            switch controller.status {
+            case let .running(phase):
+                ProgressView(value: phase.progressFraction)
+                    .tint(PomoGemTheme.amber)
+                    .accessibilityLabel(phase.userFacingTitle)
+                Text(phase.userFacingTitle)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .multilineTextAlignment(.center)
+
+            case let .failed(_, message):
+                Text(message)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .multilineTextAlignment(.center)
+                Text("削除は完了扱いになっていません。記録の追加は停止したままです。iCloudに接続して再試行してください。", tableName: "Launch")
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .multilineTextAlignment(.center)
+                Button(String(localized: "削除を再試行", table: "Launch")) {
+                    controller.startOrRetry()
+                }
+                .buttonStyle(PomoGemPrimaryButtonStyle())
+                .accessibilityHint(Text("保存済みの削除工程から再開します", tableName: "Launch",
+                                        comment: "VoiceOver hint for Retry Deletion"))
+
+            case .rebuildingPersistence:
+                ProgressView()
+                    .tint(PomoGemTheme.amber)
+                    .accessibilityLabel(Text("空の保存領域を準備中", tableName: "Launch",
+                                             comment: "VoiceOver: progress while the emptied store is rebuilt"))
+                Text("ユーザー内容を削除した保存領域を閉じ、空の状態で作り直しています。古い端末からの再流入検知用に、内容を含まない削除世代記録1件だけをiCloudに残します。", tableName: "Launch")
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .multilineTextAlignment(.center)
+
+            case .idle:
+                EmptyView()
+            }
+
+            Link(destination: AppLinks.support) {
+                Label(String(localized: "サポートを見る", table: "Launch"), systemImage: "questionmark.circle")
+            }
+            .buttonStyle(PomoGemSecondaryButtonStyle())
+        }
+        .frame(maxWidth: 480)
+        .padding(24)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24))
+        .padding(20)
     }
 
     private var statusTitle: String {
