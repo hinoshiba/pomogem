@@ -101,6 +101,17 @@ enum MassText {
         )
     }
 
+    /// The kilogram number alone, for a readout that sets its unit in its own
+    /// style (the jar's HUD): 「2.6」「1,234.5」. The same digits and rounding
+    /// as `kilograms(fromGrams:fractionDigits:)`.
+    static func kilogramsNumber(
+        fromGrams grams: Int,
+        fractionDigits: ClosedRange<Int>,
+        locale: Locale = PomoGemLocale.current
+    ) -> String {
+        decimal(Double(grams) / 1_000, fractionDigits: fractionDigits, locale: locale)
+    }
+
     /// Metric tonnes from grams with exactly `fractionDigits` decimals, for
     /// the long views (年月, the plan): 「2.50t」; en "2.50 t".
     static func tonnes(

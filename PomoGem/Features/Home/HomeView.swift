@@ -1788,16 +1788,8 @@ struct HomeView: View {
                 context: aggregateProjectionPresentation
             )
         }
-        let value: String
-        if grams < 1_000 {
-            value = grams.formatted()
-        } else {
-            value = (Double(grams) / 1_000).formatted(
-                .number.precision(.fractionLength(1 ... 2))
-            )
-        }
         return AggregateProjectionPresentationPolicy.homeMassValue(
-            deviceValue: value,
+            deviceValue: HomeLifetimeMassText.readoutNumber(grams),
             context: aggregateProjectionPresentation
         )
     }
@@ -6148,11 +6140,10 @@ struct HomeView: View {
         router.showToast(Constants.UIStrings.processTerminatedNote, symbol: "exclamationmark.circle")
     }
 
-    /// The menu's lifetime mass: 「250g」, 「3kg」, 「2.60kg」 (device-verify-2
-    /// P7: it read 「250 g」 with a space, unlike every other screen).
+    /// The menu's lifetime mass, as the jar's readout shows it
+    /// (`HomeLifetimeMassText`).
     private func formattedMass(_ grams: Int) -> String {
-        guard grams >= 1_000 else { return MassText.grams(value: grams) }
-        return MassText.kilograms(fromGrams: grams, fractionDigits: grams.isMultiple(of: 1_000) ? 0 : 2)
+        HomeLifetimeMassText.text(grams)
     }
 }
 
@@ -6262,6 +6253,29 @@ private struct JarLandedTotalsReader<Content: View>: View {
 
     var body: some View {
         content(inputs.landedTotals(with: state))
+    }
+}
+
+/// The lifetime mass on Home. The jar's readout sets the number apart from
+/// its unit (「2.6」 kg) and the menu's 累計 reads them as one (「2.6kg」); one
+/// rule for both, so the menu no longer says 「2.60kg」 or 「3kg」 under a
+/// readout of 2.6 or 3.0 kg (device-verify-2 P7, after review). Grams below
+/// a kilogram; above, one decimal, or two when the second is not zero.
+enum HomeLifetimeMassText {
+    static let kilogramFractionDigits = 1 ... 2
+
+    /// The readout's number: 「250」「2.6」「3.0」「2.63」.
+    static func readoutNumber(_ grams: Int, locale: Locale = PomoGemLocale.current) -> String {
+        grams < 1_000
+            ? PomoGemLocale.grouped(grams, locale: locale)
+            : MassText.kilogramsNumber(fromGrams: grams, fractionDigits: kilogramFractionDigits, locale: locale)
+    }
+
+    /// The menu's 累計: 「250g」「2.6kg」「3.0kg」「2.63kg」.
+    static func text(_ grams: Int, locale: Locale = PomoGemLocale.current) -> String {
+        grams < 1_000
+            ? MassText.grams(value: grams, locale: locale)
+            : MassText.kilograms(fromGrams: grams, fractionDigits: kilogramFractionDigits, locale: locale)
     }
 }
 

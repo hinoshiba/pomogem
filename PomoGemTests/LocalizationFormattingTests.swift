@@ -146,6 +146,20 @@ final class LocalizationFormattingTests: XCTestCase {
         XCTAssertEqual(EffortConstellationPresentation.formattedMass(2_500_000), "2.50t")
         XCTAssertEqual(EffortProgressPresentation.formattedMass(grams: 2_500), "2.5kg")
         XCTAssertEqual(EffortProgressPresentation.formattedMass(grams: 1_234_000), "1,234kg")
+
+        // Home's readout and its menu's 累計 show one lifetime total the same
+        // way; the readout sets the unit apart.
+        for (grams, number, text) in [
+            (250, "250", "250g"),
+            (2_600, "2.6", "2.6kg"),
+            (3_000, "3.0", "3.0kg"),
+            (2_634, "2.63", "2.63kg"),
+            (1_234_500, "1,234.5", "1,234.5kg")
+        ] {
+            XCTAssertEqual(HomeLifetimeMassText.readoutNumber(grams, locale: ja), number)
+            XCTAssertEqual(HomeLifetimeMassText.text(grams, locale: ja), text)
+        }
+        XCTAssertEqual(MassText.kilogramsNumber(fromGrams: 2_450, fractionDigits: 1...1, locale: ja), "2.5")
     }
 
     /// VoiceOver masses read like the share card's (grouped) and the jar's
