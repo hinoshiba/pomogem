@@ -276,7 +276,11 @@ struct PaywallView: View {
                 badge
             }
             VStack(alignment: .leading, spacing: 8) {
+                // Like the hero title: the product name shrinks rather than
+                // breaking mid-word (「ポモ／ジェム」, "Pomo-Gem").
                 name
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
                 badge
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -640,7 +644,7 @@ private struct PaywallFeature: View {
                 // "September 2026" is wider than 「2026年9月」: at accessibility
                 // sizes it shrinks instead of breaking the month in two.
                 .lineLimit(1)
-                .minimumScaleFactor(0.5)
+                .minimumScaleFactor(0.35)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
