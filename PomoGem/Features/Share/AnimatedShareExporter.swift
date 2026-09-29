@@ -13,15 +13,20 @@ enum AnimatedShareExportError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noFrames:
-            return "GIFにする画像がありません。"
+            return String(localized: "GIFにする画像がありません。", table: "Share",
+                          comment: "Share error: no card image was rendered to encode as a GIF")
         case .cannotCreateDestination:
-            return "GIFの保存先を準備できませんでした。"
+            return String(localized: "GIFの保存先を準備できませんでした。", table: "Share",
+                          comment: "Share error: the temporary GIF file could not be created")
         case .cannotFinalize:
-            return "GIFを書き出せませんでした。"
+            return String(localized: "GIFを書き出せませんでした。", table: "Share",
+                          comment: "Share error: the GIF could not be written")
         case .fileTooLarge:
-            return "GIFの容量を小さくできませんでした。静止画で共有してください。"
+            return String(localized: "GIFの容量を小さくできませんでした。静止画で共有してください。", table: "Share",
+                          comment: "Share error: the GIF stays over the share size limit even at the smallest scale")
         case .frameCountMismatch:
-            return "GIFのフレーム数が一致しません。"
+            return String(localized: "GIFのフレーム数が一致しません。", table: "Share",
+                          comment: "Share error: the GIF writer received a different number of frames than it expected")
         }
     }
 }
@@ -284,10 +289,28 @@ enum AnimatedShareExporter {
 }
 
 enum ShareCopy {
-    static let hashtags = ["#ポモジェム", "#ポモドーロ"]
-    /// Common Japanese study-post tags, offered unselected after the defaults.
+    /// Selected by default, in the language of the app: ja #ポモジェム
+    /// #ポモドーロ, en #PomoGem #pomodoro (the tags a reader of that language
+    /// searches for). Resolved once per process; a language change relaunches
+    /// the app.
+    static let hashtags = [
+        String(localized: "#ポモジェム", table: "Share",
+               comment: "Default share hashtag (selected): the app's name, a valid hashtag (letters, numbers, _ only). en: #PomoGem"),
+        String(localized: "#ポモドーロ", table: "Share",
+               comment: "Default share hashtag (selected): the Pomodoro technique, a valid hashtag (letters, numbers, _ only). en: #pomodoro")
+    ]
+    /// Common study-post tags, offered unselected after the defaults.
     /// Tags stay opt-in: nothing here is shared unless the person taps it.
-    static let suggestedHashtags = ["#勉強記録", "#勉強垢"]
+    /// One localized list, because each language has its own community tags
+    /// and not the same number of them: ja #勉強記録 #勉強垢, en #studywithme.
+    static let suggestedHashtags = String(
+        localized: "#勉強記録 #勉強垢",
+        table: "Share",
+        comment: "Suggested share hashtags (unselected), separated by single spaces: community tags for posting study logs. Each must be a valid hashtag (letters, numbers, _ only) and differ from the default tags. en: #studywithme"
+    )
+    .split(separator: " ")
+    .compactMap { ShareHashtagPolicy.normalized(String($0)) }
+    .filter { !hashtags.contains($0) }
     /// Every chip the composer offers, in display order.
     static var hashtagChoices: [String] { hashtags + suggestedHashtags }
     static let websiteURL = AppLinks.marketingWebsite
@@ -311,16 +334,15 @@ enum ShareCopy {
             includesSelfReportedFocus: includesSelfReportedFocus,
             achievementCount: achievementCount
         )
-        let fairness = disclosure.captionDisclosure.map { "（\($0)）" } ?? ""
         let details = [rewardDetail, visualDisclosure]
             .compactMap { detail -> String? in
                 guard let detail else { return nil }
                 let trimmed = detail.trimmingCharacters(in: .whitespacesAndNewlines)
-                return trimmed.isEmpty ? nil : trimmed
+                return trimmed.isEmpty ? nil : sentence(trimmed)
             }
         let detailLine = details.isEmpty
             ? ""
-            : "\n\(details.joined(separator: "。"))。"
+            : "\n\(SentenceText.join(details))"
         let uniqueHashtags = hashtags.reduce(into: [String]()) { values, hashtag in
             guard let normalized = ShareHashtagPolicy.normalized(hashtag),
                   !values.contains(where: {
@@ -333,14 +355,54 @@ enum ShareCopy {
             ? ""
             : "\n\(uniqueHashtags.joined(separator: " "))"
         let websiteLine = "\n\(websiteURL.absoluteString)"
-        let claim = focusTime.map {
-            String(
-                localized: "\(subject)を \(grams)（\($0)）積みました\(fairness)。",
-                table: "Share",
-                comment: "Share caption. Arguments: what was stacked, mass, focus time, optional disclosure in parentheses"
-            )
-        } ?? "\(subject)を \(grams) 積みました\(fairness)。"
+        let claim = claimSentence(
+            subject: subject,
+            grams: grams,
+            focusTime: focusTime,
+            disclosure: disclosure.captionDisclosure
+        )
         return "\(claim)\(detailLine)\(websiteLine)\(hashtagLine)"
+    }
+
+    /// The caption's first sentence, one format per shape so English can
+    /// reorder it: 「これまでの集中を 2,500g（4時間10分）積みました（記念石は自己申告）。」
+    private static func claimSentence(subject: String, grams: String, focusTime: String?, disclosure: String?) -> String {
+        switch (focusTime, disclosure) {
+        case let (time?, disclosure?):
+            String(
+                localized: "\(subject)を \(grams)（\(time)）積みました（\(disclosure)）。",
+                table: "Share",
+                comment: "Share caption, first sentence. Arguments: what the card holds (e.g. これまでの集中, sentence start in en), mass (2,500g), focus time (4時間10分), what is self-reported (a sentence without its period in en)"
+            )
+        case let (time?, nil):
+            String(
+                localized: "\(subject)を \(grams)（\(time)）積みました。",
+                table: "Share",
+                comment: "Share caption, first sentence. Arguments: what the card holds (e.g. これまでの集中, sentence start in en), mass (2,500g), focus time (4時間10分)"
+            )
+        case let (nil, disclosure?):
+            String(
+                localized: "\(subject)を \(grams) 積みました（\(disclosure)）。",
+                table: "Share",
+                comment: "Share caption, first sentence of a card with under a minute of focus. Arguments: what the card holds (sentence start in en), mass (0g), what is self-reported (a sentence without its period in en)"
+            )
+        case (nil, nil):
+            String(
+                localized: "\(subject)を \(grams) 積みました。",
+                table: "Share",
+                comment: "Share caption, first sentence of a card with under a minute of focus. Arguments: what the card holds (sentence start in en), mass (0g)"
+            )
+        }
+    }
+
+    /// Ends one complete statement as a sentence (ja 「。」, en "."), so
+    /// several of them can be joined with `SentenceText.join`.
+    static func sentence(_ text: String) -> String {
+        String(
+            localized: "\(text)。",
+            table: "Share",
+            comment: "Ends one statement of the share caption or the card's VoiceOver text as a sentence. en: '%@.'"
+        )
     }
 }
 
@@ -373,23 +435,48 @@ struct ShareDisclosurePolicy: Equatable {
 
     var cardBadge: String? {
         switch (includesSelfReportedFocus, achievementCount > 0) {
-        case (true, true): "自己申告込み・記念石は自己申告"
-        case (true, false): "自己申告込み"
-        case (false, true): "記念石は自己申告"
-        case (false, false): nil
+        case (true, true):
+            String(localized: "自己申告込み・記念石は自己申告", table: "Share",
+                   comment: "Badge drawn on the share card: the card includes self-reported focus, and milestone stones are self-reported")
+        case (true, false):
+            String(localized: "自己申告込み", table: "Share",
+                   comment: "Badge drawn on the share card: the card includes self-reported focus")
+        case (false, true):
+            Self.stonesAreSelfReported
+        case (false, false):
+            nil
         }
     }
 
+    /// Also a sentence of the card's VoiceOver text, and in English its own
+    /// sentence of the caption, so it reads as a statement without a period.
     var captionDisclosure: String? {
         switch (includesSelfReportedFocus, achievementCount > 0) {
-        case (true, true): "自己申告の集中を含む・記念石は自己申告"
-        case (true, false): "自己申告の集中を含む"
-        case (false, true): "記念石は自己申告"
-        case (false, false): nil
+        case (true, true):
+            String(localized: "自己申告の集中を含む・記念石は自己申告", table: "Share",
+                   comment: "Share caption and VoiceOver: the card includes self-reported focus, and milestone stones are self-reported. A statement without its final period (sentence case in en)")
+        case (true, false):
+            String(localized: "自己申告の集中を含む", table: "Share",
+                   comment: "Share caption and VoiceOver: the card includes self-reported focus. A statement without its final period (sentence case in en)")
+        case (false, true):
+            Self.stonesAreSelfReported
+        case (false, false):
+            nil
         }
     }
 
     var accessibilityDisclosure: String {
-        captionDisclosure ?? "実測のみ"
+        captionDisclosure ?? Self.measuredOnly
+    }
+
+    /// Only timed focus (timer or Screen Time) is on the card.
+    static var measuredOnly: String {
+        String(localized: "実測のみ", table: "Share",
+               comment: "Share: only timed focus (timer or Screen Time) is on the card. An item of the settings summary and a VoiceOver sentence without its period")
+    }
+
+    private static var stonesAreSelfReported: String {
+        String(localized: "記念石は自己申告", table: "Share",
+               comment: "Share card badge, caption and VoiceOver: milestone stones are entered by hand. A statement without its final period (sentence case in en)")
     }
 }

@@ -49,10 +49,40 @@ enum ShareScope: Equatable {
                 comment: "Share card period label for the whole history"
             )
         case let .month(monthStart):
-            return StrataMath.monthLabel(for: monthStart)
+            // DateText on the Gregorian calendar StrataMath buckets months
+            // with: the same 「2026年9月」, and "September 2026" in English.
+            return DateText.yearMonth(monthStart)
         case let .aggregate(_, monthLabel):
-            return monthLabel
+            return Self.displayMonthLabel(monthLabel)
         }
+    }
+
+    /// A crystal's month is handed over as the Japanese label its receipt
+    /// stores (`StrataMath.monthLabel`, 「2026年9月」), which also reaches
+    /// 1.0.2 devices and is never localized (Docs/Localization.md). It is
+    /// read back into its month and named in the app's language; a label in
+    /// any other shape is shown as stored.
+    static func displayMonthLabel(
+        _ storedLabel: String,
+        locale: Locale = PomoGemLocale.current,
+        timeZone: TimeZone = .current
+    ) -> String {
+        guard let month = storedMonth(storedLabel, timeZone: timeZone) else { return storedLabel }
+        return DateText.yearMonth(month, locale: locale, timeZone: timeZone)
+    }
+
+    /// The first day of the month a stored 「YYYY年M月」 label names.
+    static func storedMonth(_ storedLabel: String, timeZone: TimeZone = .current) -> Date? {
+        // l10n-ignore: parses the persisted Japanese month label, which is data (StrataMath.monthLabel)
+        let parts = storedLabel.split(separator: "年", omittingEmptySubsequences: false)
+        guard parts.count == 2,
+              parts[1].hasSuffix("月"), // l10n-ignore: the persisted label's month marker
+              let year = Int(parts[0]),
+              let month = Int(parts[1].dropLast()),
+              (1...12).contains(month)
+        else { return nil }
+        return PomoGemCalendar.gregorian(timeZone: timeZone)
+            .date(from: DateComponents(year: year, month: month, day: 1))
     }
 }
 
