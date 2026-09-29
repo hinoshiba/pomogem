@@ -2180,12 +2180,12 @@
       }
     },
     "タイマーと保存処理を停止しています" : {
-      "comment" : "Data deletion step 2: stopping the timer and saving",
+      "comment" : "Data deletion step 2: stopping the timer and all saving (the app stops writing data; it is not saving anything)",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Stopping the timer and saving"
+            "value" : "Stopping the timer and any saving"
           }
         },
         "ja" : {

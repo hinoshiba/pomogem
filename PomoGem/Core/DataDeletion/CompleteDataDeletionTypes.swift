@@ -106,7 +106,7 @@ extension CompleteDataDeletionPhase {
                    comment: "Data deletion step 1: recording the deletion request safely in iCloud")
         case .quiesceApplication:
             String(localized: "タイマーと保存処理を停止しています", table: "Storage",
-                   comment: "Data deletion step 2: stopping the timer and saving")
+                   comment: "Data deletion step 2: stopping the timer and all saving (the app stops writing data; it is not saving anything)")
         case .clearDeviceState:
             String(localized: "この端末の設定と一時ファイルを消去しています", table: "Storage",
                    comment: "Data deletion step 3")

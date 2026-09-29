@@ -375,7 +375,7 @@ final class StorageSyncLocalizationTests: XCTestCase {
             try ["iCloudに削除要求を保護しています", "タイマーと保存処理を停止しています", "この端末の設定と一時ファイルを消去しています",
                  "この端末の記録を消去しています", "iCloudの記録を消去しています", "iCloudで削除完了を確認しています",
                  "この端末に削除世代を記録しています", "削除結果を検証しています"].map { try english($0) },
-            ["Securing the deletion request in iCloud", "Stopping the timer and saving",
+            ["Securing the deletion request in iCloud", "Stopping the timer and any saving",
              "Erasing this device's settings and temporary files", "Erasing the records on this device",
              "Erasing your records in iCloud", "Confirming with iCloud that the deletion is complete",
              "Recording the deletion marker on this device", "Verifying the deletion"]
