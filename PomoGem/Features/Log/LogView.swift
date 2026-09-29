@@ -1793,12 +1793,14 @@ struct LogView: View {
                             selectedWrappedMonth = month
                         } label: {
                             // The decorative icon steps aside when the row
-                            // is too narrow, so a long month name such as
-                            // "September 2026" at large text sizes wraps
-                            // between words instead of breaking "Sep-".
+                            // is too narrow, and at the largest sizes on an
+                            // iPhone SE the chevron too, so a long month name
+                            // such as "September 2026" wraps between words
+                            // instead of breaking "Sep-".
                             ViewThatFits(in: .horizontal) {
                                 monthRow(month: month, summary: summary, showsIcon: true)
                                 monthRow(month: month, summary: summary, showsIcon: false)
+                                monthRow(month: month, summary: summary, showsIcon: false, showsChevron: false)
                             }
                             .frame(minHeight: 44)
                             .contentShape(Rectangle())
@@ -1837,7 +1839,12 @@ struct LogView: View {
         }
     }
 
-    private func monthRow(month: WrappedMonth, summary: LogMonthSummary, showsIcon: Bool) -> some View {
+    private func monthRow(
+        month: WrappedMonth,
+        summary: LogMonthSummary,
+        showsIcon: Bool,
+        showsChevron: Bool = true
+    ) -> some View {
         HStack(spacing: 12) {
             if showsIcon {
                 Image(systemName: "sparkles.rectangle.stack.fill")
@@ -1851,10 +1858,14 @@ struct LogView: View {
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
             }
-            Spacer()
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundStyle(PomoGemTheme.muted)
+            if showsChevron {
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+            } else {
+                Spacer(minLength: 0)
+            }
         }
     }
 
@@ -2945,6 +2956,9 @@ private struct AchievementEditorSheet: View {
     private let keptSubjectChoiceID: UUID?
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// The menu symbols grow with the text, so their column does too.
+    @ScaledMetric(relativeTo: .body) private var menuSymbolWidth: CGFloat = 22
     @State private var selectedSubjectID: UUID?
     @State private var kind: AchievementKind
     @State private var note: String
@@ -3267,15 +3281,39 @@ private struct AchievementEditorSheet: View {
     }
 
     private var dateEditor: some View {
+        let title = String(localized: "達成した日", table: "Log", comment: "Milestone editor: the date the achievement happened")
+        return Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                // The compact picker keeps its full width, so beside it the
+                // label broke into 「Dat」「e」「Ach…」, and on an iPhone SE at
+                // the largest size the row pushed the whole form past the
+                // screen edges. At these sizes the label sits above the date,
+                // and the date stops growing at a size that still fits.
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(title)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityHidden(true)
+                    dateField(title)
+                        .labelsHidden()
+                        .dynamicTypeSize(...DynamicTypeSize.accessibility3)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                dateField(title)
+            }
+        }
+        .padding(14)
+        .background(PomoGemTheme.raised, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func dateField(_ title: String) -> some View {
         DatePicker(
-            String(localized: "達成した日", table: "Log", comment: "Milestone editor: the date the achievement happened"),
+            title,
             selection: $achievedAt,
             in: ...Date.now,
             displayedComponents: .date
         )
         .datePickerStyle(.compact)
-        .padding(14)
-        .background(PomoGemTheme.raised, in: RoundedRectangle(cornerRadius: 12))
         .accessibilityIdentifier("achievement.editor.date")
     }
 
@@ -3293,7 +3331,7 @@ private struct AchievementEditorSheet: View {
         HStack(spacing: 10) {
             Image(systemName: symbol)
                 .foregroundStyle(Color(hex: colorHex))
-                .frame(width: 22)
+                .frame(width: menuSymbolWidth)
                 .accessibilityHidden(true)
             Text(title)
                 .font(.system(.body, design: .rounded, weight: .bold))
