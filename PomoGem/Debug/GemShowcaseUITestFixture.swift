@@ -23,6 +23,10 @@ import SwiftUI
 /// - `corecard`: the time core one focus away without a fusion: four
 ///   50-minute gems and one 25-minute gem (2.25kg in five gems), so the
 ///   next completion brings the core on the card itself (product-05).
+/// - `edge`: 重さの旅's edge (GemExperienceDesign §5.6): 25-minute gems up to
+///   `POMOGEM_UI_TEST_EDGE_GRAMS` (5,998 g by default), the last one short,
+///   so the 12-second demo focus (2 g) crosses a threshold: 10 hours (a 名所
+///   and the first 一里塚) by default, 30 hours with 17998.
 /// - `gallery`: no persistence at all. A standalone jar restores one
 ///   descriptor per visual tier (loose, self-reported, ×10 … ×1万,
 ///   achievement) plus Screen Time obstacles, for side-by-side inspection.
@@ -61,6 +65,8 @@ enum GemShowcaseUITestFixture {
         /// (about 2.5 t: one ×1万 root and six loose gems).
         case heavy
         case veteran
+        /// Just under a 重さの旅 threshold (see the list above).
+        case edge
         /// Theme tone and mark review (Docs/GemExperienceDesign.md §7.4,
         /// §7.12): one 25-minute gem in each `SubjectPalette` colour, two
         /// off-palette legacy colours, and ×10 crystals that mix palette
@@ -100,7 +106,29 @@ enum GemShowcaseUITestFixture {
         case .corecard: 5
         case .heavy: 1_004
         case .veteran: 10_006
+        case .edge: (edgeGrams + Constants.Mass.measuredPebbleGrams - 1) / Constants.Mass.measuredPebbleGrams
         case .gallery, .stress, .worstcase, .fusionfx, .palette, nil: nil
+        }
+    }
+
+    /// `edge`: the total the fixture stops at.
+    static let edgeGramsEnvironmentKey = "POMOGEM_UI_TEST_EDGE_GRAMS"
+    private static var edgeGrams: Int {
+        let value = ProcessInfo.processInfo.environment[edgeGramsEnvironmentKey].flatMap(Int.init) ?? 5_998
+        return min(max(1, value), 1_000_000)
+    }
+
+    /// Seconds of the fixture's `index`th session.
+    private static func sessionSeconds(index: Int, count: Int) -> Int {
+        switch modeForCurrentProcess {
+        case .corecard where index < 4:
+            return 3_000
+        case .edge where index == count - 1:
+            // The short last gem: the rest of the edge total.
+            let remainder = edgeGrams - (count - 1) * Constants.Mass.measuredPebbleGrams
+            return remainder * 60 / Constants.Mass.gramsPerMinute
+        default:
+            return 1_500
         }
     }
 
@@ -146,8 +174,9 @@ enum GemShowcaseUITestFixture {
         for index in 0 ..< count {
             let subject = subjects[subjectCycle[index % subjectCycle.count] % subjects.count]
             let endAt = end.addingTimeInterval(-Double(count - index) * 5_400)
-            // `corecard`: the first four are 50-minute gems.
-            let seconds = modeForCurrentProcess == .corecard && index < 4 ? 3_000 : 1_500
+            // `corecard`: the first four are 50-minute gems; `edge`: the last
+            // one is short.
+            let seconds = sessionSeconds(index: index, count: count)
             planned.append((sessionID(index: index), subject, endAt.addingTimeInterval(-Double(seconds)), endAt))
             context.insert(StudySession(
                 id: sessionID(index: index),

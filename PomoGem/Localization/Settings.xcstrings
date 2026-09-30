@@ -7,6 +7,9 @@
     "App Storeを開きます" : {
       "comment" : "Settings row subtitle: opens the App Store"
     },
+    "Home に次の目標を表示" : {
+      "comment" : "Settings toggle: show Home's one next-target line of the Weight Journey (重さの旅), the next milestone marker (一里塚) or landmark (名所). Suggested en: 'Show the next goal on Home'"
+    },
     "MIT License・GitHub（Webで開く）" : {
       "comment" : "About page link subtitle"
     },
@@ -186,6 +189,9 @@
     },
     "瑠璃" : {
       "comment" : "Theme colour swatch (lapis blue)"
+    },
+    "瓶の上に、つぎの一里塚か名所までを1行で表示します" : {
+      "comment" : "Settings toggle subtitle: Home shows one line above the jar with the next milestone marker (一里塚, every 10 hours) or landmark (名所). Suggested en: 'One line above the jar with the next marker or landmark'"
     },
     "瓶の表示" : {
       "comment" : "Settings section header: how the jar is shown (Jar display)"

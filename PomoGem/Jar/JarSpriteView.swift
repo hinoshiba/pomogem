@@ -157,6 +157,15 @@ struct JarSpriteView: View {
     /// Height of an overlaid HUD at the top of the stage (Home), so the core
     /// and its orbit stay clear of it.
     let coreTopClearance: CGFloat?
+    /// D5: Home's readout above the mouth carries 「瓶N杯」, so the chip behind
+    /// the glass stays hidden.
+    let showsCycleChip: Bool
+    /// D6: Home names the core only (its next-target line is the 重さの旅 in
+    /// the readout); other jars keep the core's progress card.
+    let showsCoreProgressCard: Bool
+    /// Home's jar reports its core's frame to UI tests (DEBUG), whether its
+    /// readout is inside the jar or above the mouth.
+    let reportsCoreFrame: Bool
     let projectionIsLowerBound: Bool
     let projectionIsUnverified: Bool
     /// sync-03 (icloud-life): VoiceOver only; the jar's visuals are unchanged.
@@ -208,6 +217,9 @@ struct JarSpriteView: View {
         lifetimeCoreColorHex: String? = nil,
         lifetimeCoreColorShares: [GemColorShare] = [],
         coreTopClearance: CGFloat? = nil,
+        showsCycleChip: Bool = true,
+        showsCoreProgressCard: Bool = true,
+        reportsCoreFrame: Bool = false,
         projectionIsLowerBound: Bool = false,
         projectionIsUnverified: Bool = false,
         pendingMass: JarAccessibilityPresentation.PendingMass? = nil,
@@ -236,6 +248,9 @@ struct JarSpriteView: View {
         self.lifetimeCoreColorHex = lifetimeCoreColorHex ?? accentHex
         self.lifetimeCoreColorShares = lifetimeCoreColorShares
         self.coreTopClearance = coreTopClearance
+        self.showsCycleChip = showsCycleChip
+        self.showsCoreProgressCard = showsCoreProgressCard
+        self.reportsCoreFrame = reportsCoreFrame
         self.projectionIsLowerBound = projectionIsLowerBound
         self.projectionIsUnverified = projectionIsUnverified
         self.pendingMass = pendingMass
@@ -276,7 +291,8 @@ struct JarSpriteView: View {
                     JarAccumulationPresenceBackdrop(
                         state: accumulationPresence,
                         colorHex: lifetimeCoreColorHex,
-                        showsLifetimeCore: lifetimeCoreState != nil
+                        showsLifetimeCore: lifetimeCoreState != nil,
+                        showsCycleChip: showsCycleChip
                     )
                 }
 
@@ -305,7 +321,9 @@ struct JarSpriteView: View {
                 // without the second line, or not at all, whichever fits
                 // above the settled gems (the completion card shortens the
                 // jar the same way).
-                let coreSecondLine = lifetimeCoreState?.nextFusionLabel == nil ? 0 : coreLabelMetrics.secondLine
+                let coreSecondLine = lifetimeCoreState?.nextFusionLabel == nil || !showsCoreProgressCard
+                    ? 0
+                    : coreLabelMetrics.secondLine
                 let coreLabelHeight = coreLabelMetrics.size.height
                 let coreLabelBottomLimit = floorLabelLimit
                 let coreLayout = lifetimeCoreState.map { state in
@@ -398,6 +416,7 @@ struct JarSpriteView: View {
                         topClearance: coreTopClearance,
                         bottomLimit: coreBottomLimit,
                         labelBottomLimit: coreLabelBottomLimit,
+                        showsProgressCard: showsCoreProgressCard,
                         metrics: $coreLabelMetrics
                     )
                     .opacity(0)
@@ -540,6 +559,7 @@ struct JarSpriteView: View {
                         bottomLimit: coreBottomLimit,
                         labelBottomLimit: coreLabelBottomLimit,
                         fit: coreLabelFit,
+                        showsProgressCard: showsCoreProgressCard,
                         measures: false,
                         metrics: $coreLabelMetrics
                     )
@@ -551,7 +571,7 @@ struct JarSpriteView: View {
                 // one element), so Home's jar (the only one with a measured
                 // HUD above its core) reports it for UI tests: the tapped
                 // crystal's card must stay clear of it.
-                if coreTopClearance != nil, let coreDisc {
+                if coreTopClearance != nil || reportsCoreFrame, let coreDisc {
                     let labelBottom = coreLayout.map {
                         $0.labelTop + (coreLabelsBuried ? 0 : coreLabelMetrics.size.height)
                     } ?? 0

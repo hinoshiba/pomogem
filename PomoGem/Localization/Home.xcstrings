@@ -12,17 +12,6 @@
         }
       }
     },
-    "%@ / %@" : {
-      "comment" : "Jar rail: focus time so far / time the next time core needs",
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ / %2$@"
-          }
-        }
-      }
-    },
     "%@ ・ まもなく瓶に入ります" : {
       "comment" : "Undo banner subtitle: the mass added (+300g), and that the entry is saved shortly"
     },
@@ -39,6 +28,17 @@
     },
     "%@。" : {
       "comment" : "VoiceOver: ends a sentence built elsewhere. %@ is the sentence without its final punctuation. en: '%@.'"
+    },
+    "%@。%@の重さになりました" : {
+      "comment" : "Weight Journey chip when a landmark (名所) is reached. %1$@ the landmark's name (2時間, 最初の一粒, ゾウ1頭ぶん), %2$@ its weight comparison (キャベツ1玉ほど). Never claims an exact balance. Suggested en: '%1$@. Now about as heavy as %2$@.'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@。%2$@の重さになりました"
+          }
+        }
+      }
     },
     "%@。累計%@、集中%lld粒、記念石%@個" : {
       "comment" : "VoiceOver, menu metrics while iCloud is checked: status, lifetime mass, focus count, achievement stone count",
@@ -106,11 +106,14 @@
         }
       }
     },
+    "%@に届きました" : {
+      "comment" : "Home chip: the lifetime total reached a milestone marker while Home was not being looked at (synced from another device, or while away). %@ is 一里塚 30時間. Suggested en: 'Reached %@'"
+    },
     "%@の自己申告を保存できませんでした。もう一度積んでください" : {
       "comment" : "Toast when a confirmed manual entry could not be saved; the argument is the theme"
     },
-    "%@まで" : {
-      "comment" : "Jar rail caption; the argument is 最初の時間の核 or 時間の核・N段目"
+    "%@以上・同期中" : {
+      "comment" : "Home's Weight Journey (重さの旅) line while the lifetime total is still being checked with iCloud: at least this much time is stacked. %@ is a time (80時間). Suggested en: 'At least %@ · syncing'"
     },
     "%lld分休憩" : {
       "comment" : "Completion card: the primary action that starts the break. %lld is minutes. en: '%lld-min break'"
@@ -155,6 +158,15 @@
     "×10の結晶が10個そろうと、×100の結晶になります。" : {
       "comment" : "Fusion sheet 「しくみ」: ten ×10 crystals make a ×100 crystal"
     },
+    "◇ %@" : {
+      "comment" : "Completion card chip: this focus reached a milestone marker (一里塚), and its ◇ lights on the time core's orbit. %@ its time (30時間). Suggested en: '◇ %@'"
+    },
+    "◇ %@。◇10個が星になりました" : {
+      "comment" : "Completion card chip: a milestone marker completed ten ◇, which fold into one 100-hour star (星, suggested en 'star'). %@ its time (300時間). Suggested en: '◇ %@. Ten ◇ became a star.'"
+    },
+    "◇ %@。星10個が冠になりました" : {
+      "comment" : "Completion card chip: a milestone marker completed ten stars, which fold into one 1,000-hour crown (冠, suggested en 'crown'). %@ its time (3,000時間). Suggested en: '◇ %@. Ten stars became a crown.'"
+    },
     "あと%lld%%で、下の粒がひとつの結晶に" : {
       "comment" : "Jar capsule before a fusion; the argument is the remaining capacity percent"
     },
@@ -185,8 +197,127 @@
     "しくみ。%@" : {
       "comment" : "VoiceOver label of the 「しくみ」 disclosure; %@ is its full accounting, read whether it is open or not"
     },
+    "つぎの一里塚　%@" : {
+      "comment" : "Home's next-target line: the next milestone marker (一里塚, one every 10 hours; suggested en 'milestone marker'). %@ its time (80時間). Suggested en: 'Next marker: %@'"
+    },
+    "つぎの一里塚　%@・+%@ 積みました" : {
+      "comment" : "Home's next-target line, first half of the stretch. %1$@ the marker's time, %2$@ stacked time (3時間10分). Suggested en: 'Next marker: %1$@ · +%2$@ stacked'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "つぎの一里塚　%1$@・+%2$@ 積みました"
+          }
+        }
+      }
+    },
+    "つぎの一里塚　%@・+%@ 積みました・あと1本" : {
+      "comment" : "Home's next-target line, first half of the stretch, with the one-more note. %1$@ the marker's time, %2$@ stacked time. Suggested en: 'Next marker: %1$@ · +%2$@ stacked · one more focus'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "つぎの一里塚　%1$@・+%2$@ 積みました・あと1本"
+          }
+        }
+      }
+    },
+    "つぎの一里塚　%@・あと%@" : {
+      "comment" : "Home's next-target line, second half of the stretch. %1$@ the marker's time, %2$@ time left (4時間50分). Suggested en: 'Next marker: %1$@ · %2$@ to go'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "つぎの一里塚　%1$@・あと%2$@"
+          }
+        }
+      }
+    },
+    "つぎの一里塚　%@・あと%@・あと1本" : {
+      "comment" : "Home's next-target line, second half of the stretch, with the one-more note. %1$@ the marker's time, %2$@ time left. Suggested en: 'Next marker: %1$@ · %2$@ to go · one more focus'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "つぎの一里塚　%1$@・あと%2$@・あと1本"
+          }
+        }
+      }
+    },
+    "つぎの一里塚　%@・あと1本" : {
+      "comment" : "Home's next-target line with D11's one-more note. %@ the marker's time. Suggested en: 'Next marker: %@ · one more focus'"
+    },
+    "つぎの名所　%@・%@" : {
+      "comment" : "Home's next-target line: the next landmark (名所, suggested en 'landmark'). %1$@ its weight comparison (米俵1俵), %2$@ its time (100時間). Suggested en: 'Next landmark: %1$@ · %2$@'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "つぎの名所　%1$@・%2$@"
+          }
+        }
+      }
+    },
+    "つぎの名所　%@・%@・+%@ 積みました" : {
+      "comment" : "Home's next-target line, first half of the stretch: what was stacked since the last landmark or milestone marker. %1$@ comparison, %2$@ time, %3$@ stacked time (3時間10分). Suggested en: 'Next landmark: %1$@ · %2$@ · +%3$@ stacked'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "つぎの名所　%1$@・%2$@・+%3$@ 積みました"
+          }
+        }
+      }
+    },
+    "つぎの名所　%@・%@・+%@ 積みました・あと1本" : {
+      "comment" : "Home's next-target line, first half of the stretch, with the one-more note. %1$@ comparison, %2$@ time, %3$@ stacked time. Suggested en: 'Next landmark: %1$@ · %2$@ · +%3$@ stacked · one more focus'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "つぎの名所　%1$@・%2$@・+%3$@ 積みました・あと1本"
+          }
+        }
+      }
+    },
+    "つぎの名所　%@・%@・あと%@" : {
+      "comment" : "Home's next-target line, second half of the stretch: time left to the landmark. %1$@ comparison, %2$@ time, %3$@ time left (4時間50分). Suggested en: 'Next landmark: %1$@ · %2$@ · %3$@ to go'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "つぎの名所　%1$@・%2$@・あと%3$@"
+          }
+        }
+      }
+    },
+    "つぎの名所　%@・%@・あと%@・あと1本" : {
+      "comment" : "Home's next-target line, second half of the stretch, with the one-more note. %1$@ comparison, %2$@ time, %3$@ time left. Suggested en: 'Next landmark: %1$@ · %2$@ · %3$@ to go · one more focus'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "つぎの名所　%1$@・%2$@・あと%3$@・あと1本"
+          }
+        }
+      }
+    },
+    "つぎの名所　%@・%@・あと1本" : {
+      "comment" : "Home's next-target line with D11's one-more note: one focus of the chosen length reaches it. %1$@ comparison, %2$@ time. Suggested en: 'Next landmark: %1$@ · %2$@ · one more focus'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "つぎの名所　%1$@・%2$@・あと1本"
+          }
+        }
+      }
+    },
     "はじめての1時間" : {
       "comment" : "Weight Journey (重さの旅) landmark (名所) at 1 hour. Suggested en: 'Your First Hour'."
+    },
+    "ほかに %@" : {
+      "comment" : "Completion card, under the Weight Journey chip: the other landmarks or milestone markers this focus also reached. %@ is a list (5時間・◇ 10時間). Suggested en: 'Also: %@'"
     },
     "まだ空っぽ" : {
       "comment" : "Empty jar at accessibility text sizes: title"
@@ -256,6 +387,9 @@
     },
     "リマインダーを保存できませんでした。設定からも選べます。" : {
       "comment" : "First completion card: the reminder could not be saved"
+    },
+    "一里塚 %@" : {
+      "comment" : "Weight Journey: a milestone marker (一里塚, one every 10 hours; suggested en 'milestone marker') named in a sentence. %@ its time (30時間). Suggested en: 'the %@ marker'"
     },
     "下のボタンへ" : {
       "comment" : "Empty jar at accessibility text sizes: points to the start button below"
@@ -329,6 +463,17 @@
     },
     "取り消しました。瓶には積んでいません" : {
       "comment" : "Toast after undoing a manual entry"
+    },
+    "名所 %@・%@" : {
+      "comment" : "Weight Journey: a landmark (名所) named in a sentence. %1$@ its comparison (米俵1俵), %2$@ its time (100時間). Suggested en: 'the %1$@ landmark (%2$@)'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "名所 %1$@・%2$@"
+          }
+        }
+      }
     },
     "大玉スイカ1玉ほど" : {
       "comment" : "Weight Journey comparison for 6kg (名所 at 10 hours). Suggested en: 'About a large watermelon'."
@@ -503,6 +648,23 @@
     },
     "進行中の集中があるため、新しい集中は始めませんでした" : {
       "comment" : "Toast: a widget, link or Siri asked to start a focus while another one still needs attention"
+    },
+    "重さの旅" : {
+      "comment" : "Title of the large-text card under the jar that repeats the Weight Journey (重さの旅) next-target line. Suggested en: 'Weight Journey'"
+    },
+    "重さの旅、%@" : {
+      "comment" : "VoiceOver: the large-text Weight Journey card. %@ is the next-target line (つぎの一里塚　80時間・あと4時間50分). Suggested en: 'Weight Journey, %@'"
+    },
+    "重さの旅を読み込みました。いまは%@、つぎは%@です" : {
+      "comment" : "Home chip shown once on a device that reads the Weight Journey (重さの旅, suggested en 'Weight Journey') for the first time: a new device, a reinstall or the first run after the update. %1$@ what is reached (5時間, 一里塚 30時間), %2$@ the next target (一里塚 80時間, 名所 米俵1俵・100時間). Suggested en: 'Weight Journey loaded. You are at %1$@; next is %2$@.'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "重さの旅を読み込みました。いまは%1$@、つぎは%2$@です"
+          }
+        }
+      }
     },
     "重さはそのまま %@" : {
       "comment" : "Fusion sheet subline: the crystal weighs what its gems did. %@ is a mass (2.50kg). en: 'Same weight: %@'"

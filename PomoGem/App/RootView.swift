@@ -2164,6 +2164,10 @@ struct RootView: View {
         PendingRewardReceiptStore.removeAll()
         ScreenTimeGemDropStore.removeAll()
         FocusRestCadenceStore.removeAll()
+        // 重さの旅 (§5.6): how far this device celebrated, and its Home line
+        // toggle, belong to the records that were reset.
+        WeightJourneyCelebrationStore.removeAll()
+        WeightJourneyHomePreference.removeAll()
         UserDefaults.standard.removeObject(
             forKey: AccountScopedLocalState.defaultsKey(
                 base: "review.local-completion-count"

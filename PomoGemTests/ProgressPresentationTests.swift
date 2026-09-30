@@ -461,8 +461,16 @@ final class ProgressPresentationTests: XCTestCase {
         XCTAssertEqual(sixtyMinutes.progressLabel, "時間 1時間 / 4時間10分")
         XCTAssertEqual(tenMinutes.countLabel, "100g")
         XCTAssertEqual(sixtyMinutes.countLabel, "600g")
+        // D7 (v1.3): the orbit's ◇ are the 一里塚 (one per 10 hours), still
+        // read from mass alone, never from the number of timers.
         XCTAssertEqual(tenMinutes.litOrbitSlotCount, 0)
-        XCTAssertEqual(sixtyMinutes.litOrbitSlotCount, 2)
+        XCTAssertEqual(sixtyMinutes.litOrbitSlotCount, 0)
+        let tenHoursInThreeTimers = try! XCTUnwrap(JarLifetimeCorePresentation.state(
+            totalPebbleCount: 3,
+            totalGrams: 6_000,
+            projectionIsLowerBound: false
+        ))
+        XCTAssertEqual(tenHoursInThreeTimers.litOrbitSlotCount, 1)
     }
 
     func testConstellationMassValueIsMonotonicAcrossDurationChoices() {
@@ -1148,7 +1156,11 @@ final class ProgressPresentationTests: XCTestCase {
                 snapshot.progressFraction,
                 accuracy: 0.000_001
             )
-            XCTAssertEqual(core.litOrbitSlotCount, 10)
+            // D7 (v1.3): the ◇ count the 一里塚 reached, not the way to the
+            // next 10× stage (which the core's shape shows): 4h10m has none,
+            // 41h40m four, 416h40m one after four 星.
+            XCTAssertEqual(core.litOrbitSlotCount, [0, 4, 1][index])
+            XCTAssertEqual(core.journeyMarkers?.count, grams / WeightJourney.markerGrams)
             XCTAssertEqual(
                 core.progressLabel,
                 "時間 \(EffortProgressPresentation.formattedDuration(grams: grams)) / \(EffortProgressPresentation.formattedDuration(grams: grams))"
@@ -1701,7 +1713,6 @@ final class ProgressPresentationTests: XCTestCase {
             projectionIsLowerBound: true
         )
 
-        XCTAssertEqual(display.eyebrow, "CRYSTAL SYNC")
         XCTAssertEqual(display.progressLabel, "今回 +1粒")
         XCTAssertEqual(display.nextStepLabel, "結晶進捗を整理中")
         XCTAssertNil(display.litSlotCount)
