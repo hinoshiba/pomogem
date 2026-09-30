@@ -705,6 +705,7 @@ struct GemShowcaseFixtureLaunchView: View {
                 Text(Self.mode == .worstcase ? "最悪ケース（Debug・320pt）" : (Self.mode == .palette ? "テーマ12色（Debug）" : "宝石ギャラリー（Debug）"))
                     .font(.system(size: 15, weight: .bold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.8))
+                    .accessibilityIdentifier("gem.showcase.gallery")
                 JarSpriteView(
                     scene: scene,
                     totalGrams: grams,
@@ -739,7 +740,6 @@ struct GemShowcaseFixtureLaunchView: View {
             }
             .padding(.horizontal, 8)
         }
-        .accessibilityIdentifier("gem.showcase.gallery")
         .task {
             guard Self.mode == .fusionfx else { return }
             var landed = false
