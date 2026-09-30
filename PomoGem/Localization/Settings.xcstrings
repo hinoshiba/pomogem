@@ -263,6 +263,9 @@
         }
       }
     },
+    "Home に次の目標を表示" : {
+      "comment" : "Settings toggle: show Home's one next-target line of the Weight Journey (重さの旅), the next milestone marker (一里塚) or landmark (名所). Suggested en: 'Show the next goal on Home'"
+    },
     "JSONファイルを作成中" : {
       "comment" : "Export row subtitle while the file is being written",
       "localizations" : {
@@ -740,6 +743,9 @@
           }
         }
       }
+    },
+    "「抽選しない」を選択として保存" : {
+
     },
     "「毎日のリマインダー」と「先月の瓶のお知らせ」は既定でオフです。赤いバッジや連続記録の警告は使いません。タイマー終了の通知だけは「即時通知」として送るため、iPhoneの集中モード（おやすみモードなど）で即時通知を許可していれば、その間も届きます。" : {
       "comment" : "Settings footer under the Notifications card. The default-off sentence names only this card's two switches, because the leave-pause notifications in the Focus card are on by default. Suggested English: Daily Reminder and Last Month's Jar are off by default. The app never uses red badges or streak warnings. Only timer-end alerts are sent as Time Sensitive, so they still arrive during a Focus such as Do Not Disturb if Time Sensitive notifications are allowed there.",
@@ -3672,6 +3678,9 @@
         }
       }
     },
+    "瓶の上に、つぎの一里塚か名所までを1行で表示します" : {
+      "comment" : "Settings toggle subtitle: Home shows one line above the jar with the next milestone marker (一里塚, every 10 hours) or landmark (名所). Suggested en: 'One line above the jar with the next marker or landmark'"
+    },
     "瓶の表示" : {
       "comment" : "Settings section header: how the jar is shown (Jar display)",
       "localizations" : {
@@ -4727,7 +4736,7 @@
       }
     },
     "集中" : {
-      "comment" : "Settings section header: timer settings (English: Focus)",
+      "comment" : "Timer display preview: the phase shown in the ring (集中 · 35% 残り)",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4925,6 +4934,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "離れてから%@までに最大%@"
+          }
+        }
+      }
+    },
+    "離れてから%@までに最大%lld回" : {
+      "comment" : "Settings switch subtitle for the leave-pause notifications. The first argument is when the series stops after leaving (20分), the second how many notifications at most (5). Suggested English: Up to %2$lld times in your first %1$@ away",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "離れてから%1$@までに最大%2$lld回"
           }
         }
       }

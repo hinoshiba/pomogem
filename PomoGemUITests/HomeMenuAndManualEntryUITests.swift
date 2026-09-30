@@ -469,7 +469,11 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         waitForPendingManualEntryToSave()
         let card = app.descendants(matching: .any)["home.fusion-progress.large-text"]
         XCTAssertTrue(card.waitForExistence(timeout: 8), "The first gem gets the large-text progress card")
-        XCTAssertTrue(card.label.contains("時間 30分 / 4時間10分"), card.label)
+        // D6 (v1.3): the card says the jar's one next-target line (重さの旅)
+        // in full-size text: 30 minutes are past 最初の一粒, on the way to
+        // はじめての1時間.
+        XCTAssertTrue(card.label.contains("重さの旅"), card.label)
+        XCTAssertTrue(card.label.contains("つぎの名所　卵10個ほど・1時間"), card.label)
         XCTAssertTrue(launcher.isHittable, "The start button stays in view with a gem in the jar")
         XCTAssertLessThanOrEqual(launcher.frame.maxY, window.maxY)
         pause(3.5)

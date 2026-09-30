@@ -1084,7 +1084,7 @@ struct AccumulationOverviewView: View {
         .accessibilityHidden(true)
 
         VStack(alignment: .leading, spacing: 9) {
-            SectionEyebrow(text: "THIS WEEK")
+            SectionEyebrow(text: String(localized: "今週", table: "Overview", comment: "Eyebrow over this week's headline in 積み上がり"))
             Text(currentWeekHeadline)
                 .font(PomoGemTheme.brand(22))
             Text(currentWeekCaption)
@@ -2067,7 +2067,7 @@ private struct FusionHierarchyLevelRow: View {
         )
         FusionHierarchyMetric(
             title: String(localized: "保持する質量", table: "Overview", comment: "Tier metric title: the mass this tier holds"),
-            value: MassText.grams(summary.grams.formatted(.number.grouping(.automatic)))
+            value: MassText.grams(value: summary.grams)
         )
     }
 }
@@ -2614,15 +2614,9 @@ struct ClusterDetailSheet: View {
     }
 
     private func formattedMass(_ grams: Int) -> String {
-        if grams >= 1_000 {
-            let kilograms = (Double(grams) / 1_000).formatted(
-                .number
-                    .grouping(.automatic)
-                    .precision(.fractionLength(1))
-            )
-            return MassText.kilograms(kilograms)
-        }
-        return MassText.grams(grams.formatted())
+        grams >= 1_000
+            ? MassText.kilograms(fromGrams: grams, fractionDigits: 1)
+            : MassText.grams(value: grams)
     }
 
     private var visibleSubjectMix: [AggregateSubjectFraction] {
@@ -2904,8 +2898,8 @@ private struct MonthBottleCard: View {
 
     private func formattedMass(_ grams: Int) -> String {
         grams >= 1_000
-            ? MassText.kilograms(String(format: "%.1f", Double(grams) / 1_000))
-            : MassText.grams("\(grams)")
+            ? MassText.kilograms(fromGrams: grams, fractionDigits: 1)
+            : MassText.grams(value: grams)
     }
 }
 

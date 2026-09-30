@@ -1361,13 +1361,12 @@ struct FocusView: View {
     private var timerModeLabel: String {
         switch snapshot.phase {
         case .shortBreak, .longBreak:
-            "BREAK"
+            String(localized: "休憩", table: "Focus", comment: "Timer ring status: the phase, before the percent left (休憩 · 35% 残り)")
         case .paused:
-            // Beside the English-looking BREAK and FOCUS, in capitals.
             String(localized: "focus.ring.mode.paused", defaultValue: "一時停止", table: "Focus",
-                   comment: "Ring status word while paused, shown where BREAK or FOCUS stands (en: PAUSED, in capitals)")
+                   comment: "Timer ring status while paused, before the percent left (en: PAUSED)")
         default:
-            "FOCUS"
+            String(localized: "集中", table: "Focus", comment: "Timer ring status: the phase, before the percent left (集中 · 35% 残り)")
         }
     }
 
@@ -3668,7 +3667,7 @@ private struct RareRewardPreFocusChoiceView: View {
             VStack(spacing: 18) {
                 RareRewardChoicePanel(
                     selection: $selection,
-                    eyebrow: "BEFORE YOUR FIRST FOCUS",
+                    eyebrow: String(localized: "レア粒の扱い", table: "Focus", comment: "Eyebrow of the rare-gem choice asked before the first timer"),
                     title: String(localized: "タイマーの前に、1つだけ。", table: "Focus",
                                   comment: "Rare-gem choice before the first timed focus: heading"),
                     introduction: String(
@@ -4170,7 +4169,7 @@ private struct FocusCompletionView: View {
     var body: some View {
         VStack(spacing: 26) {
             Spacer()
-            SectionEyebrow(text: "THE DROP")
+            SectionEyebrow(text: String(localized: "完走", table: "Focus", comment: "Eyebrow over the gem dropping into the jar after a completed focus"))
             ZStack(alignment: .bottom) {
                 RoundedRectangle(cornerRadius: 34, style: .continuous)
                     .fill(.white.opacity(0.025))

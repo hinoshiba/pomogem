@@ -257,7 +257,8 @@ final class AppEntryUITests: XCTestCase {
         let dismissReward = app.buttons["休憩の提案を閉じる"]
         XCTAssertTrue(dismissReward.waitForExistence(timeout: 30))
         dismissReward.tap()
-        let celebration = app.staticTexts["10粒を、ひとつに整理した"]
+        // The fusion sheet's headline, by identifier: its wording is copy.
+        let celebration = app.staticTexts["fusion.celebration.title"]
         XCTAssertTrue(celebration.waitForExistence(timeout: 12))
 
         openLink(URL(string: "pomogem://focus/start?minutes=25")!)

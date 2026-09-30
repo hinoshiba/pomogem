@@ -131,7 +131,7 @@ struct AccumulationTimelineBrowser: View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 SectionEyebrow(
-                    text: "TIME ARCHIVE",
+                    text: String(localized: "年月の瓶", table: "Overview", comment: "Eyebrow over 年月をたどる: the section's name, as the Home menu's 積み上がり row lists it"),
                     foreground: PomoGemTheme.text
                 )
                 Text("年月をたどる", tableName: "Overview", comment: "Section title of the Years & Months browser")
@@ -477,11 +477,11 @@ struct AccumulationTimelineBrowser: View {
     }
 
     private func formattedMass(_ grams: Int64) -> String {
-        AccumulationTimelineMassText.short(grams)
+        HistoryMassText.text(grams)
     }
 
     private func spokenMass(_ grams: Int64) -> String {
-        AccumulationTimelineMassText.spoken(grams)
+        MassText.spoken(grams: Int(clamping: max(0, grams)))
     }
 
     private struct ExtentLoadKey: Hashable {
@@ -900,11 +900,11 @@ private struct AccumulationTimelineMonthSheet: View {
     }
 
     private func formattedMass(_ grams: Int64) -> String {
-        AccumulationTimelineMassText.short(grams)
+        HistoryMassText.text(grams)
     }
 
     private func spokenMass(_ grams: Int64) -> String {
-        AccumulationTimelineMassText.spoken(grams)
+        MassText.spoken(grams: Int(clamping: max(0, grams)))
     }
 }
 

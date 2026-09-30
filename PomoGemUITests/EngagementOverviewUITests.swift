@@ -40,9 +40,10 @@ final class EngagementOverviewUITests: XCTestCase {
             weeklyCompletion.waitForExistence(timeout: 20),
             "The guaranteed completion reward must explain real weekly progress"
         )
+        XCTAssertEqual(weeklyCompletion.label, "集中を記録しました")
         XCTAssertTrue(
-            String(describing: weeklyCompletion.value).contains("完走した回数1回"),
-            "The reward heading must retain weekly recurrence context without presenting count as time value"
+            String(describing: weeklyCompletion.value).contains("今週の実測は"),
+            "The reward heading must read this week's measured time: \(String(describing: weeklyCompletion.value))"
         )
         let rewardBridge = app.descendants(matching: .any)["reward.bridge"]
         XCTAssertTrue(
@@ -53,6 +54,15 @@ final class EngagementOverviewUITests: XCTestCase {
         XCTAssertTrue(fusionProgress.waitForExistence(timeout: 3))
         XCTAssertTrue(fusionProgress.label.contains("×10へ 1/10"), fusionProgress.label)
         XCTAssertTrue(fusionProgress.label.contains("あと9粒"), fusionProgress.label)
+        // The weekly timer count stays, but only inside 「しくみ」, as a
+        // frequency cue apart from time value (walk-std-08, product-05).
+        XCTAssertTrue(fusionProgress.label.contains("今週のタイマー完走は1回"), fusionProgress.label)
+        XCTAssertEqual(fusionProgress.value as? String, "閉じています")
+        for jargon in ["TIME CORE", "25分 = 1.0標準単位 ・ 粒の10→1は瓶の整理"] {
+            XCTAssertFalse(app.staticTexts[jargon].exists, "「\(jargon)」 left the card")
+        }
+        // D18: the very first completion offers one quiet reminder row.
+        XCTAssertTrue(app.buttons["reward.reminder-offer"].exists)
 
         let rewardBridgeAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         rewardBridgeAttachment.name = "Reward Bridge — weekly and fusion progress"
@@ -517,6 +527,16 @@ final class EngagementOverviewUITests: XCTestCase {
             ),
             "Closing the recovered card must land exactly the one persisted 250g pebble"
         )
+        // Home releases the receipt a moment after the gem strikes, once the
+        // landing has settled (device-verify-2 P4); the start button works
+        // again then. A process that ends before that keeps the receipt and
+        // drops the gem again, as during the fall.
+        let released = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND isEnabled == true"),
+            object: app.buttons["home.focus-launcher"]
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [released], timeout: 5), .completed,
+                       "The landed gem's receipt must be released")
         app.terminate()
         app.launch()
 
@@ -643,8 +663,12 @@ final class EngagementOverviewUITests: XCTestCase {
             "Home must not retire a receipt under its own card"
         )
         let launcher = app.buttons["home.focus-launcher"]
-        XCTAssertTrue(launcher.waitForExistence(timeout: 3))
-        XCTAssertFalse(launcher.isEnabled, "The card still holds the start button")
+        // While a completion card is up its start button sits hidden behind
+        // it, out of the accessibility tree (and disabled underneath).
+        XCTAssertFalse(
+            launcher.exists && launcher.isEnabled,
+            "The card still holds the start button"
+        )
 
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = "Receipt card whose session is gone — before 閉じる"
@@ -662,6 +686,7 @@ final class EngagementOverviewUITests: XCTestCase {
             NSPredicate(format: "label CONTAINS %@", "もう一度「閉じる」")
         ).firstMatch
         XCTAssertFalse(retryToast.exists, "「閉じる」 must not ask to be pressed again")
+        XCTAssertTrue(launcher.waitForExistence(timeout: 5), "Closing the card shows the start button again")
         XCTAssertTrue(
             waitUntil(launcher, isEnabled: true, timeout: 10),
             "Once closed, the receipt that can never land must free the start button"

@@ -376,6 +376,14 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         // land: the durable receipt is retired only after landing, and an
         // unacknowledged or mid-drop receipt would block the next test.
         let bridge = app.descendants(matching: .any)["reward.bridge"]
+        // The card is in the tree while it still slides in and settles, and
+        // its 閉じる (in the first AX5 viewport) is not reliably hittable yet.
+        // Swiping at that moment scrolled 閉じる up under the menu on the SE.
+        // The share offer arrives once the card has settled (the reward
+        // bridge audit waits for it too), so wait for it before deciding
+        // that 閉じる needs scrolling.
+        _ = app.buttons["今の瓶をGIFでシェアする"].waitForExistence(timeout: 8)
+        _ = waitForHittable(dismiss, timeout: 2)
         for _ in 0 ..< 6 where !dismiss.isHittable {
             bridge.swipeUp()
         }
@@ -503,6 +511,14 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         XCTAssertTrue(confirmation.waitForExistence(timeout: 4))
         confirmation.buttons["今日はここまで"].tap()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
+    }
+
+    private func waitForHittable(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let hittable = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND hittable == true"),
+            object: element
+        )
+        return XCTWaiter.wait(for: [hittable], timeout: timeout) == .completed
     }
 
     private func waitForEnabled(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
@@ -1040,8 +1056,8 @@ final class DynamicTypeSystemAuditUITests: XCTestCase {
             // component with a ScaledMetric font. XCTest nevertheless audits
             // its glyph nodes; the surrounding controls/cards carry the
             // localized semantic descriptions.
-            "SPACE", "FOCUS",
-            "THIS WEEK", "CRYSTAL HIERARCHY",
+            // (Japanese since device-verify-2 P8: SPACE → 背景, THIS WEEK → 今週.)
+            "背景", "今週",
             // Decorative text inside the accessibility-hidden empty weekly
             // crystal. The parent card announces the same value semantically.
             "0分"

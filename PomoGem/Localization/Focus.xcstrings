@@ -927,6 +927,9 @@
         }
       }
     },
+    "レア粒の扱い" : {
+      "comment" : "Eyebrow of the rare-gem choice asked before the first timer"
+    },
     "一時停止" : {
       "comment" : "Pause the Music app",
       "localizations" : {
@@ -1231,6 +1234,9 @@
           }
         }
       }
+    },
+    "休憩" : {
+      "comment" : "Timer ring status: the phase, before the percent left (休憩 · 35% 残り)"
     },
     "休憩のときなどに「ミュージック」アプリでApple Musicにサインインすると、再生できるようになります。" : {
       "localizations" : {
@@ -1805,6 +1811,9 @@
           }
         }
       }
+    },
+    "完走" : {
+      "comment" : "Eyebrow over the gem dropping into the jar after a completed focus"
     },
     "未選択" : {
       "comment" : "VoiceOver value: this music is not chosen",
@@ -2705,6 +2714,9 @@
           }
         }
       }
+    },
+    "集中" : {
+      "comment" : "Timer ring status: the phase, before the percent left (集中 · 35% 残り)"
     },
     "集中を始めたら再生する" : {
       "localizations" : {

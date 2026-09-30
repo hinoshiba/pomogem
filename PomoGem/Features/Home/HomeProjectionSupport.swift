@@ -1193,6 +1193,13 @@ enum HomeProjectionPolicy {
         /// count remains a return-frequency cue; this is the value-bearing
         /// measure.
         let weeklyMeasuredGrams: Int
+        /// Self-reported mass (manual and demoted timers) in the same week
+        /// and the same query, so the completion card can name it beside
+        /// the measured figure (walk-std-07), as Overview and 記録 do.
+        let weeklySelfReportedGrams: Int
+        /// The sessions in `weeklySelfReportedGrams`: a timer completion
+        /// demoted to self-reported is one of them, not a measured one.
+        let weeklySelfReportedSessionIDs: Set<UUID>
     }
 
     /// Aggregate-backed lifetime cadence plus a paged calendar-week query
@@ -1228,27 +1235,32 @@ enum HomeProjectionPolicy {
                 weeklyMeasuredSessionIDs: [],
                 weeklyTimerCompletionSessionIDs: [],
                 weeklyTimerCompletionDates: [],
-                weeklyMeasuredGrams: 0
+                weeklyMeasuredGrams: 0,
+                weeklySelfReportedGrams: 0,
+                weeklySelfReportedSessionIDs: []
             )
         }
         // Source remains an in-memory filter for SwiftData compatibility, but
         // logical resolution and interval membership happen first. A losing
         // in-week row therefore cannot survive when its canonical copy is just
         // outside the week, and an adversarial dense week fails at a hard cap.
-        let unique = try BoundedHistoryPolicy.resolvedSessionsInFiniteInterval(
+        let week = try BoundedHistoryPolicy.resolvedSessionsInFiniteInterval(
             context: context,
             epochID: ActivityResetPolicy.currentEpochID(from: resetMarkers),
             interval: interval,
             maximumPhysicalRows: maximumWeeklyPhysicalRows
         )
-            .filter { $0.effectiveSource.isMeasured }
+        let unique = week.filter { $0.effectiveSource.isMeasured }
+        let selfReported = week.filter { !$0.effectiveSource.isMeasured }
         let timerCompletions = unique.filter { $0.effectiveSource.isTimerCompletion }
         return CompletionMetrics(
             completedFocusCount: completedCount,
             weeklyMeasuredSessionIDs: Set(unique.map(\.id)),
             weeklyTimerCompletionSessionIDs: Set(timerCompletions.map(\.id)),
             weeklyTimerCompletionDates: timerCompletions.map(\.endAt),
-            weeklyMeasuredGrams: saturatingNonnegativeSum(unique.map(\.grams))
+            weeklyMeasuredGrams: saturatingNonnegativeSum(unique.map(\.grams)),
+            weeklySelfReportedGrams: saturatingNonnegativeSum(selfReported.map(\.grams)),
+            weeklySelfReportedSessionIDs: Set(selfReported.map(\.id))
         )
     }
 }

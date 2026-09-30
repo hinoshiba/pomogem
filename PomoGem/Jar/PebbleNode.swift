@@ -65,15 +65,14 @@ struct AggregateMetadata: Equatable, Sendable {
     }
 
     var primarySubjectName: String {
-        // l10n-ignore: the name stored for history before themes (AggregateSubjectFraction's sentinel), shown through JarSubjectDisplayName
+        // l10n-ignore: the name stored for history before themes, like AggregateSubjectFraction's
         subjectMix.first?.name ?? "過去の集中"
     }
 
-    // l10n (Docs/Localization.md): the VoiceOver text only. One fact per
-    // list item, joined by ListText (ja 「、」, as before); no rendering or
-    // label change here (BRIEF rule 12).
-    /// What VoiceOver says about a crystal, one fact per item:
-    /// ja 「英語など、10粒を含むまとまり粒、実測7粒、自己申告3粒」.
+    /// What VoiceOver says about a crystal, one fact per item: its themes,
+    /// what it holds, how its gems were recorded and (only where rare gems
+    /// are shown) its gold and prism gems. ja 「英語など、10粒を含む結晶、
+    /// 実測7粒、自己申告3粒」.
     func accessibilityFacts(
         presentsRareRewards requestedPresentation: Bool
     ) -> [String] {
@@ -83,9 +82,9 @@ struct AggregateMetadata: Equatable, Sendable {
                      comment: "VoiceOver, a crystal of several themes: the name of the theme with the most gems, then 'and others'")
             : name
         let hierarchy = level == 1
-            ? String(localized: "\(pebbleCount)粒を含むまとまり粒", table: "Jar",
+            ? String(localized: "\(pebbleCount)粒を含む結晶", table: "Jar",
                      comment: "VoiceOver, a ×10 crystal: the number of gems it holds")
-            : String(localized: "\(pebbleCount)粒、\(childAggregateCount)個のまとまりを含むまとまり粒", table: "Jar",
+            : String(localized: "\(pebbleCount)粒、\(childAggregateCount)個の結晶を含む結晶", table: "Jar",
                      comment: "VoiceOver, a ×100 or larger crystal: the number of gems it holds, then the number of smaller crystals in it")
         var facts = [
             subject,
@@ -415,6 +414,11 @@ struct PebbleDescriptor: Identifiable {
     /// Cloud reconciliation can legitimately update a row in place, so the
     /// scene also compares every field that affects geometry, appearance or
     /// accessibility before deciding an existing body is current.
+    /// Same bodies in the same order, each with the same presentation.
+    static func haveSamePresentation(_ lhs: [PebbleDescriptor], _ rhs: [PebbleDescriptor]) -> Bool {
+        lhs.count == rhs.count && zip(lhs, rhs).allSatisfy { $0.hasSamePresentation(as: $1) }
+    }
+
     func hasSamePresentation(as other: PebbleDescriptor) -> Bool {
         id == other.id
             && subjectName == other.subjectName
@@ -451,6 +455,8 @@ struct PebbleDescriptor: Identifiable {
         }
     }
 
+    /// What VoiceOver says about one body in the jar. A gem or a crystal is
+    /// a list of facts ending in its mass: ja 「英語、実測の粒、250グラム」.
     var accessibilityDescription: String {
         if let screenTimeObstacle {
             return screenTimeObstacle.accessibilityDescription
@@ -475,46 +481,46 @@ struct PebbleDescriptor: Identifiable {
         )
     }
 
-    /// How a gem was recorded and what it is, as VoiceOver names it:
-    /// 「実測のつぶ」「自己申告の金のつぶ」「スクリーンタイムのつぶ」.
+    /// How a gem was recorded, and what it is where rare gems are shown:
+    /// 「実測の粒」「自己申告の粒」「勉強アプリの粒」 (Screen Time's study apps).
     private var gemAccessibilityName: String {
         let presentationKind = RareRewardPresentationPolicy.kind(kind)
         if source == .screenTime {
             return switch presentationKind {
             case .normal:
-                String(localized: "スクリーンタイムのつぶ", table: "Jar",
-                       comment: "VoiceOver, a gem from time in study apps recorded by Screen Time")
+                String(localized: "勉強アプリの粒", table: "Jar",
+                       comment: "VoiceOver, a gem from the time spent in study apps (Screen Time)")
             case .gold:
-                String(localized: "スクリーンタイムの金のつぶ", table: "Jar",
-                       comment: "VoiceOver, a rare gold gem from Screen Time (in-app only)")
+                String(localized: "勉強アプリの金の粒", table: "Jar",
+                       comment: "VoiceOver, a gold gem from the time spent in study apps (Screen Time)")
             case .prism:
-                String(localized: "スクリーンタイムの虹のつぶ", table: "Jar",
-                       comment: "VoiceOver, a rare rainbow gem from Screen Time (in-app only)")
+                String(localized: "勉強アプリの虹の粒", table: "Jar",
+                       comment: "VoiceOver, a prism (rainbow) gem from the time spent in study apps (Screen Time)")
             }
         }
         if isMeasured {
             return switch presentationKind {
             case .normal:
-                String(localized: "実測のつぶ", table: "Jar",
+                String(localized: "実測の粒", table: "Jar",
                        comment: "VoiceOver, a gem measured by the timer")
             case .gold:
-                String(localized: "実測の金のつぶ", table: "Jar",
-                       comment: "VoiceOver, a rare gold gem measured by the timer (in-app only)")
+                String(localized: "実測の金の粒", table: "Jar",
+                       comment: "VoiceOver, a gold gem measured by the timer")
             case .prism:
-                String(localized: "実測の虹のつぶ", table: "Jar",
-                       comment: "VoiceOver, a rare rainbow gem measured by the timer (in-app only)")
+                String(localized: "実測の虹の粒", table: "Jar",
+                       comment: "VoiceOver, a prism (rainbow) gem measured by the timer")
             }
         }
         return switch presentationKind {
         case .normal:
-            String(localized: "自己申告のつぶ", table: "Jar",
+            String(localized: "自己申告の粒", table: "Jar",
                    comment: "VoiceOver, a gem entered by hand")
         case .gold:
-            String(localized: "自己申告の金のつぶ", table: "Jar",
-                   comment: "VoiceOver, a rare gold gem entered by hand (in-app only)")
+            String(localized: "自己申告の金の粒", table: "Jar",
+                   comment: "VoiceOver, a gold gem entered by hand")
         case .prism:
-            String(localized: "自己申告の虹のつぶ", table: "Jar",
-                   comment: "VoiceOver, a rare rainbow gem entered by hand (in-app only)")
+            String(localized: "自己申告の虹の粒", table: "Jar",
+                   comment: "VoiceOver, a prism (rainbow) gem entered by hand")
         }
     }
 

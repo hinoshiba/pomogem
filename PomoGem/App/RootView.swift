@@ -227,12 +227,113 @@ enum SyncMaintenanceLaunchPolicy {
         persistenceMode == .cloudKit && sceneIsActive
     }
 
-    static func shouldResetForegroundGrace(after phase: ScenePhase) -> Bool {
+    /// The scene left for the background, which starts an absence. Whether
+    /// the return begins a new foreground epoch is decided when the scene is
+    /// active again (`CloudForegroundEpoch`), not here.
+    static func beginsBackgroundAbsence(after phase: ScenePhase) -> Bool {
         phase == .background
     }
 
     static func shouldRearmForegroundWork(after phase: ScenePhase) -> Bool {
         phase == .active
+    }
+
+    /// device-verify-2 P2. A Root still on screen after a `.background` of at
+    /// most the background grace resumes the foreground epoch it left
+    /// (`CloudForegroundEpoch`); a longer absence begins a new one.
+    static func resumesForegroundEpoch(afterAbsence absence: Duration) -> Bool {
+        absence >= .zero
+            && absence <= .seconds(CloudBackgroundGracePolicy.graceInterval)
+    }
+}
+
+/// device-verify-2 P2. Root's foreground epochs: what a return to the
+/// foreground does to iCloud trust and to the two foreground timers — the
+/// interaction grace before checkpointed maintenance may start, and the
+/// rolling verification.
+///
+/// Before PR #40 an iCloud Root never outlived a `.background`: the host
+/// retired the session at once, so every return was a fresh mount, and Root
+/// treated each `.background` → `.active` as a new foreground epoch — trust
+/// revoked at `.background`, a new verification sweep at `.active`, and a new
+/// 60-second grace before that sweep could even start. The background grace
+/// now keeps Root on screen across a short absence, and the same rule turned
+/// every glance at another app into about 65 seconds of 「iCloudを確認中」 on
+/// the phone.
+///
+/// A return within the background grace therefore resumes the epoch it left:
+/// the presentation, a running verification ticket and both deadlines stay.
+/// Nothing about the store went unobserved meanwhile. The host holds a
+/// background task for the whole grace, so the process was never suspended;
+/// Root's store-change observers stayed armed, so a remote import during the
+/// absence revoked trust and requested a sweep through the ordinary path; and
+/// the host's identity recheck still closes the whole session on an identity
+/// verdict. A longer absence, which only a Root without a CloudKit transport
+/// survives (an admitted offline session), still begins a new epoch.
+///
+/// The deadlines are kept across `.inactive` too. Restarting the grace on
+/// every return would keep postponing the sweep; restarting the rolling timer
+/// would let frequent short absences skip the rolling check altogether.
+struct CloudForegroundEpoch: Equatable {
+    typealias Instant = ContinuousClock.Instant
+
+    enum Return: Equatable {
+        /// Back from `.inactive` only (a system sheet, Control Center).
+        case fromInactive
+        /// Back within the background grace: the epoch continues.
+        case afterShortAbsence
+        /// Back after a longer absence: a new foreground epoch.
+        case newEpoch
+    }
+
+    /// The interaction grace of this epoch has elapsed; maintenance may run.
+    private(set) var interactionGraceHasElapsed = false
+    private(set) var interactionGraceDeadline: Instant?
+    private(set) var nextRollingVerification: Instant?
+    private(set) var backgroundEnteredAt: Instant?
+
+    mutating func sceneEnteredBackground(at now: Instant) {
+        // An absence starts at its first `.background`.
+        if backgroundEnteredAt == nil { backgroundEnteredAt = now }
+    }
+
+    mutating func sceneBecameActive(at now: Instant) -> Return {
+        guard let left = backgroundEnteredAt else { return .fromInactive }
+        backgroundEnteredAt = nil
+        guard SyncMaintenanceLaunchPolicy.resumesForegroundEpoch(
+            afterAbsence: left.duration(to: now)
+        ) else {
+            interactionGraceHasElapsed = false
+            interactionGraceDeadline = nil
+            nextRollingVerification = nil
+            return .newEpoch
+        }
+        return .afterShortAbsence
+    }
+
+    /// Time left of this epoch's interaction grace; the first call starts it.
+    mutating func interactionGraceRemaining(at now: Instant) -> Duration {
+        let deadline = interactionGraceDeadline
+            ?? now.advanced(by: SyncMaintenanceLaunchPolicy.foregroundIdleGrace)
+        interactionGraceDeadline = deadline
+        return max(.zero, now.duration(to: deadline))
+    }
+
+    mutating func interactionGraceElapsed() {
+        interactionGraceHasElapsed = true
+        interactionGraceDeadline = nil
+    }
+
+    /// Time until the next rolling verification; the first call schedules it.
+    mutating func rollingVerificationDelay(at now: Instant) -> Duration {
+        let deadline = nextRollingVerification
+            ?? now.advanced(by: SyncMaintenanceLaunchPolicy.recurringVerificationInterval)
+        nextRollingVerification = deadline
+        return max(.zero, now.duration(to: deadline))
+    }
+
+    mutating func rollingVerificationRequested() {
+        nextRollingVerification = nil
     }
 }
 
@@ -456,7 +557,9 @@ struct RootView: View {
     @State private var maintenanceDrainToken: UUID?
     @State private var maintenanceIdleGraceTask: Task<Void, Never>?
     @State private var maintenanceIdleGraceToken: UUID?
-    @State private var maintenanceGraceHasElapsed = false
+    /// device-verify-2 P2. The interaction grace, the rolling verification
+    /// deadline and whether a return resumes this foreground epoch.
+    @State private var foregroundEpoch = CloudForegroundEpoch()
     @State private var recurringVerificationTask: Task<Void, Never>?
     @State private var recurringVerificationToken: UUID?
     @State private var localSessionMaintenanceRequestGate =
@@ -761,32 +864,14 @@ struct RootView: View {
             // Transient messages share the top edge with the persistence
             // notice. At the bottom, a toast sat on Home's start button (the
             // primary action right after every drop) and took its taps.
-            if router.toast != nil || showsPersistenceSafetyNotice {
-                VStack(spacing: 8) {
-                    if let activePersistenceSafetyNotice, showsPersistenceSafetyNotice {
-                        Label(activePersistenceSafetyNotice, systemImage: "icloud.slash")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(PomoGemTheme.text)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 9)
-                            .background(.ultraThinMaterial, in: Capsule())
-                            .accessibilityIdentifier("root.persistence-safety-notice")
-                            .padding(.horizontal, 16)
-                            .allowsHitTesting(false)
-                    }
-                    if let toast = router.toast {
-                        ToastOverlay(message: toast)
-                            // Clear the navigation bar (Home's メニュー) unless
-                            // the notice above already pushes it down.
-                            .padding(.top, showsPersistenceSafetyNotice ? 0 : 44)
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                            .allowsHitTesting(false)
-                    }
-                    Spacer(minLength: 0)
-                }
-                .padding(.top, 8)
-                .zIndex(30)
-            }
+            // Their own view observes `router.toast`, so a toast — every gem
+            // landing shows one — no longer re-runs this body and its store
+            // fingerprints (device-verify-2 P4).
+            RootTransientMessages(
+                router: router,
+                persistenceSafetyNotice: showsPersistenceSafetyNotice ? activePersistenceSafetyNotice : nil
+            )
+            .zIndex(30)
 
             if completeDeletion.hasStarted {
                 CompleteDataDeletionBlockingView(controller: completeDeletion)
@@ -992,7 +1077,7 @@ struct RootView: View {
             guard SyncMaintenanceLaunchPolicy.permitsForegroundDrain(
                 on: selectedTab
             ) else { return }
-            if maintenanceGraceHasElapsed {
+            if foregroundEpoch.interactionGraceHasElapsed {
                 startMaintenanceDrain()
             } else {
                 scheduleMaintenanceAfterIdleGrace()
@@ -1008,18 +1093,17 @@ struct RootView: View {
             guard SyncMaintenanceLaunchPolicy.shouldRearmForegroundWork(
                 after: newPhase
             ) else {
-                if SyncMaintenanceLaunchPolicy.shouldResetForegroundGrace(
+                if SyncMaintenanceLaunchPolicy.beginsBackgroundAbsence(
                     after: newPhase
                 ) {
                     hasLeftActiveStateAfterFirstFrame = true
                     // Another iPhone may start a timer while this one is away.
                     cloudFocusOfferCheckIsCurrent = false
-                    // Every genuine foreground return receives the same
-                    // interaction grace as launch. A temporary inactive phase
-                    // (Control Center/system sheet) does not reset it.
-                    maintenanceGraceHasElapsed = false
-                    aggregateProjectionPresentation.invalidate()
-                    projectionVerificationTicket = nil
+                    // Trust is no longer revoked here: the return decides
+                    // whether this is a new foreground epoch (device-verify-2
+                    // P2, `CloudForegroundEpoch`). Store changes during the
+                    // absence still revoke it through the observers below.
+                    foregroundEpoch.sceneEnteredBackground(at: .now)
                 }
                 maintenanceIdleGraceTask?.cancel()
                 maintenanceIdleGraceTask = nil
@@ -1033,6 +1117,15 @@ struct RootView: View {
                 return
             }
             guard !isDataDeletionQuiesced else { return }
+            // Back within the background grace, the epoch continues: the
+            // verified presentation, a running ticket and both deadlines stay
+            // (`CloudForegroundEpoch`). A longer absence begins a new epoch
+            // with the same interaction grace as launch.
+            let foregroundReturn = foregroundEpoch.sceneBecameActive(at: .now)
+            if foregroundReturn == .newEpoch {
+                aggregateProjectionPresentation.invalidate()
+                projectionVerificationTicket = nil
+            }
             // System sheets and Control Center may produce inactive→active
             // without a background phase. Always resume existing work and the
             // recurring timer; only the expensive fence/entitlement refresh
@@ -1045,10 +1138,12 @@ struct RootView: View {
             // merely because this launch initially verified successfully.
             guard hasLeftActiveStateAfterFirstFrame else { return }
             hasLeftActiveStateAfterFirstFrame = false
-            // Revoke trust and persist the new sweep before any asynchronous
-            // account/deletion checks. The sweep itself still waits for this
-            // foreground epoch's 60-second interaction grace.
-            requestAggregateProjectionVerification()
+            if foregroundReturn == .newEpoch {
+                // Revoke trust and persist the new sweep before any
+                // asynchronous account/deletion checks. The sweep itself
+                // still waits for this epoch's 60-second interaction grace.
+                requestAggregateProjectionVerification()
+            }
             viewTasks.start {
                 await verifyMountedDeletionFence()
                 guard !Task.isCancelled, !isDataDeletionQuiesced,
@@ -1379,18 +1474,19 @@ struct RootView: View {
     private func scheduleMaintenanceAfterIdleGrace() {
         guard scenePhase == .active,
               !isDataDeletionQuiesced else { return }
-        if maintenanceGraceHasElapsed {
+        if foregroundEpoch.interactionGraceHasElapsed {
             startMaintenanceDrain()
             return
         }
         guard maintenanceIdleGraceTask == nil else { return }
         let token = UUID()
+        // The grace runs from this epoch's first request; an inactive phase or
+        // a short absence cancels the timer but keeps its deadline.
+        let remaining = foregroundEpoch.interactionGraceRemaining(at: .now)
         maintenanceIdleGraceToken = token
         maintenanceIdleGraceTask = Task { @MainActor in
             do {
-                try await Task.sleep(
-                    for: SyncMaintenanceLaunchPolicy.foregroundIdleGrace
-                )
+                try await Task.sleep(for: remaining)
             } catch {
                 return
             }
@@ -1399,7 +1495,7 @@ struct RootView: View {
                   !isDataDeletionQuiesced else { return }
             maintenanceIdleGraceTask = nil
             maintenanceIdleGraceToken = nil
-            maintenanceGraceHasElapsed = true
+            foregroundEpoch.interactionGraceElapsed()
             // @Query can already contain a CloudKit delivery before its
             // observers are armed. Re-run bounded preparation once at the end
             // of the launch grace, ahead of the rolling verification work.
@@ -1416,7 +1512,7 @@ struct RootView: View {
         guard isFirstFramePresented,
               scenePhase == .active,
               !isDataDeletionQuiesced,
-              maintenanceGraceHasElapsed,
+              foregroundEpoch.interactionGraceHasElapsed,
               maintenanceDrainTask == nil else { return }
 
         // Propagate background QoS into each ModelActor slice. Verification is
@@ -1549,7 +1645,7 @@ struct RootView: View {
                 verificationSweepGeneration: generation
             )
         }
-        if maintenanceGraceHasElapsed {
+        if foregroundEpoch.interactionGraceHasElapsed {
             startMaintenanceDrain()
         }
     }
@@ -1663,7 +1759,7 @@ struct RootView: View {
         // verification pass happened after it, even if the pending graph later
         // becomes empty before the trailing coalesced sweep is requested.
         projectionVerificationTicket = nil
-        if maintenanceGraceHasElapsed { startMaintenanceDrain() }
+        if foregroundEpoch.interactionGraceHasElapsed { startMaintenanceDrain() }
     }
 
     @MainActor
@@ -1685,17 +1781,19 @@ struct RootView: View {
             while !Task.isCancelled,
                   scenePhase == .active,
                   !isDataDeletionQuiesced {
+                // Due 15 minutes after the last rolling request of this
+                // epoch; cancelling the timer (inactive, background) keeps the
+                // deadline, so frequent short absences cannot skip the check.
+                let delay = foregroundEpoch.rollingVerificationDelay(at: .now)
                 do {
-                    try await Task.sleep(
-                        for: SyncMaintenanceLaunchPolicy
-                            .recurringVerificationInterval
-                    )
+                    try await Task.sleep(for: delay)
                 } catch {
                     return
                 }
                 guard !Task.isCancelled,
                       scenePhase == .active,
                       !isDataDeletionQuiesced else { return }
+                foregroundEpoch.rollingVerificationRequested()
                 requestAggregateProjectionVerification()
                 scheduleMaintenanceAfterIdleGrace()
             }
@@ -1895,7 +1993,7 @@ struct RootView: View {
         recurringVerificationTask = nil
         recurringVerificationToken = nil
         projectionVerificationTicket = nil
-        maintenanceGraceHasElapsed = false
+        foregroundEpoch = CloudForegroundEpoch()
         aggregateProjectionPresentation = .initial(for: persistenceMode)
         maintenanceDrainTask?.cancel()
         maintenanceDrainTask = nil
@@ -2063,6 +2161,10 @@ struct RootView: View {
         PendingRewardReceiptStore.removeAll()
         ScreenTimeGemDropStore.removeAll()
         FocusRestCadenceStore.removeAll()
+        // 重さの旅 (§5.6): how far this device celebrated, and its Home line
+        // toggle, belong to the records that were reset.
+        WeightJourneyCelebrationStore.removeAll()
+        WeightJourneyHomePreference.removeAll()
         UserDefaults.standard.removeObject(
             forKey: AccountScopedLocalState.defaultsKey(
                 base: "review.local-completion-count"
@@ -3099,6 +3201,40 @@ struct RootView: View {
             String(localized: "通知だけ更新できませんでした。通信状態を確認し、設定で通知時刻をもう一度保存してください", table: "Launch"),
             symbol: "bell.badge.exclamationmark"
         )
+    }
+}
+
+/// The toast and the persistence notice at the top edge (see RootView).
+private struct RootTransientMessages: View {
+    let router: AppRouter
+    let persistenceSafetyNotice: String?
+
+    var body: some View {
+        if router.toast != nil || persistenceSafetyNotice != nil {
+            VStack(spacing: 8) {
+                if let persistenceSafetyNotice {
+                    Label(persistenceSafetyNotice, systemImage: "icloud.slash")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(PomoGemTheme.text)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .accessibilityIdentifier("root.persistence-safety-notice")
+                        .padding(.horizontal, 16)
+                        .allowsHitTesting(false)
+                }
+                if let toast = router.toast {
+                    ToastOverlay(message: toast)
+                        // Clear the navigation bar (Home's メニュー) unless
+                        // the notice above already pushes it down.
+                        .padding(.top, persistenceSafetyNotice != nil ? 0 : 44)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .allowsHitTesting(false)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 8)
+        }
     }
 }
 

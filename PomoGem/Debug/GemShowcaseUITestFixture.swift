@@ -15,6 +15,18 @@ import SwiftUI
 ///   3.75kg time core — the same state as the owner's reference image.
 /// - `tiers`: 117 completions stored as ×100 + ×10 + seven loose gems plus
 ///   one achievement stone (29.25kg core).
+/// - `nine` / `nineteen`: one focus before a fusion. Nine loose 25-minute
+///   gems (2.25kg: the next completion makes the first ×10 and the time
+///   core together), or one ×10 and nine loose gems (4.75kg: the next
+///   completion makes a second ×10). For reviewing the completion card and
+///   the fusion sheet without ten live focuses.
+/// - `corecard`: the time core one focus away without a fusion: four
+///   50-minute gems and one 25-minute gem (2.25kg in five gems), so the
+///   next completion brings the core on the card itself (product-05).
+/// - `edge`: 重さの旅's edge (GemExperienceDesign §5.6): 25-minute gems up to
+///   `POMOGEM_UI_TEST_EDGE_GRAMS` (5,750 g by default), so the 12-second
+///   Debug demo (persisted as a canonical 250 g focus) crosses a threshold:
+///   10 hours by default, 30 hours with 17,750 g.
 /// - `gallery`: no persistence at all. A standalone jar restores one
 ///   descriptor per visual tier (loose, self-reported, ×10 … ×1万,
 ///   achievement) plus Screen Time obstacles, for side-by-side inspection.
@@ -28,6 +40,9 @@ enum GemShowcaseUITestFixture {
         /// §7.5): 39 completions, three ×10 roots and nine loose gems.
         case midload
         case tiers
+        case nine
+        case nineteen
+        case corecard
         case gallery
         /// Worst case for rendering: the study body ceiling plus the maximum
         /// visible achievements and Screen Time obstacles, all at once.
@@ -50,6 +65,8 @@ enum GemShowcaseUITestFixture {
         /// (about 2.5 t: one ×1万 root and six loose gems).
         case heavy
         case veteran
+        /// Just under a 重さの旅 threshold (see the list above).
+        case edge
         /// Theme tone and mark review (Docs/GemExperienceDesign.md §7.4,
         /// §7.12): one 25-minute gem in each `SubjectPalette` colour, two
         /// off-palette legacy colours, and ×10 crystals that mix palette
@@ -84,9 +101,33 @@ enum GemShowcaseUITestFixture {
         case .home: 15
         case .midload: 39
         case .tiers: 117
+        case .nine: 9
+        case .nineteen: 19
+        case .corecard: 5
         case .heavy: 1_004
         case .veteran: 10_006
+        case .edge: edgeGrams / Constants.Mass.measuredPebbleGrams
         case .gallery, .stress, .worstcase, .fusionfx, .palette, nil: nil
+        }
+    }
+
+    /// `edge`: the total the fixture stops at. Timer completions must have a
+    /// whole-minute duration and matching grams (`StudySessionIntegrityPolicy`),
+    /// so only whole 250 g fixture gems can contribute to the Home readout.
+    static let edgeGramsEnvironmentKey = "POMOGEM_UI_TEST_EDGE_GRAMS"
+    private static var edgeGrams: Int {
+        let value = ProcessInfo.processInfo.environment[edgeGramsEnvironmentKey].flatMap(Int.init) ?? 5_750
+        let unit = Constants.Mass.measuredPebbleGrams
+        return min(max(unit, value), 1_000_000) / unit * unit
+    }
+
+    /// Seconds of the fixture's `index`th session.
+    private static func sessionSeconds(index: Int) -> Int {
+        switch modeForCurrentProcess {
+        case .corecard where index < 4:
+            return 3_000
+        default:
+            return 1_500
         }
     }
 
@@ -132,16 +173,18 @@ enum GemShowcaseUITestFixture {
         for index in 0 ..< count {
             let subject = subjects[subjectCycle[index % subjectCycle.count] % subjects.count]
             let endAt = end.addingTimeInterval(-Double(count - index) * 5_400)
-            planned.append((sessionID(index: index), subject, endAt.addingTimeInterval(-1_500), endAt))
+            // `corecard`: the first four are 50-minute gems.
+            let seconds = sessionSeconds(index: index)
+            planned.append((sessionID(index: index), subject, endAt.addingTimeInterval(-Double(seconds)), endAt))
             context.insert(StudySession(
                 id: sessionID(index: index),
                 subject: subject,
-                startAt: endAt.addingTimeInterval(-1_500),
+                startAt: endAt.addingTimeInterval(-Double(seconds)),
                 endAt: endAt,
-                seconds: 1_500,
+                seconds: seconds,
                 source: .timer,
                 pebbleKind: .normal,
-                grams: 250,
+                grams: seconds / 6,
                 deviceDayKey: "gem-showcase-\(index / 4)",
                 isBaked: index < bakedCount,
                 subjectNameSnapshot: subject.name,
@@ -359,6 +402,36 @@ enum GemShowcaseUITestFixture {
         grams: Constants.Mass.measuredPebbleGrams,
         createdAt: Date(timeIntervalSince1970: 1_790_000_100)
     )
+
+    /// F3 (review F4, 2026-09-29): `POMOGEM_UI_TEST_ENTRY_DROPS=<kind>@<s>,…`
+    /// drops one new 50-minute gem per entry into a standalone showcase jar
+    /// that many seconds after it appears: `completion` from the scene top
+    /// down the neck (`JarScene.dropFromAbove`, the completion path),
+    /// `interior` just under the mouth (`JarScene.drop`, Home's other gems).
+    /// With `POMOGEM_UI_TEST_GRAVITY` and the synthetic motion source it
+    /// records the entry ritual held sideways or upside down.
+    static let entryDrops: [(kind: String, seconds: Double)] = {
+        guard let value = ProcessInfo.processInfo.environment["POMOGEM_UI_TEST_ENTRY_DROPS"] else { return [] }
+        return value.split(separator: ",").compactMap { entry in
+            let parts = entry.split(separator: "@")
+            guard parts.count == 2, let seconds = Double(parts[1]),
+                  parts[0] == "completion" || parts[0] == "interior"
+            else { return nil }
+            return (String(parts[0]), seconds)
+        }.sorted { $0.seconds < $1.seconds }
+    }()
+
+    static func entryDrop(_ index: Int) -> PebbleDescriptor {
+        PebbleDescriptor(
+            id: UUID(uuidString: String(format: "6E4D5348-4658-4658-4658-0000000E%04X", index))!,
+            subjectName: "英語",
+            colorHex: palette[(index + 2) % palette.count].hex,
+            source: .timer,
+            kind: .normal,
+            grams: 50 * Constants.Mass.gramsPerMinute,
+            createdAt: Date(timeIntervalSince1970: 1_790_001_000 + TimeInterval(index))
+        )
+    }
 
     /// A root crystal of `level` (×10, ×100, …) in two palette colours.
     private static func rootDescriptor(id: UUID, level: Int, paletteIndex index: Int, createdAt: Date) -> PebbleDescriptor {
@@ -659,6 +732,7 @@ struct GemShowcaseFixtureLaunchView: View {
                 Text(Self.mode == .worstcase ? "最悪ケース（Debug・320pt）" : (Self.mode == .palette ? "テーマ12色（Debug）" : "宝石ギャラリー（Debug）"))
                     .font(.system(size: 15, weight: .bold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.8))
+                    .accessibilityIdentifier("gem.showcase.gallery")
                 JarSpriteView(
                     scene: scene,
                     totalGrams: grams,
@@ -680,10 +754,19 @@ struct GemShowcaseFixtureLaunchView: View {
                             .foregroundStyle(.white.opacity(0.85))
                     }
                 }
+                if JarFrameProbe.settleProbeCount != nil {
+                    // The settle probe's result for `JarHeadroomProbeUITests`
+                    // (§7.5's in-app headroom, read by a UI test).
+                    TimelineView(.periodic(from: .now, by: 1)) { _ in
+                        Text(verbatim: JarFrameProbe.shared?.settleProbeSummary ?? "settle running")
+                            .font(.system(size: 9).monospacedDigit())
+                            .foregroundStyle(.white.opacity(0.5))
+                            .accessibilityIdentifier("jar.settle-probe")
+                    }
+                }
             }
             .padding(.horizontal, 8)
         }
-        .accessibilityIdentifier("gem.showcase.gallery")
         .task {
             guard Self.mode == .fusionfx else { return }
             var landed = false
@@ -701,6 +784,22 @@ struct GemShowcaseFixtureLaunchView: View {
             try? await Task.sleep(for: .seconds(Self.effectDelay(default: 4)))
             Self.captureSequence(of: scene, prefix: "before", offsets: [0])
             scene.performCompletionDrop(GemShowcaseUITestFixture.fusionEffectDrop)
+        }
+        .task {
+            // F3 (review F4): scripted entry drops.
+            let started = Date()
+            for (index, drop) in GemShowcaseUITestFixture.entryDrops.enumerated() {
+                let wait = drop.seconds - Date().timeIntervalSince(started)
+                if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
+                guard !Task.isCancelled else { return }
+                let descriptor = GemShowcaseUITestFixture.entryDrop(index)
+                JarFrameProbe.shared?.note("entry drop \(drop.kind) \(index)")
+                if drop.kind == "completion" {
+                    scene.dropFromAbove(descriptor)
+                } else {
+                    scene.drop(descriptor)
+                }
+            }
         }
         .task {
             // Share/widget capture check: the same jar exported through

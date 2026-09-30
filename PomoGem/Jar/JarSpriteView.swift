@@ -140,6 +140,14 @@ enum JarAccessibilityPresentation {
         ])
     }
 
+    /// device-verify-2 P2 (review of #56): before Home has read its records
+    /// it knows no total, and its readout shows none. Never 「0グラム」 or
+    /// 「瓶の整理：0粒」 for a jar that is only still loading.
+    static var loadingValue: String {
+        String(localized: "これまでの記録を読み込み中", table: "Jar",
+               comment: "VoiceOver, jar value before Home has read its focus records")
+    }
+
     /// sync-03: the lifetime mass Home's headline shows while iCloud is
     /// checked (`PendingMassPresentationPolicy`).
     struct PendingMass: Equatable {
@@ -208,11 +216,22 @@ struct JarSpriteView: View {
     /// Height of an overlaid HUD at the top of the stage (Home), so the core
     /// and its orbit stay clear of it.
     let coreTopClearance: CGFloat?
+    /// D5: Home's readout above the mouth carries 「瓶N杯」, so the chip behind
+    /// the glass stays hidden.
+    let showsCycleChip: Bool
+    /// D6: Home names the core only (its next-target line is the 重さの旅 in
+    /// the readout); other jars keep the core's progress card.
+    let showsCoreProgressCard: Bool
+    /// Home's jar reports its core's frame to UI tests (DEBUG), whether its
+    /// readout is inside the jar or above the mouth.
+    let reportsCoreFrame: Bool
     let projectionIsLowerBound: Bool
     let projectionIsUnverified: Bool
     /// sync-03 (icloud-life): VoiceOver only; the jar's visuals are unchanged.
     let pendingMass: JarAccessibilityPresentation.PendingMass?
     let fusionProgressDescription: String?
+    /// device-verify-2 P2: Home has not read its records yet (VoiceOver only).
+    let isLoadingRecords: Bool
     let isMotionEnabled: Bool
     let inspectableAggregateID: UUID?
     let onJarTapAccepted: (() -> Void)?
@@ -228,6 +247,11 @@ struct JarSpriteView: View {
     /// 演出の強さ (D17): device-local, read live from Settings.
     @AppStorage(JarEffectsIntensity.defaultsKey) private var effectsIntensity: JarEffectsIntensity = .standard
     @StateObject private var motionObserver: JarMotionObserver
+    /// The 「N巡」 pill's frame in `stageCoordinateSpace` (F3, review F1).
+    @State private var cyclePillFrame: CGRect?
+    /// The jar stage's own coordinate space (y down; the scene is its
+    /// size, y up).
+    static let stageCoordinateSpace = "jar.stage"
     /// Measured size of the time core's label block (shared by the core
     /// behind the scene and its labels in front, so both use one layout;
     /// the width tells which columns of the pile lie under the labels).
@@ -257,10 +281,14 @@ struct JarSpriteView: View {
         lifetimeCoreColorHex: String? = nil,
         lifetimeCoreColorShares: [GemColorShare] = [],
         coreTopClearance: CGFloat? = nil,
+        showsCycleChip: Bool = true,
+        showsCoreProgressCard: Bool = true,
+        reportsCoreFrame: Bool = false,
         projectionIsLowerBound: Bool = false,
         projectionIsUnverified: Bool = false,
         pendingMass: JarAccessibilityPresentation.PendingMass? = nil,
         fusionProgressDescription: String? = nil,
+        isLoadingRecords: Bool = false,
         isMotionEnabled: Bool = true,
         inspectableAggregateID: UUID? = nil,
         onJarTapAccepted: (() -> Void)? = nil,
@@ -284,10 +312,14 @@ struct JarSpriteView: View {
         self.lifetimeCoreColorHex = lifetimeCoreColorHex ?? accentHex
         self.lifetimeCoreColorShares = lifetimeCoreColorShares
         self.coreTopClearance = coreTopClearance
+        self.showsCycleChip = showsCycleChip
+        self.showsCoreProgressCard = showsCoreProgressCard
+        self.reportsCoreFrame = reportsCoreFrame
         self.projectionIsLowerBound = projectionIsLowerBound
         self.projectionIsUnverified = projectionIsUnverified
         self.pendingMass = pendingMass
         self.fusionProgressDescription = fusionProgressDescription
+        self.isLoadingRecords = isLoadingRecords
         self.isMotionEnabled = isMotionEnabled
         self.inspectableAggregateID = inspectableAggregateID
         self.onJarTapAccepted = onJarTapAccepted
@@ -319,11 +351,28 @@ struct JarSpriteView: View {
                     )
                     : nil
 
+                // F3 (review F1): the 「N巡」 pill is part of the HUD. While a
+                // settled gem lies behind it (held upside down, the pile
+                // rests against the cap), it is drawn in front of the scene
+                // instead, with the strengthened ink, where it always is.
+                let stageBodies = JarHUDScrimPolicy.stageBodies(
+                    ofScene: scene.settledPileBodies,
+                    stageFrame: CGRect(origin: .zero, size: proxy.size)
+                )
+                let liftsCyclePill = JarHUDScrimPolicy.liftsCyclePill(
+                    pileBodies: stageBodies,
+                    pillFrame: cyclePillFrame
+                )
                 if accumulationPresence.isVisible {
                     JarAccumulationPresenceBackdrop(
                         state: accumulationPresence,
                         colorHex: lifetimeCoreColorHex,
-                        showsLifetimeCore: lifetimeCoreState != nil
+                        showsLifetimeCore: lifetimeCoreState != nil,
+                        showsCycleChip: showsCycleChip,
+                        cyclePill: .behindTheScene(lifted: liftsCyclePill),
+                        onCyclePillFrame: { frame in
+                            if cyclePillFrame != frame { cyclePillFrame = frame }
+                        }
                     )
                 }
 
@@ -334,17 +383,12 @@ struct JarSpriteView: View {
                     bed: gemBedState
                 )
                 let coreBottomLimit = bedTop - 6
-                let limits = JarLifetimeCoreLabelLimits.resolve(
+                let floorLabelLimit = JarLifetimeCoreLabelLimits.resolve(
                     stageHeight: proxy.size.height,
                     floorY: JarScene.interiorRect(sceneSize: proxy.size).minY,
                     bedTop: bedTop,
-                    pileTop: scene.settledPileTop(
-                        minX: (proxy.size.width - coreLabelMetrics.size.width) / 2,
-                        maxX: (proxy.size.width + coreLabelMetrics.size.width) / 2
-                    )
-                )
-                let floorLabelLimit = limits.floor
-                let abovePileLimit = limits.abovePile
+                    pileTop: 0
+                ).floor
                 // Round 12: the column is placed from the HUD, the bed and
                 // the floor row only, so the core never moves or shrinks
                 // with the pile (the pile scale keeps the pile below it,
@@ -352,7 +396,9 @@ struct JarSpriteView: View {
                 // without the second line, or not at all, whichever fits
                 // above the settled gems (the completion card shortens the
                 // jar the same way).
-                let coreSecondLine = lifetimeCoreState?.nextFusionLabel == nil ? 0 : coreLabelMetrics.secondLine
+                let coreSecondLine = lifetimeCoreState?.nextFusionLabel == nil || !showsCoreProgressCard
+                    ? 0
+                    : coreLabelMetrics.secondLine
                 let coreLabelHeight = coreLabelMetrics.size.height
                 let coreLabelBottomLimit = floorLabelLimit
                 let coreLayout = lifetimeCoreState.map { state in
@@ -365,6 +411,21 @@ struct JarSpriteView: View {
                         labelHeight: coreLabelHeight
                     )
                 }
+                // F3 (review F5): a pile resting against a wall or the cap
+                // hides the labels only where its gems reach below the
+                // block's top edge (`settledPileTop(minX:maxX:below:)`); an
+                // upright pile is judged by its column tops, as before.
+                let labelCeiling = coreLayout.map { proxy.size.height - $0.labelTop }
+                let abovePileLimit = JarLifetimeCoreLabelLimits.resolve(
+                    stageHeight: proxy.size.height,
+                    floorY: JarScene.interiorRect(sceneSize: proxy.size).minY,
+                    bedTop: bedTop,
+                    pileTop: scene.settledPileTop(
+                        minX: (proxy.size.width - coreLabelMetrics.size.width) / 2,
+                        maxX: (proxy.size.width + coreLabelMetrics.size.width) / 2,
+                        below: labelCeiling
+                    )
+                ).abovePile
                 let namePlateHalfWidth = coreLabelMetrics.namePlateWidth / 2 + JarLifetimeCoreLabelLimits.clearance
                 let nameAbovePileLimit = JarLifetimeCoreLabelLimits.resolve(
                     stageHeight: proxy.size.height,
@@ -372,7 +433,8 @@ struct JarSpriteView: View {
                     bedTop: bedTop,
                     pileTop: scene.settledPileTop(
                         minX: proxy.size.width / 2 - namePlateHalfWidth,
-                        maxX: proxy.size.width / 2 + namePlateHalfWidth
+                        maxX: proxy.size.width / 2 + namePlateHalfWidth,
+                        below: labelCeiling
                     )
                 ).abovePile
                 let coreLabelFit = coreLayout.map { layout in
@@ -398,8 +460,11 @@ struct JarSpriteView: View {
                 // 1.0, or a young one at the 2.0 floor) never buries the
                 // core: it steps in front of the settled gems instead.
                 let coreInFront = coreDisc.map { disc in
-                    scene.settledPileTop(minX: disc.center.x - disc.radius, maxX: disc.center.x + disc.radius)
-                        > proxy.size.height - disc.center.y - disc.radius * 0.8
+                    scene.settledPileTop(
+                        minX: disc.center.x - disc.radius,
+                        maxX: disc.center.x + disc.radius,
+                        below: proxy.size.height - disc.center.y + disc.radius
+                    ) > proxy.size.height - disc.center.y - disc.radius * 0.8
                 } ?? false
                 let pileClearances = Self.pileClearances(
                     stageSize: proxy.size,
@@ -445,6 +510,7 @@ struct JarSpriteView: View {
                         topClearance: coreTopClearance,
                         bottomLimit: coreBottomLimit,
                         labelBottomLimit: coreLabelBottomLimit,
+                        showsProgressCard: showsCoreProgressCard,
                         metrics: $coreLabelMetrics
                     )
                     .opacity(0)
@@ -576,6 +642,18 @@ struct JarSpriteView: View {
                     }
                 }
 
+                // F3 (review F1): the lifted 「N巡」 pill, in front of the
+                // settled gems behind it.
+                if accumulationPresence.isVisible, showsCycleChip, liftsCyclePill {
+                    JarAccumulationPresenceBackdrop(
+                        state: accumulationPresence,
+                        colorHex: lifetimeCoreColorHex,
+                        showsLifetimeCore: lifetimeCoreState != nil,
+                        showsCycleChip: showsCycleChip,
+                        cyclePill: .inFrontOfTheScene
+                    )
+                }
+
                 // The core's name plate and progress card sit in front of
                 // the scene (like the HUD): the bed can never hide them, and
                 // they may overlap its soft top edge. While ten gems fuse
@@ -587,13 +665,37 @@ struct JarSpriteView: View {
                         bottomLimit: coreBottomLimit,
                         labelBottomLimit: coreLabelBottomLimit,
                         fit: coreLabelFit,
+                        showsProgressCard: showsCoreProgressCard,
                         measures: false,
                         metrics: $coreLabelMetrics
                     )
                     .opacity(scene.isFusionSpotlightActive ? 0 : 1)
                     .animation(.easeInOut(duration: 0.18), value: scene.isFusionSpotlightActive)
                 }
+#if DEBUG
+                // The core has no accessibility frame of its own (the jar is
+                // one element), so Home's jar (the only one with a measured
+                // HUD above its core) reports it for UI tests: the tapped
+                // crystal's card must stay clear of it.
+                if coreTopClearance != nil || reportsCoreFrame, let coreDisc {
+                    let labelBottom = coreLayout.map {
+                        $0.labelTop + (coreLabelsBuried ? 0 : coreLabelMetrics.size.height)
+                    } ?? 0
+                    let halfWidth = max(coreDisc.radius, coreLayout == nil ? 0 : coreLabelMetrics.size.width / 2)
+                    let top = coreDisc.center.y - coreDisc.radius
+                    let bottom = max(coreDisc.center.y + coreDisc.radius, labelBottom)
+                    Color.clear
+                        .frame(width: halfWidth * 2, height: max(0, bottom - top))
+                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: {
+                            HomeRenderDiagnostics.jarCoreWindowFrame = $0
+                        }
+                        .position(x: coreDisc.center.x, y: (top + bottom) / 2)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+#endif
             }
+            .coordinateSpace(.named(Self.stageCoordinateSpace))
         }
         .accessibilityElement(children: .ignore)
         // The element's frame is the stage. Without this it took in layers
@@ -813,21 +915,26 @@ struct JarSpriteView: View {
     }
 
     private var accessibilityValue: String {
-        let studyValue = JarAccessibilityPresentation.value(
-            totalGrams: totalGrams,
-            pebbleCount: pebbleCount,
-            achievementCount: achievementCount,
-            aggregateCount: aggregateCount,
-            legacyAggregateCount: legacyAggregateCount,
-            representedPebbleCount: representedPebbleCount,
-            goldPebbleCount: goldPebbleCount,
-            prismPebbleCount: prismPebbleCount,
-            fusionProgressDescription: fusionProgressDescription,
-            projectionIsLowerBound: projectionIsLowerBound,
-            projectionIsUnverified: projectionIsUnverified,
-            pendingMass: pendingMass,
-            isCloudOfflineSession: isCloudOfflineSession
-        )
+        let studyValue: String
+        if isLoadingRecords {
+            studyValue = JarAccessibilityPresentation.loadingValue
+        } else {
+            studyValue = JarAccessibilityPresentation.value(
+                totalGrams: totalGrams,
+                pebbleCount: pebbleCount,
+                achievementCount: achievementCount,
+                aggregateCount: aggregateCount,
+                legacyAggregateCount: legacyAggregateCount,
+                representedPebbleCount: representedPebbleCount,
+                goldPebbleCount: goldPebbleCount,
+                prismPebbleCount: prismPebbleCount,
+                fusionProgressDescription: fusionProgressDescription,
+                projectionIsLowerBound: projectionIsLowerBound,
+                projectionIsUnverified: projectionIsUnverified,
+                pendingMass: pendingMass,
+                isCloudOfflineSession: isCloudOfflineSession
+            )
+        }
         guard let obstacles = scene.screenTimeObstacleAccessibilityDescription else {
             return studyValue
         }
@@ -836,6 +943,8 @@ struct JarSpriteView: View {
     }
 
     private var accessibilityHint: String {
+        // Still loading, not empty: 「まだ粒はありません」 would say otherwise.
+        guard !isLoadingRecords else { return "" }
         guard hasPhysicalContent else {
             return String(localized: "まだ粒はありません。集中を完走するか成果を積むと、瓶に粒が入ります", table: "Jar",
                           comment: "VoiceOver hint of the empty jar")
@@ -873,6 +982,9 @@ struct JarSpriteView: View {
     @MainActor
     private func updateMotionBehavior(reduceMotion: Bool) {
         scene.reduceMotion = reduceMotion
+        // F3 (review B2): the scene does not step while the app is not
+        // active, so stopping the motion there opens no window of its own.
+        scene.hostIsActive = scenePhase == .active
         if scenePhase != .active {
             scene.cancelInteractionPresentation()
         }
@@ -918,7 +1030,7 @@ struct JarSpriteView: View {
                 )
                 scene.setGravityVector(
                     CGVector(
-                        dx: horizontalFraction * Constants.Jar.tiltGravityHorizontalScale,
+                        dx: horizontalFraction * JarGravityMapping.strength,
                         dy: Constants.Jar.gravity
                     ),
                     smoothing: false,

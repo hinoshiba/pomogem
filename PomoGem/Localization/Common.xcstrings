@@ -52,6 +52,9 @@
         }
       }
     },
+    "%@t" : {
+      "comment" : "Mass in metric tonnes. %@ is the number, already formatted. en: '%@ t'."
+    },
     "%lld〜%lld分" : {
       "comment" : "Range of custom focus lengths. %1$lld is the shortest and %2$lld the longest length in minutes. en: '%1$lld–%2$lld min'",
       "localizations" : {
@@ -65,6 +68,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld〜%lld分"
+          }
+        }
+      }
+    },
+    "%lld分" : {
+      "comment" : "A duration in whole minutes"
+    },
+    "%lld時間" : {
+      "comment" : "A duration in whole hours"
+    },
+    "%lld時間%lld分" : {
+      "comment" : "A duration in hours and minutes",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld時間%2$lld分"
           }
         }
       }

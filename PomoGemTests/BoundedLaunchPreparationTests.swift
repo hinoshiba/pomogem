@@ -1042,13 +1042,116 @@ final class BoundedLaunchPreparationTests: XCTestCase {
                 sceneIsActive: true
             ))
         XCTAssertTrue(SyncMaintenanceLaunchPolicy
-            .shouldResetForegroundGrace(after: .background))
+            .beginsBackgroundAbsence(after: .background))
         XCTAssertFalse(SyncMaintenanceLaunchPolicy
-            .shouldResetForegroundGrace(after: .inactive))
+            .beginsBackgroundAbsence(after: .inactive))
         XCTAssertTrue(SyncMaintenanceLaunchPolicy
             .shouldRearmForegroundWork(after: .active))
         XCTAssertFalse(SyncMaintenanceLaunchPolicy
             .shouldRearmForegroundWork(after: .inactive))
+    }
+
+    // MARK: Foreground epochs (device-verify-2 P2)
+
+    /// On the phone every return from another app — 5 s or 10 s, inside the
+    /// 15 s background grace that keeps Root on screen — revoked trust and
+    /// restarted the 60 s interaction grace, so Home said 「iCloudを確認中」
+    /// for about 65 s after each glance away. Such a return now resumes the
+    /// epoch it left.
+    func testAReturnWithinTheBackgroundGraceResumesTheVerifiedEpoch() {
+        let launch = ContinuousClock.now
+        var epoch = CloudForegroundEpoch()
+        XCTAssertEqual(epoch.interactionGraceRemaining(at: launch), .seconds(60))
+        epoch.interactionGraceElapsed()
+        var now = launch.advanced(by: .seconds(65))
+        for absence in [Duration.seconds(5), .seconds(10), .milliseconds(15_000)] {
+            epoch.sceneEnteredBackground(at: now)
+            now = now.advanced(by: absence)
+            XCTAssertEqual(epoch.sceneBecameActive(at: now), .afterShortAbsence,
+                           "A \(absence) absence keeps the verified presentation")
+            XCTAssertTrue(epoch.interactionGraceHasElapsed,
+                          "A \(absence) absence opens no new 60 s window before verification may run")
+            XCTAssertNil(epoch.interactionGraceDeadline)
+            now = now.advanced(by: .seconds(30))
+        }
+    }
+
+    /// Only a Root without a CloudKit transport (an admitted offline session)
+    /// outlives a longer absence; that return is still a new epoch, exactly as
+    /// every return was before, and a paused grace or rolling deadline starts
+    /// over with it.
+    func testALongerAbsenceStillBeginsANewEpoch() {
+        let launch = ContinuousClock.now
+        for absence in [Duration.milliseconds(15_001), .seconds(40), .seconds(3_600)] {
+            var epoch = CloudForegroundEpoch()
+            _ = epoch.interactionGraceRemaining(at: launch)
+            epoch.interactionGraceElapsed()
+            _ = epoch.rollingVerificationDelay(at: launch)
+            let left = launch.advanced(by: .seconds(100))
+            epoch.sceneEnteredBackground(at: left)
+            XCTAssertEqual(epoch.sceneBecameActive(at: left.advanced(by: absence)), .newEpoch)
+            XCTAssertFalse(epoch.interactionGraceHasElapsed)
+            XCTAssertNil(epoch.interactionGraceDeadline)
+            XCTAssertNil(epoch.nextRollingVerification)
+            let back = left.advanced(by: absence)
+            XCTAssertEqual(epoch.interactionGraceRemaining(at: back), .seconds(60),
+                           "A new epoch gets the same interaction grace as launch")
+            XCTAssertEqual(epoch.rollingVerificationDelay(at: back), .seconds(15 * 60))
+        }
+        XCTAssertFalse(SyncMaintenanceLaunchPolicy.resumesForegroundEpoch(afterAbsence: .seconds(-1)),
+                       "A clock that went backwards proves nothing")
+    }
+
+    /// Restarting the grace on every return kept pushing the launch sweep out
+    /// by another full minute; the grace now ends 60 s after it began.
+    func testTheInteractionGraceKeepsItsDeadlineAcrossReturns() {
+        let launch = ContinuousClock.now
+        var epoch = CloudForegroundEpoch()
+        XCTAssertEqual(epoch.interactionGraceRemaining(at: launch), .seconds(60))
+        epoch.sceneEnteredBackground(at: launch.advanced(by: .seconds(20)))
+        let back = launch.advanced(by: .seconds(30))
+        XCTAssertEqual(epoch.sceneBecameActive(at: back), .afterShortAbsence)
+        XCTAssertEqual(epoch.interactionGraceRemaining(at: back), .seconds(30))
+        // Control Center: inactive → active without a background phase.
+        XCTAssertEqual(epoch.sceneBecameActive(at: launch.advanced(by: .seconds(50))), .fromInactive)
+        XCTAssertEqual(epoch.interactionGraceRemaining(at: launch.advanced(by: .seconds(50))), .seconds(10))
+        XCTAssertEqual(epoch.interactionGraceRemaining(at: launch.advanced(by: .seconds(70))), .zero)
+    }
+
+    /// The rolling check is a backstop for imports a bounded observer can
+    /// miss. Returns no longer start a sweep of their own, so the 15-minute
+    /// timer must not restart on each of them either.
+    func testTheRollingVerificationKeepsItsDeadlineAcrossReturns() {
+        let launch = ContinuousClock.now
+        var epoch = CloudForegroundEpoch()
+        XCTAssertEqual(epoch.rollingVerificationDelay(at: launch), .seconds(900))
+        var now = launch
+        for _ in 0..<89 {
+            now = now.advanced(by: .seconds(5))
+            epoch.sceneEnteredBackground(at: now)
+            now = now.advanced(by: .seconds(5))
+            XCTAssertEqual(epoch.sceneBecameActive(at: now), .afterShortAbsence)
+        }
+        XCTAssertEqual(epoch.rollingVerificationDelay(at: now), .seconds(10))
+        now = now.advanced(by: .seconds(10))
+        epoch.sceneEnteredBackground(at: now)
+        now = now.advanced(by: .seconds(12))
+        XCTAssertEqual(epoch.sceneBecameActive(at: now), .afterShortAbsence)
+        XCTAssertEqual(epoch.rollingVerificationDelay(at: now), .zero,
+                       "A check that fell due while away runs on return")
+        epoch.rollingVerificationRequested()
+        XCTAssertEqual(epoch.rollingVerificationDelay(at: now), .seconds(900))
+    }
+
+    func testAnAbsenceIsMeasuredFromItsFirstBackground() {
+        let left = ContinuousClock.now
+        var epoch = CloudForegroundEpoch()
+        epoch.sceneEnteredBackground(at: left)
+        // .background → .inactive → .background: still the same absence.
+        epoch.sceneEnteredBackground(at: left.advanced(by: .seconds(14)))
+        XCTAssertEqual(epoch.sceneBecameActive(at: left.advanced(by: .seconds(20))), .newEpoch)
+        XCTAssertNil(epoch.backgroundEnteredAt)
+        XCTAssertEqual(epoch.sceneBecameActive(at: left.advanced(by: .seconds(21))), .fromInactive)
     }
 
     func testVerificationTicketWaitsForFollowupsAndRejectsOldGeneration() {
@@ -1199,6 +1302,100 @@ final class BoundedLaunchPreparationTests: XCTestCase {
             )
         )
         XCTAssertNotEqual(verified, reverified)
+    }
+
+    /// launch-perf (e). While the totals read 「iCloudを確認中」 Home restored
+    /// the jar at each landing and again when verification flipped ~7 s
+    /// later (device audit 2026-09-29), each restore keeping the jar awake
+    /// ~6 s. A new generation now restores only when the jar's content
+    /// changed: its epoch, its roots or a loose body's presentation.
+    func testANewSnapshotGenerationRestoresOnlyWhenTheJarsContentChanged() {
+        var presentation = AggregateProjectionPresentationContext.initial(for: .cloudKit)
+        let pending = HomeSceneSessionSnapshotGeneration(presentation)
+        presentation.markVerified()
+        let verified = HomeSceneSessionSnapshotGeneration(presentation)
+        presentation.invalidate()
+        let invalidated = HomeSceneSessionSnapshotGeneration(presentation)
+        let epoch = UUID(uuidString: "E0000000-0000-4000-8000-000000000001")!
+        let root = (id: UUID(uuidString: "A0000000-0000-4000-8000-000000000001")!, grams: 2_500)
+        let content = HomeSceneContent(epochID: epoch, roots: [root], pebbles: [gem(1), gem(2)])
+
+        func restores(
+            _ applied: HomeSceneContent?,
+            _ accepted: HomeSceneContent?,
+            from old: HomeSceneSessionSnapshotGeneration = pending,
+            to new: HomeSceneSessionSnapshotGeneration = verified,
+            initialized: Bool = true
+        ) -> Bool {
+            HomeSceneSessionSnapshotPolicy.shouldRestoreSilently(
+                sceneIsInitialized: initialized,
+                appliedGeneration: old,
+                acceptedGeneration: new,
+                appliedContent: applied,
+                acceptedContent: accepted
+            )
+        }
+
+        // The same content: a pure verification flip, or a store change's
+        // new cache epoch, does not restore.
+        let same = HomeSceneContent(epochID: epoch, roots: [root], pebbles: [gem(2), gem(1)])
+        XCTAssertEqual(content, same, "order does not matter")
+        XCTAssertFalse(restores(content, same), "pending → verified")
+        XCTAssertFalse(restores(content, same, from: verified, to: invalidated), "invalidated")
+        XCTAssertFalse(restores(content, content, from: pending, to: pending))
+
+        // Anything the jar shows changed: restore silently, as before.
+        XCTAssertTrue(restores(content, HomeSceneContent(
+            epochID: epoch, roots: [root], pebbles: [gem(1), gem(2), gem(3)]
+        )), "a row became loose")
+        XCTAssertTrue(restores(content, HomeSceneContent(
+            epochID: epoch, roots: [root], pebbles: [gem(1)]
+        )), "a row left")
+        XCTAssertTrue(restores(content, HomeSceneContent(
+            epochID: epoch, roots: [root], pebbles: [gem(1), gem(2, grams: 500)]
+        )), "grams")
+        XCTAssertTrue(restores(content, HomeSceneContent(
+            epochID: epoch, roots: [root], pebbles: [gem(1), gem(2, subjectName: "数学")]
+        )), "a renamed subject changes the gem's VoiceOver name")
+        XCTAssertTrue(restores(content, HomeSceneContent(
+            epochID: epoch, roots: [root], pebbles: [gem(1), gem(2, colorHex: Constants.Color.science)]
+        )), "a recolored subject changes the gem's appearance")
+        XCTAssertTrue(restores(content, HomeSceneContent(
+            epochID: epoch, roots: [(root.id, 3_000)], pebbles: [gem(1), gem(2)]
+        )), "a root's grams")
+        XCTAssertTrue(restores(content, HomeSceneContent(
+            epochID: epoch, roots: [], pebbles: [gem(1), gem(2)]
+        )), "roots")
+        XCTAssertTrue(restores(content, HomeSceneContent(
+            epochID: UUID(), roots: [root], pebbles: [gem(1), gem(2)]
+        )), "a new activity epoch (reset)")
+
+        // Before the first restore, or without a recorded content, it
+        // restores as it always did.
+        XCTAssertTrue(restores(nil, content))
+        XCTAssertTrue(restores(content, nil))
+        XCTAssertTrue(restores(content, same, initialized: false))
+        // Within one generation new rows keep their incremental drops.
+        XCTAssertFalse(restores(content, HomeSceneContent(
+            epochID: epoch, roots: [root], pebbles: [gem(1), gem(2), gem(3)]
+        ), from: verified, to: verified))
+    }
+
+    private func gem(
+        _ index: Int,
+        grams: Int = Constants.Mass.measuredPebbleGrams,
+        subjectName: String = "英語",
+        colorHex: String = Constants.Color.english
+    ) -> PebbleDescriptor {
+        PebbleDescriptor(
+            id: UUID(uuidString: String(format: "E2000000-0000-4000-8000-%012X", index))!,
+            subjectName: subjectName,
+            colorHex: colorHex,
+            source: .timer,
+            kind: .normal,
+            grams: grams,
+            createdAt: Date(timeIntervalSince1970: TimeInterval(1_000 + index))
+        )
     }
 
     func testProjectionCacheStampRotatesNamespaceAtEpochExhaustion() {

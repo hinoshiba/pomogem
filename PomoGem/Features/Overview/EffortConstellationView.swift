@@ -158,22 +158,14 @@ enum EffortConstellationPresentation {
     static func formattedMass(_ grams: Int) -> String {
         let safe = max(0, grams)
         if safe >= 1_000_000 {
-            return metricTons(String(format: "%.2f", Double(safe) / 1_000_000))
+            return MassText.tonnes(fromGrams: safe, fractionDigits: 2)
         }
         if safe >= 1_000 {
-            return MassText.kilograms(String(format: safe >= 10_000 ? "%.1f" : "%.2f", Double(safe) / 1_000))
+            return MassText.kilograms(fromGrams: safe, fractionDigits: safe >= 10_000 ? 1 : 2)
         }
-        return MassText.grams("\(safe)")
+        return MassText.grams(value: safe)
     }
 
-    /// Metric tons, which the shared mass helpers do not cover.
-    static func metricTons(_ number: String) -> String {
-        String(
-            localized: "\(number)t",
-            table: "Overview",
-            comment: "Mass in metric tons. %@ is the number, already formatted. en: '%@ t' (with a space; never converted)."
-        )
-    }
 
     /// 「時間の核」: the lifetime focus-time milestone at the centre of the
     /// constellation, as a title, a legend step and a VoiceOver label.

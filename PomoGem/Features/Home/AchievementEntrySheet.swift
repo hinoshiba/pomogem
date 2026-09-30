@@ -129,7 +129,7 @@ struct AchievementEntrySheet: View {
     private var kindStep: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
-                SectionEyebrow(text: "MILESTONE")
+                SectionEyebrow(text: String(localized: "記念石", table: "Home", comment: "Eyebrow over the achievement sheet question どんな成果だった？"))
                 Text("どんな成果だった？", tableName: "Home", comment: "Achievement sheet heading above the kinds of achievement")
                     .font(PomoGemTheme.brand(26))
                 Text(achievementIntroduction)

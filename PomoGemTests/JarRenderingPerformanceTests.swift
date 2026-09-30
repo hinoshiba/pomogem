@@ -377,7 +377,7 @@ final class JarRenderingPerformanceTests: XCTestCase {
         scene.evaluateInteractionMotionForTesting(currentTime: 100, uptime: 100)
         scene.evaluateInteractionMotionForTesting(currentTime: 110, uptime: 110)
         XCTAssertTrue(scene.isIdlePaused)
-        let scale = Constants.Jar.tiltGravityHorizontalScale
+        let scale = Constants.Jar.tiltLightHorizontalScale
         let start = scene.idleTiltFrameCount
 
         // Hand tremor below the threshold touches no node (no frame).
@@ -418,6 +418,262 @@ final class JarRenderingPerformanceTests: XCTestCase {
         scene.setGravityVector(CGVector(dx: 0.005 * scale, dy: Constants.Jar.gravity), smoothing: false)
         XCTAssertEqual(scene.opticalTiltFraction, 0.005, accuracy: 0.0001)
         XCTAssertEqual(scene.idleTiltFrameCount, awake)
+    }
+
+    // MARK: Glass bake (launch-perf (a), device audit 2026-09-29)
+
+    /// Home's `@State` scene is built at a default size long before its
+    /// SKView exists. It never bakes the glass there, and shows plain glass.
+    @MainActor
+    func testAnUnpresentedSceneNeverBakesTheGlassAtItsGuessedSize() throws {
+        JarScene.resetGlassCacheForTesting()
+        let scene = JarScene()
+        scene.size = CGSize(width: 402, height: 520)
+        drainMainQueue()
+        XCTAssertEqual(JarScene.glassBakeLedger.all, [])
+        XCTAssertEqual(scene.glassPresentation, .placeholder)
+        XCTAssertNil(scene.shownGlassKey)
+        try assertGlass(of: scene, showsPlaceholder: true)
+    }
+
+    /// Presented, the scene bakes once, at the size it is shown (not the
+    /// size it was built at), off the main thread. Plain glass shows until
+    /// the bake is in; the textures then cross-fade in within 150 ms.
+    @MainActor
+    func testAPresentedSceneBakesItsGlassOnceOffTheMainThreadAtThePresentedSize() throws {
+        JarScene.resetGlassCacheForTesting()
+        let scene = JarScene()
+        let built = JarScene.outerJarRect(sceneSize: scene.size).size
+        let presented = CGSize(width: 377, height: 505)
+        let view = SKView(frame: CGRect(origin: .zero, size: presented))
+        view.presentScene(scene)
+        defer { view.presentScene(nil) }
+        // As JarSpriteView does when it appears.
+        scene.size = presented
+        XCTAssertEqual(scene.glassPresentation, .placeholder, "plain glass until the bake is in")
+        try assertGlass(of: scene, showsPlaceholder: true)
+
+        waitForGlass(of: scene)
+        let bakes = JarScene.glassBakeLedger.all
+        let outer = JarScene.outerJarRect(sceneSize: presented).size
+        XCTAssertEqual(bakes.count, 1, "\(bakes)")
+        XCTAssertEqual(bakes.first?.key.width, Int(outer.width.rounded()))
+        XCTAssertEqual(bakes.first?.key.height, Int(outer.height.rounded()))
+        XCTAssertNotEqual(bakes.first?.key.width, Int(built.width.rounded()), "never the built size")
+        XCTAssertEqual(bakes.first?.onMainThread, false)
+        XCTAssertEqual(scene.shownGlassKey, bakes.first?.key)
+        XCTAssertLessThanOrEqual(JarScene.glassCrossfadeDuration, 0.15)
+        scene.settleGlassForCapture()
+        try assertGlass(of: scene, showsPlaceholder: false)
+
+        // The same size again (Home shown again, a second scene) shows its
+        // glass at once and never bakes it again.
+        let again = JarScene(size: presented)
+        let secondView = SKView(frame: CGRect(origin: .zero, size: presented))
+        secondView.presentScene(again)
+        defer { secondView.presentScene(nil) }
+        XCTAssertEqual(again.glassPresentation, .baked)
+        try assertGlass(of: again, showsPlaceholder: false)
+        drainMainQueue()
+        XCTAssertEqual(JarScene.glassBakeLedger.all.count, 1)
+    }
+
+    /// Scenes asking for one size together share one bake, and the cache
+    /// keeps only the latest `glassCacheLimit` sizes.
+    @MainActor
+    func testEachGlassSizeBakesOnceAndTheCacheIsBounded() throws {
+        JarScene.resetGlassCacheForTesting()
+        func present(_ size: CGSize) -> (JarScene, SKView) {
+            let scene = JarScene(size: size)
+            let view = SKView(frame: CGRect(origin: .zero, size: size))
+            view.presentScene(scene)
+            return (scene, view)
+        }
+        let first = CGSize(width: 371, height: 501)
+        let (a, viewA) = present(first)
+        let (b, viewB) = present(first)
+        defer { [viewA, viewB].forEach { $0.presentScene(nil) } }
+        waitForGlass(of: a)
+        waitForGlass(of: b)
+        XCTAssertEqual(JarScene.glassBakeLedger.all.count, 1, "one bake for both scenes")
+        XCTAssertEqual(a.shownGlassKey, b.shownGlassKey)
+
+        for size in [CGSize(width: 373, height: 503), CGSize(width: 375, height: 507)] {
+            let (scene, view) = present(size)
+            waitForGlass(of: scene)
+            view.presentScene(nil)
+        }
+        XCTAssertEqual(JarScene.glassBakeLedger.all.count, 3)
+        XCTAssertEqual(JarScene.cachedGlassKeysForTesting.count, JarScene.glassCacheLimit)
+        XCTAssertFalse(JarScene.cachedGlassKeysForTesting.contains { $0 == a.shownGlassKey })
+        XCTAssertTrue(JarScene.glassBakeLedger.all.allSatisfy { !$0.onMainThread })
+    }
+
+    /// A share or widget capture right after Home appears waits for the
+    /// bake instead of publishing plain glass.
+    @MainActor
+    func testACaptureWaitsForTheGlassBake() throws {
+        JarScene.resetGlassCacheForTesting()
+        let size = CGSize(width: 379, height: 509)
+        let scene = JarScene(size: size)
+        let view = SKView(frame: CGRect(origin: .zero, size: size))
+        view.presentScene(scene)
+        defer { view.presentScene(nil) }
+        XCTAssertEqual(scene.glassPresentation, .placeholder)
+        let restore = scene.prepareForSnapshot()
+        XCTAssertEqual(scene.glassPresentation, .baked)
+        try assertGlass(of: scene, showsPlaceholder: false)
+        restore()
+        drainMainQueue()
+        XCTAssertEqual(JarScene.glassBakeLedger.all.count, 1)
+        XCTAssertEqual(JarScene.glassBakeLedger.all.first?.onMainThread, false)
+    }
+
+    /// The jar freezing mid-fade shows the whole glass, never a half-faded
+    /// bottle (a resting jar runs no actions).
+    @MainActor
+    func testARestingJarNeverFreezesAHalfFadedGlass() throws {
+        JarScene.resetGlassCacheForTesting()
+        let size = CGSize(width: 381, height: 511)
+        let scene = JarScene(size: size)
+        let view = SKView(frame: CGRect(origin: .zero, size: size))
+        view.presentScene(scene)
+        defer { view.presentScene(nil) }
+        waitForGlass(of: scene)
+
+        // A small bake can finish after the empty jar has already paused,
+        // which correctly skips the animation. Put the displayed glass in a
+        // deterministic mid-fade state to check the pause path itself.
+        scene.resumeSimulation()
+        let highlights = try XCTUnwrap(scene.childNode(withName: "//jar.glass.highlights"))
+        let placeholder = try XCTUnwrap(scene.childNode(withName: "//jar.glass.placeholder"))
+        highlights.alpha = 0.35
+        highlights.run(.fadeIn(withDuration: 60), withKey: "jar.glass.crossfade")
+        placeholder.isHidden = false
+        placeholder.alpha = 0.65
+        placeholder.run(.fadeOut(withDuration: 60), withKey: "jar.glass.crossfade")
+        XCTAssertNotNil(highlights.action(forKey: "jar.glass.crossfade"))
+        scene.evaluateInteractionMotionForTesting(currentTime: 100, uptime: 100)
+        scene.evaluateInteractionMotionForTesting(
+            currentTime: 100 + Constants.Jar.idleWindow + 1,
+            uptime: 100 + Constants.Jar.interactionHardStopDelay + 1
+        )
+        XCTAssertTrue(scene.isIdlePaused)
+        try assertGlass(of: scene, showsPlaceholder: false)
+    }
+
+    // MARK: Glass highlights (launch-perf (c))
+
+    /// The moving highlights draw only where they hold light, as strips of
+    /// their one texture, and put down the same pixels as the whole layer:
+    /// at rest and moved by a tilt (a fraction of a pixel included).
+    @MainActor
+    func testGlassHighlightStripsDrawTheWholeLayersPixels() throws {
+        let stage = CGSize(width: 402, height: 520)
+        let outer = JarScene.outerJarRect(sceneSize: stage)
+        let request = JarScene.GlassBakeRequest(
+            size: outer.size,
+            neckInset: JarScene.neckInset(jarWidth: outer.width),
+            scale: 3
+        )
+        let textures = JarScene.bakeGlassTextures(request)
+        let strips = JarScene.glassHighlightStrips(textures)
+        let area = textures.highlightRegions.reduce(CGFloat.zero) { $0 + $1.width * $1.height }
+        XCTAssertLessThan(
+            area / (textures.size.width * textures.size.height),
+            0.5,
+            "the strips cover under half of the bottle's rectangle"
+        )
+        XCTAssertGreaterThan(strips.count, 1)
+        let view = SKView(frame: CGRect(origin: .zero, size: stage))
+        for tilt: CGFloat in [0, 2.37, -6] {
+            let whole = SKSpriteNode(texture: textures.highlights, size: outer.size)
+            whole.blendMode = .add
+            // As the scene arranges them (`showGlass`).
+            let pieces = SKSpriteNode()
+            pieces.blendMode = .add
+            JarScene.arrangeGlassHighlights(textures, on: pieces, fade: nil)
+            pieces.xScale = outer.width / textures.size.width
+            pieces.yScale = outer.height / textures.size.height
+            let before = try renderStage(whole, at: CGPoint(x: outer.midX + tilt, y: outer.midY), size: stage, in: view)
+            let after = try renderStage(pieces, at: CGPoint(x: outer.midX + tilt, y: outer.midY), size: stage, in: view)
+            let difference = compare(before, after)
+            XCTAssertLessThanOrEqual(difference.maximum, 2, "tilt \(tilt): max \(difference.maximum)")
+        }
+    }
+
+    /// The scene shows the highlights as those strips, and a capture draws
+    /// them as ordinary alpha with their node.
+    @MainActor
+    func testTheSceneDrawsTheHighlightsAsStripsThatFollowTheCapture() throws {
+        let size = CGSize(width: 390, height: Constants.Jar.height)
+        let scene = makeScene()
+        scene.bakesGlassInBackground = false
+        let view = SKView(frame: CGRect(origin: .zero, size: size))
+        view.presentScene(scene)
+        defer { view.presentScene(nil) }
+        let highlights = try XCTUnwrap(scene.childNode(withName: "//jar.glass.highlights") as? SKSpriteNode)
+        let strips = [highlights] + highlights.children.compactMap { $0 as? SKSpriteNode }
+        XCTAssertGreaterThan(strips.count, 1)
+        let full = try XCTUnwrap(scene.shownGlassKey)
+        XCTAssertLessThan(
+            highlights.size.width * highlights.size.height,
+            CGFloat(full.width * full.height) / 2,
+            "the node draws one strip, not the bottle's rectangle"
+        )
+        for strip in strips {
+            XCTAssertEqual(strip.blendMode, .add)
+            XCTAssertTrue(strip.shader === scene.lightEdgeFade.shader)
+        }
+        let restore = scene.prepareForSnapshot()
+        XCTAssertTrue(strips.allSatisfy { $0.blendMode == .alpha })
+        restore()
+        XCTAssertTrue(strips.allSatisfy { $0.blendMode == .add })
+    }
+
+    @MainActor
+    private func assertGlass(of scene: JarScene, showsPlaceholder: Bool, line: UInt = #line) throws {
+        let placeholder = try XCTUnwrap(scene.childNode(withName: "//jar.glass.placeholder"), line: line)
+        XCTAssertEqual(placeholder.isHidden, !showsPlaceholder, "placeholder", line: line)
+        for name in ["jar.glass.back", "jar.glass.front", "jar.glass.highlights"] {
+            let node = try XCTUnwrap(scene.childNode(withName: "//\(name)"), line: line)
+            XCTAssertEqual(node.isHidden, showsPlaceholder, name, line: line)
+            if !showsPlaceholder {
+                XCTAssertEqual(node.alpha, 1, name, line: line)
+            }
+        }
+        if !showsPlaceholder {
+            XCTAssertNotNil((scene.childNode(withName: "//jar.glass.back") as? SKShapeNode)?.fillTexture, line: line)
+            XCTAssertNotNil((scene.childNode(withName: "//jar.glass.front") as? SKShapeNode)?.fillTexture, line: line)
+        }
+    }
+
+    @MainActor
+    private func waitForGlass(of scene: JarScene, line: UInt = #line) {
+        let baked = expectation(for: NSPredicate { _, _ in
+            MainActor.assumeIsolated { scene.glassPresentation == .baked }
+        }, evaluatedWith: nil)
+        wait(for: [baked], timeout: 10)
+    }
+
+    private func drainMainQueue() {
+        let drained = expectation(description: "main queue drained")
+        DispatchQueue.main.async { drained.fulfill() }
+        wait(for: [drained], timeout: 2)
+    }
+
+    /// Draws `node` at `point` of a scene `size` over the jar's night
+    /// background and returns the pixels.
+    @MainActor
+    private func renderStage(_ node: SKNode, at point: CGPoint, size: CGSize, in view: SKView) throws -> Pixels {
+        let scene = SKScene(size: size)
+        scene.backgroundColor = UIColor(red: 0.05, green: 0.06, blue: 0.13, alpha: 1)
+        node.position = point
+        scene.addChild(node)
+        view.presentScene(scene)
+        defer { view.presentScene(nil) }
+        let rendered = try XCTUnwrap(view.texture(from: scene, crop: CGRect(origin: .zero, size: size)))
+        return pixels(of: rendered.cgImage())
     }
 
     // MARK: Helpers

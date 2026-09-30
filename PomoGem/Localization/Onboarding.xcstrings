@@ -18,6 +18,28 @@
         }
       }
     },
+    "%@の集中 = この一粒（+%@）" : {
+      "comment" : "Onboarding trial drop, shown after the trial gem lands: what one gem stands for. %1$@ is a focus time (25分), %2$@ its mass (250g). en: '%1$@ of focus = this gem (+%2$@)'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@の集中 = この一粒（+%2$@）"
+          }
+        }
+      }
+    },
+    "%@の集中が、この一粒（%@）になります" : {
+      "comment" : "VoiceOver: what the onboarding trial gem stands for. %1$@ is a spoken focus time, %2$@ a spoken mass",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@の集中が、この一粒（%2$@）になります"
+          }
+        }
+      }
+    },
     "%@を選択から外す" : {
       "comment" : "VoiceOver: remove the typed theme %@ from the selection",
       "localizations" : {
@@ -246,6 +268,9 @@
         }
       }
     },
+    "あなたの瓶" : {
+      "comment" : "Eyebrow over 最初のテーマを選ぶ"
+    },
     "このApple Accountの以前の瓶を、iCloudから受け取っています。記録が届きはじめると自動で瓶がひらき、残りの記録もそのあと順に届きます。" : {
       "comment" : "Restore waiting screen: what is happening and what happens next",
       "localizations" : {
@@ -296,6 +321,9 @@
           }
         }
       }
+    },
+    "これはお試しなので、記録には入りません。「次へ」で省略できます。" : {
+      "comment" : "Onboarding trial drop page: the trial gem is never recorded, and the page can be skipped"
     },
     "しばらく新しい記録が届いていません。通信状態を確認するか、待たずに「新しく始める」を選べます。" : {
       "comment" : "Restore waiting screen: shown when nothing new has arrived for a while",
@@ -432,6 +460,9 @@
           }
         }
       }
+    },
+    "はじめての一粒" : {
+      "comment" : "Eyebrow of the onboarding trial drop page"
     },
     "まず1つ選んでください。仕事の種類は、瓶をひらいた後も自由に追加・編集できます。" : {
       "comment" : "Legacy usage purpose: setup note for work themes",
@@ -700,22 +731,8 @@
         }
       }
     },
-    "一粒、着地しました。本番では、25分の集中でこの大きさの一粒（250グラム）が瓶に残ります。次へ進めます" : {
-      "comment" : "VoiceOver announcement when the onboarding trial gem lands",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The gem has landed. In a real focus, 25 minutes leaves a gem this size, 250 grams, in your jar. You can go on to the next page."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "一粒、着地しました。本番では、25分の集中でこの大きさの一粒（250グラム）が瓶に残ります。次へ進めます"
-          }
-        }
-      }
+    "一粒、着地しました。%@。次へ進めます" : {
+      "comment" : "VoiceOver announcement when the onboarding trial gem lands; %@ is the spoken form of 「25分の集中 = この一粒（+250g）」"
     },
     "一粒、積もった" : {
       "comment" : "Trial page button after the gem landed",
@@ -886,6 +903,9 @@
           }
         }
       }
+    },
+    "任意の設定" : {
+      "comment" : "Eyebrow of the optional rare-gem choice page"
     },
     "企画" : {
       "comment" : "Work theme suggestion; saved as shown",
@@ -1222,6 +1242,17 @@
         }
       }
     },
+    "届いた記録：テーマ%lld件。経過時間%lld分%lld秒" : {
+      "comment" : "VoiceOver summary of the restore progress: theme count, elapsed minutes and seconds",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "届いた記録：テーマ%1$lld件。経過時間%2$lld分%3$lld秒"
+          }
+        }
+      }
+    },
     "待つ" : {
       "comment" : "Restore waiting screen: keep waiting for iCloud (cancel)",
       "localizations" : {
@@ -1506,23 +1537,6 @@
         }
       }
     },
-    "本番では、25分の集中でこの大きさの一粒（250g）が瓶に残ります。" : {
-      "comment" : "Onboarding trial drop: shown after the trial gem lands",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "In a real focus, 25 minutes leaves a gem this size (250 g) in your jar."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "本番では、25分の集中でこの大きさの一粒（250g）が瓶に残ります。"
-          }
-        }
-      }
-    },
     "次のページへ進みます" : {
       "comment" : "VoiceOver hint for Next",
       "localizations" : {
@@ -1608,22 +1622,8 @@
         }
       }
     },
-    "演出を省略して一粒を積みました。本番では、25分の集中でこの大きさの一粒（250グラム）が瓶に残ります。次へ進めます" : {
-      "comment" : "VoiceOver announcement when the onboarding trial gem is placed without animation",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Added a gem without the animation. In a real focus, 25 minutes leaves a gem this size, 250 grams, in your jar. You can go on to the next page."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "演出を省略して一粒を積みました。本番では、25分の集中でこの大きさの一粒（250グラム）が瓶に残ります。次へ進めます"
-          }
-        }
-      }
+    "演出を省略して一粒を積みました。%@。次へ進めます" : {
+      "comment" : "VoiceOver announcement when the onboarding trial gem is placed without animation; %@ is the spoken form of 「25分の集中 = この一粒（+250g）」"
     },
     "現在は端末に保存済みのデータを使っています。まだ届いていないiCloudのデータは、接続回復後に確認します。" : {
       "comment" : "Onboarding page 1 while iCloud is offline: using data already on this device",
@@ -2231,6 +2231,9 @@
           }
         }
       }
+    },
+    "集中を瓶に" : {
+      "comment" : "Eyebrow of onboarding page 1 (集中を終えると、一粒。)"
     },
     "集中を終えると、一粒。" : {
       "comment" : "Onboarding page 1 headline: finish a focus, get a gem",

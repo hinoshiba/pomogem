@@ -1,6 +1,17 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "%@ %@ → +%@の一粒" : {
+      "comment" : "Completion card main line. %1$@ is the theme name (user data, never translated), %2$@ the focus time (25分), %3$@ the gem's mass (250g). en: '%1$@ %2$@ → a +%3$@ gem'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ %2$@ → +%3$@の一粒"
+          }
+        }
+      }
+    },
     "%@ +%@ 積んだ" : {
       "comment" : "Toast after a gem of another mass lands: theme, mass (+1125g); like Common's 「%@ +250g 積んだ」",
       "localizations" : {
@@ -35,23 +46,6 @@
         }
       }
     },
-    "%@ / %@" : {
-      "comment" : "Jar rail: focus time so far / time the next time core needs",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@ / %2$@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ / %@"
-          }
-        }
-      }
-    },
     "%@ ・ %@" : {
       "comment" : "Two compact stats side by side, as in 12粒 ・ 記念石 3. en: '%1$@ · %2$@'",
       "localizations" : {
@@ -68,6 +62,9 @@
           }
         }
       }
+    },
+    "%@ ・ まもなく瓶に入ります" : {
+      "comment" : "Undo banner subtitle: the mass added (+300g), and that the entry is saved shortly"
     },
     "%@ ・ 完走で+%@" : {
       "comment" : "Home start button subtitle: the theme, then the mass a completed focus adds (+625g)",
@@ -154,6 +151,17 @@
         }
       }
     },
+    "%@、%@、%@の一粒。" : {
+      "comment" : "VoiceOver: the completion card main line. %1$@ theme name (user data), %2$@ spoken focus time, %3$@ spoken mass. en: '%1$@, %2$@, a %3$@ gem'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@、%2$@、%3$@の一粒。"
+          }
+        }
+      }
+    },
     "%@、%@加算" : {
       "comment" : "VoiceOver label of a manual-entry length button: spoken duration, spoken mass it adds",
       "localizations" : {
@@ -189,7 +197,7 @@
       }
     },
     "%@。" : {
-      "comment" : "Ends a VoiceOver sentence; the argument is a phrase without final punctuation. en: '%@.'",
+      "comment" : "VoiceOver: ends a sentence built elsewhere. %@ is the sentence without its final punctuation. en: '%@.'",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -201,6 +209,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@。"
+          }
+        }
+      }
+    },
+    "%@。%@の重さになりました" : {
+      "comment" : "Weight Journey chip when a landmark (名所) is reached. %1$@ the landmark's name (2時間, 最初の一粒, ゾウ1頭ぶん), %2$@ its weight comparison (キャベツ1玉ほど). Never claims an exact balance. Suggested en: '%1$@. Now about as heavy as %2$@.'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@。%2$@の重さになりました"
           }
         }
       }
@@ -290,6 +309,50 @@
         }
       }
     },
+    "%@。累計%@、集中%lld粒、記念石%@個" : {
+      "comment" : "VoiceOver, menu metrics while iCloud is checked: status, lifetime mass, focus count, achievement stone count",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@。累計%2$@、集中%3$lld粒、記念石%4$@個"
+          }
+        }
+      }
+    },
+    "%@。累計は確認が済むと表示します。この端末で確認済みの集中%lld粒、記念石%@個" : {
+      "comment" : "VoiceOver, menu metrics while iCloud is checked and no lifetime total can be shown: status, focus count, achievement stone count",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@。累計は確認が済むと表示します。この端末で確認済みの集中%2$lld粒、記念石%3$@個"
+          }
+        }
+      }
+    },
+    "%@ごとの抽選%lld回（%@）" : {
+      "comment" : "Completion card: a long focus drew once per 250 g. %1$@ is 250g, %2$lld the draws, %3$@ the outcomes (通常1・金1). en: 'One draw per %1$@: %2$lld (%3$@)'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ごとの抽選%2$lld回（%3$@）"
+          }
+        }
+      }
+    },
+    "%@ごとの抽選が%lld回あり、内訳は%@です。" : {
+      "comment" : "VoiceOver: the draws of a long focus. %1$@ is 250 grams (spoken), %2$lld the draws, %3$@ the outcomes as a list",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ごとの抽選が%2$lld回あり、内訳は%3$@です。"
+          }
+        }
+      }
+    },
     "%@に%@、%@を積みます" : {
       "comment" : "VoiceOver hint of the manual-entry confirm button: theme, spoken duration, spoken mass",
       "localizations" : {
@@ -340,6 +403,9 @@
           }
         }
       }
+    },
+    "%@に届きました" : {
+      "comment" : "Home chip: the lifetime total reached a milestone marker while Home was not being looked at (synced from another device, or while away). %@ is 一里塚 30時間. Suggested en: 'Reached %@'"
     },
     "%@の%@を記念石にした" : {
       "comment" : "Toast after a milestone stone lands: theme, kind of achievement",
@@ -426,23 +492,6 @@
         }
       }
     },
-    "%@まで" : {
-      "comment" : "Jar rail caption; the argument is 最初の時間の核 or 時間の核・N段目",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Toward %@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@まで"
-          }
-        }
-      }
-    },
     "%@を%@集中する、完走で%@" : {
       "comment" : "VoiceOver label of Home's start button: theme, spoken length, spoken mass a completed focus adds",
       "localizations" : {
@@ -476,6 +525,9 @@
           }
         }
       }
+    },
+    "%@以上・同期中" : {
+      "comment" : "Home's Weight Journey (重さの旅) line while the lifetime total is still being checked with iCloud: at least this much time is stacked. %@ is a time (80時間). Suggested en: 'At least %@ · syncing'"
     },
     "%@個" : {
       "comment" : "Home menu metric: the milestone stone count (3 or 3+) above its caption; en shows the number alone",
@@ -558,7 +610,7 @@
       }
     },
     "%lld分休憩" : {
-      "comment" : "Completion card button: start the offered break; the argument is its length in minutes",
+      "comment" : "Completion card: the primary action that starts the break. %lld is minutes. en: '%lld-min break'",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -641,6 +693,9 @@
           }
         }
       }
+    },
+    "%lld分休憩を利用できます。" : {
+      "comment" : "VoiceOver: the break the completion card offers. %lld is minutes"
     },
     "%lld文字以内で入力してください（%lld文字超過）。" : {
       "comment" : "Milestone-stone name over the limit, above the disabled save button: the limit, then the characters over it",
@@ -734,6 +789,20 @@
         }
       }
     },
+    "%lld粒の結晶、%@" : {
+      "comment" : "VoiceOver, crystal inspection card: gems inside, then what its detail shows",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld粒の結晶、%2$@"
+          }
+        }
+      }
+    },
+    "%lld粒ぶんの時間が、\nひとつの結晶に。" : {
+      "comment" : "Fusion sheet headline, two lines. %lld is the gems the new crystal holds (10). en: 'The time of %lld gems,\\nin one crystal.'"
+    },
     "%lld粒を、ひとつに整理した" : {
       "comment" : "Fusion sheet title; the argument is how many gems the crystal holds",
       "localizations" : {
@@ -763,23 +832,6 @@
         }
       }
     },
-    "+%@ ・ まもなく瓶に入ります" : {
-      "comment" : "Undo banner subtitle: the mass, and that the entry is saved shortly",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "+%@ · Going into your jar shortly"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "+%@ ・ まもなく瓶に入ります"
-          }
-        }
-      }
-    },
     "10 → 1 ・記録と質量は保持" : {
       "comment" : "Completion card footnote for an old receipt: ten gems become one, records and mass are kept",
       "localizations" : {
@@ -796,6 +848,12 @@
           }
         }
       }
+    },
+    "10粒がそろうと、瓶の中でひとつの結晶にまとまります。瓶を軽く保つための整理で、一粒ずつの時間も、%@の重さも、記録にそのまま残ります。" : {
+      "comment" : "Fusion sheet 「しくみ」: fusing ten gems keeps the jar light and loses nothing. %@ is the crystal's mass"
+    },
+    "10粒で、時間の核が生まれました。これからは核が、積み上げた時間の重さを表します。" : {
+      "comment" : "Fusion sheet, only when the first crystal and the first time core arrive together"
     },
     "1分0秒〜360分0秒" : {
       "comment" : "Custom focus length sheet: the shortest and longest lengths",
@@ -916,6 +974,18 @@
         }
       }
     },
+    "×10の結晶が10個そろうと、×100の結晶になります。" : {
+      "comment" : "Fusion sheet 「しくみ」: ten ×10 crystals make a ×100 crystal"
+    },
+    "◇ %@" : {
+      "comment" : "Completion card chip: this focus reached a milestone marker (一里塚), and its ◇ lights on the time core's orbit. %@ its time (30時間). Suggested en: '◇ %@'"
+    },
+    "◇ %@。◇10個が星になりました" : {
+      "comment" : "Completion card chip: a milestone marker completed ten ◇, which fold into one 100-hour star (星, suggested en 'star'). %@ its time (300時間). Suggested en: '◇ %@. Ten ◇ became a star.'"
+    },
+    "◇ %@。星10個が冠になりました" : {
+      "comment" : "Completion card chip: a milestone marker completed ten stars, which fold into one 1,000-hour crown (冠, suggested en 'crown'). %@ its time (3,000時間). Suggested en: '◇ %@. Ten stars became a crown.'"
+    },
     "あと%lld%%で、下の粒がひとつの結晶に" : {
       "comment" : "Jar capsule before a fusion; the argument is the remaining capacity percent",
       "localizations" : {
@@ -1024,6 +1094,18 @@
           }
         }
       }
+    },
+    "この一粒は虹の粒" : {
+      "comment" : "Completion card: this focus's gem is a rainbow gem. en: 'This gem is a rainbow gem'"
+    },
+    "この一粒は虹の粒です。" : {
+      "comment" : "VoiceOver: this focus's gem is a rainbow gem"
+    },
+    "この一粒は金の粒" : {
+      "comment" : "Completion card: this focus's gem is a gold gem. en: 'This gem is a gold gem'"
+    },
+    "この一粒は金の粒です。" : {
+      "comment" : "VoiceOver: this focus's gem is a gold gem"
     },
     "この内容で積みますか？" : {
       "comment" : "Manual entry: heading of the confirmation card",
@@ -1215,7 +1297,7 @@
       }
     },
     "この結晶の内訳を見る" : {
-      "comment" : "Fusion sheet button: open the crystal in the Progress overview",
+      "comment" : "Fusion sheet primary action: opens the new crystal's breakdown",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1232,7 +1314,7 @@
       }
     },
     "この結晶をカードにする" : {
-      "comment" : "Fusion sheet button: make a share card of the crystal",
+      "comment" : "Fusion sheet action: makes a share card of the new crystal",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1265,6 +1347,131 @@
         }
       }
     },
+    "これまでの記録を読み込み中。記念石%@個" : {
+      "comment" : "VoiceOver, menu metrics before Home has read its records: achievement stone count"
+    },
+    "しくみ" : {
+      "comment" : "Disclosure that opens how gems, crystals and the time core work. en: 'How it works'"
+    },
+    "しくみ。%@" : {
+      "comment" : "VoiceOver label of the 「しくみ」 disclosure; %@ is its full accounting, read whether it is open or not"
+    },
+    "つぎの一里塚　%@" : {
+      "comment" : "Home's next-target line: the next milestone marker (一里塚, one every 10 hours; suggested en 'milestone marker'). %@ its time (80時間). Suggested en: 'Next marker: %@'"
+    },
+    "つぎの一里塚　%@・+%@ 積みました" : {
+      "comment" : "Home's next-target line, first half of the stretch. %1$@ the marker's time, %2$@ stacked time (3時間10分). Suggested en: 'Next marker: %1$@ · +%2$@ stacked'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "つぎの一里塚　%1$@・+%2$@ 積みました"
+          }
+        }
+      }
+    },
+    "つぎの一里塚　%@・+%@ 積みました・あと1本" : {
+      "comment" : "Home's next-target line, first half of the stretch, with the one-more note. %1$@ the marker's time, %2$@ stacked time. Suggested en: 'Next marker: %1$@ · +%2$@ stacked · one more focus'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "つぎの一里塚　%1$@・+%2$@ 積みました・あと1本"
+          }
+        }
+      }
+    },
+    "つぎの一里塚　%@・あと%@" : {
+      "comment" : "Home's next-target line, second half of the stretch. %1$@ the marker's time, %2$@ time left (4時間50分). Suggested en: 'Next marker: %1$@ · %2$@ to go'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "つぎの一里塚　%1$@・あと%2$@"
+          }
+        }
+      }
+    },
+    "つぎの一里塚　%@・あと%@・あと1本" : {
+      "comment" : "Home's next-target line, second half of the stretch, with the one-more note. %1$@ the marker's time, %2$@ time left. Suggested en: 'Next marker: %1$@ · %2$@ to go · one more focus'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "つぎの一里塚　%1$@・あと%2$@・あと1本"
+          }
+        }
+      }
+    },
+    "つぎの一里塚　%@・あと1本" : {
+      "comment" : "Home's next-target line with D11's one-more note. %@ the marker's time. Suggested en: 'Next marker: %@ · one more focus'"
+    },
+    "つぎの名所　%@・%@" : {
+      "comment" : "Home's next-target line: the next landmark (名所, suggested en 'landmark'). %1$@ its weight comparison (米俵1俵), %2$@ its time (100時間). Suggested en: 'Next landmark: %1$@ · %2$@'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "つぎの名所　%1$@・%2$@"
+          }
+        }
+      }
+    },
+    "つぎの名所　%@・%@・+%@ 積みました" : {
+      "comment" : "Home's next-target line, first half of the stretch: what was stacked since the last landmark or milestone marker. %1$@ comparison, %2$@ time, %3$@ stacked time (3時間10分). Suggested en: 'Next landmark: %1$@ · %2$@ · +%3$@ stacked'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "つぎの名所　%1$@・%2$@・+%3$@ 積みました"
+          }
+        }
+      }
+    },
+    "つぎの名所　%@・%@・+%@ 積みました・あと1本" : {
+      "comment" : "Home's next-target line, first half of the stretch, with the one-more note. %1$@ comparison, %2$@ time, %3$@ stacked time. Suggested en: 'Next landmark: %1$@ · %2$@ · +%3$@ stacked · one more focus'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "つぎの名所　%1$@・%2$@・+%3$@ 積みました・あと1本"
+          }
+        }
+      }
+    },
+    "つぎの名所　%@・%@・あと%@" : {
+      "comment" : "Home's next-target line, second half of the stretch: time left to the landmark. %1$@ comparison, %2$@ time, %3$@ time left (4時間50分). Suggested en: 'Next landmark: %1$@ · %2$@ · %3$@ to go'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "つぎの名所　%1$@・%2$@・あと%3$@"
+          }
+        }
+      }
+    },
+    "つぎの名所　%@・%@・あと%@・あと1本" : {
+      "comment" : "Home's next-target line, second half of the stretch, with the one-more note. %1$@ comparison, %2$@ time, %3$@ time left. Suggested en: 'Next landmark: %1$@ · %2$@ · %3$@ to go · one more focus'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "つぎの名所　%1$@・%2$@・あと%3$@・あと1本"
+          }
+        }
+      }
+    },
+    "つぎの名所　%@・%@・あと1本" : {
+      "comment" : "Home's next-target line with D11's one-more note: one focus of the chosen length reaches it. %1$@ comparison, %2$@ time. Suggested en: 'Next landmark: %1$@ · %2$@ · one more focus'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "つぎの名所　%1$@・%2$@・あと1本"
+          }
+        }
+      }
+    },
     "どんな成果だった？" : {
       "comment" : "Achievement sheet heading above the kinds of achievement",
       "localizations" : {
@@ -1282,6 +1489,9 @@
         }
       }
     },
+    "はじめての1時間" : {
+      "comment" : "Weight Journey (重さの旅) landmark (名所) at 1 hour. Suggested en: 'Your First Hour'."
+    },
     "ほか%lld件" : {
       "comment" : "VoiceOver, crystal card: how many more themes the crystal holds",
       "localizations" : {
@@ -1298,6 +1508,9 @@
           }
         }
       }
+    },
+    "ほかに %@" : {
+      "comment" : "Completion card, under the Weight Journey chip: the other landmarks or milestone markers this focus also reached. %@ is a list (5時間・◇ 10時間). Suggested en: 'Also: %@'"
     },
     "まだ空っぽ" : {
       "comment" : "Empty jar at accessibility text sizes: title",
@@ -1350,6 +1563,12 @@
         }
       }
     },
+    "りんご1個ほど" : {
+      "comment" : "Weight Journey comparison for 250g (名所 at 25 minutes). Suggested en: 'About an apple'."
+    },
+    "アフリカゾウ（オス）%lld頭ほど" : {
+      "comment" : "Weight Journey comparison every 10,000 hours (6t per elephant). %lld is the number of adult male African elephants. Suggested en: 'About one bull African elephant' / 'About %lld bull African elephants' (plural variation)."
+    },
     "アプリの時間を積む" : {
       "comment" : "Home menu row: open the Screen Time settings",
       "localizations" : {
@@ -1367,6 +1586,39 @@
         }
       }
     },
+    "オンにしました" : {
+      "comment" : "First completion card: the daily reminder was just turned on. en: 'Turned on'"
+    },
+    "オンにする" : {
+      "comment" : "First completion card: the pill that turns the offered daily reminder on. en: 'Turn on'"
+    },
+    "キャベツ1玉ほど" : {
+      "comment" : "Weight Journey comparison for 1.2kg (名所 at 2 hours). Suggested en: 'About a head of cabbage'."
+    },
+    "キリン1頭ほど" : {
+      "comment" : "Weight Journey comparison for 1.2t (名所 at 2,000 hours). Suggested en: 'About a giraffe'."
+    },
+    "コウテイペンギン1羽ほど" : {
+      "comment" : "Weight Journey comparison for 30kg (名所 at 50 hours). Suggested en: 'About an emperor penguin'."
+    },
+    "コーギー1頭ほど" : {
+      "comment" : "Weight Journey comparison for 12kg (名所 at 20 hours). Suggested en: 'About a corgi'."
+    },
+    "サケ1尾ほど" : {
+      "comment" : "Weight Journey comparison for 3kg (名所 at 5 hours): one chum salmon. Suggested en: 'About a salmon'."
+    },
+    "ザトウクジラ1頭ほど" : {
+      "comment" : "Weight Journey sub-comparison under 'five elephants' (30t, 50,000 hours). Suggested en: 'About a humpback whale'."
+    },
+    "シマウマ1頭ほど" : {
+      "comment" : "Weight Journey comparison for 300kg (名所 at 500 hours). Suggested en: 'About a zebra'."
+    },
+    "シロナガスクジラの赤ちゃん1頭ほど" : {
+      "comment" : "Weight Journey comparison for 3t (名所 at 5,000 hours): a newborn blue whale calf. Suggested en: 'About a newborn blue whale'."
+    },
+    "ジャイアントパンダ1頭ほど" : {
+      "comment" : "Weight Journey comparison for 120kg (名所 at 200 hours). Suggested en: 'About a giant panda'."
+    },
     "スクロール" : {
       "comment" : "Custom focus length segment: pick the minutes and seconds on wheels",
       "localizations" : {
@@ -1383,6 +1635,9 @@
           }
         }
       }
+    },
+    "ゾウ%lld頭ぶん" : {
+      "comment" : "Weight Journey (重さの旅) landmark (名所) every 10,000 hours (6t each). %lld is the number of elephants (1, 2, 3…). Suggested en: 'One Elephant' / '%lld Elephants' (plural variation)."
     },
     "タイマーを使わずに集中した時間を、あとから瓶に積めます。" : {
       "comment" : "Manual-entry sheet introduction",
@@ -1417,6 +1672,9 @@
           }
         }
       }
+    },
+    "タップすると、毎日のリマインダーをこの時刻でオンにします。通知の許可を求めることがあります" : {
+      "comment" : "VoiceOver hint on the first completion card's reminder offer"
     },
     "テーマ" : {
       "comment" : "The word theme, alone: the caption above the sheets' theme menu, the manual-entry confirmation row, and the stand-in for a missing theme name",
@@ -1622,6 +1880,9 @@
         }
       }
     },
+    "ポモジェムPro" : {
+      "comment" : "Eyebrow over the custom-duration sheet: the product name, as on the paywall; keep its case"
+    },
     "ポモジェムProの説明を開きます" : {
       "comment" : "VoiceOver hint on the fusion sheet's Pro month-label link",
       "localizations" : {
@@ -1673,6 +1934,15 @@
         }
       }
     },
+    "リマインダーの提案を閉じる" : {
+      "comment" : "VoiceOver: dismisses the first completion card's reminder offer"
+    },
+    "リマインダーはオンにしましたが、通知を予約できませんでした。設定で確かめてください。" : {
+      "comment" : "First completion card: the reminder switch was saved but iOS did not book the notification"
+    },
+    "リマインダーを保存できませんでした。設定からも選べます。" : {
+      "comment" : "First completion card: the reminder could not be saved"
+    },
     "・ 記録 100% 保持" : {
       "comment" : "Fusion sheet pill after 10 → 1: every record is kept",
       "localizations" : {
@@ -1706,6 +1976,9 @@
           }
         }
       }
+    },
+    "一里塚 %@" : {
+      "comment" : "Weight Journey: a milestone marker (一里塚, one every 10 hours; suggested en 'milestone marker') named in a sentence. %@ its time (30時間). Suggested en: 'the %@ marker'"
     },
     "下のボタンから、最初のテーマを追加しよう。" : {
       "comment" : "Empty jar before any theme exists",
@@ -1741,6 +2014,9 @@
         }
       }
     },
+    "乳牛1頭ほど" : {
+      "comment" : "Weight Journey comparison for 600kg (名所 at 1,000 hours): a Holstein cow. Suggested en: 'About a dairy cow'."
+    },
     "今の瓶をGIFでシェアする" : {
       "comment" : "VoiceOver label of the completion card's GIF share button",
       "localizations" : {
@@ -1775,6 +2051,9 @@
         }
       }
     },
+    "今の瓶をカードにして共有できます。" : {
+      "comment" : "VoiceOver announcement: the completion card's share button is available"
+    },
     "今の瓶をカードにする共有ボタンが利用できます" : {
       "comment" : "VoiceOver announcement: the completion card now offers sharing the jar as a card",
       "localizations" : {
@@ -1791,6 +2070,9 @@
           }
         }
       }
+    },
+    "今回の %@ は保存済みです。これまでの合計は確認が済むと表示します。" : {
+      "comment" : "Completion card for an old receipt while iCloud is checked: %@ is the mass this focus added (+250g)"
     },
     "今回の +%@ は保存済みです。これまでの合計は確認が済むと表示します。" : {
       "comment" : "Completion card while iCloud is checked: this focus's mass (+250g) is saved; the total shows once the check is done",
@@ -1809,6 +2091,9 @@
         }
       }
     },
+    "今回の記録は保存済みです。これまでの合計は確認が済むと表示します。" : {
+      "comment" : "VoiceOver announcement while iCloud is checked: this focus is saved; the totals follow"
+    },
     "今回は%@、標準換算は%@です。" : {
       "comment" : "VoiceOver, completion card: the mass this focus added, then the same in standard units",
       "localizations" : {
@@ -1826,68 +2111,36 @@
         }
       }
     },
-    "今週 %@ ・ 完走%lld回" : {
-      "comment" : "Completion card heading line: this week's measured mass, timers completed this week",
+    "今週のタイマー完走は%lld回です。回数は時間の価値とは別です。" : {
+      "comment" : "Completion card 「しくみ」: timer completions this calendar week, a frequency cue only. %lld is the count"
+    },
+    "今週の実測 %@" : {
+      "comment" : "Completion card: this calendar week's measured focus time (timer and Screen Time). en: 'This week, measured: %@'"
+    },
+    "今週の実測 %@・自己申告 %@" : {
+      "comment" : "Completion card: this calendar week's measured focus time, then its self-reported focus time. en: 'This week, measured: %1$@ · self-reported: %2$@'",
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This week: %1$@ · %2$lld completed"
-          }
-        },
         "ja" : {
           "stringUnit" : {
-            "state" : "translated",
-            "value" : "今週 %@ ・ 完走%lld回"
+            "state" : "new",
+            "value" : "今週の実測 %1$@・自己申告 %2$@"
           }
         }
       }
     },
-    "今週の完走%lld回（時間の価値とは別）" : {
-      "comment" : "Completion card heading line for an old receipt without mass: timers completed this week",
+    "今週の実測は%@、自己申告は%@。" : {
+      "comment" : "VoiceOver: this week's measured, then self-reported, focus time on the completion card",
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld completed this week (separate from the value of your time)"
-          }
-        },
         "ja" : {
           "stringUnit" : {
-            "state" : "translated",
-            "value" : "今週の完走%lld回（時間の価値とは別）"
+            "state" : "new",
+            "value" : "今週の実測は%1$@、自己申告は%2$@。"
           }
         }
       }
     },
-    "今週の完走した回数%lld回。回数は時間の価値とは別です" : {
-      "comment" : "VoiceOver, completion card for an old receipt: timers completed this week",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld completed session this week. The count is separate from the value of your time"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld completed sessions this week. The count is separate from the value of your time"
-                }
-              }
-            }
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "今週の完走した回数%lld回。回数は時間の価値とは別です"
-          }
-        }
-      }
+    "今週の実測は%@。" : {
+      "comment" : "VoiceOver: this week's measured focus time on the completion card"
     },
     "今週・時間の核・結晶・年月の瓶" : {
       "comment" : "Home menu row detail: what 積み上がり holds",
@@ -1922,6 +2175,9 @@
           }
         }
       }
+    },
+    "休憩、共有、または閉じるを選べます。しくみで時間の核と結晶の進みを確認できます" : {
+      "comment" : "VoiceOver hint on the completion card heading while the share button shows"
     },
     "休憩の提案を閉じる" : {
       "comment" : "VoiceOver label of the completion card's close button",
@@ -1973,6 +2229,9 @@
           }
         }
       }
+    },
+    "休憩または閉じるを選べます。しくみで時間の核と結晶の進みを確認できます" : {
+      "comment" : "VoiceOver hint on the completion card heading"
     },
     "休憩を開始できませんでした。もう一度お試しください" : {
       "comment" : "Toast: the offered break could not start",
@@ -2297,6 +2556,9 @@
         }
       }
     },
+    "刻印" : {
+      "comment" : "Fusion sheet tile title for Pro: the month engraved on the crystal. en: 'Engraving'"
+    },
     "前回使った時間として保存できませんでした" : {
       "comment" : "Toast: the length of the focus just started could not be saved as the last-used length",
       "localizations" : {
@@ -2382,6 +2644,9 @@
         }
       }
     },
+    "卵10個ほど" : {
+      "comment" : "Weight Journey comparison for 600g (名所 at 1 hour): ten M-size hen's eggs. Suggested en: 'About 10 eggs'."
+    },
     "取り消しました。瓶には積んでいません" : {
       "comment" : "Toast after undoing a manual entry",
       "localizations" : {
@@ -2398,6 +2663,20 @@
           }
         }
       }
+    },
+    "名所 %@・%@" : {
+      "comment" : "Weight Journey: a landmark (名所) named in a sentence. %1$@ its comparison (米俵1俵), %2$@ its time (100時間). Suggested en: 'the %1$@ landmark (%2$@)'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "名所 %1$@・%2$@"
+          }
+        }
+      }
+    },
+    "大玉スイカ1玉ほど" : {
+      "comment" : "Weight Journey comparison for 6kg (名所 at 10 hours). Suggested en: 'About a large watermelon'."
     },
     "完走した回数%lld回。回数は時間の価値とは別です" : {
       "comment" : "VoiceOver, completion card: timers completed this week, which says nothing about the value of the time",
@@ -2610,8 +2889,17 @@
         }
       }
     },
+    "新しい結晶。その下に、もとになった%lld個の結晶" : {
+      "comment" : "VoiceOver: the fusion sheet art, a larger crystal over its source crystals. %lld is 10"
+    },
+    "新しい結晶。その下に、もとになった%lld粒" : {
+      "comment" : "VoiceOver: the fusion sheet art, a new ×10 crystal over its source gems. %lld is 10"
+    },
+    "明日もこの時間に？" : {
+      "comment" : "First completion card: optional offer of a daily reminder at this time. en: 'Same time tomorrow?'"
+    },
     "時間" : {
-      "comment" : "Manual entry confirmation row: the self-reported time",
+      "comment" : "Fusion sheet tile title: the focus time the crystal holds. en: 'Time'",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2623,6 +2911,31 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "時間"
+          }
+        }
+      }
+    },
+    "時間の核が生まれました。これからは核が、積み上げた時間の重さを表します。" : {
+      "comment" : "Completion card, once: this focus brought the first time core (without a fusion). en: 'Your time core is born. From now on it shows the weight of the time you have built up.'"
+    },
+    "時間の核が育ち、%lld段目になりました。集中した時間があと%@たまると、さらに育ちます" : {
+      "comment" : "Completion card 「しくみ」: this focus grew the time core. %1$lld is its new level (the jar labels it 時間の核・二段目…), %2$@ the focus time until it grows again. en: 'Your time core grew to level %1$lld. After %2$@ more of focus, it grows again'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "時間の核が育ち、%1$lld段目になりました。集中した時間があと%2$@たまると、さらに育ちます"
+          }
+        }
+      }
+    },
+    "時間の核の%lld段目まで あと%@" : {
+      "comment" : "Completion card 「しくみ」: focus time left until the time core's next level. %1$lld is the level, %2$@ a duration",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "時間の核の%1$lld段目まで あと%2$@"
           }
         }
       }
@@ -2643,6 +2956,18 @@
           }
         }
       }
+    },
+    "時間の核の進みを確認しています" : {
+      "comment" : "Completion card 「しくみ」 while the lifetime total is being checked"
+    },
+    "時間の核は、粒の数ではなく積み上げた時間で進みます。次へ急ぐ必要はありません。" : {
+      "comment" : "Fusion sheet 「しくみ」: the time core counts time, not gems; no need to hurry"
+    },
+    "時間の核は、粒の数ではなく集中した時間で進みます。25分が1.0標準単位で、今回は%@標準単位です。" : {
+      "comment" : "Completion card 「しくみ」: the time core counts time, not gems; 25 minutes is one standard unit. %@ is this focus in standard units (1.0)"
+    },
+    "時間の核まで あと%@" : {
+      "comment" : "Completion card 「しくみ」: focus time left until the first time core. %@ is a duration"
     },
     "時間の選び方" : {
       "comment" : "Custom focus length: label of the type/scroll segmented control",
@@ -2712,6 +3037,9 @@
         }
       }
     },
+    "最初の一粒" : {
+      "comment" : "Weight Journey (重さの旅) landmark (名所) at 25 minutes. Suggested en: 'First Gem'."
+    },
     "最近のカスタム時間" : {
       "comment" : "Home length menu section: recently used custom lengths (Pro)",
       "localizations" : {
@@ -2762,6 +3090,18 @@
           }
         }
       }
+    },
+    "毎日 %@ にお知らせします。設定でいつでも変えられます。" : {
+      "comment" : "First completion card after the reminder was turned on. %@ is a time of day. en: 'I'll remind you daily at %@. You can change this in Settings.'"
+    },
+    "毎日 %@ のリマインダー" : {
+      "comment" : "First completion card, under 「明日もこの時間に？」: the reminder a tap would turn on (it is off). %@ is a time of day (7:30). en: 'Daily reminder at %@'"
+    },
+    "毎日 %@ のリマインダー。今はオフです" : {
+      "comment" : "VoiceOver value of the first completion card's reminder offer. %@ is a time of day"
+    },
+    "毎日のリマインダーは、すでにオンです。時刻は設定で変えられます。" : {
+      "comment" : "First completion card: the daily reminder was already on, so the offer changed nothing"
     },
     "満点・試験合格・納品・公開などの節目を、集中時間とは別のひとまわり大きな記念石として残せます。" : {
       "comment" : "Achievement sheet introduction: what a milestone stone is for",
@@ -2978,6 +3318,9 @@
           }
         }
       }
+    },
+    "確認" : {
+      "comment" : "Eyebrow over the manual-entry confirmation card"
     },
     "確認して積む" : {
       "comment" : "Manual entry: the button that saves the entry",
@@ -3212,6 +3555,21 @@
         }
       }
     },
+    "米俵1俵" : {
+      "comment" : "Weight Journey comparison for 60kg (名所 at 100 hours). Exactly 60kg by definition, so no 'about'. Needs a different object in English (see Docs/WeightJourneyComparisons.md); literal en: 'One rice bale'."
+    },
+    "粒" : {
+      "comment" : "Fusion sheet tile title: how many gems the crystal holds. en: 'Gems'"
+    },
+    "粒は1回の完走につき1つです。10粒そろうと、瓶の中でひとつの結晶にまとまります（記録と重さはそのまま）。次の結晶まで あと%lld粒。" : {
+      "comment" : "Completion card 「しくみ」: ten gems fuse into one crystal; %lld gems to the next crystal"
+    },
+    "粒は1回の完走につき1つです。この一粒で10粒がそろい、瓶の中でひとつの結晶になります。記録と重さはそのままです。" : {
+      "comment" : "Completion card 「しくみ」: this gem completes ten, which fuse into one crystal; nothing is lost"
+    },
+    "粒は1回の完走につき1つです。結晶までの数は、確認が済むと表示します。" : {
+      "comment" : "Completion card 「しくみ」 while the gem count is being checked"
+    },
     "粒数・質量など、保存済みの内訳" : {
       "comment" : "VoiceOver, crystal card of an older crystal without colors: what its details hold",
       "localizations" : {
@@ -3263,6 +3621,17 @@
         }
       }
     },
+    "累計%@、集中%lld粒、記念石%@個" : {
+      "comment" : "VoiceOver, menu metrics: lifetime mass, focus count, achievement stone count",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "累計%1$@、集中%2$lld粒、記念石%3$@個"
+          }
+        }
+      }
+    },
     "累計は確認が済むと表示します。" : {
       "comment" : "VoiceOver, menu metrics while iCloud is checked: the lifetime total shows once the check is done",
       "localizations" : {
@@ -3281,7 +3650,7 @@
       }
     },
     "結晶" : {
-      "comment" : "Fusion sheet stat title above the crystal's size (×10)",
+      "comment" : "Fusion sheet tile title: the crystal's size (×10). en: 'Crystal'",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3446,6 +3815,12 @@
         }
       }
     },
+    "背景" : {
+      "comment" : "Eyebrow over the menu card 集中する空間 (Home background)"
+    },
+    "自己申告" : {
+      "comment" : "Eyebrow over the manual-entry sheet title 手動で積む: the entry counts as self-reported"
+    },
     "自己申告はこの端末で1日3回までです。" : {
       "comment" : "Manual entry error: self-reported time can be added at most three times a day on this device",
       "localizations" : {
@@ -3531,6 +3906,9 @@
         }
       }
     },
+    "虹%lld" : {
+      "comment" : "Completion card: rainbow gems among a long focus's draws. %lld is the count. en: 'Rainbow %lld'"
+    },
     "虹の粒、着地。" : {
       "comment" : "Completion card title once a rainbow gem has landed",
       "localizations" : {
@@ -3566,7 +3944,7 @@
       }
     },
     "記念石" : {
-      "comment" : "Home menu metric caption: achievement stone count",
+      "comment" : "Eyebrow over the achievement sheet question どんな成果だった？\nHome menu metric caption: achievement stone count",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3809,6 +4187,9 @@
         }
       }
     },
+    "設定を開く" : {
+      "comment" : "Opens the iOS notification settings for PomoGem. en: 'Open Settings'"
+    },
     "設定情報を読み込めませんでした。もう一度お試しください。" : {
       "comment" : "Manual entry error: the app's settings could not be read",
       "localizations" : {
@@ -3842,6 +4223,15 @@
           }
         }
       }
+    },
+    "説明の表示を切り替えます" : {
+      "comment" : "VoiceOver hint: toggles the 「しくみ」 disclosure"
+    },
+    "通常%lld" : {
+      "comment" : "Completion card: ordinary gems among a long focus's draws. %lld is the count. en: 'Standard %lld'"
+    },
+    "通知がオフになっています。設定で許可したあと、ここでもう一度「オンにする」を押せます。" : {
+      "comment" : "First completion card when iOS notifications are off for PomoGem; after allowing them the offer returns"
     },
     "進行中の集中があるため、新しい集中は始めませんでした" : {
       "comment" : "Toast: a widget, link or Siri asked to start a focus while another one still needs attention",
@@ -3928,6 +4318,29 @@
         }
       }
     },
+    "重さの旅" : {
+      "comment" : "Title of the large-text card under the jar that repeats the Weight Journey (重さの旅) next-target line. Suggested en: 'Weight Journey'"
+    },
+    "重さの旅、%@" : {
+      "comment" : "VoiceOver: the large-text Weight Journey card. %@ is the next-target line (つぎの一里塚　80時間・あと4時間50分). Suggested en: 'Weight Journey, %@'"
+    },
+    "重さの旅を読み込みました。いまは%@、つぎは%@です" : {
+      "comment" : "Home chip shown once on a device that reads the Weight Journey (重さの旅, suggested en 'Weight Journey') for the first time: a new device, a reinstall or the first run after the update. %1$@ what is reached (5時間, 一里塚 30時間), %2$@ the next target (一里塚 80時間, 名所 米俵1俵・100時間). Suggested en: 'Weight Journey loaded. You are at %1$@; next is %2$@.'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "重さの旅を読み込みました。いまは%1$@、つぎは%2$@です"
+          }
+        }
+      }
+    },
+    "重さはそのまま %@" : {
+      "comment" : "Fusion sheet subline: the crystal weighs what its gems did. %@ is a mass (2.50kg). en: 'Same weight: %@'"
+    },
+    "金%lld" : {
+      "comment" : "Completion card: gold gems among a long focus's draws. %lld is the count. en: 'Gold %lld'"
+    },
     "金の粒、着地。" : {
       "comment" : "Completion card title once a gold gem has landed",
       "localizations" : {
@@ -3962,6 +4375,9 @@
         }
       }
     },
+    "閉じています" : {
+      "comment" : "VoiceOver value: the 「しくみ」 disclosure is closed"
+    },
     "閉じると、一粒が瓶に落ちます。" : {
       "comment" : "Completion card before the gem has dropped: closing the card drops it into the jar",
       "localizations" : {
@@ -3978,6 +4394,9 @@
           }
         }
       }
+    },
+    "開いています" : {
+      "comment" : "VoiceOver value: the 「しくみ」 disclosure is open"
     },
     "集中" : {
       "comment" : "Home menu metric caption: gems from focus sessions",
@@ -4025,6 +4444,9 @@
         }
       }
     },
+    "集中した時間があと%@たまると、時間の核はさらに育ちます" : {
+      "comment" : "Completion card 「しくみ」 when this focus brought the first time core (the card's face or the fusion sheet says so). %@ is the focus time until the core grows again. en: 'After %@ more of focus, your time core grows again'"
+    },
     "集中する空間" : {
       "comment" : "Home menu section title: the background atmosphere picker",
       "localizations" : {
@@ -4042,8 +4464,11 @@
         }
       }
     },
+    "集中を記録しました" : {
+      "comment" : "Completion card headline, shown after every finished focus. en: 'Focus recorded'"
+    },
     "集中を記録しました。" : {
-      "comment" : "Completion card title before the gem has dropped into the jar",
+      "comment" : "VoiceOver announcement: the completion card's headline, as a sentence",
       "localizations" : {
         "en" : {
           "stringUnit" : {

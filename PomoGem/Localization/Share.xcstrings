@@ -1471,6 +1471,9 @@
         }
       }
     },
+    "シェアカード" : {
+      "comment" : "Eyebrow over the share composer title 積み重ねを、動く一枚に"
+    },
     "写真に保存しています" : {
       "localizations" : {
         "en" : {
@@ -2070,6 +2073,9 @@
           }
         }
       }
+    },
+    "新機能" : {
+      "comment" : "Badge on the 動くGIF choice"
     },
     "瓶に積んだ集中 %@（%@）" : {
       "comment" : "Share sheet title for the GIF. Arguments: mass, focus time",

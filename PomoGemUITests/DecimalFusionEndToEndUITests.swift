@@ -58,7 +58,7 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
 
         startDemoFocus()
         stopCompletionAlertIfPresented(in: app)
-        let celebrationTitle = app.staticTexts["10粒を、ひとつに整理した"]
+        let celebrationTitle = app.staticTexts["fusion.celebration.title"]
         let dismissBreak = app.buttons["休憩の提案を閉じる"]
 
         XCTAssertTrue(
@@ -81,19 +81,21 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
             celebrationTitle.waitForExistence(timeout: 10),
             "Ten landed level-zero pebbles must present the first decimal-fusion celebration"
         )
-        XCTAssertTrue(app.staticTexts["2.5kg"].waitForExistence(timeout: 3))
-        let continuityCopy = app.staticTexts.matching(
-            NSPredicate(
-                format: "label CONTAINS %@ AND label CONTAINS %@ AND label CONTAINS %@",
-                "一粒ずつの時間",
-                "2.5kg",
-                "急ぐ必要はありません"
+        XCTAssertTrue(app.staticTexts["重さはそのまま 2.50kg"].waitForExistence(timeout: 3))
+        // product-05: the first ×10 made the time core too, so this sheet
+        // (and no later one) teaches it once.
+        XCTAssertTrue(app.staticTexts["fusion.celebration.core-birth"].exists)
+        XCTAssertFalse(app.staticTexts["LOSSLESS STORAGE"].exists)
+        // The mechanics sit behind 「しくみ」, and VoiceOver reads them whether
+        // it is open or not.
+        let continuityCopy = app.buttons["fusion.celebration.mechanics"]
+        XCTAssertTrue(continuityCopy.waitForExistence(timeout: 3))
+        for phrase in ["一粒ずつの時間", "2.50kg", "急ぐ必要はありません"] {
+            XCTAssertTrue(
+                continuityCopy.label.contains(phrase),
+                "The fusion explanation must preserve each effort, exact mass, and an unhurried next step: \(continuityCopy.label)"
             )
-        ).firstMatch
-        XCTAssertTrue(
-            continuityCopy.waitForExistence(timeout: 3),
-            "The fusion explanation must preserve each effort, exact mass, and an unhurried next step"
-        )
+        }
 
         app.buttons["この結晶をカードにする"].tap()
         XCTAssertTrue(app.navigationBars["カードにする"].waitForExistence(timeout: 8))
@@ -179,27 +181,34 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
             waitForCondition(timeout: 4) { self.app.buttons["瓶"].frame.height > jarHeightWithTip + 40 },
             "The jar must regain the tip row's height: before=\(jarHeightWithTip) after=\(app.buttons["瓶"].frame.height)"
         )
-        // The next tap shows the card over the upper jar. Since #47 the
-        // readout follows the bottle's mouth, lower on a stage taller than
-        // the bottle, and the card hangs under the readout, never above the
-        // former fixed 188 pt.
+        // The next tap shows the card under the jar, hanging under the
+        // bottle's base: over the jar it covered the time core and the pile
+        // (#47). The jar keeps its size, and the start button stays clear
+        // (`CrystalCardPlacementUITests` pins it on every phone).
+        let jarHeightAfterDetail = app.buttons["瓶"].frame.height
         tapCrystal(from: presentationProbe)
         XCTAssertTrue(
             inspectAggregate.waitForExistence(timeout: 3),
-            "After its detail, a tap shows the crystal's card over the jar"
+            "After its detail, a tap shows the crystal's card under the jar"
         )
+        XCTAssertTrue(waitForCondition(timeout: 3) { inspectAggregate.isHittable })
         let jarFrame = app.buttons["瓶"].frame
+        let launcherFrame = app.buttons["home.focus-launcher"].frame
+        // The stage can be taller than the bottle (17 Pro); every gem rests
+        // inside the bottle, so the card belongs under its base.
+        let bottle = try XCTUnwrap(probeRect("bottle", from: presentationProbe), "The probe reports the bottle")
         XCTAssertGreaterThanOrEqual(
             inspectAggregate.frame.minY,
-            jarFrame.minY + 187,
-            "Under the readout: card=\(inspectAggregate.frame) jar=\(jarFrame)"
+            bottle.maxY,
+            "Under the bottle: card=\(inspectAggregate.frame) bottle=\(bottle) jar=\(jarFrame)"
         )
         XCTAssertLessThanOrEqual(
             inspectAggregate.frame.maxY,
-            jarFrame.maxY,
-            "Inside the jar: card=\(inspectAggregate.frame) jar=\(jarFrame)"
+            launcherFrame.minY + 0.5,
+            "Above the start button: card=\(inspectAggregate.frame) start=\(launcherFrame)"
         )
-        saveScreenshot("crystal-card-over-jar")
+        XCTAssertEqual(jarFrame.height, jarHeightAfterDetail, accuracy: 0.5, "The card never resizes the jar")
+        saveScreenshot("crystal-card-under-jar")
         XCTAssertTrue(
             waitForCondition(timeout: 9) { !inspectAggregate.exists },
             "The card still closes by itself"
@@ -290,7 +299,7 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         XCTAssertTrue(dismissBreak.waitForExistence(timeout: 28))
         dismissBreak.tap()
 
-        let celebrationTitle = app.staticTexts["10粒を、ひとつに整理した"]
+        let celebrationTitle = app.staticTexts["fusion.celebration.title"]
         XCTAssertTrue(celebrationTitle.waitForExistence(timeout: 10))
         let hint = app.buttons["fusion.celebration.month-label-hint"]
         XCTAssertTrue(hint.waitForExistence(timeout: 4))
@@ -493,6 +502,12 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
     private func startDemoFocus() {
         XCTAssertTrue(demoLauncher.waitForExistence(timeout: 5))
         XCTAssertTrue(demoLauncher.isHittable)
+        // Home enables the start button only once the last gem's landing has
+        // settled; a tap before that is ignored and no focus starts.
+        XCTAssertTrue(
+            waitForCondition(timeout: 10) { self.demoLauncher.exists && self.demoLauncher.isEnabled },
+            "The start button must come back once the last gem has landed"
+        )
         demoLauncher.tap()
     }
 
@@ -612,6 +627,16 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
             }
             return id
         }
+    }
+
+    /// A frame the probe reports as "minX,minY,maxX,maxY" in window points.
+    private func probeRect(_ key: String, from probe: XCUIElement) -> CGRect? {
+        guard let rawValue = probe.value as? String,
+              let field = rawValue.split(separator: ";").first(where: { $0.hasPrefix("\(key)=") })
+        else { return nil }
+        let numbers = field.dropFirst(key.count + 1).split(separator: ",").compactMap { Double($0) }
+        guard numbers.count == 4 else { return nil }
+        return CGRect(x: numbers[0], y: numbers[1], width: numbers[2] - numbers[0], height: numbers[3] - numbers[1])
     }
 
     private func presentationSample(from probe: XCUIElement) throws -> PresentationSample {

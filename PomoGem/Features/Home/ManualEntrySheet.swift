@@ -135,7 +135,7 @@ struct ManualEntrySheet: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            SectionEyebrow(text: "SELF-REPORTED")
+            SectionEyebrow(text: String(localized: "自己申告", table: "Home", comment: "Eyebrow over the manual-entry sheet title 手動で積む: the entry counts as self-reported"))
             Text("手動で積む", tableName: "Home", comment: "Manual-entry sheet title")
                 .font(PomoGemTheme.brand(26))
                 .accessibilityAddTraits(.isHeader)
@@ -207,7 +207,7 @@ struct ManualEntrySheet: View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 4) {
-                    SectionEyebrow(text: "CONFIRM")
+                    SectionEyebrow(text: String(localized: "確認", table: "Home", comment: "Eyebrow over the manual-entry confirmation card"))
                     Text("この内容で積みますか？", tableName: "Home", comment: "Manual entry: heading of the confirmation card")
                         .font(PomoGemTheme.brand(21))
                         .accessibilityAddTraits(.isHeader)
@@ -229,8 +229,7 @@ struct ManualEntrySheet: View {
                     )
                     confirmationRow(
                         title: String(localized: "加算", table: "Home", comment: "Manual entry confirmation row: the mass it adds"),
-                        // Ungrouped, as this row has always printed it (「+3000g」).
-                        value: "+\(MassText.grams(String(duration.grams)))"
+                        value: MassText.addedGrams(duration.grams)
                     )
                     confirmationRow(
                         title: String(localized: "保存後", table: "Home", comment: "Manual entry confirmation row: the allowance left once saved"),
@@ -480,8 +479,7 @@ private struct ManualButton: View {
         Button(action: action) {
             VStack(spacing: 5) {
                 Text(title).font(.system(.headline, design: .rounded, weight: .bold))
-                // Grouped, as this button has always printed it (「+3,000g」).
-                Text(verbatim: "+\(MassText.grams(grams.formatted()))")
+                Text(verbatim: MassText.addedGrams(grams))
                     .font(.caption)
                     .foregroundStyle(
                         selected

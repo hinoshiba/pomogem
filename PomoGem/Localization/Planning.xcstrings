@@ -351,19 +351,13 @@
         }
       }
     },
-    "1年を平均365.25日として週回数を換算し、1回の完走を1粒、集中1分を%lldgとして計算します。2.50kgごとの瓶の満杯、長期の質量段階、瓶の光は実画面と同じ計算です。10個ずつまとめるため、長期間でも描画する可動体は%lld体以内です。" : {
-      "comment" : "Plan: calculation assumptions; the arguments are grams per minute and the physics body limit",
+    "1年を平均365.25日として週回数を換算し、1回の完走を1粒、集中1分を%@として計算します。2.50kgごとの瓶の満杯、長期の質量段階、瓶の光は実画面と同じ計算です。10個ずつまとめるため、長期間でも描画する可動体は%lld体以内です。" : {
+      "comment" : "Plan: calculation assumptions; the arguments are the mass of one minute (10g) and the physics body limit",
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Weekly sessions are converted with an average year of 365.25 days. Each completed session is 1 gem, and each minute of focus is %1$lld g. A full jar every 2.50 kg, the long-term mass stages and the jar's light are calculated just as on the real screens. Gems are grouped in tens, so even a long plan draws no more than %2$lld moving pieces."
-          }
-        },
         "ja" : {
           "stringUnit" : {
-            "state" : "translated",
-            "value" : "1年を平均365.25日として週回数を換算し、1回の完走を1粒、集中1分を%lldgとして計算します。2.50kgごとの瓶の満杯、長期の質量段階、瓶の光は実画面と同じ計算です。10個ずつまとめるため、長期間でも描画する可動体は%lld体以内です。"
+            "state" : "new",
+            "value" : "1年を平均365.25日として週回数を換算し、1回の完走を1粒、集中1分を%1$@として計算します。2.50kgごとの瓶の満杯、長期の質量段階、瓶の光は実画面と同じ計算です。10個ずつまとめるため、長期間でも描画する可動体は%2$lld体以内です。"
           }
         }
       }
@@ -516,6 +510,9 @@
           }
         }
       }
+    },
+    "ペース" : {
+      "comment" : "Eyebrow over 続け方を選ぶ (focuses per week)"
     },
     "予定リズム" : {
       "comment" : "Plan results: how many sessions the plan completes",
@@ -787,6 +784,9 @@
         }
       }
     },
+    "未来の瓶" : {
+      "comment" : "Eyebrow over the previewed month (e.g. 3年後) of the plan timeline"
+    },
     "次の長期の質量段階まで" : {
       "comment" : "VoiceOver: the long-term milestone bar, progress to the next stage",
       "localizations" : {
@@ -887,22 +887,11 @@
         }
       }
     },
-    "瓶は2.50kg（集中250分相当）ごとに必ず満ち、満杯の光を見届けてから次の1杯へ進みます。累計は消えず、2.50kg → 25kg → 250kg…の長期段階として別に残ります。回数ではなく、集中1分＝%lldgで両方が進みます。" : {
-      "comment" : "Plan: how the jar fills; the argument is grams per minute",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Your jar always fills every 2.50 kg (250 min of focus), and after its full-jar glow it moves on to the next jar. Your total never disappears: it stays separately as long-term stages of 2.50 kg → 25 kg → 250 kg and beyond. Both grow with focus time, not with the number of sessions: 1 minute of focus = %lld g."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "瓶は2.50kg（集中250分相当）ごとに必ず満ち、満杯の光を見届けてから次の1杯へ進みます。累計は消えず、2.50kg → 25kg → 250kg…の長期段階として別に残ります。回数ではなく、集中1分＝%lldgで両方が進みます。"
-          }
-        }
-      }
+    "瓶の杯数" : {
+      "comment" : "Eyebrow over how many times the jar has filled at the previewed month"
+    },
+    "瓶は2.50kg（集中250分相当）ごとに必ず満ち、満杯の光を見届けてから次の1杯へ進みます。累計は消えず、2.50kg → 25kg → 250kg…の長期段階として別に残ります。回数ではなく、集中1分＝%@で両方が進みます。" : {
+      "comment" : "Plan: how the jar fills; the argument is the mass of one minute (10g)"
     },
     "確認が済むと、今日の瓶の続きから表示します" : {
       "comment" : "Bottle-cycle caption while Home re-counts today's jar",
@@ -1052,6 +1041,9 @@
         }
       }
     },
+    "試算" : {
+      "comment" : "Eyebrow over この計画で積む分 (simulated mass)"
+    },
     "試算の前提" : {
       "comment" : "Plan card title: the assumptions behind the numbers",
       "localizations" : {
@@ -1068,6 +1060,9 @@
           }
         }
       }
+    },
+    "試算・保存されません" : {
+      "comment" : "Eyebrow over これは予測です: the plan is a simulation and nothing is saved"
     },
     "週%lld回" : {
       "comment" : "Plan value: focus sessions per week",

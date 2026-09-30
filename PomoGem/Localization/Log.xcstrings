@@ -86,6 +86,17 @@
         }
       }
     },
+    "%@、%@、%@、プラス%lldグラム%@、%@" : {
+      "comment" : "VoiceOver history row: theme, gem kind, how recorded, grams added, optional rare summary, date",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@、%2$@、%3$@、プラス%4$lldグラム%5$@、%6$@"
+          }
+        }
+      }
+    },
     "%@、%@、%lldパーセント" : {
       "comment" : "VoiceOver theme row: theme name, time, share in percent",
       "localizations" : {
@@ -256,6 +267,17 @@
         }
       }
     },
+    "%@・%@" : {
+      "comment" : "History row at large text sizes: mass added (+250g), then how it was recorded",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@・%2$@"
+          }
+        }
+      }
+    },
     "%@・%lld%%" : {
       "comment" : "Theme row at large text sizes: time, then share of the period in percent",
       "localizations" : {
@@ -365,39 +387,8 @@
         }
       }
     },
-    "+%lldg" : {
-      "comment" : "Grams one record added to the jar",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "+%lld g"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "+%lldg"
-          }
-        }
-      }
-    },
-    "+%lldg・%@" : {
-      "comment" : "History row at large text sizes: mass added, then how it was recorded",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "+%1$lld g · %2$@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "+%lldg・%@"
-          }
-        }
-      }
+    "%lld粒" : {
+      "comment" : "Gem count"
     },
     "MONTHLY WRAPPED" : {
       "comment" : "Eyebrow above the Month in Review title (shown uppercased). en: 'Month in Review', the feature's name; never 'Wrapped'.",
@@ -665,6 +656,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "この日の記録、%@、%@、%@"
+          }
+        }
+      }
+    },
+    "この日の記録、%@、%lld粒、%lldグラム" : {
+      "comment" : "VoiceOver summary of a day: focus time, gem count, mass in grams",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "この日の記録、%1$@、%2$lld粒、%3$lldグラム"
           }
         }
       }
@@ -1891,7 +1893,7 @@
       }
     },
     "月の振り返り" : {
-      "comment" : "Log section title: the monthly Wrapped recaps",
+      "comment" : "Eyebrow over the month title of a Wrapped recap (2026年9月の瓶)\nLog section title: the monthly Wrapped recaps",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2435,6 +2437,9 @@
           }
         }
       }
+    },
+    "記念石" : {
+      "comment" : "Eyebrow over an achievement stone being edited"
     },
     "記念石の種類を変更できます" : {
       "comment" : "VoiceOver hint on the milestone's kind menu",

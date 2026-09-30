@@ -8,6 +8,9 @@ import SwiftUI
 struct JarEffectsSettingsSection: View {
     @AppStorage(JarEffectsIntensity.defaultsKey)
     private var intensity: JarEffectsIntensity = .standard
+    /// GemExperienceDesign §5.5: Home's one next-target line (重さの旅).
+    @AppStorage(WeightJourneyHomePreference.defaultsKey)
+    private var showsNextTarget = true
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -41,6 +44,23 @@ struct JarEffectsSettingsSection: View {
                     .foregroundStyle(PomoGemTheme.muted)
                     .accessibilityIdentifier("settings.effects-intensity.reduce-motion")
             }
+
+            Toggle(isOn: $showsNextTarget) {
+                SettingLabel(
+                    title: String(
+                        localized: "Home に次の目標を表示",
+                        table: "Settings",
+                        comment: "Settings toggle: show Home's one next-target line of the Weight Journey (重さの旅), the next milestone marker (一里塚) or landmark (名所). Suggested en: 'Show the next goal on Home'"
+                    ),
+                    subtitle: String(
+                        localized: "瓶の上に、つぎの一里塚か名所までを1行で表示します",
+                        table: "Settings",
+                        comment: "Settings toggle subtitle: Home shows one line above the jar with the next milestone marker (一里塚, every 10 hours) or landmark (名所). Suggested en: 'One line above the jar with the next marker or landmark'"
+                    ),
+                    symbol: "diamond"
+                )
+            }
+            .accessibilityIdentifier("settings.home-next-target")
         } header: {
             Text("瓶の表示", tableName: "Settings", comment: "Settings section header: how the jar is shown (Jar display)")
         } footer: {

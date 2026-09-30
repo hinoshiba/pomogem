@@ -1523,7 +1523,9 @@ struct LogView: View {
         return PomoGemCard {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 4) {
-                    SectionEyebrow(text: "MASS")
+                    // 記録's cards have no kicker: the English ones were
+                    // decoration, and in Japanese a kicker only repeated the
+                    // title (「質量」 over 「質量の推移」).
                     Text("質量の推移", tableName: "Log", comment: "Log section title: the chart of mass per day")
                         .pomogemSectionTitle()
                 }
@@ -1619,9 +1621,6 @@ struct LogView: View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 17) {
                 VStack(alignment: .leading, spacing: 4) {
-                    // The eyebrow is English in Japanese too; English says
-                    // "themes" (never "subjects").
-                    SectionEyebrow(text: String(localized: "SUBJECTS", table: "Log", comment: "Eyebrow above テーマの構成 (shown uppercased). en: 'Themes', never 'Subjects'."))
                     Text("テーマの構成", tableName: "Log", comment: "Log section title: how the period's mass splits by theme")
                         .pomogemSectionTitle()
                 }
@@ -1707,7 +1706,6 @@ struct LogView: View {
             PomoGemCard {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
-                        SectionEyebrow(text: "MILESTONES")
                         Text("記念石アーカイブ", tableName: "Log", comment: "Log section title: the milestone stones")
                             .pomogemSectionTitle()
                         Text(achievementArchiveDescription(count: stones.count))
@@ -1781,10 +1779,6 @@ struct LogView: View {
             PomoGemCard {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
-                        // Its own key: the same Japanese eyebrow sits over
-                        // Month in Review itself, where English names the
-                        // feature. Here the title below already does.
-                        SectionEyebrow(text: String(localized: "log.month-review.eyebrow", defaultValue: "MONTHLY WRAPPED", table: "Log", comment: "Eyebrow above the 月の振り返り (Month in Review) title on the Log card (shown uppercased). en: a category word like the other Log eyebrows (Mass, Themes, Milestones) that does not repeat the title; never 'Wrapped'."))
                         // Not 「月ごとの瓶」: that is 積み上がり's 年月 shelf, a
                         // different view (history-11).
                         Text("月の振り返り", tableName: "Log", comment: "Log section title: the monthly Wrapped recaps")
@@ -2400,8 +2394,8 @@ struct LogView: View {
 
     private func formatMass(_ grams: Int) -> String {
         grams >= 1_000
-            ? MassText.kilograms(String(format: "%.1f", Double(grams) / 1_000))
-            : MassText.grams("\(grams)")
+            ? MassText.kilograms(fromGrams: grams, fractionDigits: 1)
+            : MassText.grams(value: grams)
     }
 
     private func formatMinutes(_ minutes: Int) -> String {
@@ -2611,8 +2605,8 @@ struct LogAggregateArchiveItem: Identifiable, Equatable, Sendable {
 
     var formattedMass: String {
         grams >= 1_000
-            ? MassText.kilograms(String(format: "%.1f", Double(grams) / 1_000))
-            : MassText.grams("\(grams)")
+            ? MassText.kilograms(fromGrams: grams, fractionDigits: 1)
+            : MassText.grams(value: grams)
     }
 }
 
@@ -3132,7 +3126,7 @@ private struct AchievementEditorSheet: View {
             .shadow(color: Color(hex: kind.gemGlowHex).opacity(0.4), radius: 10)
             .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
-                SectionEyebrow(text: "MILESTONE")
+                SectionEyebrow(text: String(localized: "記念石", table: "Log", comment: "Eyebrow over an achievement stone being edited"))
                 Text(AchievementStone.sanitizedNote(note).isEmpty ? kind.title : AchievementStone.sanitizedNote(note))
                     .pomogemSectionTitle(size: 22)
                     .lineLimit(2)
