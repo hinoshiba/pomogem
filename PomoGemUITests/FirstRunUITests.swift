@@ -196,6 +196,40 @@ final class FirstRunUITests: XCTestCase {
         XCTAssertTrue(waitForLabel(picker, containing: "簿記2級"))
     }
 
+    /// device-verify-2 P9. On a 375 pt iPhone at the default text size the
+    /// fixed two-column grid broke 「資料作成」 and 「顧客対応」 in the middle
+    /// of the word. Every choice now stays on one line: two columns when the
+    /// widest fits in half the width, one otherwise. A wrapped name makes its
+    /// chip taller than the others.
+    func testThemeChoicesKeepEveryNameOnOneLineAtEveryTextSize() {
+        let names = ["英語", "数学", "国語", "理科", "社会", "企画", "開発", "資料作成", "顧客対応"]
+        for size in ["default", "xxxLarge", "ax5"] {
+            launchOnboarding(
+                accessibility5: size == "ax5",
+                launchArguments: size == "xxxLarge"
+                    ? ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryXXXL"]
+                    : []
+            )
+            let next = app.buttons["onboarding.next"]
+            XCTAssertTrue(next.waitForExistence(timeout: 8))
+            next.tap()
+            XCTAssertTrue(waitUntilEnabled(next))
+            next.tap()
+            XCTAssertTrue(app.staticTexts["最初のテーマを選ぶ"].waitForExistence(timeout: 4))
+            var heights: [String: CGFloat] = [:]
+            for name in names {
+                let chip = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name)).firstMatch
+                XCTAssertTrue(scrollUntilHittable(chip), "\(size): missing \(name)")
+                heights[name] = chip.frame.height
+                if name == "資料作成" { attachScreenshot("onboarding-page3-themes-\(size)") }
+            }
+            let tallest = heights.values.max() ?? 0
+            let shortest = heights.values.min() ?? 0
+            XCTAssertLessThanOrEqual(tallest - shortest, 1, "\(size): a name wrapped; heights \(heights)")
+            app.terminate()
+        }
+    }
+
     // MARK: - Onboarding at the largest text size (walk-edge-04 / walk-edge-10)
 
     func testOnboardingAtAX5KeepsEachPagesPointAboveThePinnedButton() {
@@ -321,8 +355,13 @@ final class FirstRunUITests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func launchOnboarding(accessibility5: Bool = false, extraEnvironment: [String: String] = [:]) {
+    private func launchOnboarding(
+        accessibility5: Bool = false,
+        extraEnvironment: [String: String] = [:],
+        launchArguments: [String] = []
+    ) {
         app = XCUIApplication()
+        app.launchArguments += launchArguments
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_RARE_REWARD_UNSELECTED"] = "1"

@@ -662,10 +662,13 @@ struct PomoGemHeroButtonStyle: ButtonStyle {
 struct SectionEyebrow: View {
     let text: String
     var foreground: Color = PomoGemTheme.amber
+    /// Off for the product name, which keeps its own case (「ポモジェムPro」,
+    /// never 「ポモジェムPRO」).
+    var isUppercased = true
     @ScaledMetric(relativeTo: .caption2) private var fontSize: CGFloat = 10
 
     var body: some View {
-        Text(text.uppercased())
+        Text(isUppercased ? text.uppercased() : text)
             .font(.system(size: fontSize, weight: .bold, design: .monospaced))
             .tracking(1.5)
             .foregroundStyle(foreground)

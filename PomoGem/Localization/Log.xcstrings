@@ -59,6 +59,17 @@
     "%@の記録を見る" : {
       "comment" : "VoiceOver action on the mass chart; the argument is a date such as 9月24日"
     },
+    "%@・%@" : {
+      "comment" : "History row at large text sizes: mass added (+250g), then how it was recorded",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@・%2$@"
+          }
+        }
+      }
+    },
     "%@・%lld%%" : {
       "comment" : "Theme row at large text sizes: time, then share of the period in percent",
       "localizations" : {
@@ -78,20 +89,6 @@
     },
     "%lld粒" : {
       "comment" : "Gem count"
-    },
-    "+%lldg" : {
-      "comment" : "Grams one record added to the jar"
-    },
-    "+%lldg・%@" : {
-      "comment" : "History row at large text sizes: mass added, then how it was recorded",
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "+%1$lldg・%2$@"
-          }
-        }
-      }
     },
     "iCloudの結晶を再集計中です。この端末で確認できた個別記録は引き続き表示しています。" : {
 
@@ -186,7 +183,7 @@
       "comment" : "Log: shown under 最近の記録 when the newest records could not be read"
     },
     "月の振り返り" : {
-      "comment" : "Log section title: the monthly Wrapped recaps"
+      "comment" : "Eyebrow over the month title of a Wrapped recap (2026年9月の瓶)\nLog section title: the monthly Wrapped recaps"
     },
     "月の記録へ戻る" : {
       "comment" : "Wrapped opened from a month in 年月: returns to that month's sheet"
@@ -208,6 +205,9 @@
     },
     "虹の粒" : {
       "comment" : "VoiceOver: a rainbow gem"
+    },
+    "記念石" : {
+      "comment" : "Eyebrow over an achievement stone being edited"
     },
     "記録を読み込み中" : {
       "comment" : "VoiceOver: Log is loading"

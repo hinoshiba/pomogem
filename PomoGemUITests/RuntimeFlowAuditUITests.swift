@@ -1931,6 +1931,16 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             waitForHittable(demoLauncherForVisualAudit, timeout: 6),
             "The demo launcher must be visible and operable before it is tapped"
         )
+        // Home enables the start button only once the last gem's landing has
+        // settled; a tap before that is ignored and no focus starts.
+        let enabled = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND isEnabled == true"),
+            object: demoLauncherForVisualAudit
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [enabled], timeout: 10), .completed,
+            "The start button must come back once the last gem has landed"
+        )
         demoLauncherForVisualAudit.tap()
 
         // A deliberately unselected migrated fixture may require the same
@@ -2022,14 +2032,15 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         (probe.value as? String) ?? probe.label
     }
 
-    /// The probe without `homeBodyEvaluations`. That field counts Home's
-    /// re-renders for HomeIdleRenderUITests, and closing a focus re-renders
-    /// Home, so comparing it made "the jar did not change" fail every time.
-    /// Every field about what the jar holds and shows is still compared.
+    /// The probe without Home's render counters (`homeBodyEvaluations`,
+    /// `homeLandings`, `homeBodyAtLanding`). They count Home's re-renders for
+    /// HomeIdleRenderUITests, and closing a focus re-renders Home, so
+    /// comparing them made "the jar did not change" fail every time. Every
+    /// field about what the jar holds and shows is still compared.
     private func jarPresentation(from probe: XCUIElement) -> String {
         presentationValue(from: probe)
             .split(separator: ";")
-            .filter { !$0.hasPrefix("homeBodyEvaluations=") }
+            .filter { !$0.hasPrefix("homeBody") && !$0.hasPrefix("homeLandings=") }
             .joined(separator: ";")
     }
 

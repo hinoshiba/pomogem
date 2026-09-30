@@ -118,6 +118,9 @@
     "ミュージックアプリで再生する音楽を選びます" : {
       "comment" : "VoiceOver hint: the timer music button opens the music list"
     },
+    "レア粒の扱い" : {
+      "comment" : "Eyebrow of the rare-gem choice asked before the first timer"
+    },
     "一時停止" : {
       "comment" : "Pause the Music app"
     },
@@ -129,6 +132,9 @@
     },
     "下から音楽を選ぶと再生が始まります。" : {
 
+    },
+    "休憩" : {
+      "comment" : "Timer ring status: the phase, before the percent left (休憩 · 35% 残り)"
     },
     "休憩が終わりました" : {
       "comment" : "Title of the system alarm when a break ends. Suggested English: Break is over"
@@ -165,6 +171,9 @@
     },
     "最大" : {
       "comment" : "Alarm strength option: also rings through the silent switch and as a system alarm. Suggested English: Maximum"
+    },
+    "完走" : {
+      "comment" : "Eyebrow over the gem dropping into the jar after a completed focus"
     },
     "未選択" : {
       "comment" : "VoiceOver value: this music is not chosen"
@@ -237,6 +246,9 @@
     },
     "長押しで音楽を選べます" : {
       "comment" : "VoiceOver hint: long press the timer music button to choose music"
+    },
+    "集中" : {
+      "comment" : "Timer ring status: the phase, before the percent left (集中 · 35% 残り)"
     },
     "集中を始めたら再生する" : {
 

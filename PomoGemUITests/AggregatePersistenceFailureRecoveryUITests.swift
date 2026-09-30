@@ -250,6 +250,13 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
         }
         XCTAssertTrue(launcher.waitForExistence(timeout: 6))
         XCTAssertTrue(waitForHittable(launcher, timeout: 3))
+        // The jar probe counts a gem while it falls, and Home enables the
+        // start button only once the landing has settled; a tap before that
+        // is ignored and no focus starts.
+        XCTAssertTrue(
+            waitForEnabled(launcher, timeout: 10),
+            "The start button must come back once the last gem has landed"
+        )
         launcher.tap()
     }
 
@@ -361,6 +368,17 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
             return candidate.exists && candidate.isHittable
         }
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    private func waitForEnabled(
+        _ element: XCUIElement,
+        timeout: TimeInterval
+    ) -> Bool {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND isEnabled == true"),
+            object: element
+        )
         return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }
 

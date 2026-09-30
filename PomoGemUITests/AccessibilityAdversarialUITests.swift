@@ -1056,8 +1056,8 @@ final class DynamicTypeSystemAuditUITests: XCTestCase {
             // component with a ScaledMetric font. XCTest nevertheless audits
             // its glyph nodes; the surrounding controls/cards carry the
             // localized semantic descriptions.
-            "SPACE", "FOCUS",
-            "THIS WEEK", "CRYSTAL HIERARCHY",
+            // (Japanese since device-verify-2 P8: SPACE → 背景, THIS WEEK → 今週.)
+            "背景", "今週",
             // Decorative text inside the accessibility-hidden empty weekly
             // crystal. The parent card announces the same value semantically.
             "0分"

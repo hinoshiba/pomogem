@@ -310,6 +310,9 @@
     "選択中" : {
       "comment" : "VoiceOver value of the chosen option in a list. Suggested English: Selected"
     },
+    "集中" : {
+      "comment" : "Timer display preview: the phase shown in the ring (集中 · 35% 残り)"
+    },
     "集中が切れたらお知らせ" : {
       "comment" : "Settings switch title: the notifications sent while a focus is paused because the person left the app. Suggested English: Notify Me When I Drift Away"
     },

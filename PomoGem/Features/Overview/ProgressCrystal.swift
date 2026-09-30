@@ -216,6 +216,11 @@ struct FusionRewardBridgeState: Equatable, Sendable {
 /// from 10/10 to 1/10. The just-finished effort remains certain, so the partial
 /// state celebrates only that particle until the hierarchy is exact again.
 struct FusionRewardBridgeDisplayState: Equatable, Sendable {
+    /// Not shown anywhere (「NEXT CRYSTAL」「CRYSTAL SYNC」): the completion
+    /// card lost its English eyebrow when it was rebuilt around this focus's
+    /// own gem (Docs/GemExperienceDesign.md, round 15), and nothing else reads
+    /// it. Left in place, and unlocalized, only because the card belongs to
+    /// the gem session and older branches still read it; drop it with them.
     let eyebrow: String
     let progressLabel: String
     let nextStepLabel: String
@@ -289,6 +294,8 @@ enum FusionRewardBridgePresentation {
 /// This lives beside the count-based bridge so a receipt written by an older
 /// build can still render its original, internally consistent payload.
 struct EffortProgressDisplayState: Equatable, Sendable {
+    /// Not shown anywhere (「TIME CORE」「TIME CORE SYNC」), for the same
+    /// reason as `FusionRewardBridgeDisplayState.eyebrow`.
     let eyebrow: String
     let progressLabel: String
     let nextStepLabel: String
@@ -366,7 +373,11 @@ enum EffortProgressPresentation {
     static func formattedDuration(grams rawGrams: Int) -> String {
         let grams = max(0, rawGrams)
         guard grams.isMultiple(of: Constants.Mass.gramsPerMinute) else {
-            return "\(grams.formatted(.number.grouping(.automatic)))g相当"
+            return String(
+                localized: "\(MassText.grams(value: grams))相当",
+                table: "Progress",
+                comment: "A focus time that is not a whole number of minutes, shown as its mass: %@ is the mass (1,234g)"
+            )
         }
         return DurationPresentation.focusLabel(grams: grams)
     }
@@ -386,15 +397,8 @@ enum EffortProgressPresentation {
 
     static func formattedMass(grams rawGrams: Int) -> String {
         let grams = max(0, rawGrams)
-        guard grams >= 1_000 else { return "\(grams)g" }
-        var kilograms = String(
-            format: "%.2f",
-            locale: Locale(identifier: "en_US_POSIX"),
-            Double(grams) / 1_000
-        )
-        while kilograms.hasSuffix("0") { kilograms.removeLast() }
-        if kilograms.hasSuffix(".") { kilograms.removeLast() }
-        return "\(kilograms)kg"
+        guard grams >= 1_000 else { return MassText.grams(value: grams) }
+        return MassText.kilograms(fromGrams: grams, fractionDigits: 0...2)
     }
 }
 

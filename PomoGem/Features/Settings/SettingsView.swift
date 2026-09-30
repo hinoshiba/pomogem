@@ -2587,7 +2587,7 @@ struct TimerDisplayModeSelectionView: View {
             progress: 0.35,
             remainingTime: "16:15",
             accessibleRemainingTime: "残り16分15秒",
-            modeLabel: "FOCUS",
+            modeLabel: String(localized: "集中", table: "Settings", comment: "Timer display preview: the phase shown in the ring (集中 · 35% 残り)"),
             displayMode: mode,
             isBreakMode: false,
             isPaused: false,

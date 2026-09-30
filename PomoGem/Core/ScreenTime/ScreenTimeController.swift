@@ -44,12 +44,25 @@ final class ScreenTimeController: ObservableObject {
     /// Settings row can say why learning stopped instead of looking like a
     /// feature that was never set up.
     @Published private(set) var learningThemeWasRemoved = false
+    /// Whether the bound ledger holds anything the three-second foreground
+    /// pass in `ScreenTimeIntegrationModifier` must watch: a switched-on
+    /// recording, a saved app selection, the focus shield's opt-in, or a run
+    /// whose receipts are not imported yet (`ScreenTimeForegroundRefreshPolicy`).
+    /// False while unbound, so a device that never set Screen Time up — or
+    /// cannot (no App Group) — stops re-reading the ledger after the pass
+    /// each activation runs anyway, and the loop resumes as soon as a save
+    /// gives it something to watch.
+    @Published private(set) var needsForegroundRefresh = false
     /// The only value Home needs. A stable, de-duplicated stream lets the jar
     /// follow black-stone changes without observing the whole controller,
     /// whose status fields the foreground loop re-reads every three seconds.
     /// Created once so SwiftUI's `onReceive` keeps a single subscription.
     private(set) lazy var negativeGemCountChanges: AnyPublisher<Int, Never> =
         $negativeGemCount.removeDuplicates().eraseToAnyPublisher()
+    /// `needsForegroundRefresh`, current value first, for the foreground loop
+    /// to wait on while it has nothing to watch.
+    private(set) lazy var foregroundRefreshNeeds: AnyPublisher<Bool, Never> =
+        $needsForegroundRefresh.removeDuplicates().eraseToAnyPublisher()
     let store: ScreenTimeStore
     /// F2's shield. Owned here because every path that retires the owner,
     /// voids the tokens or erases the App Group must lift it too.
@@ -511,6 +524,7 @@ final class ScreenTimeController: ObservableObject {
                     granted && configuration.enabled && !state.learningAllowedBySubscription)
             publish(\.monitoringError, error)
             publish(\.isMonitoring, granted && state.runs.contains(where: \.active))
+            publish(\.needsForegroundRefresh, ScreenTimeForegroundRefreshPolicy.needsPeriodicRefresh(state))
         } catch {
             clearPublishedState(monitoringError: error.localizedDescription)
         }
@@ -796,6 +810,7 @@ final class ScreenTimeController: ObservableObject {
         publish(\.learningStoppedByFreeLimit, false)
         publish(\.monitoringError, error)
         publish(\.isMonitoring, false)
+        publish(\.needsForegroundRefresh, false)
     }
 
     /// Assigns a published property only when the value really changes, so a
@@ -805,6 +820,29 @@ final class ScreenTimeController: ObservableObject {
         _ value: Value
     ) {
         if self[keyPath: keyPath] != value { self[keyPath: keyPath] = value }
+    }
+}
+
+/// When the foreground refresh loop has to keep running (device-verify-2 P6).
+///
+/// The loop re-reads the App Group ledger and the Family Controls status every
+/// three seconds. On an iPhone where nobody set Screen Time up that cost about
+/// 96 ms of main-thread time per 30 s for nothing: there is no run to import
+/// from, no selection whose revocation could matter, and no shield to lift.
+/// Everything the loop does has a trigger in the ledger:
+///
+/// - revocation handling needs `recordsAnApproval` (recording, the shield's
+///   opt-in or a saved app token);
+/// - the focus shield's backstop needs the shield's opt-in;
+/// - receipt import and black stones need a run, and an inactive learning run
+///   stays in the ledger until its receipts are acknowledged
+///   (`pruneConsumedRuns`), so "no run" also means "nothing left to import".
+///
+/// Every activation still runs one full pass first, and a save that switches
+/// any of these on publishes `needsForegroundRefresh` and wakes the loop.
+enum ScreenTimeForegroundRefreshPolicy {
+    static func needsPeriodicRefresh(_ state: ScreenTimeState) -> Bool {
+        state.recordsAnApproval || !state.runs.isEmpty
     }
 }
 

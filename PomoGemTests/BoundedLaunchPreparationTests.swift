@@ -1042,13 +1042,116 @@ final class BoundedLaunchPreparationTests: XCTestCase {
                 sceneIsActive: true
             ))
         XCTAssertTrue(SyncMaintenanceLaunchPolicy
-            .shouldResetForegroundGrace(after: .background))
+            .beginsBackgroundAbsence(after: .background))
         XCTAssertFalse(SyncMaintenanceLaunchPolicy
-            .shouldResetForegroundGrace(after: .inactive))
+            .beginsBackgroundAbsence(after: .inactive))
         XCTAssertTrue(SyncMaintenanceLaunchPolicy
             .shouldRearmForegroundWork(after: .active))
         XCTAssertFalse(SyncMaintenanceLaunchPolicy
             .shouldRearmForegroundWork(after: .inactive))
+    }
+
+    // MARK: Foreground epochs (device-verify-2 P2)
+
+    /// On the phone every return from another app — 5 s or 10 s, inside the
+    /// 15 s background grace that keeps Root on screen — revoked trust and
+    /// restarted the 60 s interaction grace, so Home said 「iCloudを確認中」
+    /// for about 65 s after each glance away. Such a return now resumes the
+    /// epoch it left.
+    func testAReturnWithinTheBackgroundGraceResumesTheVerifiedEpoch() {
+        let launch = ContinuousClock.now
+        var epoch = CloudForegroundEpoch()
+        XCTAssertEqual(epoch.interactionGraceRemaining(at: launch), .seconds(60))
+        epoch.interactionGraceElapsed()
+        var now = launch.advanced(by: .seconds(65))
+        for absence in [Duration.seconds(5), .seconds(10), .milliseconds(15_000)] {
+            epoch.sceneEnteredBackground(at: now)
+            now = now.advanced(by: absence)
+            XCTAssertEqual(epoch.sceneBecameActive(at: now), .afterShortAbsence,
+                           "A \(absence) absence keeps the verified presentation")
+            XCTAssertTrue(epoch.interactionGraceHasElapsed,
+                          "A \(absence) absence opens no new 60 s window before verification may run")
+            XCTAssertNil(epoch.interactionGraceDeadline)
+            now = now.advanced(by: .seconds(30))
+        }
+    }
+
+    /// Only a Root without a CloudKit transport (an admitted offline session)
+    /// outlives a longer absence; that return is still a new epoch, exactly as
+    /// every return was before, and a paused grace or rolling deadline starts
+    /// over with it.
+    func testALongerAbsenceStillBeginsANewEpoch() {
+        let launch = ContinuousClock.now
+        for absence in [Duration.milliseconds(15_001), .seconds(40), .seconds(3_600)] {
+            var epoch = CloudForegroundEpoch()
+            _ = epoch.interactionGraceRemaining(at: launch)
+            epoch.interactionGraceElapsed()
+            _ = epoch.rollingVerificationDelay(at: launch)
+            let left = launch.advanced(by: .seconds(100))
+            epoch.sceneEnteredBackground(at: left)
+            XCTAssertEqual(epoch.sceneBecameActive(at: left.advanced(by: absence)), .newEpoch)
+            XCTAssertFalse(epoch.interactionGraceHasElapsed)
+            XCTAssertNil(epoch.interactionGraceDeadline)
+            XCTAssertNil(epoch.nextRollingVerification)
+            let back = left.advanced(by: absence)
+            XCTAssertEqual(epoch.interactionGraceRemaining(at: back), .seconds(60),
+                           "A new epoch gets the same interaction grace as launch")
+            XCTAssertEqual(epoch.rollingVerificationDelay(at: back), .seconds(15 * 60))
+        }
+        XCTAssertFalse(SyncMaintenanceLaunchPolicy.resumesForegroundEpoch(afterAbsence: .seconds(-1)),
+                       "A clock that went backwards proves nothing")
+    }
+
+    /// Restarting the grace on every return kept pushing the launch sweep out
+    /// by another full minute; the grace now ends 60 s after it began.
+    func testTheInteractionGraceKeepsItsDeadlineAcrossReturns() {
+        let launch = ContinuousClock.now
+        var epoch = CloudForegroundEpoch()
+        XCTAssertEqual(epoch.interactionGraceRemaining(at: launch), .seconds(60))
+        epoch.sceneEnteredBackground(at: launch.advanced(by: .seconds(20)))
+        let back = launch.advanced(by: .seconds(30))
+        XCTAssertEqual(epoch.sceneBecameActive(at: back), .afterShortAbsence)
+        XCTAssertEqual(epoch.interactionGraceRemaining(at: back), .seconds(30))
+        // Control Center: inactive → active without a background phase.
+        XCTAssertEqual(epoch.sceneBecameActive(at: launch.advanced(by: .seconds(50))), .fromInactive)
+        XCTAssertEqual(epoch.interactionGraceRemaining(at: launch.advanced(by: .seconds(50))), .seconds(10))
+        XCTAssertEqual(epoch.interactionGraceRemaining(at: launch.advanced(by: .seconds(70))), .zero)
+    }
+
+    /// The rolling check is a backstop for imports a bounded observer can
+    /// miss. Returns no longer start a sweep of their own, so the 15-minute
+    /// timer must not restart on each of them either.
+    func testTheRollingVerificationKeepsItsDeadlineAcrossReturns() {
+        let launch = ContinuousClock.now
+        var epoch = CloudForegroundEpoch()
+        XCTAssertEqual(epoch.rollingVerificationDelay(at: launch), .seconds(900))
+        var now = launch
+        for _ in 0..<89 {
+            now = now.advanced(by: .seconds(5))
+            epoch.sceneEnteredBackground(at: now)
+            now = now.advanced(by: .seconds(5))
+            XCTAssertEqual(epoch.sceneBecameActive(at: now), .afterShortAbsence)
+        }
+        XCTAssertEqual(epoch.rollingVerificationDelay(at: now), .seconds(10))
+        now = now.advanced(by: .seconds(10))
+        epoch.sceneEnteredBackground(at: now)
+        now = now.advanced(by: .seconds(12))
+        XCTAssertEqual(epoch.sceneBecameActive(at: now), .afterShortAbsence)
+        XCTAssertEqual(epoch.rollingVerificationDelay(at: now), .zero,
+                       "A check that fell due while away runs on return")
+        epoch.rollingVerificationRequested()
+        XCTAssertEqual(epoch.rollingVerificationDelay(at: now), .seconds(900))
+    }
+
+    func testAnAbsenceIsMeasuredFromItsFirstBackground() {
+        let left = ContinuousClock.now
+        var epoch = CloudForegroundEpoch()
+        epoch.sceneEnteredBackground(at: left)
+        // .background → .inactive → .background: still the same absence.
+        epoch.sceneEnteredBackground(at: left.advanced(by: .seconds(14)))
+        XCTAssertEqual(epoch.sceneBecameActive(at: left.advanced(by: .seconds(20))), .newEpoch)
+        XCTAssertNil(epoch.backgroundEnteredAt)
+        XCTAssertEqual(epoch.sceneBecameActive(at: left.advanced(by: .seconds(21))), .fromInactive)
     }
 
     func testVerificationTicketWaitsForFollowupsAndRejectsOldGeneration() {
