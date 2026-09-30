@@ -1483,11 +1483,12 @@ final class RuntimeFlowAuditUITests: XCTestCase {
     /// Captures unretouched Japanese UI candidates for product-page review.
     ///
     /// The disposable Debug fixture is only a way to reach deterministic states:
-    /// restore the real duration before capturing Home or its completion card.
+    /// restore the real duration before capturing Home. The expanded completion
+    /// card hides the picker and displays the production 25-minute reward.
     /// Export the five named attachments from the xcresult so the set remains
     /// reproducible, then verify against signed Release on a physical device.
-    /// Naturally scroll the storage screen to its privacy explanation so
-    /// Simulator-only diagnostics are outside the captured viewport.
+    /// The fifth image shows the four real timer-display choices in a complete
+    /// screen, without Simulator-specific storage diagnostics.
     func testAppStoreScreenshotSetJapaneseReleaseCandidate() throws {
         // The product page uses screenshots from large iPhones. On a 4.7-inch
         // screen the completion card covers the duration picker this fixture
@@ -1505,6 +1506,10 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         // UI-test runs. An invalid argument-domain value makes the typed Data
         // lookup start from zero without deleting any simulator or app data.
         app.launchArguments += ["-focus.rest-cadence.v2", "screenshot-fixture-reset"]
+        // Ordinary UI tests disable the leave pause to keep their shared
+        // Simulator sessions predictable. Product 1.1.0 enables it for a new
+        // installation, so the listing must show that running-timer wording.
+        app.launchEnvironment["POMOGEM_UI_TEST_FOCUS_LEAVE_PAUSE"] = "1"
         app.launch()
         let interruptedReward = app.buttons["休憩の提案を閉じる"]
         if interruptedReward.waitForExistence(timeout: 1) {
@@ -1534,6 +1539,11 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(focusTimer.waitForExistence(timeout: 6))
         XCTAssertTrue(app.buttons["一時停止"].waitForExistence(timeout: 4))
+        XCTAssertTrue(
+            app.buttons["画面ロック中も通常は進みます。終了通知を許可"].exists
+                || app.buttons["終了通知を許可"].exists,
+            "A new-install screenshot must show the leave-pause-on timer notice"
+        )
         waitForUISettle()
         retainScreenshot(named: "ASC_02_25-minute-focus")
 
@@ -1558,8 +1568,19 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             app.buttons["5分休憩する"].waitForExistence(timeout: 4),
             "The 250g screenshot fixture must match a first 25-minute completion"
         )
-        // The duration is now visible behind the completion card. Restore a
-        // release preset without dismissing the completed session's reward.
+        // The expanded reward card covers the Home duration picker. Its
+        // visible copy describes a real 25-minute completion; the Debug-only
+        // duration remains hidden until the card is dismissed.
+        XCTAssertTrue(dismissBridge.exists)
+        let dismissReminderOffer = app.buttons["reward.reminder-offer.dismiss"]
+        if dismissReminderOffer.waitForExistence(timeout: 3) {
+            tapUntilGone(dismissReminderOffer, "The reminder offer must close before the reward capture")
+        }
+        waitForUISettle()
+        retainScreenshot(named: "ASC_03_completion-reward")
+        tapUntilGone(dismissBridge, "The reward card must close before the Home capture")
+
+        // Restore a shipped preset before Home becomes the visible subject.
         let visibleDuration = app.buttons["home.duration-picker"]
         XCTAssertTrue(waitForHittable(visibleDuration, timeout: 5))
         visibleDuration.tap()
@@ -1567,11 +1588,6 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(freeTwentyFiveMinutes.waitForExistence(timeout: 4))
         freeTwentyFiveMinutes.tap()
         XCTAssertEqual(visibleDuration.label, "集中時間、25分")
-        XCTAssertTrue(dismissBridge.exists)
-        waitForUISettle()
-        retainScreenshot(named: "ASC_03_completion-reward")
-        dismissBridge.tap()
-        XCTAssertTrue(waitForAbsence(dismissBridge, timeout: 5))
 
         XCTAssertTrue(waitForHittable(productionLauncher, timeout: 6))
         let jar = app.buttons["瓶"]
@@ -1594,33 +1610,125 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         app.buttons["overview.close"].tap()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
 
-        // 5. Finish with the shipped privacy/storage explanation. This avoids
-        // showing the shortened fixture duration in History and directly
-        // documents the selected storage contract promised by the product page.
+        // 5. Finish with all four shipped timer-display choices. This avoids
+        // Simulator-specific iCloud diagnostics in Settings and shows another
+        // real customization screen without exposing the Debug-only duration.
         openMenuAction(containing: "設定")
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
-        // settings-06. The storage state and privacy promise are the support
-        // section's footer, and the version is on the 「このアプリについて」
-        // row below it.
-        let privacyFooter = app.staticTexts["settings.privacy-footer"]
-        XCTAssertTrue(scrollUntilVisible(privacyFooter))
-        XCTAssertTrue(
-            privacyFooter.label == "記録はあなたのiCloudに保存されます。開発者が記録を受け取ることはありません。"
-                || privacyFooter.label == "記録はこのiPhoneにだけ保存されます。開発者が記録を受け取ることはありません。",
-            privacyFooter.label
-        )
-        XCTAssertFalse(
-            app.buttons.matching(
-                NSPredicate(format: "label CONTAINS %@", "ユーザー内容を削除")
-            ).firstMatch.exists,
-            "Version 1.0 must not expose the experimental cross-container deletion transaction"
-        )
-        let about = app.buttons["settings.about"]
-        XCTAssertTrue(scrollUntilVisible(about))
-        XCTAssertTrue(about.label.contains("バージョン"), about.label)
-        XCTAssertTrue(privacyFooter.exists)
+        let timerDisplay = app.buttons["settings.timer-display-mode"]
+        XCTAssertTrue(scrollUntilHittable(timerDisplay))
+        timerDisplay.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["timer-display.selection"].waitForExistence(timeout: 6))
         waitForUISettle()
-        retainScreenshot(named: "ASC_05_iCloud-and-privacy")
+        retainScreenshot(named: "ASC_05_timer-display")
+    }
+
+    /// Captures a separate English product-page candidate. The language pin
+    /// applies to the app process only; the Debug-only 12-second menu choice
+    /// remains Japanese but is closed before any image is retained.
+    func testAppStoreScreenshotSetEnglishReleaseCandidate() throws {
+        let windowHeight = app.windows.firstMatch.frame.height
+        try XCTSkipIf(
+            windowHeight < 700,
+            "App Store screenshots come from a large iPhone; this window is \(Int(windowHeight)) pt tall"
+        )
+        app.terminate()
+        PomoGemUITestLanguage.configureEnglish(app)
+        app.launchArguments += ["-focus.rest-cadence.v2", "screenshot-fixture-reset"]
+        app.launchEnvironment["POMOGEM_UI_TEST_FOCUS_LEAVE_PAUSE"] = "1"
+        app.launch()
+        XCUIDevice.shared.orientation = .portrait
+        let menu = app.buttons["home.menu.open"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 10))
+        XCTAssertEqual(menu.label, "Menu")
+
+        let duration = app.buttons["home.duration-picker"]
+        duration.tap()
+        let twentyFive = app.buttons["25 min"]
+        XCTAssertTrue(twentyFive.waitForExistence(timeout: 4))
+        twentyFive.tap()
+        let launcher = app.buttons["home.focus-launcher"]
+        XCTAssertTrue(waitForHittable(launcher, timeout: 5))
+        launcher.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["focus.timer-display"].waitForExistence(timeout: 6))
+        XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 4))
+        XCTAssertTrue(
+            app.buttons["Usually keeps running while locked. Allow end notifications"].exists
+                || app.buttons["Allow end notifications"].exists,
+            "A new-install screenshot must show the leave-pause-on timer notice"
+        )
+        waitForUISettle()
+        retainScreenshot(named: "ASC_EN_02_25-minute-focus")
+
+        let stopForToday = app.buttons["Stop for Today"]
+        stopForToday.tap()
+        let confirmation = app.alerts["Stop for Today"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 4))
+        confirmation.buttons["Stop for Today"].tap()
+        XCTAssertTrue(menu.waitForExistence(timeout: 8))
+
+        duration.tap()
+        let demo = app.buttons["12秒、DEMO"]
+        XCTAssertTrue(waitForHittable(demo, timeout: 4))
+        demo.tap()
+        XCTAssertTrue(waitForHittable(launcher, timeout: 5))
+        let enabled = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND isEnabled == true"),
+            object: launcher
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 10), .completed)
+        launcher.tap()
+        XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 8))
+        let completionStop = app.buttons["focus.completion-alert.stop"]
+        if completionStop.waitForExistence(timeout: 25) {
+            tapUntilGone(completionStop, "Stop must end the repeating completion alarm")
+        }
+        let dismissReward = app.buttons["reward.dismiss"]
+        XCTAssertTrue(dismissReward.waitForExistence(timeout: 30))
+        XCTAssertTrue(app.descendants(matching: .any)["reward.fusion-progress"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Take a 5-minute break"].waitForExistence(timeout: 4))
+        let dismissReminderOffer = app.buttons["reward.reminder-offer.dismiss"]
+        if dismissReminderOffer.waitForExistence(timeout: 3) {
+            tapUntilGone(dismissReminderOffer, "The reminder offer must close before the reward capture")
+        }
+        waitForUISettle()
+        retainScreenshot(named: "ASC_EN_03_completion-reward")
+        tapUntilGone(dismissReward, "The reward card must close before the Home capture")
+
+        XCTAssertTrue(waitForHittable(duration, timeout: 5))
+        duration.tap()
+        XCTAssertTrue(twentyFive.waitForExistence(timeout: 4))
+        twentyFive.tap()
+        XCTAssertTrue(duration.label.contains("25 min"), duration.label)
+        XCTAssertTrue(waitForHittable(launcher, timeout: 6))
+        let jar = app.buttons["Jar"]
+        XCTAssertTrue(jar.waitForExistence(timeout: 5))
+        XCTAssertTrue(((jar.value as? String) ?? "").contains("1"), String(describing: jar.value))
+        waitForUISettle(4_000_000)
+        retainScreenshot(named: "ASC_EN_01_home-with-first-pebble")
+
+        menu.tap()
+        let progress = button(containing: "See Progress")
+        XCTAssertTrue(scrollUntilHittable(progress))
+        progress.tap()
+        XCTAssertTrue(app.navigationBars["Progress"].waitForExistence(timeout: 6))
+        XCTAssertTrue(app.descendants(matching: .any)["overview.weekly-crystal"].waitForExistence(timeout: 5))
+        waitForUISettle()
+        retainScreenshot(named: "ASC_EN_04_accumulation-overview")
+
+        app.buttons["overview.close"].tap()
+        XCTAssertTrue(menu.waitForExistence(timeout: 5))
+        menu.tap()
+        let settings = button(containing: "Settings")
+        XCTAssertTrue(scrollUntilHittable(settings))
+        settings.tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 6))
+        let timerDisplay = app.buttons["settings.timer-display-mode"]
+        XCTAssertTrue(scrollUntilHittable(timerDisplay))
+        timerDisplay.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["timer-display.selection"].waitForExistence(timeout: 6))
+        waitForUISettle()
+        retainScreenshot(named: "ASC_EN_05_timer-display")
     }
 
     /// Captures the production Product.displayPrice without purchasing or

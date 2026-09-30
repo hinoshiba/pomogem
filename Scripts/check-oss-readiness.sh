@@ -424,7 +424,12 @@ expected_paths = {
     "AppStore/screenshots/ja-JP/02-25-minute-focus.png",
     "AppStore/screenshots/ja-JP/03-completion-reward.png",
     "AppStore/screenshots/ja-JP/04-accumulation-overview.png",
-    "AppStore/screenshots/ja-JP/05-iCloud-and-privacy.png",
+    "AppStore/screenshots/ja-JP/05-timer-display.png",
+    "AppStore/screenshots/en-US/01-home-with-first-pebble.png",
+    "AppStore/screenshots/en-US/02-25-minute-focus.png",
+    "AppStore/screenshots/en-US/03-completion-reward.png",
+    "AppStore/screenshots/en-US/04-accumulation-overview.png",
+    "AppStore/screenshots/en-US/05-timer-display.png",
     # Kept only as historical provenance, outside the upload directories.
     "AppStore/screenshots/history/iap-review-20260906.png",
 }
