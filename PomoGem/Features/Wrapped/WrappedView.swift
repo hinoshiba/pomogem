@@ -19,6 +19,26 @@ struct WrappedMonth: Identifiable, Hashable {
     var title: String { DateText.yearMonth(start) }
 }
 
+/// Choose from the ID-grouped breakdown, so two themes with the same stored
+/// name never borrow each other's mass on the month card.
+enum WrappedThemePolicy {
+    static func topSubject(
+        in themes: [AccumulationTimelineThemeSummary],
+        bundle: Bundle = .main
+    ) -> String? {
+        guard let top = themes.max(by: { lhs, rhs in
+            if lhs.grams != rhs.grams { return lhs.grams < rhs.grams }
+            if lhs.seconds != rhs.seconds { return lhs.seconds < rhs.seconds }
+            return lhs.id > rhs.id
+        }) else { return nil }
+        return SubjectNamePolicy.localizedDisplayName(
+            top.name,
+            subjectID: UUID(uuidString: top.id),
+            bundle: bundle
+        )
+    }
+}
+
 /// Where 「この月の瓶をカードにする」 opens the card.
 enum WrappedShareRoute {
     /// Close Wrapped, then open Home's share sheet. For 記録, which is a
@@ -71,11 +91,7 @@ struct WrappedView: View {
     }
 
     private var topSubject: String {
-        let groups = Dictionary(grouping: monthSessions, by: \.displaySubjectName)
-        return groups.max { lhs, rhs in
-            NonnegativeIntPolicy.sum(lhs.value.map(\.grams))
-                < NonnegativeIntPolicy.sum(rhs.value.map(\.grams))
-        }?.value.first?.localizedDisplaySubjectName ?? "—"
+        WrappedThemePolicy.topSubject(in: themeTimes) ?? "—"
     }
 
     var body: some View {

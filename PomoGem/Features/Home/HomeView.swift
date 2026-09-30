@@ -59,6 +59,26 @@ enum HomeSceneSessionSnapshotPolicy {
         guard let appliedContent, let acceptedContent else { return true }
         return appliedContent != acceptedContent
     }
+
+    /// A theme or achievement can change its presentation without rotating
+    /// the projection's generation. Refresh bodies already in the jar while
+    /// leaving newly inserted rows to the incremental drop path.
+    static func shouldRefreshExistingBodies(
+        appliedGeneration: HomeSceneSessionSnapshotGeneration?,
+        acceptedGeneration: HomeSceneSessionSnapshotGeneration,
+        appliedContent: HomeSceneContent?,
+        acceptedContent: HomeSceneContent,
+        installedIDs: Set<UUID>
+    ) -> Bool {
+        guard appliedGeneration == acceptedGeneration,
+              let appliedContent else { return false }
+        return installedIDs.contains { id in
+            guard let before = appliedContent.pebblePresentations[id],
+                  let after = acceptedContent.pebblePresentations[id]
+            else { return false }
+            return !before.hasSamePresentation(as: after)
+        }
+    }
 }
 
 enum LegacyStratumPresentationChangeFingerprint {
@@ -4834,6 +4854,26 @@ struct HomeView: View {
             scheduleWidgetSnapshot()
             return
         }
+        if HomeSceneSessionSnapshotPolicy.shouldRefreshExistingBodies(
+            appliedGeneration: appliedSceneSessionSnapshotGeneration,
+            acceptedGeneration: snapshotGeneration,
+            appliedContent: appliedSceneContent.value,
+            acceptedContent: sceneContent,
+            installedIDs: knownLooseIDs
+        ) {
+            // A renamed or recolored theme, or an edited achievement, can
+            // change a descriptor while retaining its UUID. Rebuild only the
+            // already-present rows; new rows below still get their first drop.
+            let retainedIDs = knownLooseIDs.intersection(currentIDs)
+            scene.restore(pebbles: current.filter {
+                retainedIDs.contains($0.id) && !awaitingDropIDs.contains($0.id)
+            })
+            knownLooseIDs = retainedIDs
+            for descriptor in current
+            where retainedIDs.contains(descriptor.id) && awaitingDropIDs.contains(descriptor.id) {
+                scene.dropFromAbove(descriptor)
+            }
+        }
         // launch-perf (e): a new generation with the same content (e.g. a
         // pure pending → verified flip) is adopted without a restore; the
         // incremental pass below then finds nothing to add or remove.
@@ -6903,7 +6943,7 @@ struct HomeView: View {
         }
         var parts = subjects.prefix(2).map {
             String(
-                localized: "\($0.name)\(CountText.gems($0.pebbleCount))",
+                localized: "\($0.displayName)\(CountText.gems($0.pebbleCount))",
                 table: "Home",
                 comment: "VoiceOver, crystal card: one theme in the crystal, then how many of its gems it holds (英語12粒). en: '%1$@ %2$@'"
             )

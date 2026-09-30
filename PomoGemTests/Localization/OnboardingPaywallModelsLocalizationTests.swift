@@ -126,6 +126,21 @@ final class OnboardingPaywallModelsLocalizationTests: XCTestCase {
         XCTAssertEqual(AggregateSubjectFraction(name: "数学", colorHex: "#FFFFFF", pebbleCount: 1).displayName, "数学")
     }
 
+    func testAggregateDisplayPreservesCustomJapaneseNameWithKnownID() throws {
+        let bundle = try LocalizationTestSupport.englishBundle()
+        let presetID = try XCTUnwrap(SeedData.subjects.first?.id)
+        let preset = AggregateSubjectFraction(
+            name: "英語", subjectID: presetID,
+            colorHex: Constants.Color.english, pebbleCount: 1
+        )
+        let custom = AggregateSubjectFraction(
+            name: "英語", subjectID: UUID(),
+            colorHex: Constants.Color.english, pebbleCount: 1
+        )
+        XCTAssertEqual(preset.displayName(bundle: bundle), "English")
+        XCTAssertEqual(custom.displayName(bundle: bundle), "英語")
+    }
+
     func testSuggestionsMatchTheJapaneseAndTheShownSpelling() throws {
         let bundle = try LocalizationTestSupport.englishBundle()
         let suggestions = SubjectSuggestionCatalog.suggestions(bundle: bundle)

@@ -8,6 +8,44 @@ import XCTest
 /// reads produced, and that 記録 no longer runs those reads itself.
 @MainActor
 final class LogHistoryReadsTests: XCTestCase {
+    func testLegacyLiveThemeRelationSuppliesMissingIDSnapshot() throws {
+        let theme = Subject(name: "英語", colorHex: Constants.Color.english, sortOrder: 0)
+        let end = date(2026, 9, 24, 15)
+        let legacy = StudySession(
+            subject: theme,
+            startAt: end.addingTimeInterval(-1_500),
+            endAt: end,
+            seconds: 1_500,
+            source: .timer,
+            deviceDayKey: "legacy-theme"
+        )
+        legacy.subjectIDSnapshot = nil // a pre-snapshot row with a live relationship
+        let current = StudySession(
+            subject: theme,
+            startAt: end.addingTimeInterval(-3_600),
+            endAt: end.addingTimeInterval(-1_500),
+            seconds: 1_500,
+            source: .timer,
+            deviceDayKey: "current-theme"
+        )
+        let records = [LogSessionRecord(legacy), LogSessionRecord(current)]
+        XCTAssertEqual(records.map(\.subjectCompositionKey), [theme.id.uuidString, theme.id.uuidString])
+        let presentation = LogPeriodPresentation(
+            records: records,
+            interval: nil,
+            calendar: japaneseCalendar
+        )
+        XCTAssertEqual(presentation.subjectMass.count, 1)
+        XCTAssertEqual(presentation.subjectMass.first?.grams, 500)
+        let bundle = try LocalizationTestSupport.englishBundle()
+        let display = SubjectNamePolicy.localizedDisplayName(
+            records[0].displaySubjectName,
+            subjectID: UUID(uuidString: records[0].subjectCompositionKey),
+            bundle: bundle
+        )
+        XCTAssertEqual(display, "英語", "A custom Japanese name is not a built-in preset")
+    }
+
     func testPeriodContentMatchesTheMainContextPageItReplaces() async throws {
         let container = try makeContainer()
         let context = container.mainContext
@@ -702,7 +740,7 @@ final class LogHistoryReadsTests: XCTestCase {
     /// 「テーマの構成」 as LogView computed it from the main-context page.
     private static func referenceSubjectMass(_ sessions: [StudySession]) -> [ReferenceSubjectMass] {
         let grouped = Dictionary(grouping: sessions) { session in
-            session.subjectIDSnapshot?.uuidString
+            (session.subject?.id ?? session.subjectIDSnapshot)?.uuidString
                 ?? "deleted:\(session.subjectNameSnapshot):\(session.subjectColorHexSnapshot)"
         }
         let values = grouped.compactMap { identity, sessions -> (String, String, String, Int)? in

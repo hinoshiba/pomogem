@@ -201,6 +201,7 @@ struct AccumulationClusterSummary: Identifiable, Equatable, Sendable {
         _ values: [AggregateSubjectFraction]
     ) -> [AggregateSubjectFraction] {
         struct Key: Hashable {
+            let subjectID: UUID?
             let name: String
             let colorHex: String
         }
@@ -212,7 +213,7 @@ struct AccumulationClusterSummary: Identifiable, Equatable, Sendable {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .uppercased()
             guard !name.isEmpty, !colorHex.isEmpty else { continue }
-            let key = Key(name: name, colorHex: colorHex)
+            let key = Key(subjectID: value.subjectID, name: name, colorHex: colorHex)
             counts[key] = NonnegativeIntPolicy.adding(
                 counts[key, default: 0],
                 value.pebbleCount
@@ -221,13 +222,19 @@ struct AccumulationClusterSummary: Identifiable, Equatable, Sendable {
         return counts.map {
             AggregateSubjectFraction(
                 name: $0.key.name,
+                subjectID: $0.key.subjectID,
                 colorHex: $0.key.colorHex,
                 pebbleCount: $0.value
             )
         }
         .sorted { lhs, rhs in
             if lhs.pebbleCount == rhs.pebbleCount {
-                if lhs.name == rhs.name { return lhs.colorHex < rhs.colorHex }
+                if lhs.name == rhs.name {
+                    if lhs.colorHex == rhs.colorHex {
+                        return (lhs.subjectID?.uuidString ?? "") < (rhs.subjectID?.uuidString ?? "")
+                    }
+                    return lhs.colorHex < rhs.colorHex
+                }
                 return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
             }
             return lhs.pebbleCount > rhs.pebbleCount
@@ -2525,7 +2532,7 @@ struct ClusterDetailSheet: View {
                                 .foregroundStyle(PomoGemTheme.muted)
                             ForEach(Array(visibleSubjectMix.enumerated()), id: \.offset) { _, item in
                                 let percentage = subjectPercentage(item.pebbleCount)
-                                let subjectName = SubjectNamePolicy.localizedDisplayName(item.name)
+                                let subjectName = item.displayName
                                 CompositionBreakdownRow(
                                     colorHex: item.colorHex,
                                     title: subjectName,
@@ -2645,9 +2652,8 @@ struct ClusterDetailSheet: View {
         var seen = Set<String>()
         let subjectNames = cluster.subjectMix
             .filter { $0.colorHex.caseInsensitiveCompare(hex) == .orderedSame }
-            .map(\.name)
-            .filter { seen.insert($0).inserted }
-            .map { SubjectNamePolicy.localizedDisplayName($0) }
+            .filter { seen.insert($0.subjectID?.uuidString ?? "snapshot:\($0.name)").inserted }
+            .map(\.displayName)
         if !subjectNames.isEmpty {
             // Theme names are the person's own text; only the separator
             // is localized (「英語・数学」, en "English · Math").

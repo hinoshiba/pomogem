@@ -306,7 +306,7 @@ enum AccumulationTimelineBreakdownPolicy {
             let name = session.displaySubjectName
             let color = session.displaySubjectColorHex
             self.init(
-                themeKey: session.subjectIDSnapshot?.uuidString
+                themeKey: (session.subject?.id ?? session.subjectIDSnapshot)?.uuidString
                     ?? "snapshot|\(name)|\(color.uppercased())",
                 themeName: name,
                 colorHex: color,

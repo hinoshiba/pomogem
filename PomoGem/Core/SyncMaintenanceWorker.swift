@@ -2429,6 +2429,7 @@ private extension SyncMaintenanceSliceWorker {
         let subjectMix = StrataMath.mergedSubjectMix(unique.map {
             [AggregateSubjectFraction(
                 name: $0.displaySubjectName,
+                subjectID: $0.subject?.id ?? $0.subjectIDSnapshot,
                 colorHex: $0.displaySubjectColorHex,
                 pebbleCount: 1
             )]

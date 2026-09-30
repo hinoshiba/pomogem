@@ -1636,7 +1636,7 @@ struct LogView: View {
                                     .fill(Color(hex: item.colorHex))
                                     .frame(width: max(4, proxy.size.width * item.fraction))
                                     .accessibilityLabel(String(
-                                        localized: "\(item.name)、\(NonnegativeIntPolicy.clamped(item.fraction * 100, maximum: 100))パーセント",
+                                        localized: "\(displayedSubjectName(item))、\(NonnegativeIntPolicy.clamped(item.fraction * 100, maximum: 100))パーセント",
                                         table: "Log",
                                         comment: "VoiceOver: one theme's segment of the bar; theme name, then its share in percent"
                                     ))
@@ -1649,7 +1649,7 @@ struct LogView: View {
                         ForEach(subjectMass) { item in
                             HStack(spacing: 10) {
                                 Circle().fill(Color(hex: item.colorHex)).frame(width: 9, height: 9)
-                                Text(item.name).font(.subheadline.weight(.semibold))
+                                Text(displayedSubjectName(item)).font(.subheadline.weight(.semibold))
                                 Spacer()
                                 Text(formatMass(item.grams))
                                     .font(.system(.caption, design: .rounded, weight: .bold))
@@ -1660,6 +1660,10 @@ struct LogView: View {
                 }
             }
         }
+    }
+
+    private func displayedSubjectName(_ item: LogSubjectMass) -> String {
+        SubjectNamePolicy.localizedDisplayName(item.name, subjectID: UUID(uuidString: item.id))
     }
 
     private var rarePebbles: some View {
@@ -2579,6 +2583,7 @@ struct LogAggregateArchiveItem: Identifiable, Equatable, Sendable {
             members.map {
                 [AggregateSubjectFraction(
                     name: $0.displaySubjectName,
+                    subjectID: $0.row.subjectID,
                     colorHex: $0.displaySubjectColorHex,
                     pebbleCount: 1
                 )]
@@ -2656,7 +2661,7 @@ private struct AggregateArchiveRow: View {
                             Circle()
                                 .fill(Color(hex: subject.colorHex))
                                 .frame(width: 7, height: 7)
-                            Text(SubjectNamePolicy.localizedDisplayName(subject.name))
+                            Text(subject.displayName)
                                 .font(.caption2.weight(.semibold))
                                 .lineLimit(1)
                             Spacer()
