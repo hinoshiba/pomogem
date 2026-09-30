@@ -52,7 +52,9 @@ App Store Connectでは1.0.2 (9)がReady for Distributionです。1.1.0のdraft�
   20分の一括到達、日付／時刻変更、端末再起動などの未確認条件と最終配布候補の試験は引き続き残す
 - [x] 新しいPro特典を含む実StoreKit価格のIAP審査画像と掲載画像5枚を1.1.0 (10)から再撮影し、目視確認・hash記録
   （集中用の音楽を入れる前のbuildでの撮影。1.1.0に音楽を含める場合は下の再撮影が残る）
-- [ ] 英語UIを含む最終1.1.0候補からen-US掲載画像を撮影し、署名済み実機版との表示一致と画像の順序・hashを確認する
+- [ ] en-US掲載画像5枚とja-JP掲載画像5枚を最終署名済み実機版と表示照合し、画像03の報酬カード表示を掲載用に評価し、
+  Connect上の古い／継承画像を差し替えて順序・hashを確認する。2026-09-30に両言語のSimulator候補各5枚を
+  最新ソースから再撮影し、XCTestと画像hashを確認済み。実機版との照合とConnect差し替えは未完了
 - [x] 統合コードから署名なしRelease archiveを生成し、3 bundleの構成・privacy・Debugコード不在・dSYM一致を確認（sourceと限界はrelease record参照）
 - [ ] 統合CIと最終配布署名・entitlement検証を完了。署名なしarchiveは配布用の合格ではない
 - [x] Connectのja-JP／en-US掲載文・Review Notes・掲載画像・IAP説明のdraftと審査メモ・画像を保存し、再読込で一致を確認
@@ -61,11 +63,16 @@ App Store Connectでは1.0.2 (9)がReady for Distributionです。1.1.0のdraft�
   `com.hinoshiba.pomogem`でMusicKit App Serviceを有効にし、署名した実機で同文書の実機確認を登録あり・登録なしの
   両方のアカウントで行う。Simulatorの単体テストの合格だけでは閉じない
 - [ ] 同じく含める場合: タイマー見出しに音符buttonが増えるため`ja-JP/02-25-minute-focus.png`を再撮影して目視確認・hash記録し、
-  APPLE MUSICの節を加えたReview NotesをConnectへ再保存して再読込で一致を確認
-- [ ] 改訂した日本語／英語の公開PrivacyをPagesへ反映し、実配信との一致を確認
+  APPLE MUSICの節を加えたReview NotesをConnectへ再保存して再読込で一致を確認。
+  2026-09-30に両言語の02を最新ソースのSimulatorから再撮影してリポジトリへ反映し、Review NotesをConnectへ保存・再読込で確認済み。
+  最終配布署名版との表示一致とConnect上の画像差し替えは未完了
+- [x] 改訂した日本語／英語の公開PrivacyをPagesへ反映し、実配信との一致を確認。
+  2026-09-30に`https://pomogem.hinoshiba.com/`がHTTP 200を返し、配信HTMLと
+  `http_dists/index.html`のSHA-256が一致することを確認。両言語のPrivacy文面には
+  1.1.0候補の集中用音楽と終了アラームを含む
 - [ ] build 10のupload・処理・versionへの割当・審査提出を確認。自動公開設定の過去の値だけで提出済みとしない
 
-実機試験は現在の作業対象外です。未実施項目を合格にせず、配布前の残件として保持します。
+最終配布署名版による実機試験は未完了です。未実施項目を合格にせず、配布前の残件として保持します。
 
 ## 2026-09-13 スクリーンタイム候補の配布前確認
 

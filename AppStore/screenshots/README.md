@@ -1,12 +1,34 @@
 # App Store screenshots
 
-## Candidate 1.1.0 (10) — 2026-09-22
+## Candidate 1.1.0 (10) refresh — 2026-09-30
 
-The five images in `ja-JP/` and the separate image in `iap-review/` were captured
-from PomoGem 1.1.0 (10) on an iOS 26.5 iPhone 12 Pro Max Simulator. All six are
-unretouched XCTest attachments, copied byte for byte as portrait 1284 × 2778
-RGB PNGs without alpha. Their hashes are recorded in `checksums.sha256` and
-`ASSET_LICENSES.md`.
+The five `ja-JP/` and five `en-US/` images are byte-for-byte XCTest attachments
+from the current product source at `b5441d3a0abc3214e2b5486ef7e2f4d5dd96d028`,
+plus the screenshot test edits awaiting integration. Each language test passed
+on a disposable iOS 26.5 iPhone 12 Pro Max Simulator at standard text size,
+using the Debug-only deterministic fixture and the product's new-install
+leave-pause default. All ten PNGs are 1284 × 2778 RGB without alpha; their
+hashes are in `checksums.sha256` and `ASSET_LICENSES.md`. Image 02 shows the
+Focus Music button in each language.
+
+Image 05 now shows the four shipped Timer Display choices, avoiding the
+Simulator-only iCloud warning in a Settings capture. Image 03 is a genuine
+transition: the reward card says a 250 g gem was earned while the jar behind
+it still shows 0 g until the card is closed. The optional daily-reminder offer
+was dismissed before capture so its real clock time does not conflict with the
+9:41 status bar override. Review the remaining 0 g transition before
+uploading. The IAP review image remains from 2026-09-22 and needs recapture.
+These ten images are candidates until compared with the final signed build on
+a physical iPhone; App Store Connect still holds the older Japanese images,
+which its English listing inherits.
+
+## Original 1.1.0 (10) capture — 2026-09-22
+
+The original five Japanese images and the separate image in `iap-review/` were
+captured from PomoGem 1.1.0 (10) on an iOS 26.5 iPhone 12 Pro Max Simulator.
+The original 01–05 files were superseded on 2026-09-30; the IAP review image
+still comes from this capture. All were unretouched XCTest attachments,
+copied byte for byte as portrait 1284 × 2778 RGB PNGs without alpha.
 
 Product source was `f3d7f456fdb9b8da05d77d2c4cdb9af4026039f2`; the capture-only
 test changes were recorded in `1c40e4e9a2118101bc798a40df3bb2fd8ac11733` and
@@ -21,40 +43,15 @@ Both selected tests passed: two tests, zero failures, zero skips. No images
 from the earlier capture attempt are selected; its Settings accessibility-row
 locator was corrected and the complete capture was rerun.
 
-## Pending recapture after the Settings reorganisation
+## Remaining IAP image recapture
 
-`ja-JP/05-iCloud-and-privacy.png` and `iap-review/01-pomogem-pro-live-price.png`
-show layouts that changed after this capture (settings-06 and settings-04):
-
-- Settings no longer has the inert 「iCloud／あなたのプライベートデータベースのみ」 row or the
-  top-level 「クレジット」 card. The storage and privacy promise is the footer of
-  「サポートとプライバシー」 (「記録はあなたのiCloudに保存されます。開発者が記録を受け取ることは
-  ありません。」), and the version is on the 「このアプリについて」 row below it.
-- The paywall orders its three Pro features by entry point, says what stays free,
-  and shows a month-label example.
-
-`testAppStoreScreenshotSetJapaneseReleaseCandidate` already captures the new
-Settings layout as `ASC_05_iCloud-and-privacy`. Recapture both images with the
-procedure below before the 1.1.0 submission and update this file, the checksums
-and `ASSET_LICENSES.md`. The images in this folder remain an exact record of the
-1.1.0 (10) capture until then.
-
-The frame for image 05 needs an owner decision before that recapture:
-
-- The privacy promise is now the footer of 「サポートとプライバシー」, near the end of
-  Settings. The List cannot scroll past its last row, so the Simulator frame that
-  shows the footer also shows the card above it: 「データを書き出す」, the red
-  「表示中の記録をリセット」 row and the export disclosure. No iCloud row is visible.
-- The iCloud section can't be the frame in the Simulator. That section shows the
-  Simulator's own diagnostics (「iCloudは実機で確認できます」), and this set must not
-  contain them.
-- The options:
-  - capture 05 on a physical iPhone, framed on the iCloud section (the export
-    card still sits between that section and the privacy footer);
-  - keep the Simulator frame as it is;
-  - use a different screen for 05.
-
-  Record the choice here when you recapture.
+`iap-review/01-pomogem-pro-live-price.png` shows the paywall before the
+settings-04 changes. The current paywall orders its three Pro features by entry
+point, says what stays free, and shows a month-label example. Recapture the live
+StoreKit price from the final candidate before submission. The obsolete
+`ja-JP/05-iCloud-and-privacy.png` was replaced with a complete Timer Display
+screen because the Simulator's iCloud section showed a diagnostic unavailable
+on a physical device.
 
 ## Japanese iPhone set
 
@@ -64,20 +61,24 @@ The App Store listing order is:
 |---|---|---|
 | `ja-JP/01-home-with-first-pebble.png` | Home after one deterministic 250g completion, with the normal 25-minute preset visible and the landing toast gone | `ASC_01_home-with-first-pebble` |
 | `ja-JP/02-25-minute-focus.png` | Real 25-minute countdown and the ordinary notification-permission invitation | `ASC_02_25-minute-focus` |
-| `ja-JP/03-completion-reward.png` | Normal completion card, with the visible preset restored to 25 minutes before capture | `ASC_03_completion-reward` |
+| `ja-JP/03-completion-reward.png` | Normal completion card showing the production 25-minute reward; the fixture's short duration is hidden by the card and restored before the Home capture | `ASC_03_completion-reward` |
 | `ja-JP/04-accumulation-overview.png` | Weekly and lifetime accumulation from the same 250g fixture | `ASC_04_accumulation-overview` |
-| `ja-JP/05-iCloud-and-privacy.png` | Naturally scrolled Settings showing its privacy explanation and version 1.1.0 (10) | `ASC_05_iCloud-and-privacy` |
+| `ja-JP/05-timer-display.png` | All four Timer Display choices on one complete screen | `ASC_05_timer-display` |
+
+The English set has the same five scenes, with English product UI and attachment
+prefixes `ASC_EN_01` through `ASC_EN_05`. Its files are in `en-US/` with the
+same basenames as the Japanese files.
 
 The existing Debug-only local-preview/UI-test fixture creates one 250g record
 through its 12-second test duration. It restores the visible duration to the
-normal 25 minutes before the completion and Home captures. The images do not
+normal 25 minutes before the Home capture. The images do not
 establish completion of a real 25-minute session or physical-device Screen Time
 callbacks. No Screen Time permission or Pro entitlement was synthesized.
 
-All images show Japanese product UI with built-in content, without account
+All images show the product UI in the named language with built-in content, without account
 information, debug labels, promotional overlays, device frames or compositing.
-The landing toast disappears normally; Simulator cloud diagnostics are outside
-the naturally scrolled Settings viewport. The product-page set contains no price
+The landing toast disappears normally; Simulator cloud diagnostics are absent
+from the selected Timer Display screen. The product-page set contains no price
 or purchased state. No optional Screen Time image is included because real-device
 authorization was outside this capture task.
 
@@ -166,6 +167,7 @@ xcodebuild \
   -resultBundlePath "$SCREENSHOT_RESULTS/PomoGemScreenshots.xcresult" \
   -parallel-testing-enabled NO \
   -only-testing:PomoGemUITests/RuntimeFlowAuditUITests/testAppStoreScreenshotSetJapaneseReleaseCandidate \
+  -only-testing:PomoGemUITests/RuntimeFlowAuditUITests/testAppStoreScreenshotSetEnglishReleaseCandidate \
   -only-testing:PomoGemUITests/RuntimeFlowAuditUITests/testCaptureActualStoreKitPrice \
   test-without-building
 
@@ -174,19 +176,19 @@ xcrun xcresulttool export attachments \
   --output-path "$SCREENSHOT_RESULTS/attachments"
 ```
 
-Map the five `ASC_` attachments and one `IAP_` attachment using the exported
+Map the five `ASC_`, five `ASC_EN_`, and one `IAP_` attachment using the exported
 `manifest.json`. Visually inspect the actual images and copy the selected
 attachments unchanged. A skipped live-price test does not produce price evidence.
 Record new provenance and checksums when adopting a replacement capture.
 
 ```sh
-for screenshot in AppStore/screenshots/ja-JP/*.png AppStore/screenshots/iap-review/*.png; do
+for screenshot in AppStore/screenshots/ja-JP/*.png AppStore/screenshots/en-US/*.png AppStore/screenshots/iap-review/*.png; do
   sips -g pixelWidth -g pixelHeight -g hasAlpha -g space -g format "$screenshot"
 done
 shasum -a 256 -c AppStore/screenshots/checksums.sha256
 ```
 
-The current six candidate files should report 1284 × 2778, RGB, PNG, and no
+The eleven files currently in the repository should report 1284 × 2778, RGB, PNG, and no
 alpha. The checksum manifest also covers the separate historical image below.
 
 ## Historical IAP review image — 2026-09-06
@@ -194,7 +196,7 @@ alpha. The checksum manifest also covers the separate historical image below.
 `history/iap-review-20260906.png` is retained only as a historical PomoGem 1.0
 build 5 capture from an iOS 26.5 iPhone 12 Pro Max Simulator. It is not the
 current candidate's review image and does not show the new unlimited
-learning-app benefit. The five current listing files replace the earlier
+learning-app benefit. The ten current listing files replace the earlier
 September 6 listing set.
 
 The historical capture used the actual `Product.products` request without a
@@ -210,7 +212,7 @@ RGB PNG; its hash remains in `checksums.sha256` and `ASSET_LICENSES.md`.
 ## English product page
 
 The published 1.0.2 screenshots show Japanese UI. The 1.1.0 candidate supports
-English and Japanese UI; support remains in Japanese. Its `en-US` product page
-needs new English screenshots captured from the matching signed candidate and
-checked against that build before submission. Until then, inherited Japanese
-images are historical material, not evidence of the 1.1.0 English experience.
+English and Japanese UI; support remains in Japanese. The `en-US/` images show
+the English UI from the same Simulator candidate as `ja-JP/`. Compare them
+with the final signed physical-device build and replace the inherited Japanese
+images in App Store Connect before submission.

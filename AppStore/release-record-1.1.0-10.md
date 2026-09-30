@@ -1,8 +1,45 @@
 # PomoGem 1.1.0 (10) — preparation record
 
-Updated: 2026-09-22. This is a preparation record, not an upload or submission receipt.
+Updated: 2026-09-30. This is a preparation record, not an upload or submission receipt.
 App Store Connect shows the public version as 1.0.2 (9), Ready for Distribution.
 The new 1.1.0 draft is in Prepare for Submission, with no build assigned.
+
+## 2026-09-30 live submission check
+
+- App Store Connect still shows 1.1.0 as Prepare for Submission, with no build
+  selected. Its Japanese listing has five older images; English inherits that
+  Japanese set. No upload or App Review submission occurred.
+- Saved the current Japanese and English What's New text, the current English
+  promotional text and description, and the checked-in App Review notes in the
+  Connect draft. Reloaded the page and confirmed the English UI statement,
+  Apple Music release note, and the updated review paths were retained.
+- The signed-in App Store Connect user can administer and submit app versions,
+  but Apple Developer's Certificates, Identifiers & Profiles reports Access
+  Unavailable for that browser account. Xcode is signed into a separate Admin
+  Apple Account with developer resources enabled, but this Mac still has no
+  Apple Distribution signing identity. Re-downloading existing profiles from
+  Xcode did not add a suitable one: the cached host App Store profile lacks
+  Family Controls, App Group, and Time Sensitive Notifications; the Monitor
+  has no App Store profile.
+- Xcode 26.6 built the current 1.1.0 (10) source for generic iOS in Release
+  configuration with code signing disabled. Compilation passed with warnings.
+  This checks compilation only; it is not an installable, distribution-signed
+  archive, a physical-device test, Apple Validate, or an upload.
+- A direct Release build for the connected iPhone 12 mini with the existing
+  team development profile stopped at signing: the host profile omits the
+  Time Sensitive Notifications entitlement required by the source. No new
+  profile or certificate was created, and no build was installed on the phone.
+- The public privacy page returned HTTP 200, and its HTML exactly matched
+  `http_dists/index.html`, including the Japanese and English text for focus
+  music and the timer-end alarm.
+- Refreshed all five Japanese and five English listing image candidates from
+  current source with passing screenshot UI tests. Both 05 images show Timer
+  Display choices without a Simulator-only iCloud warning. Image 03 is a reward
+  transition and needs an editorial review: its card shows +250 g while the jar
+  behind it remains at 0 g until the card is closed. The optional reminder
+  offer was dismissed before capture to avoid a real-time clock mismatch.
+  Simulator images do not
+  establish signed-device parity; the images in Connect have not been replaced.
 
 ## Reviewed integration
 
