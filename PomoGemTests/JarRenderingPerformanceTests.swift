@@ -535,15 +535,24 @@ final class JarRenderingPerformanceTests: XCTestCase {
     func testARestingJarNeverFreezesAHalfFadedGlass() throws {
         JarScene.resetGlassCacheForTesting()
         let size = CGSize(width: 381, height: 511)
-        let scene = makeScene()
-        scene.size = size
+        let scene = JarScene(size: size)
         let view = SKView(frame: CGRect(origin: .zero, size: size))
         view.presentScene(scene)
         defer { view.presentScene(nil) }
-        scene.restore(pebbles: [looseDescriptor(index: 3)])
         waitForGlass(of: scene)
+
+        // A small bake can finish after the empty jar has already paused,
+        // which correctly skips the animation. Put the displayed glass in a
+        // deterministic mid-fade state to check the pause path itself.
+        scene.resumeSimulation()
         let highlights = try XCTUnwrap(scene.childNode(withName: "//jar.glass.highlights"))
-        XCTAssertNotNil(highlights.action(forKey: "jar.glass.crossfade"), "an awake jar cross-fades")
+        let placeholder = try XCTUnwrap(scene.childNode(withName: "//jar.glass.placeholder"))
+        highlights.alpha = 0.35
+        highlights.run(.fadeIn(withDuration: 60), withKey: "jar.glass.crossfade")
+        placeholder.isHidden = false
+        placeholder.alpha = 0.65
+        placeholder.run(.fadeOut(withDuration: 60), withKey: "jar.glass.crossfade")
+        XCTAssertNotNil(highlights.action(forKey: "jar.glass.crossfade"))
         scene.evaluateInteractionMotionForTesting(currentTime: 100, uptime: 100)
         scene.evaluateInteractionMotionForTesting(
             currentTime: 100 + Constants.Jar.idleWindow + 1,
