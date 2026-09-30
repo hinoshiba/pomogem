@@ -7,17 +7,44 @@ import UniformTypeIdentifiers
 struct ShareComposerView: View {
     let scope: ShareScope
 
-    enum Format: String, CaseIterable, Identifiable {
-        case feed = "フィード 4:5"
-        case story = "ストーリー 9:16"
+    enum Format: CaseIterable, Identifiable {
+        case feed
+        case story
         var id: Self { self }
+
+        var title: String {
+            switch self {
+            case .feed:
+                String(localized: "フィード 4:5", table: "Share",
+                       comment: "Share card shape (segmented control): the 4:5 feed post. en: Feed 4:5")
+            case .story:
+                String(localized: "ストーリー 9:16", table: "Share",
+                       comment: "Share card shape (segmented control): the 9:16 story. en: Story 9:16")
+            }
+        }
     }
 
-    enum MediaKind: String, CaseIterable, Identifiable {
-        case animatedGIF = "動くGIF"
-        case stillImage = "静止画"
+    enum MediaKind: CaseIterable, Identifiable {
+        case animatedGIF
+        case stillImage
 
         var id: Self { self }
+
+        var title: String {
+            switch self {
+            case .animatedGIF:
+                String(localized: "動くGIF", table: "Share",
+                       comment: "Share file type button: an animated GIF")
+            case .stillImage:
+                Self.stillImageTitle
+            }
+        }
+
+        /// Also the file type in the settings summary line.
+        static var stillImageTitle: String {
+            String(localized: "静止画", table: "Share",
+                   comment: "Share file type: a still image (button, and an item of the settings summary)")
+        }
 
         var symbol: String {
             switch self {
@@ -187,45 +214,70 @@ struct ShareComposerView: View {
     private var shareCaptionSubject: String {
         if aggregateProjectionPresentation.isCloudVerificationPending {
             return includeManual
-                ? "この端末で確認済みの記録"
-                : "この端末で確認済みの実測記録"
+                ? String(localized: "この端末で確認済みの記録", table: "Share",
+                         comment: "Share caption subject (starts the caption's first sentence in en) while iCloud is checked: the records confirmed on this device")
+                : String(localized: "この端末で確認済みの実測記録", table: "Share",
+                         comment: "Share caption subject (starts the caption's first sentence in en) while iCloud is checked: the timed records confirmed on this device")
         }
         switch scope {
         case .all:
             let selection = selection
             if historyPageIsPartial && !selection.usesCompactRootProjection {
                 return includeManual
-                    ? "最近の記録から選んだ集中"
-                    : "最近の記録から選んだ実測集中"
+                    ? String(localized: "最近の記録から選んだ集中", table: "Share",
+                             comment: "Share caption subject (starts the caption's first sentence in en): focus taken from the newest records only")
+                    : String(localized: "最近の記録から選んだ実測集中", table: "Share",
+                             comment: "Share caption subject (starts the caption's first sentence in en): timed focus taken from the newest records only")
             }
             if selection.compactProjectionIsIncomplete {
-                return "読み込めた結晶と最新層の集中"
+                return String(localized: "読み込めた結晶と最新層の集中", table: "Share",
+                              comment: "Share caption subject (starts the caption's first sentence in en): focus in the crystals that loaded and the newest layer of gems")
             }
             return achievementPageIsPartial
-                ? "これまでの集中（記念石は最新\(BoundedHistoryPolicy.achievementLimit)個）"
-                : "これまでの集中"
+                ? String(localized: "これまでの集中（記念石は最新\(BoundedHistoryPolicy.achievementLimit)個）", table: "Share",
+                         comment: "Share caption subject (starts the caption's first sentence in en): all focus so far, with only the newest milestone stones. Argument: how many stones")
+                : String(localized: "これまでの集中", table: "Share",
+                         comment: "Share caption subject (starts the caption's first sentence in en): all focus so far")
         case .month:
             return historyPageIsPartial
-                ? "\(scope.periodLabel)の表示分"
-                : "\(scope.periodLabel)の集中"
-        case .aggregate: return "\(scope.periodLabel)の積み重ね"
+                ? String(localized: "\(scope.periodLabel)の表示分", table: "Share",
+                         comment: "Share caption subject (starts the caption's first sentence in en): the part of a month's focus the card shows. Argument: the month (2026年9月)")
+                // A semantic key: the card's 「4時間10分の集中」 has the same
+                // Japanese and needs different English.
+                : String(localized: "share.caption.subject.month", defaultValue: "\(scope.periodLabel)の集中", table: "Share",
+                         comment: "Share caption subject (starts the caption's first sentence in en): a month's focus. Argument: the month (2026年9月)")
+        case .aggregate:
+            return String(localized: "\(scope.periodLabel)の積み重ね", table: "Share",
+                          comment: "Share caption subject (starts the caption's first sentence in en): the focus in one crystal. Argument: the month it formed (2026年9月)")
         }
+    }
+
+    /// The record limit as these labels have always printed it (「2048」):
+    /// an interpolated Int would group it (「2,048」). A fixed limit far above
+    /// one, so English needs no singular form.
+    private static var sessionLimitText: String {
+        String(BoundedHistoryPolicy.periodSessionLimit)
     }
 
     private var effectivePeriodLabel: String {
         if aggregateProjectionPresentation.isCloudVerificationPending {
-            return "この端末で確認済み・iCloud再集計中"
+            return String(localized: "この端末で確認済み・iCloud再集計中", table: "Share",
+                          comment: "Share card period label (small capsule on the card) while iCloud totals are recounted: only records confirmed on this device")
         }
         let selection = selection
         switch scope {
         case .all where historyPageIsPartial && !includeManual && !selection.usesCompactRootProjection:
-            return "最近の実測・最新\(BoundedHistoryPolicy.periodSessionLimit)件の記録内"
+            return String(localized: "最近の実測・最新\(Self.sessionLimitText)件の記録内", table: "Share",
+                          comment: "Share card period label (small capsule): timed focus from the newest records. Argument: how many records are read (a fixed number far above one)")
         case .all where historyPageIsPartial && !selection.usesCompactRootProjection:
-            return "最近の記録・最新\(BoundedHistoryPolicy.periodSessionLimit)件"
+            return String(localized: "最近の記録・最新\(Self.sessionLimitText)件", table: "Share",
+                          comment: "Share card period label (small capsule): the newest records. Argument: how many records are read (a fixed number far above one)")
         case .all where selection.compactProjectionIsIncomplete:
-            return "これまで・読み込み分"
+            return String(localized: "これまで・読み込み分", table: "Share",
+                          comment: "Share card period label (small capsule): everything so far, but only the part that loaded")
         case .month where historyPageIsPartial:
-            return "\(scope.periodLabel)・表示分"
+            return String(localized: "\(scope.periodLabel)・表示分", table: "Share",
+                          comment: "Share card period label (small capsule): part of a month. Argument: the month (2026年9月)")
         default:
             return scope.periodLabel
         }
@@ -233,18 +285,20 @@ struct ShareComposerView: View {
 
     private var settingsSummary: String {
         let selection = selection
-        let medium = mediaKind == .animatedGIF ? "GIF" : "静止画"
+        let medium = mediaKind == .animatedGIF ? "GIF" : MediaKind.stillImageTitle
         let shape = format == .feed ? "4:5" : "9:16"
         // Describe the focus on the card first, then any 記念石 separately.
         // A stone used to turn the whole label into 「自己申告あり」 even while
         // self-reported focus was left out (walk-std-04).
         let focusLabel: String
         if selection.includesSelfReportedFocus {
-            focusLabel = "自己申告あり"
+            focusLabel = String(localized: "自己申告あり", table: "Share",
+                                comment: "Share settings summary item: self-reported focus is on the card")
         } else if selection.hasExcludedSelfReportedContent {
-            focusLabel = "実測のみ（自己申告は除外）"
+            focusLabel = String(localized: "実測のみ（自己申告は除外）", table: "Share",
+                                comment: "Share settings summary item: only timed focus is on the card, and self-reported focus is left out")
         } else {
-            focusLabel = "実測のみ"
+            focusLabel = ShareDisclosurePolicy.measuredOnly
         }
         let scopeLabel = selection.achievements.isEmpty
             ? focusLabel
@@ -254,9 +308,11 @@ struct ShareComposerView: View {
                 comment: "Share settings summary: focus scope, then the note that stones are self-reported"
             )
         let hashtagLabel = activeHashtags.isEmpty
-            ? "タグなし"
-            : "タグ\(activeHashtags.count)個"
-        return "\(medium)・\(shape)・\(scopeLabel)・\(hashtagLabel)"
+            ? String(localized: "タグなし", table: "Share",
+                     comment: "Share settings summary item: no hashtags are selected")
+            : String(localized: "タグ\(activeHashtags.count)個", table: "Share",
+                     comment: "Share settings summary item: how many hashtags are selected")
+        return ListText.compact([medium, shape, scopeLabel, hashtagLabel])
     }
 
     var body: some View {
@@ -285,7 +341,8 @@ struct ShareComposerView: View {
                     }
 
                     if isLoadingData {
-                        ProgressView("カードの記録を読み込み中")
+                        ProgressView(String(localized: "カードの記録を読み込み中", table: "Share",
+                                            comment: "Share composer: progress while the card's records load"))
                             .frame(maxWidth: .infinity, minHeight: 280)
                     } else if selection.hasShareableContent {
                         AnimatedShareCardPreview(
@@ -340,12 +397,12 @@ struct ShareComposerView: View {
 
 #if DEBUG
                     if LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess {
-                        Text("GIF share lifecycle probe")
+                        Text(verbatim: "GIF share lifecycle probe")
                             .font(.system(size: 1))
                             .foregroundStyle(Color.clear)
                             .frame(width: 1, height: 1)
                             .accessibilityIdentifier("share.debug.gif-lifecycle")
-                            .accessibilityLabel("GIF share lifecycle probe")
+                            .accessibilityLabel(Text(verbatim: "GIF share lifecycle probe"))
                             .accessibilityValue(Text(verbatim: debugGIFShareLifecycle.accessibilityValue))
                             .allowsHitTesting(false)
                             // How often this process resolved the card
@@ -353,12 +410,12 @@ struct ShareComposerView: View {
                             // only reuse it. An overlay, so the probe adds no
                             // height the UI tests' scrolling would notice.
                             .overlay {
-                                Text("Share selection probe")
+                                Text(verbatim: "Share selection probe")
                                     .font(.system(size: 1))
                                     .foregroundStyle(Color.clear)
                                     .frame(width: 1, height: 1)
                                     .accessibilityIdentifier("share.debug.selection")
-                                    .accessibilityLabel("Share selection probe")
+                                    .accessibilityLabel(Text(verbatim: "Share selection probe"))
                                     .accessibilityValue(Text(verbatim: "builds=\(ShareSelectionCache.debugBuildCount);lookups=\(ShareSelectionCache.debugLookupCount)"))
                                     .allowsHitTesting(false)
                             }
@@ -390,8 +447,10 @@ struct ShareComposerView: View {
                     .accessibilityIdentifier("share.primary-action")
                     .accessibilityHint(
                         mediaKind == .animatedGIF
-                            ? "瓶と質量の短いGIF、公式サイトURL、選択中のハッシュタグをシステム共有画面に渡します"
-                            : "瓶と質量の画像、公式サイトURL、選択中のハッシュタグをシステム共有画面に渡します"
+                            ? Text("瓶と質量の短いGIF、公式サイトURL、選択中のハッシュタグをシステム共有画面に渡します", tableName: "Share",
+                                   comment: "VoiceOver hint of the share button (GIF selected)")
+                            : Text("瓶と質量の画像、公式サイトURL、選択中のハッシュタグをシステム共有画面に渡します", tableName: "Share",
+                                   comment: "VoiceOver hint of the share button (still image selected)")
                     )
                 }
                 .padding(.horizontal, 20)
@@ -403,7 +462,7 @@ struct ShareComposerView: View {
                 }
             }
             .background(NightBackground())
-            .navigationTitle("カードにする")
+            .navigationTitle(Text("カードにする", tableName: "Share", comment: "Share composer navigation title. en: Make a Card"))
             // Scrolled content must not ghost through the title bar: an
             // inline title on a near-opaque bar (a large title would sit
             // under the bar's background).
@@ -413,10 +472,12 @@ struct ShareComposerView: View {
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     if isRendering {
-                        Button("生成を中止", role: .destructive) {
+                        Button(String(localized: "生成を中止", table: "Share",
+                                      comment: "Share composer toolbar button: stop creating the GIF or image"), role: .destructive) {
                             cancelExport()
                         }
-                        .accessibilityHint("この画面は閉じず、共有データの生成だけを中止します")
+                        .accessibilityHint(Text("この画面は閉じず、共有データの生成だけを中止します", tableName: "Share",
+                                                comment: "VoiceOver hint of the stop button"))
                     }
                     PomoGemSheetCloseButton(
                         accessibilityIdentifier: "share.close"
@@ -461,7 +522,8 @@ struct ShareComposerView: View {
             jarSnapshot = nil
             jarMotion = nil
             aggregateProjectionCacheStamp = nil
-            updateStatus("iCloudを再集計中です。確認済みの記録でカードを作り直してください。")
+            updateStatus(String(localized: "iCloudを再集計中です。確認済みの記録でカードを作り直してください。", table: "Share",
+                                comment: "Share composer status: iCloud totals started a recount, so the card must be made again from confirmed records"))
         }
         .onDisappear {
             cancelExport()
@@ -508,11 +570,11 @@ struct ShareComposerView: View {
             .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("SHARE STUDIO")
+                Text(verbatim: "SHARE STUDIO")
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .tracking(1.8)
                     .foregroundStyle(PomoGemTheme.amber)
-                Text("積み重ねを、動く一枚に")
+                Text("積み重ねを、動く一枚に", tableName: "Share", comment: "Share composer headline: turn your progress into one moving card")
                     .pomogemSectionTitle(size: 22)
                     .foregroundStyle(PomoGemTheme.text)
                 // No duration: 720-pixel GIFs take several seconds on a
@@ -540,20 +602,14 @@ struct ShareComposerView: View {
                     shareCompleted = false
                     statusMessage = nil
                 } label: {
-                    HStack(spacing: 8) {
-                        if !isAccessibilitySize {
-                            Image(systemName: kind.symbol)
-                                .font(.system(size: 14, weight: .bold))
-                        }
-                        Text(kind.rawValue)
-                            .font(.system(.subheadline, design: .rounded, weight: .bold))
-                        if kind == .animatedGIF, !isAccessibilitySize {
-                            Text("NEW")
-                                .font(.system(size: 8, weight: .black, design: .rounded))
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 3)
-                                .background(.white.opacity(mediaKind == kind ? 0.18 : 0.08), in: Capsule())
-                        }
+                    // English "Animated GIF" beside its icon and NEW badge is
+                    // wider than a tile on a 375–402 pt iPhone and broke onto
+                    // two lines: the icon gives way first, then the badge.
+                    // 「動くGIF」 always fits the first form.
+                    ViewThatFits(in: .horizontal) {
+                        mediaKindLabel(kind, showsIcon: !isAccessibilitySize, showsBadge: !isAccessibilitySize)
+                        mediaKindLabel(kind, showsIcon: false, showsBadge: !isAccessibilitySize)
+                        mediaKindLabel(kind, showsIcon: false, showsBadge: false)
                     }
                     .foregroundStyle(mediaKind == kind ? PomoGemTheme.background : PomoGemTheme.text)
                     .frame(maxWidth: .infinity)
@@ -572,9 +628,28 @@ struct ShareComposerView: View {
         .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 17, style: .continuous))
     }
 
+    private func mediaKindLabel(_ kind: MediaKind, showsIcon: Bool, showsBadge: Bool) -> some View {
+        HStack(spacing: 8) {
+            if showsIcon {
+                Image(systemName: kind.symbol)
+                    .font(.system(size: 14, weight: .bold))
+            }
+            Text(kind.title)
+                .font(.system(.subheadline, design: .rounded, weight: .bold))
+            if kind == .animatedGIF, showsBadge {
+                Text(verbatim: "NEW")
+                    .font(.system(size: 8, weight: .black, design: .rounded))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 3)
+                    .background(.white.opacity(mediaKind == kind ? 0.18 : 0.08), in: Capsule())
+            }
+        }
+    }
+
     private var shareFormatPicker: some View {
-        Picker("カードの形", selection: $format) {
-            ForEach(Format.allCases) { item in Text(item.rawValue).tag(item) }
+        Picker(String(localized: "カードの形", table: "Share", comment: "Share composer: label of the card shape picker (feed or story)"),
+               selection: $format) {
+            ForEach(Format.allCases) { item in Text(item.title).tag(item) }
         }
         .pickerStyle(.segmented)
         .accessibilityIdentifier("share.format")
@@ -601,7 +676,8 @@ struct ShareComposerView: View {
         .frame(minHeight: 48)
         .background(PomoGemTheme.card.opacity(0.88), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("現在の共有設定、\(settingsSummary)")
+        .accessibilityLabel(Text("現在の共有設定、\(settingsSummary)", tableName: "Share",
+                                 comment: "VoiceOver: the share settings summary. Argument: the summary items (GIF・4:5・実測のみ・タグなし)"))
         .accessibilityIdentifier("share.settings-summary")
     }
 
@@ -609,14 +685,18 @@ struct ShareComposerView: View {
         DisclosureGroup(isExpanded: $adjustmentsAreExpanded) {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 9) {
-                    adjustmentHeading("ファイルと形", symbol: "rectangle.on.rectangle.angled")
+                    adjustmentHeading(
+                        String(localized: "ファイルと形", table: "Share", comment: "Share adjustments heading: file type and card shape"),
+                        symbol: "rectangle.on.rectangle.angled"
+                    )
                     mediaKindPicker
                     shareFormatPicker
                 }
 
                 if mediaKind == .animatedGIF && (reduceMotion || !playAnimatedImages) {
                     Label(
-                        "プレビューの自動再生は停止中です。GIFを選んでシェアすると、動くファイルを書き出します。",
+                        String(localized: "プレビューの自動再生は停止中です。GIFを選んでシェアすると、動くファイルを書き出します。", table: "Share",
+                               comment: "Share composer note when Reduce Motion or Auto-Play Animated Images is off"),
                         systemImage: "accessibility"
                     )
                     .font(.caption)
@@ -652,7 +732,7 @@ struct ShareComposerView: View {
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(PomoGemTheme.amber)
                     .accessibilityHidden(true)
-                Text("調整")
+                Text("調整", tableName: "Share", comment: "Share composer: title of the collapsed options (file type, shape, self-reported, hashtags)")
                     .font(.system(.subheadline, design: .rounded, weight: .bold))
                 Spacer(minLength: 0)
             }
@@ -662,6 +742,11 @@ struct ShareComposerView: View {
         .background(PomoGemTheme.card.opacity(0.88), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
+    private static var copyCaptionTitle: String {
+        String(localized: "本文をコピー", table: "Share",
+               comment: "Share composer button: copy the caption (text, website URL and hashtags). en: Copy Text")
+    }
+
     private func adjustmentHeading(_ title: String, symbol: String) -> some View {
         Label(title, systemImage: symbol)
             .font(.caption.weight(.bold))
@@ -669,20 +754,46 @@ struct ShareComposerView: View {
     }
 
     private var shareInclusionControl: some View {
-        Toggle(isOn: $includeManual) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("自己申告を含める")
-                    .font(.subheadline.weight(.semibold))
-                Text("集中の自己申告を切替。記念石は常に「自己申告」と表示します")
-                    .font(.caption)
-                    .foregroundStyle(PomoGemTheme.muted)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                // At accessibility sizes the switch goes under its title. Beside
+                // it, the title had only a narrow column, and on a 375 pt iPhone
+                // "Include Self-Reported" was hyphenated mid-word. The switch
+                // keeps the label for VoiceOver, so the visible copy is hidden
+                // from it and the control is still read once.
+                VStack(alignment: .leading, spacing: 10) {
+                    shareInclusionLabel
+                        .accessibilityHidden(true)
+                    shareInclusionToggle
+                        .labelsHidden()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                shareInclusionToggle
             }
+        }
+        .padding(16)
+        .background(PomoGemTheme.raised, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var shareInclusionToggle: some View {
+        Toggle(isOn: $includeManual) {
+            shareInclusionLabel
         }
         .disabled(isRendering || isSaving)
         .tint(PomoGemTheme.amber)
         .accessibilityIdentifier("share.include-self-reported")
-        .padding(16)
-        .background(PomoGemTheme.raised, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var shareInclusionLabel: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("自己申告を含める", tableName: "Share")
+                .font(.subheadline.weight(.semibold))
+            Text("集中の自己申告を切替。記念石は常に「自己申告」と表示します", tableName: "Share",
+                 comment: "Share composer: subtitle of the Include Self-Reported toggle")
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+        }
     }
 
     private var sharePhotoSaveButton: some View {
@@ -694,7 +805,11 @@ struct ShareComposerView: View {
                     .tint(PomoGemTheme.text)
                     .accessibilityLabel(Text("写真に保存しています", tableName: "Share"))
             } else {
-                Label("写真に2サイズ保存", systemImage: "photo.badge.arrow.down")
+                Label {
+                    Text("写真に2サイズ保存", tableName: "Share", comment: "Share composer button: save the feed and story sizes to Photos")
+                } icon: {
+                    Image(systemName: "photo.badge.arrow.down")
+                }
             }
         }
         .buttonStyle(PomoGemSecondaryButtonStyle())
@@ -715,7 +830,7 @@ struct ShareComposerView: View {
                         .foregroundStyle(PomoGemTheme.amber)
                         .accessibilityHidden(true)
                 }
-                Text("一緒に渡すハッシュタグ")
+                Text("一緒に渡すハッシュタグ", tableName: "Share", comment: "Share composer: heading of the hashtag chips shared with the card")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(PomoGemTheme.muted)
                 Spacer(minLength: 0)
@@ -723,11 +838,17 @@ struct ShareComposerView: View {
                     UIPasteboard.general.string = shareCaption
                     updateStatus(
                         activeHashtags.isEmpty
-                            ? "本文をコピーしました。"
-                            : "本文とハッシュタグをコピーしました。"
+                            ? String(localized: "本文をコピーしました。", table: "Share",
+                                     comment: "Share composer status: the caption was copied")
+                            : String(localized: "本文とハッシュタグをコピーしました。", table: "Share",
+                                     comment: "Share composer status: the caption and hashtags were copied")
                     )
                 } label: {
-                    Label("本文をコピー", systemImage: "doc.on.doc")
+                    Label {
+                        Text(Self.copyCaptionTitle)
+                    } icon: {
+                        Image(systemName: "doc.on.doc")
+                    }
                         .font(.caption.weight(.bold))
                         .foregroundStyle(PomoGemTheme.amber)
                         .frame(minHeight: 44)
@@ -736,13 +857,16 @@ struct ShareComposerView: View {
                 .accessibilityIdentifier("share.copy-caption")
                 .accessibilityLabel(
                     activeHashtags.isEmpty
-                        ? "本文をコピー"
-                        : "本文とハッシュタグをコピー"
+                        ? Text(Self.copyCaptionTitle)
+                        : Text("本文とハッシュタグをコピー", tableName: "Share",
+                               comment: "VoiceOver label of the copy button when hashtags are selected")
                 )
                 .accessibilityHint(
                     activeHashtags.isEmpty
-                        ? "瓶の質量と固定の公式サイトURLを含む本文をコピーします"
-                        : "瓶の質量、固定の公式サイトURL、選択中のハッシュタグをコピーします"
+                        ? Text("瓶の質量と固定の公式サイトURLを含む本文をコピーします", tableName: "Share",
+                               comment: "VoiceOver hint of the copy button: the caption holds the jar's mass and the fixed official website URL")
+                        : Text("瓶の質量、固定の公式サイトURL、選択中のハッシュタグをコピーします", tableName: "Share",
+                               comment: "VoiceOver hint of the copy button: the caption holds the jar's mass, the fixed official website URL and the selected hashtags")
                 )
             }
             // Wrapping, not a sideways scroll: the study tags used to start
@@ -760,7 +884,12 @@ struct ShareComposerView: View {
                         HStack(spacing: 5) {
                             Image(systemName: selectedHashtags.contains(hashtag) ? "checkmark" : "plus")
                                 .font(.system(size: 9, weight: .black))
+                            // A tag never breaks: at AX5 on a 375 pt iPhone
+                            // "#studywithme" was hyphenated onto two lines. It
+                            // shrinks instead (the Japanese chips always fit).
                             Text(hashtag)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.5)
                         }
                         .font(.system(.caption, design: .rounded, weight: .bold))
                         .foregroundStyle(
@@ -793,7 +922,9 @@ struct ShareComposerView: View {
                 }
             }
 
-            TextField("追加タグ（任意）", text: $customHashtagInput)
+            TextField(String(localized: "追加タグ（任意）", table: "Share",
+                             comment: "Share composer: placeholder of the field for one extra hashtag"),
+                      text: $customHashtagInput)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .submitLabel(.done)
@@ -815,17 +946,21 @@ struct ShareComposerView: View {
 
             if !customHashtagInput.isEmpty,
                ShareHashtagPolicy.normalized(customHashtagInput) == nil {
-                Text("文字・数字・_ のみ、30文字まで。本文やURLは追加しません。")
+                Text("文字・数字・_ のみ、\(ShareHashtagPolicy.maximumBodyLength)文字まで。本文やURLは追加しません。", tableName: "Share",
+                     comment: "Share composer: the extra hashtag is invalid. Argument: the longest allowed tag in characters (30)")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(Color.red.opacity(0.86))
             } else {
                 Text(activeHashtags.isEmpty
-                    ? "ハッシュタグなしで共有します"
-                    : "選択中：\(activeHashtags.joined(separator: " "))")
+                    ? String(localized: "ハッシュタグなしで共有します", table: "Share",
+                             comment: "Share composer: no hashtags will be shared")
+                    : String(localized: "選択中：\(activeHashtags.joined(separator: " "))", table: "Share",
+                             comment: "Share composer: the hashtags that will be shared. Argument: the tags separated by spaces"))
                     .font(.caption2)
                     .foregroundStyle(PomoGemTheme.muted)
             }
-            Text("保存済みのテーマ名・成果メモ・顧客名は自動で含めません。追加タグへ入力した内容は共有されます")
+            Text("保存済みのテーマ名・成果メモ・顧客名は自動で含めません。追加タグへ入力した内容は共有されます", tableName: "Share",
+                 comment: "Share composer privacy note under the hashtags")
                 .font(.caption2)
                 .foregroundStyle(PomoGemTheme.muted)
         }
@@ -853,16 +988,18 @@ struct ShareComposerView: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(
-                    isRendering
-                        ? (mediaKind == .animatedGIF ? "GIFを生成中…" : "画像を生成中…")
-                        : (mediaKind == .animatedGIF ? "GIF + ハッシュタグをシェア" : "画像 + ハッシュタグをシェア")
-                )
-                .font(.system(.body, design: .rounded, weight: .black))
+                Text(shareLaunchTitle)
+                    .font(.system(.body, design: .rounded, weight: .black))
                 if !isCompact {
-                    Text(mediaKind == .animatedGIF ? "粒がきらめく短いループ" : "高解像度の一枚")
-                        .font(.caption.weight(.semibold))
-                        .opacity(0.72)
+                    Text(
+                        mediaKind == .animatedGIF
+                            ? String(localized: "粒がきらめく短いループ", table: "Share",
+                                     comment: "Share button subtitle (GIF): a short loop of sparkling gems")
+                            : String(localized: "高解像度の一枚", table: "Share",
+                                     comment: "Share button subtitle (still image): one high-resolution image")
+                    )
+                    .font(.caption.weight(.semibold))
+                    .opacity(0.72)
                 }
             }
             Spacer(minLength: 4)
@@ -879,6 +1016,28 @@ struct ShareComposerView: View {
         .padding(.vertical, 7)
     }
 
+    private var shareLaunchTitle: String {
+        switch (isRendering, mediaKind) {
+        case (true, .animatedGIF):
+            String(localized: "GIFを生成中…", table: "Share", comment: "Share button while the GIF is created")
+        case (true, .stillImage):
+            String(localized: "画像を生成中…", table: "Share", comment: "Share button while the image is created")
+        case (false, .animatedGIF):
+            String(localized: "GIF + ハッシュタグをシェア", table: "Share", comment: "Share button (GIF selected): share the GIF with the caption and hashtags")
+        case (false, .stillImage):
+            String(localized: "画像 + ハッシュタグをシェア", table: "Share", comment: "Share button (still image selected): share the image with the caption and hashtags")
+        }
+    }
+
+    private static var firstGemNeededStatus: String {
+        String(localized: "最初の一粒を積むと、カードにできます。", table: "Share",
+               comment: "Share composer status: there is nothing to put on a card yet")
+    }
+
+    private static var sharedTitle: String {
+        String(localized: "共有できました", table: "Share", comment: "Share composer: the share finished (banner title and VoiceOver announcement)")
+    }
+
     private var shareSuccessBanner: some View {
         HStack(spacing: 13) {
             ZStack {
@@ -890,23 +1049,24 @@ struct ShareComposerView: View {
             .frame(width: 42, height: 42)
             .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text("共有できました")
+                Text(Self.sharedTitle)
                     .font(.system(.subheadline, design: .rounded, weight: .bold))
-                Text("次の集中も、また一粒ずつ。")
+                Text("次の集中も、また一粒ずつ。", tableName: "Share", comment: "Share composer: gentle line under Shared")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
             }
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("share.success.message")
-            .accessibilityLabel("共有できました。次の集中も、また一粒ずつ。")
+            .accessibilityLabel(Text("共有できました。次の集中も、また一粒ずつ。", tableName: "Share",
+                                     comment: "VoiceOver: the share banner, title and gentle line together"))
             Spacer()
-            Button("完了") { dismiss() }
+            Button(String(localized: "完了", table: "Share", comment: "Share banner button: close the composer. en: Done")) { dismiss() }
                 .font(.caption.weight(.bold))
                 .foregroundStyle(PomoGemTheme.amber)
                 .frame(minWidth: 44, minHeight: 44)
                 .accessibilityIdentifier("share.success.done")
-                .accessibilityLabel("共有を完了して閉じる")
-                .accessibilityHint("カード作成画面を閉じて瓶に戻ります")
+                .accessibilityLabel(Text("共有を完了して閉じる", tableName: "Share", comment: "VoiceOver label of the Done button after sharing"))
+                .accessibilityHint(Text("カード作成画面を閉じて瓶に戻ります", tableName: "Share", comment: "VoiceOver hint of the Done button after sharing"))
         }
         .padding(14)
         .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
@@ -929,10 +1089,13 @@ struct ShareComposerView: View {
                 VStack(spacing: 6) {
                     Text(
                         aggregateProjectionPresentation.isCloudVerificationPending
-                            ? "iCloudを再集計中"
+                            ? String(localized: "iCloudを再集計中", table: "Share",
+                                     comment: "Share composer empty state title: iCloud totals are being recounted")
                             : selection.hasExcludedSelfReportedContent
-                            ? "自己申告の粒があります"
-                            : "カードにする粒が、まだありません"
+                            ? String(localized: "自己申告の粒があります", table: "Share",
+                                     comment: "Share composer empty state title: only self-reported gems, which are left out")
+                            : String(localized: "カードにする粒が、まだありません", table: "Share",
+                                     comment: "Share composer empty state title: no gems yet")
                     )
                         .font(PomoGemTheme.brand(21))
                         .multilineTextAlignment(.center)
@@ -945,16 +1108,19 @@ struct ShareComposerView: View {
                 if aggregateProjectionPresentation.isCloudVerificationPending {
                     ProgressView()
                         .tint(PomoGemTheme.amber)
-                        .accessibilityLabel("iCloudの集計を確認中")
+                        .accessibilityLabel(Text("iCloudの集計を確認中", tableName: "Share",
+                                                 comment: "VoiceOver: progress while iCloud totals are checked"))
                 } else if selection.hasExcludedSelfReportedContent {
-                    Button("自己申告を含めてカードにする") {
+                    Button(String(localized: "自己申告を含めてカードにする", table: "Share",
+                                  comment: "Share composer empty state button: include self-reported focus and make the card")) {
                         includeSelfReportedFocusHere()
                     }
                     .buttonStyle(PomoGemSecondaryButtonStyle())
                     .accessibilityIdentifier("share.include-self-reported-direct")
-                    .accessibilityHint("自己申告として明記したうえで、この記録をカードに含めます")
+                    .accessibilityHint(Text("自己申告として明記したうえで、この記録をカードに含めます", tableName: "Share"))
                 } else {
-                    Button("最初の一粒へ") {
+                    Button(String(localized: "最初の一粒へ", table: "Share",
+                                  comment: "Share composer empty state button: close and go to the jar to add a first gem")) {
                         dismiss()
                         router.selectedTab = .jar
                     }
@@ -1007,11 +1173,11 @@ struct ShareComposerView: View {
             try? await Task.sleep(for: .milliseconds(350))
             let grams = selection.totalGrams
             let message: String
-            if let time = ShareMassFormatter.focusTime(grams) {
+            if let time = ShareMassFormatter.spokenFocusTime(grams) {
                 message = String(
                     localized: "自己申告を含めました。カードは\(ShareMassFormatter.spoken(grams))、\(time)です。",
                     table: "Share",
-                    comment: "VoiceOver after including self-reported focus. Arguments: spoken mass (300グラム), focus time (30分)"
+                    comment: "VoiceOver after including self-reported focus. Arguments: spoken mass (300グラム), spoken focus time (30分)"
                 )
             } else {
                 message = String(
@@ -1115,10 +1281,10 @@ struct ShareComposerView: View {
                     .frame(width: 26)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text("ポモジェムロゴと公式サイト")
+                Text("ポモジェムロゴと公式サイト", tableName: "Share", comment: "Share composer row title: the PomoGem logo and the official website")
                     .font(.subheadline.weight(.semibold))
                     .fixedSize(horizontal: false, vertical: true)
-                Text("すべてのカードと共有本文に表示します")
+                Text("すべてのカードと共有本文に表示します", tableName: "Share", comment: "Share composer row subtitle: the logo and website appear on every card and caption")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1126,7 +1292,7 @@ struct ShareComposerView: View {
             if !isAccessibilitySize {
                 Spacer()
             }
-            Text("常に表示")
+            Text("常に表示", tableName: "Share", comment: "Share composer: the logo and website row cannot be turned off")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(PomoGemTheme.amber)
         }
@@ -1143,43 +1309,55 @@ struct ShareComposerView: View {
             if case .aggregate = scope {
                 return String(localized: "この結晶は、確認が終わるとカードにできます。", table: "Share")
             }
-            return "古い集計値は使わず、この端末で確認できる個別記録だけを確認しています。"
+            return String(localized: "古い集計値は使わず、この端末で確認できる個別記録だけを確認しています。", table: "Share",
+                          comment: "Share composer empty state while iCloud is checked")
         }
         if case .aggregate = scope,
            !includeManual,
            selection.scopedAggregateHasSelfReportedPebbles {
-            return "この結晶には自己申告が含まれます。「自己申告を含める」をオンにすると、結晶全体の正確な質量をカードにできます。"
+            return String(localized: "この結晶には自己申告が含まれます。「自己申告を含める」をオンにすると、結晶全体の正確な質量をカードにできます。", table: "Share",
+                          comment: "Share composer empty state: the crystal holds self-reported gems. 「自己申告を含める」 is the toggle's title")
         }
         if !includeManual, selection.scopeHasSelfReportedSessions {
-            return "自己申告を含めると、この期間の瓶をカードにできます。"
+            return String(localized: "自己申告を含めると、この期間の瓶をカードにできます。", table: "Share",
+                          comment: "Share composer empty state: the period only has self-reported focus")
         }
-        return "集中を完走すると、瓶の画像とグラム数を一緒に残せます。"
+        return String(localized: "集中を完走すると、瓶の画像とグラム数を一緒に残せます。", table: "Share",
+                      comment: "Share composer empty state: no gems yet")
     }
 
     private var coverageNotice: String? {
         if aggregateProjectionPresentation.isCloudVerificationPending {
-            return "iCloudの集計を再確認中です。古い結晶集計は使わず、この端末で確認できた個別記録だけをカードにします。"
+            return String(localized: "iCloudの集計を再確認中です。古い結晶集計は使わず、この端末で確認できた個別記録だけをカードにします。", table: "Share",
+                          comment: "Share composer coverage note while iCloud totals are rechecked")
         }
         if historyPageIsPartial {
             switch scope {
             case .all where selection.usesCompactRootProjection:
                 if selection.compactProjectionIsIncomplete {
-                    return "全履歴を一括展開せず、取得できた結晶集計と最新層だけで構成しています。カードは「読み込み分」と明記されます。"
+                    return String(localized: "全履歴を一括展開せず、取得できた結晶集計と最新層だけで構成しています。カードは「読み込み分」と明記されます。", table: "Share",
+                                  comment: "Share composer coverage note: the card holds only the crystal totals that loaded and the newest layer. 「読み込み分」 quotes the card's period label これまで・読み込み分")
                 }
                 if achievementPageIsPartial {
-                    return "集中の質量は結晶集計から構成し、記念石は最新\(BoundedHistoryPolicy.achievementLimit)個を載せます。"
+                    return String(localized: "集中の質量は結晶集計から構成し、記念石は最新\(BoundedHistoryPolicy.achievementLimit)個を載せます。", table: "Share",
+                                  comment: "Share composer coverage note: focus mass comes from crystal totals; only the newest milestone stones are on the card. Argument: how many stones")
                 }
-                return "40年分でも全履歴を展開せず、結晶集計と現在の粒から正確な質量を構成します。"
+                return String(localized: "40年分でも全履歴を展開せず、結晶集計と現在の粒から正確な質量を構成します。", table: "Share",
+                              comment: "Share composer coverage note: the exact mass is built from crystal totals and current gems without loading every record")
             case .all:
-                return "全履歴を一括展開しないため、最新\(BoundedHistoryPolicy.periodSessionLimit)件の記録から選んだ表示分です。カードにも範囲を明記します。"
+                return String(localized: "全履歴を一括展開しないため、最新\(Self.sessionLimitText)件の記録から選んだ表示分です。カードにも範囲を明記します。", table: "Share",
+                              comment: "Share composer coverage note: the card shows part of the history, from the newest records. Argument: how many records (a fixed number far above one)")
             case .month:
-                return "この月は記録が多いため、最新\(BoundedHistoryPolicy.periodSessionLimit)件の表示分です。カードにも「表示分」と明記します。"
+                return String(localized: "この月は記録が多いため、最新\(Self.sessionLimitText)件の表示分です。カードにも「表示分」と明記します。", table: "Share",
+                              comment: "Share composer coverage note: the month has many records, so the card shows the newest. Argument: how many records (a fixed number far above one). 「表示分」 quotes the card's period label")
             case .aggregate:
-                return "この結晶は集計値で表示しています。元の全セッションはこの画面では展開しません。"
+                return String(localized: "この結晶は集計値で表示しています。元の全セッションはこの画面では展開しません。", table: "Share",
+                              comment: "Share composer coverage note: the crystal is shown from its totals")
             }
         }
         if achievementPageIsPartial {
-            return "記念石は最新\(BoundedHistoryPolicy.achievementLimit)個をカードに載せます。記録画面で削除した石は共有にも含まれません。"
+            return String(localized: "記念石は最新\(BoundedHistoryPolicy.achievementLimit)個をカードに載せます。記録画面で削除した石は共有にも含まれません。", table: "Share",
+                          comment: "Share composer coverage note: only the newest milestone stones are on the card. Argument: how many stones")
         }
         return nil
     }
@@ -1387,7 +1565,8 @@ struct ShareComposerView: View {
             aggregateProjectionCacheStamp = nil
             shareRecordsGeneration &+= 1
             isLoadingData = false
-            dataLoadError = "記録を安全な範囲で読み込めませんでした。もう一度この画面を開いてください。"
+            dataLoadError = String(localized: "記録を安全な範囲で読み込めませんでした。もう一度この画面を開いてください。", table: "Share",
+                                   comment: "Share composer error: the records could not be loaded within the safe limits")
         }
     }
 
@@ -1413,7 +1592,8 @@ struct ShareComposerView: View {
     private func persistSharePreference(from oldValue: Bool, to value: Bool) {
         guard let resolvedPreferences else {
             includeManual = false
-            updateStatus("共有設定を安全に確認できないため、自己申告は含めません。")
+            updateStatus(String(localized: "共有設定を安全に確認できないため、自己申告は含めません。", table: "Share",
+                                comment: "Share composer status: the saved share setting cannot be read safely, so self-reported focus stays out"))
             refreshJarSnapshot()
             return
         }
@@ -1434,7 +1614,8 @@ struct ShareComposerView: View {
         } catch {
             modelContext.rollback()
             includeManual = oldValue
-            updateStatus("共有の設定を保存できませんでした。変更前の状態に戻しました。")
+            updateStatus(String(localized: "共有の設定を保存できませんでした。変更前の状態に戻しました。", table: "Share",
+                                comment: "Share composer status: the Include Self-Reported setting could not be saved and was put back"))
         }
     }
 
@@ -1576,7 +1757,7 @@ struct ShareComposerView: View {
     @MainActor
     private func startShareExport() {
         guard selection.hasShareableContent else {
-            updateStatus("最初の一粒を積むと、カードにできます。")
+            updateStatus(Self.firstGemNeededStatus)
             return
         }
         guard exportTask == nil else { return }
@@ -1641,20 +1822,28 @@ struct ShareComposerView: View {
                             table: "Share",
                             comment: "Share sheet title for the GIF. Arguments: mass, focus time"
                         )
-                    } ?? "瓶に積んだ集中 \(ShareMassFormatter.visual(snapshot.totalGrams))"
+                    } ?? String(
+                        localized: "瓶に積んだ集中 \(ShareMassFormatter.visual(snapshot.totalGrams))",
+                        table: "Share",
+                        comment: "Share sheet title for a GIF with under a minute of focus. Argument: mass"
+                    )
                 )
                 preparedItems = [source, snapshot.caption]
                 status = snapshot.hashtags.isEmpty
-                    ? "GIFと公式サイトURL入りの本文を準備しました。共有先によっては本文の貼り付けが必要です。"
-                    : "GIF、公式サイトURL、ハッシュタグを準備しました。共有先によっては本文の貼り付けが必要です。"
+                    ? String(localized: "GIFと公式サイトURL入りの本文を準備しました。共有先によっては本文の貼り付けが必要です。", table: "Share",
+                             comment: "Share composer status: the GIF and the caption with the website URL are ready for the share sheet")
+                    : String(localized: "GIF、公式サイトURL、ハッシュタグを準備しました。共有先によっては本文の貼り付けが必要です。", table: "Share",
+                             comment: "Share composer status: the GIF, website URL and hashtags are ready for the share sheet")
             case .stillImage:
                 guard let image = render(snapshot: snapshot, logicalSize: logicalSize) else {
                     throw AnimatedShareExportError.noFrames
                 }
                 preparedItems = [image, snapshot.caption]
                 status = snapshot.hashtags.isEmpty
-                    ? "画像と公式サイトURL入りの本文を準備しました。共有先を選んでください。"
-                    : "画像、公式サイトURL、ハッシュタグを準備しました。共有先を選んでください。"
+                    ? String(localized: "画像と公式サイトURL入りの本文を準備しました。共有先を選んでください。", table: "Share",
+                             comment: "Share composer status: the image and the caption with the website URL are ready for the share sheet")
+                    : String(localized: "画像、公式サイトURL、ハッシュタグを準備しました。共有先を選んでください。", table: "Share",
+                             comment: "Share composer status: the image, website URL and hashtags are ready for the share sheet")
             }
 
             try Task.checkCancellation()
@@ -1687,7 +1876,8 @@ struct ShareComposerView: View {
             if let producedURL { try? FileManager.default.removeItem(at: producedURL) }
             if activeExportID == snapshot.id {
                 cleanUpTemporaryShareFile()
-                updateStatus("共有データを生成できませんでした。\(error.localizedDescription)")
+                updateStatus(String(localized: "共有データを生成できませんでした。\(error.localizedDescription)", table: "Share",
+                                    comment: "Share composer status: the GIF or image could not be created. Argument: the system's reason, a full sentence"))
             }
         }
     }
@@ -1797,19 +1987,21 @@ struct ShareComposerView: View {
     private func handleShareCompletion(completed: Bool, error: Error?) {
         if let error {
             shareCompleted = false
-            updateStatus("共有を完了できませんでした。\(error.localizedDescription)")
+            updateStatus(String(localized: "共有を完了できませんでした。\(error.localizedDescription)", table: "Share",
+                                comment: "Share composer status: the share sheet reported an error. Argument: the system's reason, a full sentence"))
             return
         }
         guard completed else {
             shareCompleted = false
-            updateStatus("共有はキャンセルされました。カードはこの画面に残っています。")
+            updateStatus(String(localized: "共有はキャンセルされました。カードはこの画面に残っています。", table: "Share",
+                                comment: "Share composer status: the share sheet was closed without sharing; the card stays"))
             return
         }
         withAnimation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.8)) {
             shareCompleted = true
             statusMessage = nil
         }
-        UIAccessibility.post(notification: .announcement, argument: "共有できました")
+        UIAccessibility.post(notification: .announcement, argument: Self.sharedTitle)
     }
 
     @MainActor
@@ -1834,7 +2026,7 @@ struct ShareComposerView: View {
     @MainActor
     private func renderAndSave() {
         guard selection.hasShareableContent else {
-            updateStatus("最初の一粒を積むと、カードにできます。")
+            updateStatus(Self.firstGemNeededStatus)
             return
         }
         guard photoSaveTask == nil else { return }
@@ -1898,7 +2090,8 @@ struct ShareComposerView: View {
         let authorization = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
         guard activePhotoSaveID == snapshot.id, !Task.isCancelled else { return }
         guard authorization == .authorized || authorization == .limited else {
-            updateStatus("写真への追加が許可されていません。端末の設定から変更できます。")
+            updateStatus(String(localized: "写真への追加が許可されていません。端末の設定から変更できます。", table: "Share",
+                                comment: "Share composer status: PomoGem may not add to Photos; the person can allow it in the device's Settings"))
             return
         }
 
@@ -1929,7 +2122,8 @@ struct ShareComposerView: View {
         } catch {
             guard activePhotoSaveID == snapshot.id, !Task.isCancelled,
                   !(error is CancellationError) else { return }
-            updateStatus("カードを生成できませんでした。")
+            updateStatus(String(localized: "カードを生成できませんでした。", table: "Share",
+                                comment: "Share composer status: the cards for Photos could not be created"))
             return
         }
         guard activePhotoSaveID == snapshot.id, !Task.isCancelled else { return }
@@ -1968,7 +2162,8 @@ struct ShareComposerView: View {
             }
             switch media {
             case .stills:
-                updateStatus("フィード用とストーリー用を写真に保存しました。")
+                updateStatus(String(localized: "フィード用とストーリー用を写真に保存しました。", table: "Share",
+                                    comment: "Share composer status: both still image sizes were saved to Photos"))
             case .animatedGIFs:
                 updateStatus(String(
                     localized: "動くGIFをフィード用とストーリー用で写真に保存しました。",
@@ -1981,7 +2176,8 @@ struct ShareComposerView: View {
             return
         } catch {
             guard activePhotoSaveID == snapshot.id else { return }
-            updateStatus("写真に保存できませんでした。\(error.localizedDescription)")
+            updateStatus(String(localized: "写真に保存できませんでした。\(error.localizedDescription)", table: "Share",
+                                comment: "Share composer status: saving to Photos failed. Argument: the system's reason, a full sentence"))
         }
     }
 
@@ -2130,18 +2326,39 @@ struct ShareHiddenContent: Equatable {
         ])
     }
 
+    /// The card's corner chip: 「代表表示 +74」. The number is how many
+    /// bodies the drawn jar leaves out, printed as it always was (no digit
+    /// grouping), so it is passed as text; "+N" needs no plural form.
     var compactLabel: String? {
-        totalCount > 0 ? "代表表示 +\(totalCount)" : nil
+        totalCount > 0
+            ? String(localized: "代表表示 +\(String(totalCount))", table: "Share",
+                     comment: "Share card corner chip: the drawn jar is a sample; the argument is how many gems, crystals and stones it leaves out")
+            : nil
     }
 
+    /// 「瓶は代表表示（ほか集中粒48粒・結晶17個・記念石9個）」: drawn on the card,
+    /// a sentence of the caption and of the card's VoiceOver text.
     var captionDisclosure: String? {
         let details = [
-            loosePebbleCount > 0 ? "集中粒\(loosePebbleCount)粒" : nil,
-            aggregateCount > 0 ? String(localized: "結晶\(aggregateCount)個", table: "Share", comment: "Share caption disclosure item: crystals left out of the drawn jar") : nil,
-            achievementCount > 0 ? "記念石\(achievementCount)個" : nil
+            loosePebbleCount > 0
+                ? String(localized: "集中粒\(loosePebbleCount)粒", table: "Share",
+                         comment: "Share caption disclosure item: focus gems left out of the drawn jar")
+                : nil,
+            aggregateCount > 0
+                ? String(localized: "結晶\(aggregateCount)個", table: "Share",
+                         comment: "Share caption disclosure and VoiceOver item: a number of crystals")
+                : nil,
+            achievementCount > 0
+                ? String(localized: "記念石\(achievementCount)個", table: "Share",
+                         comment: "Share caption disclosure and VoiceOver item: a number of milestone stones")
+                : nil
         ].compactMap { $0 }
         guard !details.isEmpty else { return nil }
-        return "瓶は代表表示（ほか\(details.joined(separator: "・"))）"
+        return String(
+            localized: "瓶は代表表示（ほか\(ListText.compact(details))）",
+            table: "Share",
+            comment: "Share card, caption and VoiceOver: the drawn jar is a sample. Argument: what it leaves out (集中粒48粒・結晶17個), a statement without its final period"
+        )
     }
 }
 
@@ -2236,16 +2453,20 @@ struct SharePebbleRewardIdentity: Equatable {
         switch kind {
         case .normal:
             mark = nil
-            baseAccessibilityName = "通常の集中粒"
+            baseAccessibilityName = String(localized: "通常の集中粒", table: "Share",
+                                           comment: "VoiceOver name of an ordinary focus gem drawn on the share card")
         case .gold:
             mark = "✦"
-            baseAccessibilityName = "金のレア粒"
+            baseAccessibilityName = String(localized: "金のレア粒", table: "Share",
+                                           comment: "VoiceOver name of a rare gold gem drawn on the share card (in-app only)")
         case .prism:
             mark = "◇"
-            baseAccessibilityName = "虹のレア粒"
+            baseAccessibilityName = String(localized: "虹のレア粒", table: "Share",
+                                           comment: "VoiceOver name of a rare rainbow gem drawn on the share card (in-app only)")
         }
-        accessibilityName = baseAccessibilityName
-            + (rewardCounts?.multiDrawSummary.map { "、\($0)" } ?? "")
+        accessibilityName = ListText.inSentence(
+            [baseAccessibilityName] + [rewardCounts?.multiDrawSummary].compactMap { $0 }
+        )
     }
 }
 
@@ -2282,19 +2503,36 @@ struct ShareAggregateRewardIdentity: Equatable {
 
     var compactLabel: String? {
         let parts = [
-            goldCount > 0 ? "金\(goldCount)" : nil,
-            prismCount > 0 ? "虹\(prismCount)" : nil
+            goldCount > 0
+                ? String(localized: "金\(goldCount)", table: "Share",
+                         comment: "Tiny label on a crystal drawn on the share card: how many rare gold gems it holds (in-app only)")
+                : nil,
+            prismCount > 0
+                ? String(localized: "虹\(prismCount)", table: "Share",
+                         comment: "Tiny label on a crystal drawn on the share card: how many rare rainbow gems it holds (in-app only)")
+                : nil
         ].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 
     var accessibilityDetail: String? {
-        let parts = [
-            goldCount > 0 ? "金のレア粒\(goldCount)粒" : nil,
-            prismCount > 0 ? "虹のレア粒\(prismCount)粒" : nil
-        ].compactMap { $0 }
-        return parts.isEmpty ? nil : parts.joined(separator: "、")
+        let parts = shareRareGemCounts(goldCount: goldCount, prismCount: prismCount)
+        return parts.isEmpty ? nil : ListText.inSentence(parts)
     }
+}
+
+/// 「金のレア粒2粒」「虹のレア粒1粒」 for the share card's caption and VoiceOver.
+private func shareRareGemCounts(goldCount: Int, prismCount: Int) -> [String] {
+    [
+        goldCount > 0
+            ? String(localized: "金のレア粒\(goldCount)粒", table: "Share",
+                     comment: "Share caption and VoiceOver: how many rare gold gems the card holds (in-app only)")
+            : nil,
+        prismCount > 0
+            ? String(localized: "虹のレア粒\(prismCount)粒", table: "Share",
+                     comment: "Share caption and VoiceOver: how many rare rainbow gems the card holds (in-app only)")
+            : nil
+    ].compactMap { $0 }
 }
 
 struct ShareRewardSemantics: Equatable {
@@ -2318,37 +2556,55 @@ struct ShareRewardSemantics: Equatable {
             .mapValues { $0.count }
     }
 
+    /// A line of the caption: 「報酬内訳：金のレア粒2粒・虹のレア粒1粒／記念石：100点1個・試験合格2個」.
+    /// A statement without its final period.
     var captionDetail: String? {
-        let rareParts = [
-            goldCount > 0 ? "金のレア粒\(goldCount)粒" : nil,
-            prismCount > 0 ? "虹のレア粒\(prismCount)粒" : nil
-        ].compactMap { $0 }
-        let achievementParts = AchievementKind.allCases.compactMap { kind -> String? in
-            guard let count = achievementCounts[kind], count > 0 else { return nil }
-            return "\(kind.title)\(count)個"
+        let rareParts = shareRareGemCounts(goldCount: goldCount, prismCount: prismCount)
+        let achievementParts = achievementCountLabels
+        switch (rareParts.isEmpty, achievementParts.isEmpty) {
+        case (true, true):
+            return nil
+        case (false, true):
+            return String(localized: "報酬内訳：\(ListText.compact(rareParts))", table: "Share",
+                          comment: "Share caption line: the rare gems on the card (in-app only). Argument: 金のレア粒2粒・虹のレア粒1粒")
+        case (true, false):
+            return String(localized: "報酬内訳：記念石：\(ListText.compact(achievementParts))", table: "Share",
+                          comment: "Share caption line: the milestone stones on the card. Argument: each kind with its count (100点1個・試験合格2個)")
+        case (false, false):
+            return String(
+                localized: "報酬内訳：\(ListText.compact(rareParts))／記念石：\(ListText.compact(achievementParts))",
+                table: "Share",
+                comment: "Share caption line: the rare gems (in-app only), then the milestone stones on the card. Arguments: 金のレア粒2粒・虹のレア粒1粒, 100点1個・試験合格2個"
+            )
         }
-        let sections = [
-            rareParts.isEmpty ? nil : rareParts.joined(separator: "・"),
-            achievementParts.isEmpty ? nil : "記念石：\(achievementParts.joined(separator: "・"))"
-        ].compactMap { $0 }
-        return sections.isEmpty ? nil : "報酬内訳：\(sections.joined(separator: "／"))"
     }
 
+    /// Part of the card's VoiceOver text: 「記念石の内訳、100点1個、試験合格2個」,
+    /// with the rare gems first where they are shown.
     var accessibilityDetail: String {
-        let rare = [
-            goldCount > 0 ? "金のレア粒\(goldCount)粒" : nil,
-            prismCount > 0 ? "虹のレア粒\(prismCount)粒" : nil
-        ].compactMap { $0 }
-        let achievements = AchievementKind.allCases.compactMap { kind -> String? in
-            guard let count = achievementCounts[kind], count > 0 else { return nil }
-            return "\(kind.title)\(count)個"
-        }
+        let achievements = achievementCountLabels
         let achievementText = achievements.isEmpty
-            ? "記念石なし"
-            : "記念石の内訳、\(achievements.joined(separator: "、"))"
+            ? String(localized: "記念石なし", table: "Share",
+                     comment: "VoiceOver, share card: no milestone stones")
+            : String(localized: "記念石の内訳、\(ListText.inSentence(achievements))", table: "Share",
+                     comment: "VoiceOver, share card: the milestone stones. Argument: each kind with its count (100点1個、試験合格2個)")
         guard presentsRareRewards else { return achievementText }
-        let rareText = rare.isEmpty ? "レア粒なし" : rare.joined(separator: "、")
-        return "\(rareText)。\(achievementText)"
+        let rare = shareRareGemCounts(goldCount: goldCount, prismCount: prismCount)
+        let rareText = rare.isEmpty
+            ? String(localized: "レア粒なし", table: "Share",
+                     comment: "VoiceOver, share card: no rare gems (in-app only)")
+            : ListText.inSentence(rare)
+        return String(localized: "\(rareText)。\(achievementText)", table: "Share",
+                      comment: "VoiceOver, share card (in-app only): the rare gems, then the milestone stones, as two sentences; the second has no final period")
+    }
+
+    /// 「100点1個」 for each kind of milestone stone on the card.
+    private var achievementCountLabels: [String] {
+        AchievementKind.allCases.compactMap { kind -> String? in
+            guard let count = achievementCounts[kind], count > 0 else { return nil }
+            return String(localized: "\(kind.title)\(count)個", table: "Share",
+                          comment: "Share caption and VoiceOver: one kind of milestone stone and how many are on the card. Arguments: the kind (100点), the count")
+        }
     }
 }
 
@@ -2622,13 +2878,20 @@ struct ShareCardView: View {
 
                 VStack(spacing: 9) {
                     HStack(alignment: .firstTextBaseline) {
-                        Text("ポモジェム")
+                        Text("ポモジェム", tableName: "Share", comment: "Share card: the app's name at the top left. en: PomoGem")
                             .font(PomoGemTheme.brand(story ? 25 : 21))
                             .tracking(1)
                             .foregroundStyle(PomoGemTheme.amber)
+                            .layoutPriority(1)
                         Spacer()
+                        // One line, shrunk to fit: English period labels run
+                        // longer ("Confirmed on this device · iCloud
+                        // recounting"), and a second line grew the header
+                        // until the footer left the fixed canvas.
                         Text(periodLabel)
                             .font(.system(size: story ? 11 : 9, weight: .bold, design: .rounded))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
                             .foregroundStyle(PomoGemTheme.muted)
                             .padding(.horizontal, 9)
                             .padding(.vertical, 5)
@@ -2695,26 +2958,40 @@ struct ShareCardView: View {
                     VStack(spacing: story ? 8 : 5) {
                         Text(
                             pebbleCount > 0
-                                ? "\(pebbleCount)粒の積み重ね"
-                                : "\(achievements.count)個の記念石"
+                                ? String(localized: "\(pebbleCount)粒の積み重ね", table: "Share",
+                                         comment: "Share card line under the jar: how many gems the card holds")
+                                : String(localized: "\(achievements.count)個の記念石", table: "Share",
+                                         comment: "Share card line under the jar when it holds only milestone stones: how many")
                         )
                             .font(.system(size: story ? 13 : 10, weight: .heavy, design: .rounded))
                             .foregroundStyle(PomoGemTheme.text)
                         HStack(spacing: 6) {
                             Text("実測 \(measuredCount)粒", tableName: "Share", comment: "Share card: measured gems (timer or Screen Time)")
-                            Text("・")
+                            Text(Self.statSeparator)
                             Text("結晶 \(aggregates.count)", tableName: "Share", comment: "Share card stat: crystal count")
                             if goldCount > 0 {
-                                Text("・")
-                                Label("金 \(goldCount)", systemImage: "sparkles")
+                                Text(Self.statSeparator)
+                                Label {
+                                    Text("金 \(goldCount)", tableName: "Share", comment: "Share card stat: rare gold gems (in-app only)")
+                                } icon: {
+                                    Image(systemName: "sparkles")
+                                }
                             }
                             if prismCount > 0 {
-                                Text("・")
-                                Label("虹 \(prismCount)", systemImage: "diamond.fill")
+                                Text(Self.statSeparator)
+                                Label {
+                                    Text("虹 \(prismCount)", tableName: "Share", comment: "Share card stat: rare rainbow gems (in-app only)")
+                                } icon: {
+                                    Image(systemName: "diamond.fill")
+                                }
                             }
                             if !achievements.isEmpty {
-                                Text("・")
-                                Label("記念石 \(achievements.count)", systemImage: "medal.fill")
+                                Text(Self.statSeparator)
+                                Label {
+                                    Text("記念石 \(achievements.count)", tableName: "Share", comment: "Share card stat: milestone stones")
+                                } icon: {
+                                    Image(systemName: "medal.fill")
+                                }
                             }
                         }
                         .font(.system(size: story ? 11 : 9, weight: .bold, design: .rounded))
@@ -2752,7 +3029,7 @@ struct ShareCardView: View {
                         HStack(spacing: 5) {
                             Text(ShareCopy.wordmark)
                                 .tracking(1.1)
-                            Text("·")
+                            Text(verbatim: "·")
                                 .foregroundStyle(.white.opacity(0.34))
                             Text(ShareCopy.websiteURL.absoluteString)
                         }
@@ -2768,10 +3045,55 @@ struct ShareCardView: View {
             .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            "ポモジェムシェアカード。\(periodLabel)。瓶に積んだ集中、\(ShareMassFormatter.spoken(totalGrams))\(ShareMassFormatter.focusTime(totalGrams).map { "、\($0)" } ?? "")。\(pebbleCount)粒、うち実測\(measuredCount)粒、結晶\(aggregates.count)個、記念石\(achievements.count)個。\(rewardSemantics.accessibilityDetail)。\(hiddenContent.captionDisclosure ?? "すべての石を表示")。\(disclosure.accessibilityDisclosure)。公式サイト、\(ShareCopy.websiteDisplayName)。\(hashtags.isEmpty ? "ハッシュタグなし" : "ハッシュタグ、\(hashtags.joined(separator: "、"))")"
-        )
+        .accessibilityLabel(Text(accessibilityDescription))
         .accessibilityIdentifier("share.card")
+    }
+
+    /// The separator between the stats under the jar (the stack spaces it).
+    private static var statSeparator: String {
+        String(localized: "・", table: "Share",
+               comment: "Share card: separator between the stats under the jar; the layout adds the spacing. en: a middle dot ·")
+    }
+
+    /// What VoiceOver reads for the card, one sentence per fact: 「ポモジェム
+    /// シェアカード。これまで。瓶に積んだ集中、2,500グラム、4時間10分。…」.
+    var accessibilityDescription: String {
+        let massSentence = ShareMassFormatter.spokenFocusTime(totalGrams).map {
+            String(localized: "瓶に積んだ集中、\(ShareMassFormatter.spoken(totalGrams))、\($0)。", table: "Share",
+                   comment: "VoiceOver, share card: the mass in the jar, then the focus time it stands for. Arguments: spoken mass (2,500グラム), spoken time (4時間10分)")
+        } ?? String(localized: "瓶に積んだ集中、\(ShareMassFormatter.spoken(totalGrams))。", table: "Share",
+                    comment: "VoiceOver, share card with under a minute of focus: the mass in the jar. Argument: spoken mass (0グラム)")
+        let hashtagText = hashtags.isEmpty
+            ? String(localized: "ハッシュタグなし", table: "Share",
+                     comment: "VoiceOver, share card, last sentence (no final period): no hashtags")
+            : String(localized: "ハッシュタグ、\(ListText.inSentence(hashtags))", table: "Share",
+                     comment: "VoiceOver, share card, last sentence (no final period): the hashtags. Argument: the tags as a list")
+        return SentenceText.join([
+            String(localized: "ポモジェムシェアカード。", table: "Share",
+                   comment: "VoiceOver, share card: the first sentence, what the image is"),
+            ShareCopy.sentence(periodLabel),
+            massSentence,
+            // One list item per count, so each can take its plural form.
+            ShareCopy.sentence(ListText.inSentence([
+                CountText.gems(pebbleCount),
+                String(localized: "うち実測\(measuredCount)粒", table: "Share",
+                       comment: "VoiceOver, share card: how many of the card's gems are timed (follows the gem count in a list)"),
+                String(localized: "結晶\(aggregates.count)個", table: "Share",
+                       comment: "Share caption disclosure and VoiceOver item: a number of crystals"),
+                String(localized: "記念石\(achievements.count)個", table: "Share",
+                       comment: "Share caption disclosure and VoiceOver item: a number of milestone stones")
+            ])),
+            ShareCopy.sentence(rewardSemantics.accessibilityDetail),
+            ShareCopy.sentence(
+                hiddenContent.captionDisclosure
+                    ?? String(localized: "すべての石を表示", table: "Share",
+                              comment: "VoiceOver, share card: the drawn jar shows every gem and stone (a statement without its final period)")
+            ),
+            ShareCopy.sentence(disclosure.accessibilityDisclosure),
+            String(localized: "公式サイト、\(ShareCopy.websiteDisplayName)。", table: "Share",
+                   comment: "VoiceOver, share card: the official website printed on the card. Argument: the site's domain"),
+            hashtagText
+        ])
     }
 }
 
@@ -2917,7 +3239,7 @@ private struct ShareMassBadge: View {
             // A user can change the primary purpose without rewriting history.
             // Keep the exported claim accurate even when one bottle spans study
             // and professional phases of life.
-            Text("瓶に積んだ集中")
+            Text("瓶に積んだ集中", tableName: "Share", comment: "Share card: small caption above the mass (the focus stacked in the jar)")
                 .font(.system(size: story ? 10 : 8, weight: .bold, design: .rounded))
                 .tracking(0.8)
                 .foregroundStyle(PomoGemTheme.muted)
@@ -2994,12 +3316,14 @@ private struct ShareMassBadge: View {
 }
 
 private enum ShareMassFormatter {
+    /// 「2,500g」, en "2,500 g".
     static func visual(_ grams: Int) -> String {
-        "\(max(0, grams).formatted(.number.grouping(.automatic)))g"
+        MassText.grams(max(0, grams).formatted(.number.grouping(.automatic).locale(PomoGemLocale.current)))
     }
 
+    /// VoiceOver: 「2,500グラム」, en "2,500 grams".
     static func spoken(_ grams: Int) -> String {
-        "\(max(0, grams).formatted(.number.grouping(.automatic)))グラム"
+        MassText.spoken(grams: max(0, grams))
     }
 
     /// The focus time a card's mass stands for, or nil when it holds less
@@ -3008,6 +3332,13 @@ private enum ShareMassFormatter {
         DurationPresentation.focusMinutes(grams: grams) > 0
             ? DurationPresentation.focusLabel(grams: grams)
             : nil
+    }
+
+    /// The same time for VoiceOver: ja 「4時間10分」 as on the card, en
+    /// "4 hours, 10 minutes".
+    static func spokenFocusTime(_ grams: Int) -> String? {
+        let minutes = DurationPresentation.focusMinutes(grams: grams)
+        return minutes > 0 ? DurationText.spoken(minutes: minutes) : nil
     }
 }
 
@@ -3839,7 +4170,7 @@ private struct ShareAggregatePebble: View {
                 }
                 if let rareLabel = rewardIdentity.compactLabel {
                     VStack(spacing: -1) {
-                        Text("×\(aggregate.pebbleCount)")
+                        Text(verbatim: "×\(aggregate.pebbleCount.formatted())")
                             .font(.system(size: aggregate.pebbleCount >= 100 ? 7 : 8, weight: .heavy, design: .rounded))
                         Text(rareLabel)
                             .font(.system(size: 5.5, weight: .black, design: .rounded))

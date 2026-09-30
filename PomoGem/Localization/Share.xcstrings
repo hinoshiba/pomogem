@@ -1,9 +1,151 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "#ポモジェム" : {
+      "comment" : "Default share hashtag (selected): the app's name, a valid hashtag (letters, numbers, _ only). en: #PomoGem",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "#PomoGem"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "#ポモジェム"
+          }
+        }
+      }
+    },
+    "#ポモドーロ" : {
+      "comment" : "Default share hashtag (selected): the Pomodoro technique, a valid hashtag (letters, numbers, _ only). en: #pomodoro",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "#pomodoro"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "#ポモドーロ"
+          }
+        }
+      }
+    },
+    "#勉強記録 #勉強垢" : {
+      "comment" : "Suggested share hashtags (unselected), separated by single spaces: community tags for posting study logs. Each must be a valid hashtag (letters, numbers, _ only) and differ from the default tags. en: #studywithme",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "#studywithme"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "#勉強記録 #勉強垢"
+          }
+        }
+      }
+    },
+    "%@%lld個" : {
+      "comment" : "Share caption and VoiceOver: one kind of milestone stone and how many are on the card. Arguments: the kind (100点), the count",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ (%2$lld)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@%lld個"
+          }
+        }
+      }
+    },
+    "%@。" : {
+      "comment" : "Ends one statement of the share caption or the card's VoiceOver text as a sentence. en: '%@.'",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@。"
+          }
+        }
+      }
+    },
+    "%@。%@" : {
+      "comment" : "VoiceOver, share card (in-app only): the rare gems, then the milestone stones, as two sentences; the second has no final period",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@。%@"
+          }
+        }
+      }
+    },
+    "%@の積み重ね" : {
+      "comment" : "Share caption subject (starts the caption's first sentence in en): the focus in one crystal. Argument: the month it formed (2026年9月)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "My crystal from %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@の積み重ね"
+          }
+        }
+      }
+    },
+    "%@の表示分" : {
+      "comment" : "Share caption subject (starts the caption's first sentence in en): the part of a month's focus the card shows. Argument: the month (2026年9月)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Part of my focus in %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@の表示分"
+          }
+        }
+      }
+    },
     "%@の集中" : {
       "comment" : "Share card: focus time under the mass, e.g. 4時間10分の集中",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ of focus"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -12,13 +154,87 @@
         }
       }
     },
-    "%@を %@（%@）積みました%@。" : {
-      "comment" : "Share caption. Arguments: what was stacked, mass, focus time, optional disclosure in parentheses",
+    "%@を %@ 積みました。" : {
+      "comment" : "Share caption, first sentence of a card with under a minute of focus. Arguments: what the card holds (sentence start in en), mass (0g)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@: %2$@ added to my jar."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@を %@（%@）積みました%@。"
+            "value" : "%@を %@ 積みました。"
+          }
+        }
+      }
+    },
+    "%@を %@ 積みました（%@）。" : {
+      "comment" : "Share caption, first sentence of a card with under a minute of focus. Arguments: what the card holds (sentence start in en), mass (0g), what is self-reported (a sentence without its period in en)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@: %2$@ added to my jar. %3$@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@を %@ 積みました（%@）。"
+          }
+        }
+      }
+    },
+    "%@を %@（%@）積みました。" : {
+      "comment" : "Share caption, first sentence. Arguments: what the card holds (e.g. これまでの集中, sentence start in en), mass (2,500g), focus time (4時間10分)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@: %2$@ (%3$@) added to my jar."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@を %@（%@）積みました。"
+          }
+        }
+      }
+    },
+    "%@を %@（%@）積みました（%@）。" : {
+      "comment" : "Share caption, first sentence. Arguments: what the card holds (e.g. これまでの集中, sentence start in en), mass (2,500g), focus time (4時間10分), what is self-reported (a sentence without its period in en)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@: %2$@ (%3$@) added to my jar. %4$@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@を %@（%@）積みました（%@）。"
+          }
+        }
+      }
+    },
+    "%@・表示分" : {
+      "comment" : "Share card period label (small capsule): part of a month. Argument: the month (2026年9月)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · partial"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@・表示分"
           }
         }
       }
@@ -26,6 +242,12 @@
     "%@・記念石は自己申告" : {
       "comment" : "Share settings summary: focus scope, then the note that stones are self-reported",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · Milestone stones are self-reported"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -34,8 +256,458 @@
         }
       }
     },
+    "%lld個の記念石" : {
+      "comment" : "Share card line under the jar when it holds only milestone stones: how many",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld milestone stone"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld milestone stones"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld個の記念石"
+          }
+        }
+      }
+    },
+    "%lld粒の積み重ね" : {
+      "comment" : "Share card line under the jar: how many gems the card holds",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld gem added"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld gems added"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld粒の積み重ね"
+          }
+        }
+      }
+    },
+    "40年分でも全履歴を展開せず、結晶集計と現在の粒から正確な質量を構成します。" : {
+      "comment" : "Share composer coverage note: the exact mass is built from crystal totals and current gems without loading every record",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Even with 40 years of history, nothing is loaded all at once: the exact mass comes from crystal totals and your current gems."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "40年分でも全履歴を展開せず、結晶集計と現在の粒から正確な質量を構成します。"
+          }
+        }
+      }
+    },
+    "GIF + ハッシュタグをシェア" : {
+      "comment" : "Share button (GIF selected): share the GIF with the caption and hashtags",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Share GIF + Hashtags"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GIF + ハッシュタグをシェア"
+          }
+        }
+      }
+    },
+    "GIF、公式サイトURL、ハッシュタグを準備しました。共有先によっては本文の貼り付けが必要です。" : {
+      "comment" : "Share composer status: the GIF, website URL and hashtags are ready for the share sheet",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The GIF, website URL and hashtags are ready. Some apps may need you to paste the text."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GIF、公式サイトURL、ハッシュタグを準備しました。共有先によっては本文の貼り付けが必要です。"
+          }
+        }
+      }
+    },
+    "GIFと公式サイトURL入りの本文を準備しました。共有先によっては本文の貼り付けが必要です。" : {
+      "comment" : "Share composer status: the GIF and the caption with the website URL are ready for the share sheet",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The GIF and text with the website URL are ready. Some apps may need you to paste the text."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GIFと公式サイトURL入りの本文を準備しました。共有先によっては本文の貼り付けが必要です。"
+          }
+        }
+      }
+    },
+    "GIFにする画像がありません。" : {
+      "comment" : "Share error: no card image was rendered to encode as a GIF",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "There are no images to make the GIF from."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GIFにする画像がありません。"
+          }
+        }
+      }
+    },
+    "GIFのフレーム数が一致しません。" : {
+      "comment" : "Share error: the GIF writer received a different number of frames than it expected",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The GIF's frame count doesn't match."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GIFのフレーム数が一致しません。"
+          }
+        }
+      }
+    },
+    "GIFの保存先を準備できませんでした。" : {
+      "comment" : "Share error: the temporary GIF file could not be created",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't prepare a place to save the GIF."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GIFの保存先を準備できませんでした。"
+          }
+        }
+      }
+    },
+    "GIFの容量を小さくできませんでした。静止画で共有してください。" : {
+      "comment" : "Share error: the GIF stays over the share size limit even at the smallest scale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't make the GIF small enough. Please share a still image instead."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GIFの容量を小さくできませんでした。静止画で共有してください。"
+          }
+        }
+      }
+    },
+    "GIFを書き出せませんでした。" : {
+      "comment" : "Share error: the GIF could not be written",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't export the GIF."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GIFを書き出せませんでした。"
+          }
+        }
+      }
+    },
+    "GIFを生成中…" : {
+      "comment" : "Share button while the GIF is created",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Creating GIF…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GIFを生成中…"
+          }
+        }
+      }
+    },
+    "iCloudの集計を再確認中です。古い結晶集計は使わず、この端末で確認できた個別記録だけをカードにします。" : {
+      "comment" : "Share composer coverage note while iCloud totals are rechecked",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rechecking iCloud totals. Old crystal totals aren't used; the card holds only individual records confirmed on this device."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudの集計を再確認中です。古い結晶集計は使わず、この端末で確認できた個別記録だけをカードにします。"
+          }
+        }
+      }
+    },
+    "iCloudの集計を確認中" : {
+      "comment" : "VoiceOver: progress while iCloud totals are checked",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking iCloud totals"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudの集計を確認中"
+          }
+        }
+      }
+    },
+    "iCloudを再集計中" : {
+      "comment" : "Share composer empty state title: iCloud totals are being recounted",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud Is Recounting"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudを再集計中"
+          }
+        }
+      }
+    },
+    "iCloudを再集計中です。確認済みの記録でカードを作り直してください。" : {
+      "comment" : "Share composer status: iCloud totals started a recount, so the card must be made again from confirmed records",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud is recounting your totals. Please make the card again from confirmed records."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudを再集計中です。確認済みの記録でカードを作り直してください。"
+          }
+        }
+      }
+    },
+    "share.caption.subject.month" : {
+      "comment" : "Share caption subject (starts the caption's first sentence in en): a month's focus. Argument: the month (2026年9月)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "My focus in %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@の集中"
+          }
+        }
+      }
+    },
+    "うち実測%lld粒" : {
+      "comment" : "VoiceOver, share card: how many of the card's gems are timed (follows the gem count in a list)",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "including %lld timed gem"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "including %lld timed gems"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "うち実測%lld粒"
+          }
+        }
+      }
+    },
+    "この月は記録が多いため、最新%@件の表示分です。カードにも「表示分」と明記します。" : {
+      "comment" : "Share composer coverage note: the month has many records, so the card shows the newest. Argument: how many records (a fixed number far above one). 「表示分」 quotes the card's period label",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This month has many records, so this shows the newest %@ records. The card says “partial” too."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この月は記録が多いため、最新%@件の表示分です。カードにも「表示分」と明記します。"
+          }
+        }
+      }
+    },
+    "この画面は閉じず、共有データの生成だけを中止します" : {
+      "comment" : "VoiceOver hint of the stop button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stops creating the file to share without closing this screen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この画面は閉じず、共有データの生成だけを中止します"
+          }
+        }
+      }
+    },
+    "この端末で確認済みの実測記録" : {
+      "comment" : "Share caption subject (starts the caption's first sentence in en) while iCloud is checked: the timed records confirmed on this device",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "My timed records confirmed on this device"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末で確認済みの実測記録"
+          }
+        }
+      }
+    },
+    "この端末で確認済みの記録" : {
+      "comment" : "Share caption subject (starts the caption's first sentence in en) while iCloud is checked: the records confirmed on this device",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "My records confirmed on this device"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末で確認済みの記録"
+          }
+        }
+      }
+    },
+    "この端末で確認済み・iCloud再集計中" : {
+      "comment" : "Share card period label (small capsule on the card) while iCloud totals are recounted: only records confirmed on this device",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Confirmed on this device · iCloud recounting"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末で確認済み・iCloud再集計中"
+          }
+        }
+      }
+    },
+    "この結晶には自己申告が含まれます。「自己申告を含める」をオンにすると、結晶全体の正確な質量をカードにできます。" : {
+      "comment" : "Share composer empty state: the crystal holds self-reported gems. 「自己申告を含める」 is the toggle's title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This crystal includes self-reported focus. Turn on “Include Self-Reported” to put the whole crystal's exact mass on the card."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この結晶には自己申告が含まれます。「自己申告を含める」をオンにすると、結晶全体の正確な質量をカードにできます。"
+          }
+        }
+      }
+    },
     "この結晶は、確認が終わるとカードにできます。" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can make a card of this crystal once the check is done."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -44,9 +716,32 @@
         }
       }
     },
+    "この結晶は集計値で表示しています。元の全セッションはこの画面では展開しません。" : {
+      "comment" : "Share composer coverage note: the crystal is shown from its totals",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This crystal is shown from its totals. Its original sessions aren't loaded on this screen."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この結晶は集計値で表示しています。元の全セッションはこの画面では展開しません。"
+          }
+        }
+      }
+    },
     "これまで" : {
       "comment" : "Share card period label for the whole history",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "So far"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -55,8 +750,735 @@
         }
       }
     },
+    "これまでの集中" : {
+      "comment" : "Share caption subject (starts the caption's first sentence in en): all focus so far",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "My focus so far"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "これまでの集中"
+          }
+        }
+      }
+    },
+    "これまでの集中（記念石は最新%lld個）" : {
+      "comment" : "Share caption subject (starts the caption's first sentence in en): all focus so far, with only the newest milestone stones. Argument: how many stones",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "My focus so far (newest %lld milestone stone)"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "My focus so far (newest %lld milestone stones)"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "これまでの集中（記念石は最新%lld個）"
+          }
+        }
+      }
+    },
+    "これまで・読み込み分" : {
+      "comment" : "Share card period label (small capsule): everything so far, but only the part that loaded",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "So far · loaded only"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "これまで・読み込み分"
+          }
+        }
+      }
+    },
+    "すべてのカードと共有本文に表示します" : {
+      "comment" : "Share composer row subtitle: the logo and website appear on every card and caption",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shown on every card and in the share text"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すべてのカードと共有本文に表示します"
+          }
+        }
+      }
+    },
+    "すべての石を表示" : {
+      "comment" : "VoiceOver, share card: the drawn jar shows every gem and stone (a statement without its final period)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Every gem and stone is shown"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すべての石を表示"
+          }
+        }
+      }
+    },
+    "カードにする" : {
+      "comment" : "Share composer navigation title. en: Make a Card",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Make a Card"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カードにする"
+          }
+        }
+      }
+    },
+    "カードにする粒が、まだありません" : {
+      "comment" : "Share composer empty state title: no gems yet",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No Gems for a Card Yet"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カードにする粒が、まだありません"
+          }
+        }
+      }
+    },
+    "カードの形" : {
+      "comment" : "Share composer: label of the card shape picker (feed or story)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Card Shape"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カードの形"
+          }
+        }
+      }
+    },
+    "カードの記録を読み込み中" : {
+      "comment" : "Share composer: progress while the card's records load",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading the card's records"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カードの記録を読み込み中"
+          }
+        }
+      }
+    },
+    "カードを生成できませんでした。" : {
+      "comment" : "Share composer status: the cards for Photos could not be created",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't create the cards."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カードを生成できませんでした。"
+          }
+        }
+      }
+    },
+    "カード作成画面を閉じて瓶に戻ります" : {
+      "comment" : "VoiceOver hint of the Done button after sharing",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Closes the card maker and returns to your jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カード作成画面を閉じて瓶に戻ります"
+          }
+        }
+      }
+    },
+    "ストーリー 9:16" : {
+      "comment" : "Share card shape (segmented control): the 9:16 story. en: Story 9:16",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Story 9:16"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ストーリー 9:16"
+          }
+        }
+      }
+    },
+    "タグ%lld個" : {
+      "comment" : "Share settings summary item: how many hashtags are selected",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld hashtag"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld hashtags"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タグ%lld個"
+          }
+        }
+      }
+    },
+    "タグなし" : {
+      "comment" : "Share settings summary item: no hashtags are selected",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hashtags"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タグなし"
+          }
+        }
+      }
+    },
+    "ハッシュタグ、%@" : {
+      "comment" : "VoiceOver, share card, last sentence (no final period): the hashtags. Argument: the tags as a list",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hashtags: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ハッシュタグ、%@"
+          }
+        }
+      }
+    },
+    "ハッシュタグなし" : {
+      "comment" : "VoiceOver, share card, last sentence (no final period): no hashtags",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hashtags"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ハッシュタグなし"
+          }
+        }
+      }
+    },
+    "ハッシュタグなしで共有します" : {
+      "comment" : "Share composer: no hashtags will be shared",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sharing without hashtags"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ハッシュタグなしで共有します"
+          }
+        }
+      }
+    },
+    "ファイルと形" : {
+      "comment" : "Share adjustments heading: file type and card shape",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "File & Shape"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ファイルと形"
+          }
+        }
+      }
+    },
+    "フィード 4:5" : {
+      "comment" : "Share card shape (segmented control): the 4:5 feed post. en: Feed 4:5",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Feed 4:5"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フィード 4:5"
+          }
+        }
+      }
+    },
+    "フィード用とストーリー用を写真に保存しました。" : {
+      "comment" : "Share composer status: both still image sizes were saved to Photos",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved the feed and story sizes to Photos."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フィード用とストーリー用を写真に保存しました。"
+          }
+        }
+      }
+    },
+    "プレビューの自動再生は停止中です。GIFを選んでシェアすると、動くファイルを書き出します。" : {
+      "comment" : "Share composer note when Reduce Motion or Auto-Play Animated Images is off",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The preview doesn't play automatically. If you share with GIF selected, an animated file is still exported."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プレビューの自動再生は停止中です。GIFを選んでシェアすると、動くファイルを書き出します。"
+          }
+        }
+      }
+    },
+    "ポモジェム" : {
+      "comment" : "Share card: the app's name at the top left. en: PomoGem",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PomoGem"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェム"
+          }
+        }
+      }
+    },
+    "ポモジェムシェアカード。" : {
+      "comment" : "VoiceOver, share card: the first sentence, what the image is",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PomoGem share card."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェムシェアカード。"
+          }
+        }
+      }
+    },
+    "ポモジェムロゴと公式サイト" : {
+      "comment" : "Share composer row title: the PomoGem logo and the official website",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PomoGem Logo and Website"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェムロゴと公式サイト"
+          }
+        }
+      }
+    },
+    "レア粒なし" : {
+      "comment" : "VoiceOver, share card: no rare gems (in-app only)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No rare gems"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "レア粒なし"
+          }
+        }
+      }
+    },
+    "・" : {
+      "comment" : "Share card: separator between the stats under the jar; the layout adds the spacing. en: a middle dot ·",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "·"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "・"
+          }
+        }
+      }
+    },
+    "一緒に渡すハッシュタグ" : {
+      "comment" : "Share composer: heading of the hashtag chips shared with the card",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hashtags to Include"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一緒に渡すハッシュタグ"
+          }
+        }
+      }
+    },
+    "代表表示 +%@" : {
+      "comment" : "Share card corner chip: the drawn jar is a sample; the argument is how many gems, crystals and stones it leaves out",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+%@ not shown"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代表表示 +%@"
+          }
+        }
+      }
+    },
+    "保存済みのテーマ名・成果メモ・顧客名は自動で含めません。追加タグへ入力した内容は共有されます" : {
+      "comment" : "Share composer privacy note under the hashtags",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved theme names, achievement notes and client names are never added automatically. Whatever you type as an extra hashtag is shared."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存済みのテーマ名・成果メモ・顧客名は自動で含めません。追加タグへ入力した内容は共有されます"
+          }
+        }
+      }
+    },
+    "全履歴を一括展開しないため、最新%@件の記録から選んだ表示分です。カードにも範囲を明記します。" : {
+      "comment" : "Share composer coverage note: the card shows part of the history, from the newest records. Argument: how many records (a fixed number far above one)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your whole history isn't loaded at once, so this is part of it, taken from your newest %@ records. The card states this range too."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全履歴を一括展開しないため、最新%@件の記録から選んだ表示分です。カードにも範囲を明記します。"
+          }
+        }
+      }
+    },
+    "全履歴を一括展開せず、取得できた結晶集計と最新層だけで構成しています。カードは「読み込み分」と明記されます。" : {
+      "comment" : "Share composer coverage note: the card holds only the crystal totals that loaded and the newest layer. 「読み込み分」 quotes the card's period label これまで・読み込み分",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your whole history isn't loaded at once: the card is built from the crystal totals that loaded and your newest gems. The card says “loaded only”."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全履歴を一括展開せず、取得できた結晶集計と最新層だけで構成しています。カードは「読み込み分」と明記されます。"
+          }
+        }
+      }
+    },
+    "公式サイト、%@。" : {
+      "comment" : "VoiceOver, share card: the official website printed on the card. Argument: the site's domain",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Official website: %@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "公式サイト、%@。"
+          }
+        }
+      }
+    },
+    "共有できました" : {
+      "comment" : "Share composer: the share finished (banner title and VoiceOver announcement)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shared"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共有できました"
+          }
+        }
+      }
+    },
+    "共有できました。次の集中も、また一粒ずつ。" : {
+      "comment" : "VoiceOver: the share banner, title and gentle line together",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shared. Your next focus, one gem at a time."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共有できました。次の集中も、また一粒ずつ。"
+          }
+        }
+      }
+    },
+    "共有の設定を保存できませんでした。変更前の状態に戻しました。" : {
+      "comment" : "Share composer status: the Include Self-Reported setting could not be saved and was put back",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save your share setting. It's back to how it was."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共有の設定を保存できませんでした。変更前の状態に戻しました。"
+          }
+        }
+      }
+    },
+    "共有はキャンセルされました。カードはこの画面に残っています。" : {
+      "comment" : "Share composer status: the share sheet was closed without sharing; the card stays",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sharing was canceled. Your card is still here."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共有はキャンセルされました。カードはこの画面に残っています。"
+          }
+        }
+      }
+    },
+    "共有を完了して閉じる" : {
+      "comment" : "VoiceOver label of the Done button after sharing",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finish sharing and close"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共有を完了して閉じる"
+          }
+        }
+      }
+    },
+    "共有を完了できませんでした。%@" : {
+      "comment" : "Share composer status: the share sheet reported an error. Argument: the system's reason, a full sentence",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't finish sharing. %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共有を完了できませんでした。%@"
+          }
+        }
+      }
+    },
+    "共有データを生成できませんでした。%@" : {
+      "comment" : "Share composer status: the GIF or image could not be created. Argument: the system's reason, a full sentence",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't create the file to share. %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共有データを生成できませんでした。%@"
+          }
+        }
+      }
+    },
+    "共有設定を安全に確認できないため、自己申告は含めません。" : {
+      "comment" : "Share composer status: the saved share setting cannot be read safely, so self-reported focus stays out",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your share setting can't be confirmed safely, so self-reported focus is left out."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共有設定を安全に確認できないため、自己申告は含めません。"
+          }
+        }
+      }
+    },
+    "写真に2サイズ保存" : {
+      "comment" : "Share composer button: save the feed and story sizes to Photos",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save 2 Sizes to Photos"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "写真に2サイズ保存"
+          }
+        }
+      }
+    },
     "写真に保存しています" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saving to Photos"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -65,9 +1487,49 @@
         }
       }
     },
+    "写真に保存できませんでした。%@" : {
+      "comment" : "Share composer status: saving to Photos failed. Argument: the system's reason, a full sentence",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save to Photos. %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "写真に保存できませんでした。%@"
+          }
+        }
+      }
+    },
+    "写真への追加が許可されていません。端末の設定から変更できます。" : {
+      "comment" : "Share composer status: PomoGem may not add to Photos; the person can allow it in the device's Settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PomoGem isn't allowed to add to Photos. You can change this in Settings."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "写真への追加が許可されていません。端末の設定から変更できます。"
+          }
+        }
+      }
+    },
     "写真用のGIFを作っています…" : {
       "comment" : "Share composer: status while the two GIFs for Photos are rendered",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Creating GIFs for Photos…"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -79,6 +1541,12 @@
     "写真用の画像を作っています…" : {
       "comment" : "Share composer: status while the two still images for Photos are rendered",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Creating images for Photos…"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -87,9 +1555,32 @@
         }
       }
     },
+    "動くGIF" : {
+      "comment" : "Share file type button: an animated GIF",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Animated GIF"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "動くGIF"
+          }
+        }
+      }
+    },
     "動くGIFをフィード用とストーリー用で写真に保存しました。" : {
       "comment" : "Share composer: both animated GIF sizes were saved to Photos",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved animated GIFs in feed and story sizes to Photos."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -98,8 +1589,31 @@
         }
       }
     },
+    "古い集計値は使わず、この端末で確認できる個別記録だけを確認しています。" : {
+      "comment" : "Share composer empty state while iCloud is checked",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Old totals aren't used. Only individual records confirmed on this device are being checked."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "古い集計値は使わず、この端末で確認できる個別記録だけを確認しています。"
+          }
+        }
+      }
+    },
     "含める" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Include"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -108,9 +1622,95 @@
         }
       }
     },
+    "報酬内訳：%@" : {
+      "comment" : "Share caption line: the rare gems on the card (in-app only). Argument: 金のレア粒2粒・虹のレア粒1粒",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rare gems: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "報酬内訳：%@"
+          }
+        }
+      }
+    },
+    "報酬内訳：%@／記念石：%@" : {
+      "comment" : "Share caption line: the rare gems (in-app only), then the milestone stones on the card. Arguments: 金のレア粒2粒・虹のレア粒1粒, 100点1個・試験合格2個",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rare gems: %1$@ / Milestone stones: %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "報酬内訳：%@／記念石：%@"
+          }
+        }
+      }
+    },
+    "報酬内訳：記念石：%@" : {
+      "comment" : "Share caption line: the milestone stones on the card. Argument: each kind with its count (100点1個・試験合格2個)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Milestone stones: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "報酬内訳：記念石：%@"
+          }
+        }
+      }
+    },
+    "完了" : {
+      "comment" : "Share banner button: close the composer. en: Done",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完了"
+          }
+        }
+      }
+    },
     "実測 %lld粒" : {
       "comment" : "Share card: measured gems (timer or Screen Time)",
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld timed gem"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld timed gems"
+                }
+              }
+            }
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -119,9 +1719,367 @@
         }
       }
     },
+    "実測のみ" : {
+      "comment" : "Share: only timed focus (timer or Screen Time) is on the card. An item of the settings summary and a VoiceOver sentence without its period",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Timed only"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "実測のみ"
+          }
+        }
+      }
+    },
+    "実測のみ（自己申告は除外）" : {
+      "comment" : "Share settings summary item: only timed focus is on the card, and self-reported focus is left out",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Timed only (self-reported left out)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "実測のみ（自己申告は除外）"
+          }
+        }
+      }
+    },
+    "常に表示" : {
+      "comment" : "Share composer: the logo and website row cannot be turned off",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Always Shown"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "常に表示"
+          }
+        }
+      }
+    },
+    "文字・数字・_ のみ、%lld文字まで。本文やURLは追加しません。" : {
+      "comment" : "Share composer: the extra hashtag is invalid. Argument: the longest allowed tag in characters (30)",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Letters, numbers and _ only, up to %lld character. Text and links can't be added here."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Letters, numbers and _ only, up to %lld characters. Text and links can't be added here."
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文字・数字・_ のみ、%lld文字まで。本文やURLは追加しません。"
+          }
+        }
+      }
+    },
+    "最初の一粒へ" : {
+      "comment" : "Share composer empty state button: close and go to the jar to add a first gem",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add Your First Gem"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最初の一粒へ"
+          }
+        }
+      }
+    },
+    "最初の一粒を積むと、カードにできます。" : {
+      "comment" : "Share composer status: there is nothing to put on a card yet",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add your first gem to make a card."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最初の一粒を積むと、カードにできます。"
+          }
+        }
+      }
+    },
+    "最近の実測・最新%@件の記録内" : {
+      "comment" : "Share card period label (small capsule): timed focus from the newest records. Argument: how many records are read (a fixed number far above one)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Timed focus · newest %@ records"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近の実測・最新%@件の記録内"
+          }
+        }
+      }
+    },
+    "最近の記録から選んだ実測集中" : {
+      "comment" : "Share caption subject (starts the caption's first sentence in en): timed focus taken from the newest records only",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Timed focus from my recent records"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近の記録から選んだ実測集中"
+          }
+        }
+      }
+    },
+    "最近の記録から選んだ集中" : {
+      "comment" : "Share caption subject (starts the caption's first sentence in en): focus taken from the newest records only",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus from my recent records"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近の記録から選んだ集中"
+          }
+        }
+      }
+    },
+    "最近の記録・最新%@件" : {
+      "comment" : "Share card period label (small capsule): the newest records. Argument: how many records are read (a fixed number far above one)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recent · newest %@ records"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近の記録・最新%@件"
+          }
+        }
+      }
+    },
+    "本文とハッシュタグをコピー" : {
+      "comment" : "VoiceOver label of the copy button when hashtags are selected",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy Text and Hashtags"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本文とハッシュタグをコピー"
+          }
+        }
+      }
+    },
+    "本文とハッシュタグをコピーしました。" : {
+      "comment" : "Share composer status: the caption and hashtags were copied",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Text and hashtags copied."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本文とハッシュタグをコピーしました。"
+          }
+        }
+      }
+    },
+    "本文をコピー" : {
+      "comment" : "Share composer button: copy the caption (text, website URL and hashtags). en: Copy Text",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy Text"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本文をコピー"
+          }
+        }
+      }
+    },
+    "本文をコピーしました。" : {
+      "comment" : "Share composer status: the caption was copied",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Text copied."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本文をコピーしました。"
+          }
+        }
+      }
+    },
+    "次の集中も、また一粒ずつ。" : {
+      "comment" : "Share composer: gentle line under Shared",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your next focus, one gem at a time."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "次の集中も、また一粒ずつ。"
+          }
+        }
+      }
+    },
+    "現在の共有設定、%@" : {
+      "comment" : "VoiceOver: the share settings summary. Argument: the summary items (GIF・4:5・実測のみ・タグなし)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Current share settings: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "現在の共有設定、%@"
+          }
+        }
+      }
+    },
+    "瓶と質量の画像、公式サイトURL、選択中のハッシュタグをシステム共有画面に渡します" : {
+      "comment" : "VoiceOver hint of the share button (still image selected)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passes an image of your jar and its mass, the official website URL and the selected hashtags to the share sheet"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶と質量の画像、公式サイトURL、選択中のハッシュタグをシステム共有画面に渡します"
+          }
+        }
+      }
+    },
+    "瓶と質量の短いGIF、公式サイトURL、選択中のハッシュタグをシステム共有画面に渡します" : {
+      "comment" : "VoiceOver hint of the share button (GIF selected)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passes a short GIF of your jar and its mass, the official website URL and the selected hashtags to the share sheet"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶と質量の短いGIF、公式サイトURL、選択中のハッシュタグをシステム共有画面に渡します"
+          }
+        }
+      }
+    },
+    "瓶に積んだ集中" : {
+      "comment" : "Share card: small caption above the mass (the focus stacked in the jar)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus in my jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶に積んだ集中"
+          }
+        }
+      }
+    },
+    "瓶に積んだ集中 %@" : {
+      "comment" : "Share sheet title for a GIF with under a minute of focus. Argument: mass",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus in my jar: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶に積んだ集中 %@"
+          }
+        }
+      }
+    },
     "瓶に積んだ集中 %@（%@）" : {
       "comment" : "Share sheet title for the GIF. Arguments: mass, focus time",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus in my jar: %1$@ (%2$@)"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -130,8 +2088,201 @@
         }
       }
     },
+    "瓶に積んだ集中、%@、%@。" : {
+      "comment" : "VoiceOver, share card: the mass in the jar, then the focus time it stands for. Arguments: spoken mass (2,500グラム), spoken time (4時間10分)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus in the jar: %1$@, %2$@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶に積んだ集中、%@、%@。"
+          }
+        }
+      }
+    },
+    "瓶に積んだ集中、%@。" : {
+      "comment" : "VoiceOver, share card with under a minute of focus: the mass in the jar. Argument: spoken mass (0グラム)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus in the jar: %@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶に積んだ集中、%@。"
+          }
+        }
+      }
+    },
+    "瓶の質量、固定の公式サイトURL、選択中のハッシュタグをコピーします" : {
+      "comment" : "VoiceOver hint of the copy button: the caption holds the jar's mass, the fixed official website URL and the selected hashtags",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copies your jar's mass, the fixed official website URL and the selected hashtags"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶の質量、固定の公式サイトURL、選択中のハッシュタグをコピーします"
+          }
+        }
+      }
+    },
+    "瓶の質量と固定の公式サイトURLを含む本文をコピーします" : {
+      "comment" : "VoiceOver hint of the copy button: the caption holds the jar's mass and the fixed official website URL",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copies text with your jar's mass and the fixed official website URL"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶の質量と固定の公式サイトURLを含む本文をコピーします"
+          }
+        }
+      }
+    },
+    "瓶は代表表示（ほか%@）" : {
+      "comment" : "Share card, caption and VoiceOver: the drawn jar is a sample. Argument: what it leaves out (集中粒48粒・結晶17個), a statement without its final period",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The jar shows a sample (not drawn: %@)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶は代表表示（ほか%@）"
+          }
+        }
+      }
+    },
+    "生成を中止" : {
+      "comment" : "Share composer toolbar button: stop creating the GIF or image",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop Creating"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "生成を中止"
+          }
+        }
+      }
+    },
+    "画像 + ハッシュタグをシェア" : {
+      "comment" : "Share button (still image selected): share the image with the caption and hashtags",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Share Image + Hashtags"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画像 + ハッシュタグをシェア"
+          }
+        }
+      }
+    },
+    "画像、公式サイトURL、ハッシュタグを準備しました。共有先を選んでください。" : {
+      "comment" : "Share composer status: the image, website URL and hashtags are ready for the share sheet",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The image, website URL and hashtags are ready. Choose where to share."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画像、公式サイトURL、ハッシュタグを準備しました。共有先を選んでください。"
+          }
+        }
+      }
+    },
+    "画像と公式サイトURL入りの本文を準備しました。共有先を選んでください。" : {
+      "comment" : "Share composer status: the image and the caption with the website URL are ready for the share sheet",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The image and text with the website URL are ready. Choose where to share."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画像と公式サイトURL入りの本文を準備しました。共有先を選んでください。"
+          }
+        }
+      }
+    },
+    "画像を生成中…" : {
+      "comment" : "Share button while the image is created",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Creating Image…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画像を生成中…"
+          }
+        }
+      }
+    },
+    "積み重ねを、動く一枚に" : {
+      "comment" : "Share composer headline: turn your progress into one moving card",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn your progress into a moving card"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "積み重ねを、動く一枚に"
+          }
+        }
+      }
+    },
     "端末の中だけで生成" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Made entirely on your device"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -140,9 +2291,44 @@
         }
       }
     },
+    "粒がきらめく短いループ" : {
+      "comment" : "Share button subtitle (GIF): a short loop of sparkling gems",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A short loop of sparkling gems"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粒がきらめく短いループ"
+          }
+        }
+      }
+    },
     "結晶 %lld" : {
       "comment" : "Share card stat: crystal count",
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld crystal"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld crystals"
+                }
+              }
+            }
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -152,8 +2338,26 @@
       }
     },
     "結晶%lld個" : {
-      "comment" : "Share caption disclosure item: crystals left out of the drawn jar",
+      "comment" : "Share caption disclosure and VoiceOver item: a number of crystals",
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld crystal"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld crystals"
+                }
+              }
+            }
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -162,8 +2366,31 @@
         }
       }
     },
+    "自己申告あり" : {
+      "comment" : "Share settings summary item: self-reported focus is on the card",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Self-reported included"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自己申告あり"
+          }
+        }
+      }
+    },
     "自己申告として明記したうえで、この記録をカードに含めます" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adds these records to the card, clearly marked as self-reported"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -175,6 +2402,12 @@
     "自己申告の%@は、カードに含めていません。" : {
       "comment" : "Share composer: amount of self-reported focus left out of the card, e.g. 1時間30分",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ of self-reported focus isn't on the card."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -183,9 +2416,32 @@
         }
       }
     },
+    "自己申告の粒があります" : {
+      "comment" : "Share composer empty state title: only self-reported gems, which are left out",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You Have Self-Reported Gems"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自己申告の粒があります"
+          }
+        }
+      }
+    },
     "自己申告の集中は、カードに含めていません。" : {
       "comment" : "Share composer: self-reported focus is left out of the card",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Self-reported focus isn't on the card."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -194,9 +2450,66 @@
         }
       }
     },
-    "自己申告を含めました。カードは%@、%@です。" : {
-      "comment" : "VoiceOver after including self-reported focus. Arguments: spoken mass (300グラム), focus time (30分)",
+    "自己申告の集中を含む" : {
+      "comment" : "Share caption and VoiceOver: the card includes self-reported focus. A statement without its final period (sentence case in en)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Includes self-reported focus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自己申告の集中を含む"
+          }
+        }
+      }
+    },
+    "自己申告の集中を含む・記念石は自己申告" : {
+      "comment" : "Share caption and VoiceOver: the card includes self-reported focus, and milestone stones are self-reported. A statement without its final period (sentence case in en)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Includes self-reported focus; milestone stones are self-reported"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自己申告の集中を含む・記念石は自己申告"
+          }
+        }
+      }
+    },
+    "自己申告を含めてカードにする" : {
+      "comment" : "Share composer empty state button: include self-reported focus and make the card",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Include Self-Reported and Make a Card"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自己申告を含めてカードにする"
+          }
+        }
+      }
+    },
+    "自己申告を含めました。カードは%@、%@です。" : {
+      "comment" : "VoiceOver after including self-reported focus. Arguments: spoken mass (300グラム), spoken focus time (30分)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Self-reported focus included. The card now shows %1$@, %2$@."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -208,6 +2521,12 @@
     "自己申告を含めました。カードは%@です。" : {
       "comment" : "VoiceOver after including self-reported focus when the card holds under a minute. Argument: spoken mass",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Self-reported focus included. The card now shows %@."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -218,10 +2537,593 @@
     },
     "自己申告を含める" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Include Self-Reported"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "自己申告を含める"
+          }
+        }
+      }
+    },
+    "自己申告を含めると、この期間の瓶をカードにできます。" : {
+      "comment" : "Share composer empty state: the period only has self-reported focus",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Include self-reported focus to make a card of this period's jar."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自己申告を含めると、この期間の瓶をカードにできます。"
+          }
+        }
+      }
+    },
+    "自己申告込み" : {
+      "comment" : "Badge drawn on the share card: the card includes self-reported focus",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Self-reported included"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自己申告込み"
+          }
+        }
+      }
+    },
+    "自己申告込み・記念石は自己申告" : {
+      "comment" : "Badge drawn on the share card: the card includes self-reported focus, and milestone stones are self-reported",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Self-reported included · Milestone stones are self-reported"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自己申告込み・記念石は自己申告"
+          }
+        }
+      }
+    },
+    "虹 %lld" : {
+      "comment" : "Share card stat: rare rainbow gems (in-app only)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld rainbow"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "虹 %lld"
+          }
+        }
+      }
+    },
+    "虹%lld" : {
+      "comment" : "Tiny label on a crystal drawn on the share card: how many rare rainbow gems it holds (in-app only)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rainbow %lld"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "虹%lld"
+          }
+        }
+      }
+    },
+    "虹のレア粒" : {
+      "comment" : "VoiceOver name of a rare rainbow gem drawn on the share card (in-app only)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rainbow rare gem"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "虹のレア粒"
+          }
+        }
+      }
+    },
+    "虹のレア粒%lld粒" : {
+      "comment" : "Share caption and VoiceOver: how many rare rainbow gems the card holds (in-app only)",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld rainbow rare gem"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld rainbow rare gems"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "虹のレア粒%lld粒"
+          }
+        }
+      }
+    },
+    "記念石 %lld" : {
+      "comment" : "Share card stat: milestone stones",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld milestone stone"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld milestone stones"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記念石 %lld"
+          }
+        }
+      }
+    },
+    "記念石%lld個" : {
+      "comment" : "Share caption disclosure and VoiceOver item: a number of milestone stones",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld milestone stone"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld milestone stones"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記念石%lld個"
+          }
+        }
+      }
+    },
+    "記念石なし" : {
+      "comment" : "VoiceOver, share card: no milestone stones",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No milestone stones"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記念石なし"
+          }
+        }
+      }
+    },
+    "記念石の内訳、%@" : {
+      "comment" : "VoiceOver, share card: the milestone stones. Argument: each kind with its count (100点1個、試験合格2個)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Milestone stones: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記念石の内訳、%@"
+          }
+        }
+      }
+    },
+    "記念石は最新%lld個をカードに載せます。記録画面で削除した石は共有にも含まれません。" : {
+      "comment" : "Share composer coverage note: only the newest milestone stones are on the card. Argument: how many stones",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "The card shows your newest %lld milestone stone. Stones you deleted in the Log aren't shared either."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "The card shows your newest %lld milestone stones. Stones you deleted in the Log aren't shared either."
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記念石は最新%lld個をカードに載せます。記録画面で削除した石は共有にも含まれません。"
+          }
+        }
+      }
+    },
+    "記念石は自己申告" : {
+      "comment" : "Share card badge, caption and VoiceOver: milestone stones are entered by hand. A statement without its final period (sentence case in en)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Milestone stones are self-reported"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記念石は自己申告"
+          }
+        }
+      }
+    },
+    "記録を安全な範囲で読み込めませんでした。もう一度この画面を開いてください。" : {
+      "comment" : "Share composer error: the records could not be loaded within the safe limits",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't load your records safely. Please open this screen again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録を安全な範囲で読み込めませんでした。もう一度この画面を開いてください。"
+          }
+        }
+      }
+    },
+    "読み込めた結晶と最新層の集中" : {
+      "comment" : "Share caption subject (starts the caption's first sentence in en): focus in the crystals that loaded and the newest layer of gems",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "My focus in the loaded crystals and newest gems"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "読み込めた結晶と最新層の集中"
+          }
+        }
+      }
+    },
+    "調整" : {
+      "comment" : "Share composer: title of the collapsed options (file type, shape, self-reported, hashtags)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adjust"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "調整"
+          }
+        }
+      }
+    },
+    "追加タグ（任意）" : {
+      "comment" : "Share composer: placeholder of the field for one extra hashtag",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Extra hashtag (optional)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "追加タグ（任意）"
+          }
+        }
+      }
+    },
+    "通常の集中粒" : {
+      "comment" : "VoiceOver name of an ordinary focus gem drawn on the share card",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus gem"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通常の集中粒"
+          }
+        }
+      }
+    },
+    "選択中：%@" : {
+      "comment" : "Share composer: the hashtags that will be shared. Argument: the tags separated by spaces",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selected: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択中：%@"
+          }
+        }
+      }
+    },
+    "金 %lld" : {
+      "comment" : "Share card stat: rare gold gems (in-app only)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld gold"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "金 %lld"
+          }
+        }
+      }
+    },
+    "金%lld" : {
+      "comment" : "Tiny label on a crystal drawn on the share card: how many rare gold gems it holds (in-app only)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gold %lld"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "金%lld"
+          }
+        }
+      }
+    },
+    "金のレア粒" : {
+      "comment" : "VoiceOver name of a rare gold gem drawn on the share card (in-app only)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gold rare gem"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "金のレア粒"
+          }
+        }
+      }
+    },
+    "金のレア粒%lld粒" : {
+      "comment" : "Share caption and VoiceOver: how many rare gold gems the card holds (in-app only)",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld gold rare gem"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld gold rare gems"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "金のレア粒%lld粒"
+          }
+        }
+      }
+    },
+    "集中の自己申告を切替。記念石は常に「自己申告」と表示します" : {
+      "comment" : "Share composer: subtitle of the Include Self-Reported toggle",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turns self-reported focus on or off. Milestone stones are always marked “self-reported”."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中の自己申告を切替。記念石は常に「自己申告」と表示します"
+          }
+        }
+      }
+    },
+    "集中の質量は結晶集計から構成し、記念石は最新%lld個を載せます。" : {
+      "comment" : "Share composer coverage note: focus mass comes from crystal totals; only the newest milestone stones are on the card. Argument: how many stones",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Focus mass comes from crystal totals, and the card shows your newest %lld milestone stone."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Focus mass comes from crystal totals, and the card shows your newest %lld milestone stones."
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中の質量は結晶集計から構成し、記念石は最新%lld個を載せます。"
+          }
+        }
+      }
+    },
+    "集中を完走すると、瓶の画像とグラム数を一緒に残せます。" : {
+      "comment" : "Share composer empty state: no gems yet",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Complete a focus session to keep an image of your jar together with its grams."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中を完走すると、瓶の画像とグラム数を一緒に残せます。"
+          }
+        }
+      }
+    },
+    "集中粒%lld粒" : {
+      "comment" : "Share caption disclosure item: focus gems left out of the drawn jar",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld focus gem"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld focus gems"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中粒%lld粒"
+          }
+        }
+      }
+    },
+    "静止画" : {
+      "comment" : "Share file type: a still image (button, and an item of the settings summary)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Still Image"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "静止画"
+          }
+        }
+      }
+    },
+    "高解像度の一枚" : {
+      "comment" : "Share button subtitle (still image): one high-resolution image",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "One high-resolution image"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "高解像度の一枚"
           }
         }
       }

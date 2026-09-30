@@ -65,32 +65,53 @@ struct AggregateMetadata: Equatable, Sendable {
     }
 
     var primarySubjectName: String {
+        // l10n-ignore: the name stored for history before themes (AggregateSubjectFraction's sentinel), shown through JarSubjectDisplayName
         subjectMix.first?.name ?? "過去の集中"
+    }
+
+    // l10n (Docs/Localization.md): the VoiceOver text only. One fact per
+    // list item, joined by ListText (ja 「、」, as before); no rendering or
+    // label change here (BRIEF rule 12).
+    /// What VoiceOver says about a crystal, one fact per item:
+    /// ja 「英語など、10粒を含むまとまり粒、実測7粒、自己申告3粒」.
+    func accessibilityFacts(
+        presentsRareRewards requestedPresentation: Bool
+    ) -> [String] {
+        let name = JarSubjectDisplayName.name(primarySubjectName)
+        let subject = subjectMix.count > 1
+            ? String(localized: "\(name)など", table: "Jar",
+                     comment: "VoiceOver, a crystal of several themes: the name of the theme with the most gems, then 'and others'")
+            : name
+        let hierarchy = level == 1
+            ? String(localized: "\(pebbleCount)粒を含むまとまり粒", table: "Jar",
+                     comment: "VoiceOver, a ×10 crystal: the number of gems it holds")
+            : String(localized: "\(pebbleCount)粒、\(childAggregateCount)個のまとまりを含むまとまり粒", table: "Jar",
+                     comment: "VoiceOver, a ×100 or larger crystal: the number of gems it holds, then the number of smaller crystals in it")
+        var facts = [
+            subject,
+            hierarchy,
+            String(localized: "実測\(measuredPebbleCount)粒", table: "Jar",
+                   comment: "VoiceOver, a crystal: how many of its gems were measured (timer or Screen Time)")
+        ]
+        if manualPebbleCount > 0 {
+            facts.append(String(localized: "自己申告\(manualPebbleCount)粒", table: "Jar",
+                                comment: "VoiceOver, a crystal: how many of its gems were entered by hand"))
+        }
+        if RareRewardReleasePolicy.permitsInternalTestOverride(requestedPresentation) {
+            if goldPebbleCount > 0 {
+                facts.append(JarRareGemText.gold(goldPebbleCount))
+            }
+            if prismPebbleCount > 0 {
+                facts.append(JarRareGemText.prism(prismPebbleCount))
+            }
+        }
+        return facts
     }
 
     func accessibilityDescription(
         presentsRareRewards requestedPresentation: Bool
     ) -> String {
-        let subject = subjectMix.count > 1 ? "\(primarySubjectName)など" : primarySubjectName
-        let hierarchy: String
-        if level == 1 {
-            hierarchy = "\(pebbleCount)粒を含むまとまり粒"
-        } else {
-            hierarchy = "\(pebbleCount)粒、\(childAggregateCount)個のまとまりを含むまとまり粒"
-        }
-        let reporting = manualPebbleCount > 0
-            ? "実測\(measuredPebbleCount)粒、自己申告\(manualPebbleCount)粒"
-            : "実測\(measuredPebbleCount)粒"
-        let presentsRareRewards = RareRewardReleasePolicy
-            .permitsInternalTestOverride(requestedPresentation)
-        let rare = presentsRareRewards
-            ? [
-                goldPebbleCount > 0 ? "金\(goldPebbleCount)粒" : nil,
-                prismPebbleCount > 0 ? "虹\(prismPebbleCount)粒" : nil
-            ].compactMap { $0 }.joined(separator: "、")
-            : ""
-        let rareSuffix = rare.isEmpty ? "" : "、\(rare)"
-        return "\(subject)、\(hierarchy)、\(reporting)\(rareSuffix)"
+        ListText.inSentence(accessibilityFacts(presentsRareRewards: requestedPresentation))
     }
 
     var accessibilityDescription: String {
@@ -434,22 +455,67 @@ struct PebbleDescriptor: Identifiable {
         if let screenTimeObstacle {
             return screenTimeObstacle.accessibilityDescription
         }
+        // l10n: VoiceOver text only (see AggregateMetadata.accessibilityFacts).
         if let aggregate {
-            return "\(aggregate.accessibilityDescription)、\(grams)グラム"
+            return ListText.inSentence(
+                aggregate.accessibilityFacts(presentsRareRewards: RareRewardReleasePolicy.isEnabled)
+                    + [MassText.spoken(grams: grams)]
+            )
         }
         if let achievementKind {
-            return "\(subjectName)、\(achievementKind.title)の記念石、質量には含まれません"
+            return String(
+                localized: "\(subjectName)、\(achievementKind.title)の記念石、質量には含まれません",
+                table: "Jar",
+                comment: "VoiceOver, a milestone stone in the jar: the theme's name, then the milestone's title; the stone adds no mass"
+            )
         }
-        let measurement = source == .screenTime ? "スクリーンタイム" : (isMeasured ? "実測" : "自己申告")
-        let material: String
+        return ListText.inSentence(
+            [subjectName, gemAccessibilityName, MassText.spoken(grams: grams)]
+                + [presentationRewardBatchSummary].compactMap { $0 }
+        )
+    }
+
+    /// How a gem was recorded and what it is, as VoiceOver names it:
+    /// 「実測のつぶ」「自己申告の金のつぶ」「スクリーンタイムのつぶ」.
+    private var gemAccessibilityName: String {
         let presentationKind = RareRewardPresentationPolicy.kind(kind)
-        switch presentationKind {
-        case .normal: material = "つぶ"
-        case .gold: material = "金のつぶ"
-        case .prism: material = "虹のつぶ"
+        if source == .screenTime {
+            return switch presentationKind {
+            case .normal:
+                String(localized: "スクリーンタイムのつぶ", table: "Jar",
+                       comment: "VoiceOver, a gem from time in study apps recorded by Screen Time")
+            case .gold:
+                String(localized: "スクリーンタイムの金のつぶ", table: "Jar",
+                       comment: "VoiceOver, a rare gold gem from Screen Time (in-app only)")
+            case .prism:
+                String(localized: "スクリーンタイムの虹のつぶ", table: "Jar",
+                       comment: "VoiceOver, a rare rainbow gem from Screen Time (in-app only)")
+            }
         }
-        let rewardDetail = presentationRewardBatchSummary.map { "、\($0)" } ?? ""
-        return "\(subjectName)、\(measurement)の\(material)、\(grams)グラム\(rewardDetail)"
+        if isMeasured {
+            return switch presentationKind {
+            case .normal:
+                String(localized: "実測のつぶ", table: "Jar",
+                       comment: "VoiceOver, a gem measured by the timer")
+            case .gold:
+                String(localized: "実測の金のつぶ", table: "Jar",
+                       comment: "VoiceOver, a rare gold gem measured by the timer (in-app only)")
+            case .prism:
+                String(localized: "実測の虹のつぶ", table: "Jar",
+                       comment: "VoiceOver, a rare rainbow gem measured by the timer (in-app only)")
+            }
+        }
+        return switch presentationKind {
+        case .normal:
+            String(localized: "自己申告のつぶ", table: "Jar",
+                   comment: "VoiceOver, a gem entered by hand")
+        case .gold:
+            String(localized: "自己申告の金のつぶ", table: "Jar",
+                   comment: "VoiceOver, a rare gold gem entered by hand (in-app only)")
+        case .prism:
+            String(localized: "自己申告の虹のつぶ", table: "Jar",
+                   comment: "VoiceOver, a rare rainbow gem entered by hand (in-app only)")
+        }
     }
 
     var aggregateSource: AggregateSource {

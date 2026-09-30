@@ -33,7 +33,11 @@ struct ScreenTimeObstacleDescriptor: Identifiable, Equatable, Sendable {
     }
 
     var accessibilityDescription: String {
-        "寄り道の黒い石、10分の石\(representedUnits.formatted())個分。勉強の積み上げには含まれません"
+        String(
+            localized: "寄り道の黒い石、10分の石\(representedUnits)個分。勉強の積み上げには含まれません",
+            table: "Jar",
+            comment: "VoiceOver, one black stone in the jar (time on apps the person wants to use less): how many 10-minute stones it stands for; it never counts toward study"
+        )
     }
 }
 
@@ -91,7 +95,8 @@ extension PebbleDescriptor {
     init(screenTimeObstacle obstacle: ScreenTimeObstacleDescriptor) {
         self.init(
             id: obstacle.id,
-            subjectName: "寄り道",
+            subjectName: String(localized: "寄り道", table: "Jar",
+                                comment: "Name of a black stone's source (time on apps the person wants to use less); never persisted"),
             colorHex: "27262D",
             source: .manual,
             kind: .normal,

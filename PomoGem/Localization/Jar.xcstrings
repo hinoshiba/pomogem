@@ -1,9 +1,66 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "%@、%@" : {
+      "comment" : "VoiceOver, jar value with black stones: the jar's study value (ends with the milestone stone count, no period), then the black stones sentence. en: '%1$@. %2$@'",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@、%@"
+          }
+        }
+      }
+    },
+    "%@、%@。" : {
+      "comment" : "VoiceOver, the jar's black stones: the stone count, then the 10-minute stones they stand for. en: '%1$@, %2$@.'",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, %2$@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@、%@。"
+          }
+        }
+      }
+    },
+    "%@、%@の記念石、質量には含まれません" : {
+      "comment" : "VoiceOver, a milestone stone in the jar: the theme's name, then the milestone's title; the stone adds no mass",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, milestone stone: %2$@, adds no mass"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@、%@の記念石、質量には含まれません"
+          }
+        }
+      }
+    },
     "%@。「最新の結晶の内訳を見る」アクションで、保存されている粒数や質量などを確認できます" : {
       "comment" : "VoiceOver jar hint: the tap/tilt hint, then the custom action that opens the newest crystal",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@. Use the “View Newest Crystal Details” action to check its saved gem count, mass and more"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -12,57 +69,494 @@
         }
       }
     },
-    "%@。この端末で確認済みの集中時間の質量：%@" : {
+    "%@。この端末で確認済みの集中時間の質量：%@。" : {
       "comment" : "VoiceOver, jar while iCloud is checked: status, the lifetime mass",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@. Mass of focus time confirmed on this device: %2$@."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@。この端末で確認済みの集中時間の質量：%@"
+            "value" : "%@。この端末で確認済みの集中時間の質量：%@。"
           }
         }
       }
     },
-    "%@。この端末で確認済みの集中時間の質量：%@以上" : {
+    "%@。この端末で確認済みの集中時間の質量：%@以上。" : {
       "comment" : "VoiceOver, jar while iCloud is checked: status, a lower bound of the lifetime mass",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@. Mass of focus time confirmed on this device: at least %2$@."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@。この端末で確認済みの集中時間の質量：%@以上"
+            "value" : "%@。この端末で確認済みの集中時間の質量：%@以上。"
           }
         }
       }
     },
-    "%@。これまでの合計は確認が済むと表示します" : {
+    "%@。これまでの合計は確認が済むと表示します。" : {
       "comment" : "VoiceOver, jar while iCloud is checked and no lifetime total can be shown: status",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@. Your total so far appears once the check is done."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@。これまでの合計は確認が済むと表示します"
+            "value" : "%@。これまでの合計は確認が済むと表示します。"
           }
         }
       }
     },
-    "、旧形式の結晶%lld個（保存済み情報を確認できます）" : {
-      "comment" : "VoiceOver jar value fragment: crystals saved in the old format",
+    "%@など" : {
+      "comment" : "VoiceOver, a crystal of several themes: the name of the theme with the most gems, then 'and others'",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ and others"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "、旧形式の結晶%lld個（保存済み情報を確認できます）"
+            "value" : "%@など"
           }
         }
       }
     },
-    "、結晶%lld個、合計%lld粒分" : {
-      "comment" : "VoiceOver jar value fragment: crystal count, gems they hold",
+    "%lld粒、%lld個のまとまりを含むまとまり粒" : {
+      "comment" : "VoiceOver, a ×100 or larger crystal: the number of gems it holds, then the number of smaller crystals in it",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "crystal holding %1$lld gems (smaller crystals inside: %2$lld)"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "、結晶%lld個、合計%lld粒分"
+            "value" : "%lld粒、%lld個のまとまりを含むまとまり粒"
+          }
+        }
+      }
+    },
+    "%lld粒を含むまとまり粒" : {
+      "comment" : "VoiceOver, a ×10 crystal: the number of gems it holds",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "crystal holding %lld gem"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "crystal holding %lld gems"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld粒を含むまとまり粒"
+          }
+        }
+      }
+    },
+    "10分の石%lld個分" : {
+      "comment" : "VoiceOver, the jar's black stones: how many 10-minute stones they stand for (follows the stone count)",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "worth %lld ten-minute stone"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "worth %lld ten-minute stones"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "10分の石%lld個分"
+          }
+        }
+      }
+    },
+    "iCloudを確認中" : {
+      "comment" : "VoiceOver, jar: iCloud is being checked; a sentence without its period",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking iCloud"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudを確認中"
+          }
+        }
+      }
+    },
+    "jar.value.crystals" : {
+      "comment" : "VoiceOver, jar contents item: the crystals (結晶1個), then the gems they hold (合計10粒分). en: '%1$@ %2$@'",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@、%@"
+          }
+        }
+      }
+    },
+    "このiPhoneの集計を確認中" : {
+      "comment" : "VoiceOver, jar: the totals are being checked on this iPhone (iCloud unavailable); a sentence without its period",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking this iPhone's totals"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneの集計を確認中"
+          }
+        }
+      }
+    },
+    "まだ粒はありません。集中を完走するか成果を積むと、瓶に粒が入ります" : {
+      "comment" : "VoiceOver hint of the empty jar",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No gems yet. Complete a focus session or add an achievement, and gems go into your jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "まだ粒はありません。集中を完走するか成果を積むと、瓶に粒が入ります"
+          }
+        }
+      }
+    },
+    "スクリーンタイムのつぶ" : {
+      "comment" : "VoiceOver, a gem from time in study apps recorded by Screen Time",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screen Time gem"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイムのつぶ"
+          }
+        }
+      }
+    },
+    "スクリーンタイムの虹のつぶ" : {
+      "comment" : "VoiceOver, a rare rainbow gem from Screen Time (in-app only)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screen Time rainbow gem"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイムの虹のつぶ"
+          }
+        }
+      }
+    },
+    "スクリーンタイムの金のつぶ" : {
+      "comment" : "VoiceOver, a rare gold gem from Screen Time (in-app only)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screen Time gold gem"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイムの金のつぶ"
+          }
+        }
+      }
+    },
+    "勉強の積み上げには含まれません" : {
+      "comment" : "VoiceOver, the jar's black stones, last sentence (no final period): they never count toward study",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not part of your study progress"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "勉強の積み上げには含まれません"
+          }
+        }
+      }
+    },
+    "合計%lld粒分" : {
+      "comment" : "VoiceOver, jar contents: how many gems the crystals hold together (follows the crystal count)",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "holding %lld gem"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "holding %lld gems"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合計%lld粒分"
+          }
+        }
+      }
+    },
+    "実測%lld粒" : {
+      "comment" : "VoiceOver, a crystal: how many of its gems were measured (timer or Screen Time)",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld timed gem"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld timed gems"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "実測%lld粒"
+          }
+        }
+      }
+    },
+    "実測のつぶ" : {
+      "comment" : "VoiceOver, a gem measured by the timer",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "timed gem"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "実測のつぶ"
+          }
+        }
+      }
+    },
+    "実測の虹のつぶ" : {
+      "comment" : "VoiceOver, a rare rainbow gem measured by the timer (in-app only)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "timed rainbow gem"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "実測の虹のつぶ"
+          }
+        }
+      }
+    },
+    "実測の金のつぶ" : {
+      "comment" : "VoiceOver, a rare gold gem measured by the timer (in-app only)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "timed gold gem"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "実測の金のつぶ"
+          }
+        }
+      }
+    },
+    "寄り道" : {
+      "comment" : "Name of a black stone's source (time on apps the person wants to use less); never persisted",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apps to use less"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "寄り道"
+          }
+        }
+      }
+    },
+    "寄り道の黒い石%lld個" : {
+      "comment" : "VoiceOver, the jar's black stones (time on apps the person wants to use less): how many stones",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld black stone from apps you want to use less"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld black stones from apps you want to use less"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "寄り道の黒い石%lld個"
+          }
+        }
+      }
+    },
+    "寄り道の黒い石、10分の石%lld個分。勉強の積み上げには含まれません" : {
+      "comment" : "VoiceOver, one black stone in the jar (time on apps the person wants to use less): how many 10-minute stones it stands for; it never counts toward study",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Black stone from apps you want to use less, worth %lld ten-minute stone. Not part of your study progress"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Black stone from apps you want to use less, worth %lld ten-minute stones. Not part of your study progress"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "寄り道の黒い石、10分の石%lld個分。勉強の積み上げには含まれません"
+          }
+        }
+      }
+    },
+    "旧形式の結晶%lld個（保存済み情報を確認できます）" : {
+      "comment" : "VoiceOver, jar contents item: crystals saved in the old format; their saved details can be opened",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld crystal in the old format (its saved details can be opened)"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld crystals in the old format (their saved details can be opened)"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "旧形式の結晶%lld個（保存済み情報を確認できます）"
           }
         }
       }
@@ -70,10 +564,450 @@
     "最新の結晶の内訳を見る" : {
       "comment" : "VoiceOver custom action on the jar",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View Newest Crystal Details"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "最新の結晶の内訳を見る"
+          }
+        }
+      }
+    },
+    "現在確認できた集中時間の質量：%@以上、集計整理中。" : {
+      "comment" : "VoiceOver, jar: a lower bound of the lifetime mass while the totals are tidied up. Argument: spoken mass",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mass of focus time confirmed so far: at least %@, while totals are being tidied."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "現在確認できた集中時間の質量：%@以上、集計整理中。"
+          }
+        }
+      }
+    },
+    "瓶" : {
+      "comment" : "VoiceOver label of the jar. en: Jar",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶"
+          }
+        }
+      }
+    },
+    "瓶の描画がまだ準備できていません。" : {
+      "comment" : "Jar snapshot error: the jar is not on screen yet, so it cannot be drawn into a share card",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The jar isn't ready to be drawn yet."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶の描画がまだ準備できていません。"
+          }
+        }
+      }
+    },
+    "瓶の描画を取得できませんでした。" : {
+      "comment" : "Jar snapshot error: the jar's drawing could not be captured",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't capture the jar's drawing."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶の描画を取得できませんでした。"
+          }
+        }
+      }
+    },
+    "瓶の整理：%@。" : {
+      "comment" : "VoiceOver, jar: what the jar holds. Argument: the items (3粒、結晶1個、合計10粒分)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In the jar: %@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶の整理：%@。"
+          }
+        }
+      }
+    },
+    "瓶の画像を生成できませんでした。" : {
+      "comment" : "Jar snapshot error: the jar's image could not be created",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't create an image of the jar."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶の画像を生成できませんでした。"
+          }
+        }
+      }
+    },
+    "瓶の粒が跳ねました" : {
+      "comment" : "VoiceOver announcement after the bounce action",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The gems in the jar bounced."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶の粒が跳ねました"
+          }
+        }
+      }
+    },
+    "瓶の粒を動かす" : {
+      "comment" : "VoiceOver custom action on the jar: bounce the gems",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move the Jar's Gems"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶の粒を動かす"
+          }
+        }
+      }
+    },
+    "瓶の粒を右へ動かす" : {
+      "comment" : "VoiceOver custom action on the jar: nudge the gems right",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move the Jar's Gems Right"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶の粒を右へ動かす"
+          }
+        }
+      }
+    },
+    "瓶の粒を左へ動かす" : {
+      "comment" : "VoiceOver custom action on the jar: nudge the gems left",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move the Jar's Gems Left"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶の粒を左へ動かす"
+          }
+        }
+      }
+    },
+    "瓶をタップすると数秒だけ1粒が大きく跳ね、ぶつかった周囲の粒も自然に動いて止まります。その間はiPhoneを傾けたり、軽く振ったりして動かせます" : {
+      "comment" : "VoiceOver hint of the jar: tapping bounces one gem for a few seconds; tilting or shaking the iPhone moves the gems meanwhile",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap the jar and one gem bounces high for a few seconds; the gems it hits move naturally, then settle. Meanwhile, tilt or gently shake your iPhone to move them"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶をタップすると数秒だけ1粒が大きく跳ね、ぶつかった周囲の粒も自然に動いて止まります。その間はiPhoneを傾けたり、軽く振ったりして動かせます"
+          }
+        }
+      }
+    },
+    "結晶%lld個" : {
+      "comment" : "VoiceOver, jar contents: the number of crystals",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld crystal"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld crystals"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結晶%lld個"
+          }
+        }
+      }
+    },
+    "自己申告%lld粒" : {
+      "comment" : "VoiceOver, a crystal: how many of its gems were entered by hand",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld self-reported gem"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld self-reported gems"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自己申告%lld粒"
+          }
+        }
+      }
+    },
+    "自己申告のつぶ" : {
+      "comment" : "VoiceOver, a gem entered by hand",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "self-reported gem"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自己申告のつぶ"
+          }
+        }
+      }
+    },
+    "自己申告の虹のつぶ" : {
+      "comment" : "VoiceOver, a rare rainbow gem entered by hand (in-app only)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "self-reported rainbow gem"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自己申告の虹のつぶ"
+          }
+        }
+      }
+    },
+    "自己申告の金のつぶ" : {
+      "comment" : "VoiceOver, a rare gold gem entered by hand (in-app only)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "self-reported gold gem"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自己申告の金のつぶ"
+          }
+        }
+      }
+    },
+    "虹%lld粒" : {
+      "comment" : "VoiceOver: how many rare rainbow (prism) gems (in-app only)",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld rainbow gem"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld rainbow gems"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "虹%lld粒"
+          }
+        }
+      }
+    },
+    "記念石%lld個" : {
+      "comment" : "VoiceOver, jar, last sentence (no final period): how many milestone stones",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld milestone stone"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld milestone stones"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記念石%lld個"
+          }
+        }
+      }
+    },
+    "記録した集中時間の質量：%@。" : {
+      "comment" : "VoiceOver, jar: the lifetime mass of recorded focus. Argument: spoken mass",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mass of recorded focus time: %@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録した集中時間の質量：%@。"
+          }
+        }
+      }
+    },
+    "過去の集中" : {
+      "comment" : "VoiceOver: the theme name the jar gives focus saved before themes existed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Earlier focus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "過去の集中"
+          }
+        }
+      }
+    },
+    "過去の集中 %lld" : {
+      "comment" : "VoiceOver: the theme name the jar gives the second, third … colour of focus saved before themes existed. Argument: the number",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Earlier focus %lld"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "過去の集中 %lld"
+          }
+        }
+      }
+    },
+    "金%lld粒" : {
+      "comment" : "VoiceOver: how many rare gold gems (in-app only)",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld gold gem"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld gold gems"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "金%lld粒"
           }
         }
       }
