@@ -1373,6 +1373,34 @@ struct JarAccumulationPresenceBackdrop: View {
     /// D5: false when Home's readout above the mouth carries 「瓶N杯」
     /// (`JarFilledJarPill`) instead of this chip behind the glass.
     var showsCycleChip = true
+    /// F3 (review F1, 2026-09-29): the 「N巡」 pill is part of the HUD. Held
+    /// upside down, the settled pile rests against the cap, over the pill:
+    /// while it does, the copy behind the scene leaves the pill out and a
+    /// second copy in front of the scene draws only the pill, where it
+    /// always is and at its size, over the strengthened ink scrim
+    /// (`JarHUDScrimPolicy.cyclePill`).
+    var cyclePill: CyclePillLayer = .behindTheScene(lifted: false)
+    /// Reports the pill's frame in `JarSpriteView.stageCoordinateSpace`.
+    var onCyclePillFrame: ((CGRect) -> Void)?
+
+    enum CyclePillLayer: Equatable {
+        /// The whole backdrop behind the scene; `lifted` leaves the pill
+        /// out (still laid out and measured) while a front copy draws it.
+        case behindTheScene(lifted: Bool)
+        /// Only the pill, in front of the scene, over the strengthened ink.
+        case inFrontOfTheScene
+    }
+
+    /// Where the 「N巡」 pill's centre is on a stage of `stageSize` (y down).
+    static func cyclePillCenter(stageSize: CGSize, showsLifetimeCore: Bool) -> CGPoint {
+        return CGPoint(
+            x: stageSize.width / 2,
+            y: JarAccumulationPresenceLayoutPresentation.cycleChipCenterY(
+                stageHeight: stageSize.height,
+                showsLifetimeCore: showsLifetimeCore
+            )
+        )
+    }
 
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
@@ -1396,7 +1424,6 @@ struct JarAccumulationPresenceBackdrop: View {
             let stageHeight = min(Constants.Jar.height, max(1, proxy.size.height))
             let lightFieldHeight = max(1, stageHeight - 28)
             let lightFieldWidth = max(1, min(342, proxy.size.width - 48))
-            let lightFieldTop = (proxy.size.height - lightFieldHeight) / 2
             let layout = JarAccumulationPresenceLayoutPresentation.state(
                 showsLifetimeCore: showsLifetimeCore
             )
@@ -1405,40 +1432,44 @@ struct JarAccumulationPresenceBackdrop: View {
                 cycleBeat: cycleBeat
             )
 
+            let drawsField = cyclePill != .inFrontOfTheScene
+            let pillCenter = Self.cyclePillCenter(stageSize: proxy.size, showsLifetimeCore: showsLifetimeCore)
             ZStack {
-                JarAccumulationLightParticleField(
-                    state: state,
-                    presentation: lightField,
-                    colorHex: colorHex,
-                    showsMajorMilestoneBeat: majorMilestoneBeat != nil,
-                    reduceTransparency: reduceTransparency
-                )
-                .frame(width: lightFieldWidth, height: lightFieldHeight)
-                .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+                if drawsField {
+                    JarAccumulationLightParticleField(
+                        state: state,
+                        presentation: lightField,
+                        colorHex: colorHex,
+                        showsMajorMilestoneBeat: majorMilestoneBeat != nil,
+                        reduceTransparency: reduceTransparency
+                    )
+                    .frame(width: lightFieldWidth, height: lightFieldHeight)
+                    .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
 
-                // This monotonic memory glow is deliberately separate from the
-                // repeating vertical fill. Once the time core exists it recedes
-                // so the two optical summaries do not wash each other out.
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                Color(hex: colorHex).opacity(reduceTransparency ? 0.12 : 0.25),
-                                PomoGemTheme.auroraViolet.opacity(reduceTransparency ? 0.04 : 0.11),
-                                .clear
-                            ],
-                            center: .center,
-                            startRadius: 3,
-                            endRadius: glowDimension * 0.47
+                    // This monotonic memory glow is deliberately separate from the
+                    // repeating vertical fill. Once the time core exists it recedes
+                    // so the two optical summaries do not wash each other out.
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    Color(hex: colorHex).opacity(reduceTransparency ? 0.12 : 0.25),
+                                    PomoGemTheme.auroraViolet.opacity(reduceTransparency ? 0.04 : 0.11),
+                                    .clear
+                                ],
+                                center: .center,
+                                startRadius: 3,
+                                endRadius: glowDimension * 0.47
+                            )
                         )
-                    )
-                    .frame(width: glowDimension, height: glowDimension)
-                    .blur(radius: reduceTransparency ? 2 : 9)
-                    .opacity(
-                        (reduceTransparency ? 0.76 : state.fieldOpacity)
-                            * layout.centerGlowOpacityScale
-                    )
-                    .position(x: proxy.size.width / 2, y: proxy.size.height * 0.54)
+                        .frame(width: glowDimension, height: glowDimension)
+                        .blur(radius: reduceTransparency ? 2 : 9)
+                        .opacity(
+                            (reduceTransparency ? 0.76 : state.fieldOpacity)
+                                * layout.centerGlowOpacityScale
+                        )
+                        .position(x: proxy.size.width / 2, y: proxy.size.height * 0.54)
+                }
 
                 if state.completedCycleCount > 0, showsCycleChip {
                     // 「瓶N杯」 reads at a glance; the long-term milestone traces
@@ -1448,17 +1479,32 @@ struct JarAccumulationPresenceBackdrop: View {
                         colorHex: colorHex,
                         reduceTransparency: reduceTransparency
                     )
-                    .position(
-                        x: proxy.size.width / 2,
-                        y: JarAccumulationPresenceLayoutPresentation.cycleChipCenterY(
-                            stageHeight: proxy.size.height,
-                            showsLifetimeCore: showsLifetimeCore
-                        )
-                    )
+                    .overlay {
+                        Capsule()
+                            .stroke(Color.white.opacity(0.16), lineWidth: 0.7)
+                    }
+                    .background {
+                        // F3 (review F1): in front of a settled pile, the
+                        // same strengthened ink as the HUD's value.
+                        if cyclePill == .inFrontOfTheScene {
+                            JarInkScrimShape(
+                                ink: JarHUDScrimPolicy.strengthenedInk,
+                                size: CGSize(width: 120, height: 64),
+                                endRadius: 56
+                            )
+                        }
+                    }
+                    .onGeometryChange(for: CGRect.self) { geometry in
+                        geometry.frame(in: .named(JarSpriteView.stageCoordinateSpace))
+                    } action: { frame in
+                        onCyclePillFrame?(frame)
+                    }
+                    .position(pillCenter)
                     // Round 14: a landing or manual-entry toast rests over
                     // the collar for about 3 s; the pill steps back under
-                    // it instead of showing through.
-                    .opacity(router?.toast == nil ? 1 : 0)
+                    // it instead of showing through. Lifted in front of
+                    // the scene, the behind copy leaves it out (F3).
+                    .opacity(router?.toast == nil && cyclePill != .behindTheScene(lifted: true) ? 1 : 0)
                     .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: router?.toast == nil)
                 }
             }

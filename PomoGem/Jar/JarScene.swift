@@ -126,12 +126,16 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
     /// Reduces decorative effects while preserving the jar's physical gem
-    /// interactions, including drops, taps, shakes, and device tilt.
+    /// interactions, including drops, taps, shakes, and device tilt. One
+    /// physical difference (F3, owner ruling 2026-09-27): the re-settle a
+    /// turn of the phone wakes runs calm (`isCalmResettleActive`).
     var reduceMotion: Bool = UIAccessibility.isReduceMotionEnabled {
         didSet {
             guard reduceMotion != oldValue else { return }
             requestRedraw()
             allPebbleNodes.forEach { $0.setReduceMotion(reduceMotion) }
+            // F3: a calm re-settle belongs to Reduce Motion only.
+            if !reduceMotion { endCalmResettle() }
             if reduceMotion {
                 // Aggregation source nodes leave `livePebbles` before their
                 // decorative move/fade starts. Complete that transaction once
@@ -185,8 +189,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// under the count. Nothing else about a crystal depends on Pro.
     var showsMonthLabels = false {
         didSet {
-            renderBaseLayers()
+            // Home assigns it on every base-layer sync; only a change is
+            // drawn (launch-perf (b)).
             guard showsMonthLabels != oldValue else { return }
+            renderBaseLayers()
             allPebbleNodes.forEach { $0.setMonthEngraving(showsMonthLabels) }
         }
     }
@@ -200,6 +206,58 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         // JarPhysicsCategory occupies bits 0...2. The mouth's containment
         // edge accepts ordinary pebbles only, allowing this body to enter.
         static let category: UInt32 = 1 << 3
+        /// The entry gravity field's category (fields have their own bit
+        /// space, matched against each body's `fieldBitMask`).
+        static let fieldCategory: UInt32 = 1 << 0
+        /// A gem that entered into gems pressed against the cap (the phone
+        /// upside down) passes them for at most this long before it joins
+        /// ordinary collisions anyway.
+        static let clearingTimeout: TimeInterval = 1.5
+        /// A gem waiting at the mouth (`EntryPhase.heldAtMouth`) lands
+        /// after this long there, so Home's receipt, the completion drop's
+        /// guard and the onboarding trial never wait on a pile that may
+        /// lie across the mouth for as long as the phone is held sideways.
+        /// It keeps waiting at the mouth until there is room.
+        static let heldLandingDelay: TimeInterval = 1.5
+        /// Two bodies closer than the sum of their radii minus this overlap.
+        static let overlapTolerance: CGFloat = 0.5
+    }
+
+    /// F3 entry ritual (Docs/JarOrientationGravity.md): a new gem always
+    /// enters through the mouth under the jar's own downward gravity (the
+    /// entry field), whatever the phone's pose, and only then follows the
+    /// phone's gravity. Above the collar a completion drop ignores walls
+    /// and gems and is held in the neck, so a sideways or upward gravity can
+    /// neither carry it past the neck nor lift it back out.
+    private enum EntryPhase: Equatable {
+        /// Above the copper collar (a completion drop from the scene top).
+        case throughMouth
+        /// Inside the walls but overlapping gems that the gravity presses
+        /// against the cap (`JarGravityMapping.pullsTowardTheMouth`): it
+        /// passes them under the entry gravity until it is clear, the
+        /// gravity turns away from the mouth, or `clearingTimeout`. Under
+        /// any other gravity a new gem that overlaps the pile joins it at
+        /// once, as before F3 — except a pile leaning on a wall, which a
+        /// gem waits on (`heldAtMouth`).
+        case clearingPile(since: TimeInterval)
+        /// Review S2 (2026-09-29): held sideways (the gravity neither on
+        /// the floor nor toward the mouth), a crowded pile lies against the
+        /// lower wall and across the mouth. A gem joining it there would
+        /// start deep inside several gems, and the solver would throw one
+        /// of them out past the cap. The gem waits in the neck instead,
+        /// resting on the gems under the mouth (no collisions, no gravity),
+        /// until there is room where it would join; it lands there after
+        /// `CompletionEntryPhysics.heldLandingDelay`. It enters through the
+        /// mouth as always.
+        case heldAtMouth(since: TimeInterval)
+
+        /// Whether the gem is still above the collar, in the neck.
+        var isInTheNeck: Bool {
+            switch self {
+            case .throughMouth, .heldAtMouth: true
+            case .clearingPile: false
+            }
+        }
     }
 
     private struct QueuedDrop {
@@ -233,6 +291,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         static let tapSpecular = "jar.tapSpecular"
         static let reducedMotionHighlight = "jar.reducedMotionHighlight"
         static let pileGlowShape = "jar.pileGlow.shape"
+        static let glassCrossfade = "jar.glass.crossfade"
     }
 
     /// A tap launches one primary gem and lets SpriteKit transfer that motion
@@ -293,6 +352,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private struct ActiveTapMotion {
         let sequence: UInt64
         let pebbleID: UUID
+        /// The launch's "up" (against gravity when the tap landed); its
+        /// return pushes back along it.
+        let up: CGVector
     }
 
     private let soundSynth: SoundSynth
@@ -309,6 +371,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// Glass v2: moving additive highlights (reflection bands, shoulder
     /// light) over the pre-rendered front glass; ±6 pt with tilt.
     private let glassHighlightNode = SKSpriteNode()
+    /// launch-perf (a): plain glass (a faint tint and the outline) shown
+    /// until the presented size's glass textures are baked off the main
+    /// thread; they then cross-fade in (`glassCrossfadeDuration`).
+    private let glassPlaceholderNode = SKShapeNode()
     /// Copper neck collar: three pre-rendered tilt states (−1, 0, +1) of
     /// which at most two are visible at once.
     private let collarNode = SKNode()
@@ -397,6 +463,103 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private(set) var isBakeInProgress = false
     private(set) var isCapacityReliefActive = false
     private(set) var appliedGravityVector = Constants.Jar.gravityVector
+    /// F3: the smoothed sensed reading the gravity is mapped from
+    /// (`setGravityReading`); nil when the gravity was set directly
+    /// (`setGravityVector`) or reset, which reads as the default gravity.
+    private(set) var appliedReading: JarGravityMapping.Reading?
+    /// F3 (review S1): the slow pose average of the sensed reading
+    /// (`JarTiltMath.poseTimeConstant`, about 1.5 s): the pose a pile
+    /// settles under, and what a resting jar compares with it to wake for
+    /// a turn. Nil with `appliedReading`.
+    private(set) var poseReading: JarGravityMapping.Reading?
+    /// What the light follows (scene units, `JarTiltMath.lightFraction`):
+    /// the sensed sideways reading, or a directly set gravity's dx.
+    private var appliedLightHorizontal: CGFloat = 0
+    /// The pose the resting pile settled under: the slow pose average when
+    /// it stopped (`.flat` stands for the jar's default gravity). A resting
+    /// jar re-settles when the pose average turns away from it
+    /// (`JarGravityMapping.needsResettle`).
+    private(set) var settledReading: JarGravityMapping.Reading = .flat
+    /// The gravity the resting pile settled under.
+    private var settledGravityVector = Constants.Jar.gravityVector
+    /// F3: which turns give the awake pile its interaction window again
+    /// (`JarGravityMapping.Refollow`, review B1): from the pose the jar woke
+    /// under, a turn of the phone itself past 15° from the pose last
+    /// followed, and only as far as the phone turns — so neither the idle
+    /// settle nor the hard stop freezes a pile in mid-flight after a
+    /// deliberate turn, and a swaying hand never keeps the jar awake.
+    private var refollow = JarGravityMapping.Refollow(wakePose: .flat)
+    /// F3 (review B2): whether the app is active (`JarSpriteView` sets it
+    /// from its scene phase before it stops or starts motion). While it is
+    /// not, the SKView does not step the scene, so a reset of the gravity
+    /// never opens an interaction window whose deadlines would run out
+    /// unseen; the pile finishes its move through the ordinary idle
+    /// lifecycle once the app is back.
+    var hostIsActive = true
+    /// The gravity the bodies rest under: the settled one while the jar
+    /// rests (a stopped motion observer resets the live gravity without
+    /// moving the frozen pile), the live one while it is awake. Share
+    /// snapshots judge support by it.
+    var pileGravityVector: CGVector {
+        isIdlePaused ? settledGravityVector : appliedGravityVector
+    }
+    /// Whether the bodies rest on the floor (heaped toward the lower side
+    /// at most), not against a wall or the cap:
+    /// `JarGravityMapping.restsOnTheFloor` of `pileGravityVector`, within
+    /// 30° of the jar's own down. An awake pile that has been under a
+    /// gravity off the floor since it last rested (`awakePileLeftTheFloor`)
+    /// does not rest on the floor until it rests again, whatever the live
+    /// gravity says: a sheet covering Home resets the gravity to the jar's
+    /// own down while that pile still lies against a wall or the cap, or is
+    /// falling back from it. The share card goes by it (the pile light by
+    /// `pileGravityVector` alone, so it moves with the gravity, animated).
+    var pileRestsOnTheFloor: Bool {
+        if isIdlePaused { return JarGravityMapping.restsOnTheFloor(settledGravityVector) }
+        return !awakePileLeftTheFloor && JarGravityMapping.restsOnTheFloor(appliedGravityVector)
+    }
+    /// F3: the awake pile has been under a gravity off the floor (or woke
+    /// from a pose off the floor) since it last rested, so its bodies may
+    /// still lie against a wall or the cap, or be on their way back, even
+    /// after the live gravity returned to the floor. Cleared when the pile
+    /// rests (the settled gravity decides then) and by a restore (its rows
+    /// start on the floor).
+    private var awakePileLeftTheFloor = false
+    /// Gems still in their entry ritual, by phase (F3).
+    private var enteringPhases: [UUID: EntryPhase] = [:]
+    /// Gems that joined the pile at the cap by `clearingTimeout`, still
+    /// overlapping it (Debug reviews and tests).
+    private(set) var entryClearingTimeoutCount = 0
+    /// The jar's own gravity for gems entering through the mouth: a linear
+    /// gravity field (the same units and integration as the physics
+    /// world's gravity) acting only on bodies whose `fieldBitMask` carries
+    /// `CompletionEntryPhysics.fieldCategory`.
+    private let entryGravityField: SKFieldNode = {
+        let field = SKFieldNode.linearGravityField(withVector: vector_float3(
+            Float(Constants.Jar.gravityVector.dx),
+            Float(Constants.Jar.gravityVector.dy),
+            0
+        ))
+        field.name = "jar.entry.gravity"
+        field.categoryBitMask = CompletionEntryPhysics.fieldCategory
+        return field
+    }()
+    /// The scene time of the latest `update(_:)` (the landing fallback and
+    /// the entry ritual's timeout use it; a paused scene does not advance).
+    private var lastSceneUpdateTime: TimeInterval = 0
+    /// `interactionClock` at the latest `update(_:)` (review B2).
+    private var lastSceneUpdateUptime: TimeInterval?
+    /// A gap longer than this (seconds) between two frames means the scene
+    /// was not stepping (the app inactive or in the background, the view
+    /// off screen, a stalled main thread), not a slow frame: the time does
+    /// not count toward any deadline (`shiftDeadlinesOverASteppingGap`).
+    static let steppingGap: TimeInterval = 0.25
+    /// When each new, not yet landed gem was first seen slow (F3 landing
+    /// fallback).
+    private var slowNewGemSince: [UUID: TimeInterval] = [:]
+    /// A new gem slower than this (pt/s) for `restingLandingDelay` of scene
+    /// time has come to rest and lands, contact or not.
+    static let restingLandingSpeed: CGFloat = 12
+    static let restingLandingDelay: TimeInterval = 0.2
     /// Height profile of the settled pile: the top (scene y, 4 pt steps; 0
     /// when empty) of the resting bodies over each of `pileProfileBinCount`
     /// equal columns of the scene width. Refreshed with the pile light
@@ -407,6 +570,39 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     static let pileProfileBinCount = 12
     /// Bodies slower than this (pt/s) count as resting for the profile.
     static let pileProfileRestingSpeed: CGFloat = 24
+    /// F3 (owner ruling 2026-09-27; review F2/F5, 2026-09-29): the same
+    /// resting bodies as the profile, each as its circle (scene points, y
+    /// up, rounded to 1 pt). A pile held upside down rests against the cap,
+    /// where the profile's column tops cannot tell it from a tall upright
+    /// one. Home strengthens its HUD's ink scrim, and draws the 「N巡」 pill
+    /// in front of the scene, while one of these circles meets their frame
+    /// (`JarHUDScrimPolicy`), and the time core's labels judge a pile that
+    /// does not stand upright by them (`settledPileTop(minX:maxX:below:)`).
+    @Published private(set) var settledPileBodies: [JarHUDScrimPolicy.Body] = []
+    /// Whether the settled pile stands upright (`JarGravityMapping
+    /// .standsUpright` of `pileGravityVector` when it was published): its
+    /// column profile is then its height over the floor.
+    private(set) var settledPileStandsUpright = true
+
+    /// The bounds of `settledPileBodies` (rounded out to 4 pt), or nil
+    /// when none rests.
+    var settledPileBounds: CGRect? {
+        guard !settledPileBodies.isEmpty else { return nil }
+        var bounds = CGRect.null
+        for body in settledPileBodies {
+            bounds = bounds.union(CGRect(
+                x: body.center.x - body.radius,
+                y: body.center.y - body.radius,
+                width: body.radius * 2,
+                height: body.radius * 2
+            ))
+        }
+        let minX = (bounds.minX / 4).rounded(.down) * 4
+        let minY = (bounds.minY / 4).rounded(.down) * 4
+        let maxX = (bounds.maxX / 4).rounded(.up) * 4
+        let maxY = (bounds.maxY / 4).rounded(.up) * 4
+        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+    }
 
     /// Highest settled body over the horizontal span `minX...maxX` (scene
     /// coordinates), or 0 when that span is clear.
@@ -419,6 +615,29 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         let last = min(settledPileProfile.count - 1, Int(min(max(maxX, 0), size.width) / binWidth))
         guard first <= last else { return 0 }
         return settledPileProfile[first ... last].max() ?? 0
+    }
+
+    /// Review F5: the settled pile's top over `minX...maxX` for something
+    /// whose top edge is at scene y `ceiling` (the time core's label block
+    /// or its stone). A pile standing upright is judged by its column
+    /// profile, as before (`settledPileTop(minX:maxX:)`). A pile resting
+    /// against a wall or the cap is judged body by body: only resting
+    /// bodies over the span that reach below `ceiling` count, so a pile at
+    /// the cap never hides what lies below it, while one reaching down into
+    /// the labels still does.
+    func settledPileTop(minX: CGFloat, maxX: CGFloat, below ceiling: CGFloat?) -> CGFloat {
+        guard !settledPileStandsUpright, let ceiling, ceiling.isFinite else {
+            return settledPileTop(minX: minX, maxX: maxX)
+        }
+        guard minX.isFinite, maxX.isFinite else { return 0 }
+        var top: CGFloat = 0
+        for body in settledPileBodies
+        where body.center.x + body.radius >= minX
+            && body.center.x - body.radius <= maxX
+            && body.center.y - body.radius < ceiling {
+            top = max(top, (min(body.center.y + body.radius, size.height) / 4).rounded(.up) * 4)
+        }
+        return top
     }
     /// Observation-only revision for SwiftUI accessibility. The actual source
     /// of truth remains `livePebbles`; consumers read `physicalPebbleCount`
@@ -436,7 +655,34 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private var lastTapBounceUptime = -Double.greatestFiniteMagnitude
     private(set) var lastAcceptedTapSelection: JarAcceptedTapSelection?
     private var lastShakeUptime = -Double.greatestFiniteMagnitude
-    private var interactionMotionWindow: JarInteractionMotionWindow?
+    private var interactionMotionWindow: JarInteractionMotionWindow? {
+        didSet {
+            // A calm re-settle lives only as long as its window, and so
+            // does a shake's claim on the pile.
+            if interactionMotionWindow == nil {
+                endCalmResettle()
+                isShakenPileSettling = false
+            }
+        }
+    }
+    /// F3, Reduce Motion (Docs/JarOrientationGravity.md, owner ruling
+    /// 2026-09-27): the open window is a turn's calm re-settle. The physics
+    /// is kept — a sideways phone still piles sideways — but the resting
+    /// pile carries `Constants.Jar.calmResettleLinearDamping` and
+    /// `calmResettleAngularDamping` for the window — damping only (owner
+    /// ruling 2026-09-29): friction and contacts are untouched — so nothing
+    /// bounces, and the re-settle adds no light or effect. It ends when the
+    /// window does (rest, hard stop, restore, a covered Home), when a tap,
+    /// shake, VoiceOver action or drag opens a window of its own, or when
+    /// Reduce Motion turns off; the pile then gets its ordinary damping
+    /// back (the resting damping once it rests).
+    private(set) var isCalmResettleActive = false
+    /// F3, Reduce Motion: a shake threw the pile in the open window. Until
+    /// that pile rests (the window ends), a turn — a shaking wrist turns the
+    /// phone too — re-settles it with the ordinary damping and never starts
+    /// a calm re-settle, so the shake behaves as it always has. Cleared with
+    /// the window.
+    private var isShakenPileSettling = false
     private var pendingTapKick: PendingTapKick?
     private var activeTapMotion: ActiveTapMotion?
     private var tapPresentationStartPositions: [UUID: CGPoint] = [:]
@@ -646,6 +892,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             acceptedPebbleIDs.subtract(removedIDs)
             mutedLandingIDs.subtract(removedIDs)
             aboveEntryPebbleIDs.subtract(removedIDs)
+            forgetEntryState(for: removedIDs)
         }
 
         if !animated || screenTimeObstacleUnitCount < previousTotal {
@@ -749,13 +996,18 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         effect.run(.sequence([.wait(forDuration: 0.3), .removeFromParent()]))
         let node = makePebbleNode(destination)
         let range = allowedHorizontalRange(at: point.y, radius: node.radius)
+        // F3 (review F7): the new root forms a little above the fragments,
+        // away from the surface they rest on: along the gravity frame's up,
+        // as its birth velocity (straight up for an upright phone, as
+        // before), inside the same clamp.
+        let up = gestureFrame.up
         node.position = CGPoint(
-            x: min(max(point.x, range.lowerBound), range.upperBound),
-            y: min(max(point.y + 12, currentFloorY + node.radius + 6), interiorRect.maxY - node.radius)
+            x: min(max(point.x + up.dx * 12, range.lowerBound), range.upperBound),
+            y: min(max(point.y + up.dy * 12, currentFloorY + node.radius + 6), interiorRect.maxY - node.radius)
         )
         node.setScale(0.4 * node.jarScale)
         node.alpha = 0.25
-        node.physicsBody?.velocity = CGVector(dx: 0, dy: 32)
+        node.physicsBody?.velocity = CGVector(dx: up.dx * 32, dy: up.dy * 32)
         node.run(.scale(to: node.jarScale, duration: 0.28), withKey: PebbleNode.birthActionKey)
         node.run(.fadeIn(withDuration: 0.28))
         acceptedPebbleIDs.insert(destination.id)
@@ -922,6 +1174,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     @discardableResult
     private func enforcePileClearances(fromRestoreRows: Bool = false) -> Bool {
         guard !pileClearances.isEmpty, !isBakeInProgress, !livePebbles.isEmpty else { return false }
+        // F3: the bands measure an upright pile's height over the floor per
+        // screen column. A pile that settled more than 15° off the jar's
+        // own down (held tilted, sideways or upside down) heaps against the
+        // lower wall or lies at the cap, so it neither steps the scale down
+        // nor lifts the cap: the phone's pose never changes the scale. It is
+        // judged again when it settles upright. Restore rows are judged by
+        // the gravity they will settle under (`restore` sets it first).
+        guard JarGravityMapping.standsUpright(pileGravityVector) else { return false }
         let floor = currentFloorY
         var stepped: CGFloat?
         for clearance in pileClearances where !(fromRestoreRows && clearance.isOptional) {
@@ -1112,6 +1372,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         soundSynth: SoundSynth? = nil,
         haptics: Haptics? = nil
     ) {
+#if DEBUG && targetEnvironment(simulator)
+        JarFrameProbe.shared?.markHomeStart()
+        let initStart = CACurrentMediaTime()
+        defer {
+            JarFrameProbe.shared?.note(String(format: "scene-init ms=%.1f", (CACurrentMediaTime() - initStart) * 1_000))
+        }
+#endif
         self.soundSynth = soundSynth ?? .shared
         self.haptics = haptics ?? .shared
         super.init(size: size)
@@ -1223,6 +1490,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         legacyStrata: [JarStratumVisual] = []
     ) {
         let previouslyPersistedIDs = persistedBakedPebbleIDs
+        let previousHistory = historyDescriptors
+        let previousQueuedDrops = dropQueue.count
         let roots = AggregatePebblePolicy.visibleRoots(from: aggregates)
         let aggregateDescriptors = roots.map(PebbleDescriptor.init(aggregate:))
         // A migrated legacy stratum can now be a non-root leaf in the compact
@@ -1249,13 +1518,24 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         acceptedPebbleIDs.formUnion(persistedBakedPebbleIDs)
         dropQueue.removeAll { persistedBakedPebbleIDs.contains($0.descriptor.id) }
         mutedLandingIDs.subtract(persistedBakedPebbleIDs)
+        var removedLiveBody = false
         for pebble in livePebbles
         where persistedBakedPebbleIDs.contains(pebble.descriptor.id) {
             pebble.removeFromParent()
+            removedLiveBody = true
         }
-        synchronizeHistoryBodies()
+        let historyBodiesChanged = synchronizeHistoryBodies()
         rebuildFloor()
-        resumeSimulation()
+        // launch-perf (b): Home re-applies its roots whenever a menu or a
+        // sheet opens or closes. The same roots, grams and presentation must
+        // not wake a resting jar (each wake kept it awake ~3 s: ~0.4 s of
+        // main thread and ~180 GPU frames on an iPhone 12 mini).
+        let changed = historyBodiesChanged
+            || removedLiveBody
+            || dropQueue.count != previousQueuedDrops
+            || persistedBakedPebbleIDs != previouslyPersistedIDs
+            || !PebbleDescriptor.haveSamePresentation(previousHistory, historyDescriptors)
+        if changed { resumeSimulation() }
     }
 
     /// Restores bodies without replaying the reward animation. They are shelf-packed and
@@ -1270,6 +1550,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         tapPresentationMaximumDisplacement = 0
         tapPresentationMovedSecondaryCount = 0
         aboveEntryPebbleIDs.removeAll()
+        enteringPhases.removeAll()
+        slowNewGemSince.removeAll()
         completionDropTracking = nil
         trialDrop = nil
         cancelActiveBakeForRestore()
@@ -1361,13 +1643,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         ))
 #endif
         let overflow = studyDescriptors.dropFirst(Constants.Jar.maxPhysicsBodies)
-        let now = ProcessInfo.processInfo.systemUptime
+        let now = interactionClock()
         for descriptor in overflow {
             mutedLandingIDs.insert(descriptor.id)
             dropQueue.append(
                 QueuedDrop(
                     descriptor: descriptor,
-                    horizontalUnit: CGFloat.random(in: -1 ... 1),
+                    horizontalUnit: interiorDropHorizontalUnit(),
                     origin: .interior,
                     readyUptime: now,
                     needsSpecialAnticipation: false
@@ -1376,6 +1658,16 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
         publishPhysicalContentChangeIfNeeded()
         resetIdleObservation()
+        // F3: the rows replace the pile and settle under the live gravity,
+        // not under the pose the removed pile rested in (a sheet may have
+        // reset the gravity since, or the phone turned while Home was
+        // covered). The clearances below and the next wake judge by it.
+        settledReading = poseReading ?? appliedReading ?? .flat
+        settledGravityVector = appliedGravityVector
+        refollow = JarGravityMapping.Refollow(wakePose: settledReading)
+        // The rows start on the floor: they leave it only for a live
+        // gravity off it.
+        awakePileLeftTheFloor = !JarGravityMapping.restsOnTheFloor(appliedGravityVector)
         // The rows just laid out already tell roughly whether the pile
         // clears the core and the HUD: step down now, before the jar is
         // first drawn (the settled pile corrects it when it rests).
@@ -1410,7 +1702,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         return didBegin
     }
 
-    private func synchronizeHistoryBodies() {
+    /// Returns whether any body was removed, replaced or added.
+    @discardableResult
+    private func synchronizeHistoryBodies() -> Bool {
         let wanted = Dictionary(uniqueKeysWithValues: historyDescriptors.map { ($0.id, $0) })
         let wantedIDs = Set(wanted.keys)
         let removedIDs = installedHistoryIDs.subtracting(wantedIDs)
@@ -1479,11 +1773,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             insertPebble(node)
         }
         installedHistoryIDs = wantedIDs
-        if !removedIDs.isEmpty || !replacements.isEmpty || !additions.isEmpty {
+        let changed = !removedIDs.isEmpty || !replacements.isEmpty || !additions.isEmpty
+        if changed {
             reconcileJarScale()
         }
         publishPhysicalContentChangeIfNeeded(force: !replacements.isEmpty)
-        resetIdleObservation()
+        // An unchanged pile keeps its idle countdown (launch-perf (b)).
+        if changed { resetIdleObservation() }
+        return changed
     }
 
     private func replaceHistoryBody(
@@ -1548,6 +1845,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
         node.zPosition = JarZPosition.pebble(stackingIndex: nextStackingIndex)
         nextStackingIndex += 1
+        // Only a gem in its entry ritual feels the entry gravity field.
+        node.physicsBody?.fieldBitMask = 0
         worldNode.addChild(node)
     }
 
@@ -1698,6 +1997,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         mutedLandingIDs.subtract(ids)
         acceptedPebbleIDs.subtract(ids)
         aboveEntryPebbleIDs.subtract(ids)
+        forgetEntryState(for: ids)
         if let tracking = completionDropTracking, ids.contains(tracking.pebbleID) {
             completionDropTracking = nil
         }
@@ -1750,7 +2050,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     ) {
         guard direction.isFinite else { return }
         let safeDirection = min(max(direction, -1), 1)
-        let pebbles = livePebbles
+        let pebbles = gesturePebbles
         guard abs(safeDirection) > 0.01,
               !pebbles.isEmpty,
               nudgeRateLimiter.accepts(
@@ -1759,13 +2059,17 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
               )
         else { return }
         beginInteractionMotionWindow(uptime: uptime)
+        // VoiceOver's "left" and "right" stay the screen's; the small lift
+        // is against gravity (F3), straight up for an upright phone.
+        let up = gestureFrame.up
         for pebble in pebbles {
             // SpriteKit's mass grows with the jar scale; the impulse grows
             // with it, so a nudge moves every jar the same.
             let massScale = pebble.xScale * pebble.xScale
+            let lift = Constants.Jar.shakeVerticalImpulseMin * 0.25 * massScale
             pebble.physicsBody?.applyImpulse(CGVector(
-                dx: safeDirection * Constants.Jar.shakeHorizontalImpulse * massScale,
-                dy: Constants.Jar.shakeVerticalImpulseMin * 0.25 * massScale
+                dx: safeDirection * Constants.Jar.shakeHorizontalImpulse * massScale + up.dx * lift,
+                dy: up.dy * lift
             ))
         }
         playSensoryFeedback(
@@ -1785,10 +2089,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     func shakePebbles(strength proposedStrength: CGFloat, horizontal direction: CGFloat) -> Bool {
         guard proposedStrength.isFinite, direction.isFinite else { return false }
         let strength = min(max(proposedStrength, 0), 1)
-        let pebbles = livePebbles
+        let pebbles = gesturePebbles
         guard strength > 0, !isBakeInProgress, !pebbles.isEmpty else { return false }
 
-        let now = ProcessInfo.processInfo.systemUptime
+        let now = interactionClock()
         guard now - lastShakeUptime >= Constants.Jar.deviceShakeCooldown else { return false }
         lastShakeUptime = now
 
@@ -1799,6 +2103,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 / CGFloat(pebbles.count)
         )
         beginInteractionMotionWindow(uptime: now)
+        // F3: the shaken pile keeps the ordinary damping through a turn
+        // until it rests (`isShakenPileSettling`).
+        isShakenPileSettling = true
         finishActiveTapMotion(forceReturn: false)
         transientMotionGate.invalidate()
         let crowdScale = min(
@@ -1808,7 +2115,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 sqrt(TapResponse.fullEnergyBodyCount / CGFloat(pebbles.count))
             )
         )
-        let safeDirection = min(max(direction, -1), 1)
+        // F3: the throw is up against gravity and sideways across it (the
+        // screen's axes for an upright phone). The shake's screen-sideways
+        // direction is taken along the across axis; held sideways, where
+        // it runs along gravity instead, each gem picks its own side.
+        let frame = gestureFrame
+        let safeDirection = min(max(direction * frame.across.dx, -1), 1)
         let horizontalImpulse = Constants.Jar.shakeHorizontalImpulse
             * (0.78 + strength * 0.72) * crowdScale
         let verticalImpulse = (
@@ -1833,8 +2145,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             body.isResting = false
             body.linearDamping = Constants.Jar.linearDamping
             body.usesPreciseCollisionDetection = !pebble.hasLanded
-            body.velocity = JarShakeVelocityPolicy.velocity(
-                current: body.velocity,
+            // The policy's sideways and vertical ceilings apply in the
+            // gravity frame (across, up), then turn back to the scene.
+            let frameVelocity = JarShakeVelocityPolicy.velocity(
+                current: frame.components(of: body.velocity),
                 impulse: CGVector(
                     dx: localDirection * horizontalImpulse,
                     dy: verticalImpulse * (0.86 + abs(variation) * 0.14)
@@ -1843,6 +2157,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 // the shipping jar (D4 is presentation only).
                 mass: pebble.presentationMass
             )
+            body.velocity = frame.vector(from: frameVelocity)
         }
         playTapCaustic(at: centroid, expands: !reduceMotion)
         playSensoryFeedback(
@@ -1866,8 +2181,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     @discardableResult
     func bouncePebbles(at proposedPoint: CGPoint? = nil) -> Bool {
         lastAcceptedTapSelection = nil
-        let now = ProcessInfo.processInfo.systemUptime
-        let pebbles = livePebbles
+        let now = interactionClock()
+        let pebbles = gesturePebbles
         guard !isBakeInProgress, !pebbles.isEmpty else { return false }
 
         // VoiceOver and keyboard activation do not provide a touch point. Use
@@ -1965,10 +2280,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             inspectableAggregateID: inspectableAggregateID
         )
 
+        // F3: launched up against gravity, sideways across it (the
+        // screen's axes for an upright phone).
+        let frame = gestureFrame
         let horizontalDirection = tapLaunchHorizontalDirection(
             for: primaryPebble,
             origin: origin,
-            pileCentroid: centroid
+            pileCentroid: centroid,
+            frame: frame
         )
 
         beginInteractionMotionWindow(uptime: now)
@@ -1982,9 +2301,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             return false
         }
 
-        let upwardRoom = max(
-            0,
-            interiorRect.maxY - primaryPebble.radius - primaryPebble.position.y
+        let upwardRoom = containmentRoom(
+            from: primaryPebble.position,
+            radius: primaryPebble.radius,
+            along: frame.up
         )
         let launchPlan = JarTapLaunchPolicy.plan(
             radius: primaryPebble.radius,
@@ -1995,7 +2315,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             for: primaryPebble.descriptor.id,
             salt: 1
         )
-        let desiredVelocity = CGVector(
+        let desiredVelocity = frame.vector(from: CGVector(
             dx: min(
                 TapResponse.maximumHorizontalVelocity,
                 max(
@@ -2007,7 +2327,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 TapResponse.maximumVerticalVelocity,
                 launchPlan.verticalVelocity
             )
-        )
+        ))
         let desiredAngularVelocity = min(
             TapResponse.maximumAngularVelocity,
             max(
@@ -2024,7 +2344,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             TapResponse.maximumLaunchClearance,
             primaryPebble.radius * TapResponse.launchClearanceRadiusFraction
         )
-        primaryPebble.position.y += launchClearance
+        primaryPebble.position.x += frame.up.dx * launchClearance
+        primaryPebble.position.y += frame.up.dy * launchClearance
         primaryBody.isDynamic = true
         primaryBody.isResting = false
         primaryBody.linearDamping = TapResponse.flightDamping
@@ -2033,7 +2354,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         primaryBody.angularVelocity = desiredAngularVelocity
         activeTapMotion = ActiveTapMotion(
             sequence: activeTapSequence,
-            pebbleID: primaryPebble.descriptor.id
+            pebbleID: primaryPebble.descriptor.id,
+            up: frame.up
         )
 
         let tapKicks = [
@@ -2050,6 +2372,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             for: primaryPebble,
             sequence: activeTapSequence,
             returnSpeed: launchPlan.returnVelocity,
+            up: frame.up,
             delay: TapResponse.returnDelay,
             remainingFrameDeferrals: TapResponse.maximumReturnFrameDeferrals
         )
@@ -2097,12 +2420,15 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             body.linearDamping = Constants.Jar.linearDamping
             body.usesPreciseCollisionDetection = !pebble.hasLanded
             if forceReturn {
+                // Back along gravity (F3): the launch's up, reversed.
+                let up = activeTapMotion.up
+                let rising = body.velocity.dx * up.dx + body.velocity.dy * up.dy
                 let returnSpeed = min(
                     TapResponse.maximumVerticalVelocity,
-                    max(abs(body.velocity.dy), 130)
+                    max(abs(rising), 130)
                 )
-                if body.velocity.dy > -returnSpeed {
-                    body.velocity.dy = -returnSpeed
+                if rising > -returnSpeed {
+                    body.velocity = Self.velocity(body.velocity, withComponent: -returnSpeed, along: up)
                 }
                 body.isResting = false
             }
@@ -2140,9 +2466,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             guard let start = tapPresentationStartPositions[pebble.descriptor.id]
             else { continue }
             if pebble.descriptor.id == primaryID {
+                // The rise is along the launch's up (F3; screen up for an
+                // upright phone).
+                let up = activeTapMotion?.up ?? CGVector(dx: 0, dy: 1)
                 tapPresentationMaximumRise = max(
                     tapPresentationMaximumRise,
-                    pebble.position.y - primaryStart.y
+                    (pebble.position.x - primaryStart.x) * up.dx
+                        + (pebble.position.y - primaryStart.y) * up.dy
                 )
                 tapPresentationMaximumDisplacement = max(
                     tapPresentationMaximumDisplacement,
@@ -2171,10 +2501,16 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private func tapLaunchHorizontalDirection(
         for pebble: PebbleNode,
         origin: CGPoint,
-        pileCentroid: CGPoint
+        pileCentroid: CGPoint,
+        frame: JarGestureFrame
     ) -> CGFloat {
-        let touchOffset = pebble.position.x - origin.x
-        let pileOffset = pileCentroid.x - pebble.position.x
+        // Offsets and room are measured across gravity (F3): the screen's x
+        // for an upright phone.
+        let across = frame.across
+        let touchOffset = (pebble.position.x - origin.x) * across.dx
+            + (pebble.position.y - origin.y) * across.dy
+        let pileOffset = (pileCentroid.x - pebble.position.x) * across.dx
+            + (pileCentroid.y - pebble.position.y) * across.dy
         let meaningfulOffset = max(pebble.radius * 0.18, 2)
         var direction: CGFloat
         if abs(touchOffset) >= meaningfulOffset {
@@ -2188,14 +2524,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             ) >= 0 ? 1 : -1
         }
 
-        let horizontalRange = allowedHorizontalRange(
-            at: pebble.position.y,
-            radius: pebble.radius
+        let forwardRoom = containmentRoom(from: pebble.position, radius: pebble.radius, along: across)
+        let backwardRoom = containmentRoom(
+            from: pebble.position,
+            radius: pebble.radius,
+            along: CGVector(dx: -across.dx, dy: -across.dy)
         )
-        let leftRoom = max(0, pebble.position.x - horizontalRange.lowerBound)
-        let rightRoom = max(0, horizontalRange.upperBound - pebble.position.x)
-        let preferredRoom = direction > 0 ? rightRoom : leftRoom
-        let oppositeRoom = direction > 0 ? leftRoom : rightRoom
+        let preferredRoom = direction > 0 ? forwardRoom : backwardRoom
+        let oppositeRoom = direction > 0 ? backwardRoom : forwardRoom
         if preferredRoom < min(pebble.radius * 2, oppositeRoom * 0.45) {
             direction *= -1
         }
@@ -2210,6 +2546,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         for pebble: PebbleNode,
         sequence: UInt64,
         returnSpeed: CGFloat,
+        up: CGVector,
         delay: TimeInterval,
         remainingFrameDeferrals: Int
     ) {
@@ -2233,6 +2570,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                     for: pebble,
                     sequence: sequence,
                     returnSpeed: returnSpeed,
+                    up: up,
                     delay: TapResponse.returnFrameRetryDelay,
                     remainingFrameDeferrals: remainingFrameDeferrals - 1
                 )
@@ -2242,11 +2580,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             if self.pendingTapKick?.sequence == sequence {
                 self.pendingTapKick = nil
             }
+            // Back along gravity (F3): straight down for an upright phone.
             let desiredReturnVelocity = -returnSpeed
-            if body.velocity.dy > desiredReturnVelocity {
+            let rising = body.velocity.dx * up.dx + body.velocity.dy * up.dy
+            if rising > desiredReturnVelocity {
                 body.isResting = false
                 body.linearDamping = TapResponse.settlingDamping
-                body.velocity.dy = desiredReturnVelocity
+                body.velocity = Self.velocity(body.velocity, withComponent: desiredReturnVelocity, along: up)
             }
 
             DispatchQueue.main.asyncAfter(
@@ -2318,8 +2658,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         )
     }
 
-    /// Applies a safe gravity vector supplied by Core Motion. Invalid values
-    /// are ignored and extreme inputs are clamped before reaching SpriteKit.
+    /// Applies a safe gravity vector set directly (Catalyst's drag, tests,
+    /// the Debug frame probe). Invalid values are ignored and extreme
+    /// inputs are clamped before reaching SpriteKit; the light follows its
+    /// dx. Core Motion's samples go through `setGravityReading` (F3).
     func setGravityVector(
         _ proposed: CGVector,
         smoothing: Bool = true,
@@ -2340,18 +2682,188 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             next.dx - appliedGravityVector.dx,
             next.dy - appliedGravityVector.dy
         ) > 0.01 else { return }
+        appliedReading = nil
+        poseReading = nil
+        applyGravity(next, lightHorizontal: next.dx, wakesSimulation: wakesSimulation)
+    }
+
+    /// F3 (Docs/JarOrientationGravity.md): applies one Core Motion gravity
+    /// reading. The reading is smoothed — not the mapped gravity, which the
+    /// flat-phone blend moves up to about 7 times faster than the sensor —
+    /// and mapped to the jar's gravity (`JarGravityMapping`: toward the
+    /// physically lowest screen edge, sideways and upward included; the
+    /// mouth stays physically closed). The light follows the sensed
+    /// sideways part, so a phone on a desk keeps the default gravity while
+    /// its glints still follow a tilt. The first reading after a reset (or
+    /// a directly set gravity) stands as it is.
+    ///
+    /// The sensed reading also feeds the slow pose average (`poseReading`).
+    /// A resting jar whose pose average turned from the pose its pile
+    /// settled under, turning the jar's gravity with it
+    /// (`JarGravityMapping.needsResettle`), wakes through one bounded
+    /// interaction window (settle 3 s, hard stop 5 s), so the pile
+    /// re-settles under the new gravity. An awake jar whose phone turns
+    /// more than 15° from the pose its pile has been following, further
+    /// than it has turned so far (`JarGravityMapping.Refollow`), opens the
+    /// window again from that moment (`followTurn`), so a turn late in a
+    /// window never freezes the pile in mid-flight, while a swaying hand
+    /// never extends it. The wake does not depend on Reduce
+    /// Motion: the gems follow the phone either way. Under Reduce Motion the
+    /// re-settle runs calm — raised damping for its window (damping only),
+    /// no bounce, no light or effect (`isCalmResettleActive`) — unless a
+    /// shaken pile is still settling.
+    ///
+    /// `smoothing: false` takes `sensed` as it is (the first reading after
+    /// a reset, or the idle check's latest reading when the jar goes back
+    /// to the full rate); `pose` is then the pose average to take with it
+    /// (the idle check's own), or `sensed` itself.
+    func setGravityReading(
+        _ sensed: JarGravityMapping.Reading,
+        smoothing: Bool = true,
+        pose: JarGravityMapping.Reading? = nil
+    ) {
+        let next: JarGravityMapping.Reading
+        if smoothing, let current = appliedReading {
+            next = current.smoothed(toward: sensed, fraction: Constants.Jar.gravitySmoothingFactor)
+            poseReading = (poseReading ?? current).smoothed(
+                toward: sensed,
+                fraction: JarTiltMath.poseFraction(updatesPerSecond: JarMotionRate.fullUpdatesPerSecond)
+            )
+        } else {
+            next = sensed
+            poseReading = pose ?? sensed
+        }
+        appliedReading = next
+        let gravity = JarGravityMapping.gravity(for: next)
+        let light = JarGravityMapping.lightHorizontal(for: next)
+        if hypot(
+            gravity.dx - appliedGravityVector.dx,
+            gravity.dy - appliedGravityVector.dy
+        ) > 0.01 {
+            applyGravity(gravity, lightHorizontal: light, wakesSimulation: false)
+        } else if light != appliedLightHorizontal {
+            appliedLightHorizontal = light
+            applyOpticalTilt(horizontal: light, uptime: tiltClock())
+        }
+        followTurn(to: next)
+    }
+
+    /// F3: re-settles the pile for a turn of the phone. A resting pile
+    /// wakes for a turn past 30° at once, and for a smaller one (about 6°)
+    /// once its slow pose average turned from the pose it settled under
+    /// (`needsResettle(from:pose:current:)`, review S1); an awake one opens its
+    /// interaction window again only for a turn of the phone past 15° from
+    /// the pose it has been following, and only as far as the phone turns
+    /// from the pose the jar woke under (`JarGravityMapping.Refollow`,
+    /// review B1). The awake check measures from the last reopening, so
+    /// with the resting jar's 6° a hand swaying a few degrees each way
+    /// would reopen the window on every swing and keep the physics awake
+    /// indefinitely; measured on the phone and bounded by its turn, a sway
+    /// never does, and a deliberate turn reopens it about once per 15° it
+    /// turns (each window still settles after 3 s and stops after 5 s).
+    /// Smaller turns while awake move the pile within the open window, as
+    /// any tilt did before F3.
+    private func followTurn(to reading: JarGravityMapping.Reading) {
+        if isIdlePaused {
+            guard JarGravityMapping.needsResettle(
+                from: settledReading,
+                pose: poseReading ?? reading,
+                current: reading
+            ) else { return }
+            beginInteractionMotionWindow(uptime: interactionClock())
+            refollow = JarGravityMapping.Refollow(wakePose: settledReading, followed: reading)
+            beginCalmResettleUnderReduceMotion()
+        } else if refollow.reopens(for: reading) {
+            reopenInteractionMotionWindowForATurn()
+        }
+    }
+
+    /// Gives the awake pile a new window from now for a turn it has not
+    /// had its settle time under. Only the deadlines move: the tapped
+    /// gem's flight damping and the idle observation stay as they are.
+    private func reopenInteractionMotionWindowForATurn() {
+        interactionMotionWindow = JarInteractionMotionWindow(openedAt: interactionClock())
+        beginCalmResettleUnderReduceMotion()
+    }
+
+    /// F3, Reduce Motion: the re-settle a turn just opened (or reopened)
+    /// runs calm (`isCalmResettleActive`). Without Reduce Motion nothing
+    /// changes, and neither does it while a shaken pile is still settling
+    /// (`isShakenPileSettling`): the shake keeps its ordinary damping.
+    private func beginCalmResettleUnderReduceMotion() {
+        guard reduceMotion, !isShakenPileSettling else { return }
+        isCalmResettleActive = true
+        for pebble in livePebbles where takesCalmResettle(pebble) {
+            applyCalmResettle(to: pebble)
+        }
+    }
+
+    /// Ends a calm re-settle: the pile's bodies get their ordinary awake
+    /// damping back (a pile coming to rest then takes the resting damping).
+    private func endCalmResettle() {
+        guard isCalmResettleActive else { return }
+        let calmBodies = livePebbles.filter(takesCalmResettle)
+        isCalmResettleActive = false
+        for pebble in calmBodies {
+            pebble.physicsBody?.linearDamping = Constants.Jar.linearDamping
+            pebble.physicsBody?.angularDamping = Constants.Jar.angularDamping
+        }
+    }
+
+    /// Whether a body takes the calm re-settle: a gem of the resting pile.
+    /// A gem still entering or falling keeps the ordinary damping (its drop
+    /// behaves as before), and so does a tapped gem in flight (the tap owns
+    /// its damping and spin).
+    private func takesCalmResettle(_ pebble: PebbleNode) -> Bool {
+        isCalmResettleActive
+            && pebble.hasLanded
+            && pebble.descriptor.id != activeTapMotion?.pebbleID
+    }
+
+    /// The calm re-settle's body: raised damping only (owner ruling
+    /// 2026-09-29: damping, nothing else), so the pile slides and rolls to
+    /// the new wall or the cap without a bounce. Friction, contacts and
+    /// the body type stay as they are.
+    private func applyCalmResettle(to pebble: PebbleNode) {
+        guard let body = pebble.physicsBody else { return }
+        body.linearDamping = Constants.Jar.calmResettleLinearDamping
+        body.angularDamping = Constants.Jar.calmResettleAngularDamping
+#if DEBUG
+        if let tuning = Self.calmTuningOverride {
+            body.linearDamping = tuning.0
+            body.angularDamping = tuning.1
+        }
+#endif
+    }
+#if DEBUG
+    static var calmTuningOverride: (CGFloat, CGFloat)?
+#endif
+
+    private func applyGravity(
+        _ next: CGVector,
+        lightHorizontal: CGFloat,
+        wakesSimulation: Bool
+    ) {
         appliedGravityVector = next
         physicsWorld.gravity = next
-        applyOpticalTilt(horizontal: next.dx, uptime: tiltClock())
+        // F3: an awake pile under a gravity off the floor may be carried
+        // away from it; it counts as off the floor until it rests again
+        // (`pileRestsOnTheFloor`). A resting pile stays where it settled.
+        if !isIdlePaused, !JarGravityMapping.restsOnTheFloor(next) {
+            awakePileLeftTheFloor = true
+        }
+        appliedLightHorizontal = lightHorizontal
+        applyOpticalTilt(horizontal: lightHorizontal, uptime: tiltClock())
         // Core Motion delivers up to 30 updates per second. Treating every
         // sample as a new interaction used to reset both the three-second
         // settling observation and the tapped gem's low damping, so a held
         // phone could keep the jar alive forever. Sensor gravity now affects
-        // only an already-open interaction window. Catalyst's explicit drag
+        // only an already-open interaction window (and, F3, a resting pile
+        // whose phone turned, which opens one). Catalyst's explicit drag
         // opts into waking below.
         if wakesSimulation {
             continueInteractionMotionWindow(
-                uptime: ProcessInfo.processInfo.systemUptime
+                uptime: interactionClock()
             )
         } else if interactionMotionWindow != nil, isPaused {
             resumeSimulation()
@@ -2362,10 +2874,32 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         setGravityVector(Constants.Jar.gravityVector, smoothing: false)
         // Below the 0.01 sample step the call above keeps the old vector;
         // a reset is exact whatever the last sample was.
+        appliedReading = nil
+        appliedLightHorizontal = 0
         appliedGravityVector = Constants.Jar.gravityVector
         physicsWorld.gravity = Constants.Jar.gravityVector
+        poseReading = nil
         // A resting jar returns its light exactly to the level position.
-        updateOpticalTilt(horizontal: appliedGravityVector.dx)
+        updateOpticalTilt(horizontal: appliedLightHorizontal)
+        // An awake pile follows the default gravity like a turn to it: a
+        // reset is one event, not a sway, so its window opens whatever the
+        // pile has followed before, and later turns are measured from the
+        // default gravity as from a new wake. A resting one stays frozen in
+        // its settled pose (share support and the next wake judge by that
+        // pose), and nothing wakes it here. While the app is not active
+        // (review B2) the SKView does not step the scene, so no window
+        // opens: its deadlines would run out unseen and the first frame back
+        // would freeze the pile wherever it was. The pile then finishes its
+        // move under the ordinary idle lifecycle when the app is back (the
+        // gravity the motion brings back decides where), and the idle
+        // observation does not count the time the scene did not step
+        // (`shiftDeadlinesOverASteppingGap`).
+        guard !isIdlePaused, hostIsActive else { return }
+        let followed = refollow.followed
+        refollow = JarGravityMapping.Refollow(wakePose: .flat)
+        if JarGravityMapping.needsRefollow(from: followed, to: .flat) {
+            reopenInteractionMotionWindowForATurn()
+        }
     }
 
     /// Idle tilt (Docs/GemExperienceDesign.md §7.13). While the jar rests,
@@ -2382,6 +2916,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// Clock of the idle tilt gate and of the render loop's redraw and
     /// motion holds (tests inject one).
     var tiltClock: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+    /// Clock of the interaction window (its settle and hard stop), the
+    /// shake and tap cooldowns and the drop queue: monotonic uptime.
+    /// Tests that drive SpriteKit's frames themselves inject the frames'
+    /// own time, so a window closes after the same simulated time whatever
+    /// the machine's load.
+    var interactionClock: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     private var lastIdleTiltUptime: TimeInterval = -.greatestFiniteMagnitude
     /// Light changes made while idle — each one is a frame SpriteKit draws
     /// for a paused jar (tests and the Debug frame probe).
@@ -2442,7 +2982,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             isIdlePaused = false
             onIdlePauseChanged?(false)
             // Samples the idle gate held back are caught up at once.
-            updateOpticalTilt(horizontal: appliedGravityVector.dx)
+            updateOpticalTilt(horizontal: appliedLightHorizontal)
+            // F3: the woken pile starts from the pose it settled under,
+            // and leaves the floor if it lay off it or the live gravity
+            // now pulls it off.
+            refollow = JarGravityMapping.Refollow(wakePose: settledReading)
+            awakePileLeftTheFloor = !JarGravityMapping.restsOnTheFloor(settledGravityVector)
+                || !JarGravityMapping.restsOnTheFloor(appliedGravityVector)
         }
         resetIdleObservation()
         // Landing, fusion, tap, shake, content changes: the render loop and
@@ -2536,6 +3082,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 #endif
 
     private func beginInteractionMotionWindow(uptime: TimeInterval) {
+        // A tap, shake or VoiceOver action takes the jar over from a calm
+        // re-settle and behaves as it always has (a turn from rest begins
+        // its calm re-settle again after this).
+        endCalmResettle()
         interactionMotionWindow = JarInteractionMotionWindow(openedAt: uptime)
         resumeSimulation()
     }
@@ -2544,6 +3094,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// sample on every event. A new drag still opens a complete window and can
     /// wake a previously settled Catalyst scene.
     private func continueInteractionMotionWindow(uptime: TimeInterval) {
+        endCalmResettle()
         let wasActive = interactionMotionWindow != nil
         interactionMotionWindow = JarInteractionMotionWindow(openedAt: uptime)
         if isPaused || isIdlePaused {
@@ -2559,6 +3110,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         JarFrameProbe.shared?.sceneUpdated()
 #endif
         refreshLightEdgeFade()
+        let uptime = interactionClock()
+        shiftDeadlinesOverASteppingGap(currentTime: currentTime, uptime: uptime)
+        lastSceneUpdateTime = currentTime
+        lastSceneUpdateUptime = uptime
         let capacity = StrataMath.capacityUnits(pebbleRadii: bakeEligibleRadii)
         if capacity >= Constants.Jar.aggregateCapacityUnits {
             isCapacityReliefActive = true
@@ -2583,18 +3138,47 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
         updateIdlePause(
             currentTime: currentTime,
-            uptime: ProcessInfo.processInfo.systemUptime
+            uptime: uptime
         )
+    }
+
+    /// F3 (review B2): time the scene did not step never counts toward a
+    /// deadline. SpriteKit stops stepping while the app is inactive or in
+    /// the background (the SKView pauses itself) or the view is off screen,
+    /// while the interaction window runs on uptime and the idle
+    /// observation, the landing fallback and the entry ritual's timeout on
+    /// the frames' own clock, which both jump over such a gap. Unshifted,
+    /// the first frame back could find the window's hard stop (or the idle
+    /// observation's three seconds) long passed and freeze a pile in the
+    /// middle of its move. A window opened during the gap counts from its
+    /// opening; the jar's own idle pause resets the idle observation when
+    /// it wakes, so no gap is counted for it.
+    private func shiftDeadlinesOverASteppingGap(currentTime: TimeInterval, uptime: TimeInterval) {
+        let frameGap = currentTime - lastSceneUpdateTime
+        if lastSceneUpdateTime > 0, frameGap.isFinite, frameGap > Self.steppingGap {
+            if let started = idleSampleStartedAt { idleSampleStartedAt = started + frameGap }
+            for (id, since) in slowNewGemSince { slowNewGemSince[id] = since + frameGap }
+            for (id, phase) in enteringPhases {
+                switch phase {
+                case let .clearingPile(since): enteringPhases[id] = .clearingPile(since: since + frameGap)
+                case let .heldAtMouth(since): enteringPhases[id] = .heldAtMouth(since: since + frameGap)
+                case .throughMouth: break
+                }
+            }
+        }
+        if let window = interactionMotionWindow, let lastUptime = lastSceneUpdateUptime {
+            let windowGap = uptime - max(lastUptime, window.openedAt)
+            if windowGap.isFinite, windowGap > Self.steppingGap {
+                interactionMotionWindow = window.shifted(by: windowGap)
+            }
+        }
     }
 
     override func didSimulatePhysics() {
         super.didSimulatePhysics()
         updateTapPresentationTrackingIfNeeded()
-        for pebble in livePebbles where aboveEntryPebbleIDs.contains(pebble.descriptor.id) {
-            if pebble.position.y + pebble.radius <= interiorRect.maxY {
-                finishCompletionEntryPhysics(for: pebble)
-            }
-        }
+        advanceEntryRituals()
+        landRestingNewGemsIfNeeded()
         updateCompletionDropTrackingIfNeeded()
         advancePendingTapLaunchIfNeeded()
         livePebbles.forEach {
@@ -2659,33 +3243,25 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
         var deliveredLanding = false
         for pebble in candidates where !pebble.hasLanded {
+            // A gem in its entry ritual never lands: its first resting
+            // contact comes after the collar (F3).
+            guard enteringPhases[pebble.descriptor.id] == nil else { continue }
             let otherBody = contact.bodyA.node === pebble ? contact.bodyB : contact.bodyA
             let isFloor = otherBody.categoryBitMask & JarPhysicsCategory.floor != .zero
             let otherPebble = otherBody.node as? PebbleNode
             let isSettledPebble = otherPebble?.hasLanded == true
-            guard isFloor || isSettledPebble else { continue }
+            // F3: held sideways or upside down, the gems come to rest
+            // against a wall or the invisible cap across the mouth.
+            let restsOnWall = otherBody.categoryBitMask & JarPhysicsCategory.wall != .zero
+                && gravityPresses(pebble, toward: contact.contactPoint)
+            guard isFloor || isSettledPebble || restsOnWall else { continue }
 
-            let velocity = abs(pebble.physicsBody?.velocity.dy ?? .zero)
+            let downward = gravityDirection
+            let velocity = pebble.physicsBody.map {
+                abs($0.velocity.dx * downward.dx + $0.velocity.dy * downward.dy)
+            } ?? .zero
             let impulseSpeed = contact.collisionImpulse / max(pebble.physicsBody?.mass ?? 1, 1)
-            let impactSpeed = max(velocity, impulseSpeed)
-            pebble.markLanded()
-            if scheduledJarScale != nil {
-                // Rescaling inside the contact callback would resize bodies
-                // mid-step; the next update applies it.
-                appliesScheduledJarScale = true
-            }
-            finishCompletionEntryPhysics(for: pebble)
-            aboveEntryPebbleIDs.remove(pebble.descriptor.id)
-            updateCompletionDropTrackingIfNeeded()
-            if mutedLandingIDs.remove(pebble.descriptor.id) != nil {
-                deliveredLanding = true
-                continue
-            }
-            deliverLandingFeedback(
-                for: pebble,
-                speed: max(impactSpeed, Constants.Jar.minimumLandingSpeed),
-                point: contact.contactPoint
-            )
+            land(pebble, impactSpeed: max(velocity, impulseSpeed), at: contact.contactPoint)
             deliveredLanding = true
         }
 
@@ -2709,6 +3285,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         floorNode.name = "jar.floor"
         glassNode.name = "jar.glass.front"
         glassHighlightNode.name = "jar.glass.highlights"
+        glassPlaceholderNode.name = "jar.glass.placeholder"
         reducedMotionHighlightNode.name = "jar.reducedMotion.highlight"
         rimNode.name = "jar.glass.rim"
         innerRimNode.name = "jar.glass.innerRim"
@@ -2731,8 +3308,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         worldNode.addChild(mouthDepthNode)
         worldNode.addChild(wallNode)
         worldNode.addChild(floorNode)
+        worldNode.addChild(entryGravityField)
         worldNode.addChild(glassNode)
         worldNode.addChild(glassHighlightNode)
+        worldNode.addChild(glassPlaceholderNode)
         worldNode.addChild(reducedMotionHighlightNode)
         worldNode.addChild(collarNode)
         collarNode.addChild(collarLeftNode)
@@ -2854,11 +3433,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
         // Glass v2: back and front are pre-rendered per jar size (cached),
         // so the bottle is a handful of textured draws instead of a dozen
-        // hairline strokes.
-        let glassTextures = Self.glassTextures(for: outer.size, neckInset: neckInset)
+        // hairline strokes. The textures are set by `refreshGlassTextures`
+        // below: baked off the main thread, at the presented size only.
         backGlassNode.path = jarPath
         backGlassNode.fillColor = .white
-        backGlassNode.fillTexture = glassTextures.back
         backGlassNode.strokeColor = .clear
         backGlassNode.lineWidth = 0
         backGlassNode.glowWidth = 0
@@ -2879,18 +3457,29 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
         glassNode.path = jarPath
         glassNode.fillColor = .white
-        glassNode.fillTexture = glassTextures.front
         // The silhouette is carried by the thick-glass rims in the texture.
         glassNode.strokeColor = .clear
         glassNode.lineWidth = 0
         glassNode.glowWidth = 0
         glassNode.zPosition = JarZPosition.glass
 
-        glassHighlightNode.texture = glassTextures.highlights
-        glassHighlightNode.size = outer.size
         glassHighlightNode.position = CGPoint(x: outer.midX + opticalTiltFraction * 6, y: outer.midY)
         glassHighlightNode.blendMode = .add
+        applyGlassHighlightBlendMode()
+        fitGlassHighlights()
         glassHighlightNode.zPosition = JarZPosition.glass + 0.4
+
+        // Plain glass until the textures are in: the back wall's tint and
+        // the faint outline, in one untextured shape behind the gems.
+        glassPlaceholderNode.path = jarPath
+        glassPlaceholderNode.fillColor = JarPalette.color(hex: Constants.Color.glassAbsorption)
+            .withAlphaComponent(0.10)
+        glassPlaceholderNode.strokeColor = JarPalette.color(hex: Constants.Color.glassEdge)
+            .withAlphaComponent(0.42)
+        glassPlaceholderNode.lineWidth = 1.6
+        glassPlaceholderNode.glowWidth = 0
+        glassPlaceholderNode.zPosition = JarZPosition.background + 0.1
+        refreshGlassTextures(for: outer.size)
 
         reducedMotionHighlightNode.path = jarPath
         reducedMotionHighlightNode.fillColor = UIColor.white.withAlphaComponent(0.11)
@@ -3060,27 +3649,385 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         return path
     }
 
-    private struct GlassTextures {
+    struct GlassTextures {
         let back: SKTexture
         let front: SKTexture
         let highlights: SKTexture
+        /// The textures' size in points (the bottle's, rounded).
+        let size: CGSize
+        /// launch-perf (c): where `highlights` holds any light, in points
+        /// from its bottom-left (`litRegions`). The layer draws only these.
+        let highlightRegions: [CGRect]
     }
 
-    private static let glassTextureCache = NSCache<NSString, NSArray>()
+    /// One size of baked glass (launch-perf (a)): the bottle's outer size
+    /// and neck inset in whole points, at the renderer's pixel scale.
+    struct GlassTextureKey: Hashable, Sendable, CustomStringConvertible {
+        let width: Int
+        let height: Int
+        let neckInset: Int
+        let scale: CGFloat
+
+        init(size: CGSize, neckInset: CGFloat, scale: CGFloat) {
+            width = Int(max(1, size.width.rounded()))
+            height = Int(max(1, size.height.rounded()))
+            self.neckInset = Int(neckInset.rounded())
+            self.scale = scale
+        }
+
+        var description: String { "\(width)x\(height)-\(neckInset)@\(scale)x" }
+    }
+
+    /// What a glass bake draws: the key's size with the exact neck inset.
+    struct GlassBakeRequest: Sendable {
+        let key: GlassTextureKey
+        let neckInset: CGFloat
+
+        init(size: CGSize, neckInset: CGFloat, scale: CGFloat) {
+            key = GlassTextureKey(size: size, neckInset: neckInset, scale: scale)
+            self.neckInset = neckInset
+        }
+    }
+
+    /// Every glass bake this process ran, with its thread (tests read it).
+    final class GlassBakeLedger: @unchecked Sendable {
+        struct Entry: Equatable, Sendable {
+            let key: GlassTextureKey
+            let onMainThread: Bool
+        }
+
+        private let lock = NSLock()
+        private var entries: [Entry] = []
+
+        func record(_ entry: Entry) {
+            lock.lock()
+            entries.append(entry)
+            if entries.count > 64 { entries.removeFirst(entries.count - 64) }
+            lock.unlock()
+        }
+
+        var all: [Entry] {
+            lock.lock()
+            defer { lock.unlock() }
+            return entries
+        }
+
+        func reset() {
+            lock.lock()
+            entries.removeAll()
+            lock.unlock()
+        }
+    }
+
+    /// A background bake of one size that any number of scenes wait for.
+    private final class GlassBakeJob: @unchecked Sendable {
+        let request: GlassBakeRequest
+        private let done = DispatchSemaphore(value: 0)
+        private let lock = NSLock()
+        private var result: GlassTextures?
+        /// Main thread only.
+        var completions: [@MainActor (GlassTextures) -> Void] = []
+        /// Main thread only: the result reached the cache and the scenes.
+        var isDelivered = false
+
+        init(request: GlassBakeRequest) {
+            self.request = request
+        }
+
+        func finish(_ textures: GlassTextures) {
+            lock.lock()
+            result = textures
+            lock.unlock()
+            done.signal()
+        }
+
+        /// Blocks until `finish` (at once when it already ran).
+        func waitForResult() -> GlassTextures {
+            done.wait()
+            done.signal()
+            lock.lock()
+            defer { lock.unlock() }
+            return result!
+        }
+    }
+
+    /// Baked glass of the latest `glassCacheLimit` sizes, newest first. A
+    /// size is ~14 MB of textures at 3× (measured on the iPhone 12 mini), so
+    /// only the sizes in use stay: Home's jar and one other (a preview).
+    static let glassCacheLimit = 2
+    private static var glassCache: [(key: GlassTextureKey, textures: GlassTextures)] = []
+    private static var glassBakesInFlight: [GlassTextureKey: GlassBakeJob] = [:]
+    nonisolated static let glassBakeLedger = GlassBakeLedger()
+    /// The main screen's scale, as `UIGraphicsImageRendererFormat.preferred()`.
+    private static let glassRenderScale = UIGraphicsImageRendererFormat.preferred().scale
+    /// Plain glass cross-fades to the baked glass this fast (≤150 ms).
+    static let glassCrossfadeDuration: TimeInterval = 0.15
+
+    enum GlassPresentation: Equatable {
+        /// The untextured stand-in (`glassPlaceholderNode`).
+        case placeholder
+        /// The baked textures (possibly still cross-fading in).
+        case baked
+    }
+
+    /// Glass textures bake off the main thread (tests may bake inline).
+    var bakesGlassInBackground = true
+    private(set) var glassPresentation: GlassPresentation = .placeholder
+    /// The size whose textures the glass shows.
+    private(set) var shownGlassKey: GlassTextureKey?
+    /// Those textures' size in points.
+    private var shownGlassSize: CGSize?
+    /// The glass the scene's current bottle should show.
+    private var wantedGlassRequest: GlassBakeRequest?
+    /// The size this scene waits on a background bake for.
+    private var awaitedGlassKey: GlassTextureKey?
+    /// A bake starts on the next main-queue turn (`startGlassBakeIfNeeded`).
+    private var isGlassBakeScheduled = false
+
+    private var glassTextureNodes: [SKNode] { [backGlassNode, glassNode, glassHighlightNode] }
+
+    /// Shows the glass of a bottle `size` (outer) in this scene (launch-perf
+    /// (a), device audit 2026-09-29: the glass was drawn twice on the main
+    /// thread at launch, once at `init`'s guessed size that was never shown,
+    /// 42–72 % of Home's first 570–683 ms on an iPhone 12 mini). A cached
+    /// size shows at once. Otherwise plain glass shows, and only a presented
+    /// scene (its real size) bakes: once per size, off the main thread; the
+    /// textures then cross-fade in. A resize keeps the previous textures,
+    /// stretched, until the new ones are in.
+    private func refreshGlassTextures(for size: CGSize) {
+        let request = GlassBakeRequest(size: size, neckInset: neckInset, scale: Self.glassRenderScale)
+        let key = request.key
+        wantedGlassRequest = request
+        guard shownGlassKey != key else { return }
+        if let cached = Self.cachedGlass(for: key) {
+            showGlass(cached, key: key, animated: false)
+            return
+        }
+        if shownGlassKey == nil { showGlassPlaceholder() }
+        guard view != nil else { return }
+        guard bakesGlassInBackground else {
+            let textures = Self.bakeGlassTextures(request)
+            Self.storeGlass(textures, for: key)
+            showGlass(textures, key: key, animated: false)
+            return
+        }
+        // A presentation settles its size within one pass (the SKView's
+        // resize, then Home's own): the bake takes the size it ends with.
+        guard !isGlassBakeScheduled else { return }
+        isGlassBakeScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.isGlassBakeScheduled = false
+                self.startGlassBakeIfNeeded()
+            }
+        }
+    }
+
+    private func startGlassBakeIfNeeded() {
+        guard view != nil,
+              let request = wantedGlassRequest,
+              shownGlassKey != request.key,
+              awaitedGlassKey != request.key
+        else { return }
+        let key = request.key
+        // Another scene may have baked this size meanwhile.
+        if let cached = Self.cachedGlass(for: key) {
+            showGlass(cached, key: key, animated: true)
+            return
+        }
+        awaitedGlassKey = key
+        Self.bakeGlassInBackground(request) { [weak self] textures in
+            guard let self, self.awaitedGlassKey == key else { return }
+            self.awaitedGlassKey = nil
+            guard self.wantedGlassRequest?.key == key else { return }
+            self.showGlass(textures, key: key, animated: true)
+        }
+    }
+
+    private func showGlassPlaceholder() {
+        glassTextureNodes.forEach {
+            $0.removeAction(forKey: ActionKey.glassCrossfade)
+            $0.isHidden = true
+        }
+        glassPlaceholderNode.removeAction(forKey: ActionKey.glassCrossfade)
+        glassPlaceholderNode.alpha = 1
+        glassPlaceholderNode.isHidden = false
+        glassPresentation = .placeholder
+    }
+
+    private func showGlass(_ textures: GlassTextures, key: GlassTextureKey, animated: Bool) {
+        backGlassNode.fillTexture = textures.back
+        glassNode.fillTexture = textures.front
+        Self.arrangeGlassHighlights(textures, on: glassHighlightNode, fade: lightEdgeFade)
+        shownGlassSize = textures.size
+        fitGlassHighlights()
+        shownGlassKey = key
+        let fromPlaceholder = glassPresentation == .placeholder
+        glassPresentation = .baked
+        settleGlassNodes()
+        // A resting jar runs no actions: it swaps in its one redrawn frame.
+        if fromPlaceholder, animated, view != nil, !isPaused, !isIdlePaused {
+            let fade = Self.glassCrossfadeDuration
+            glassTextureNodes.forEach {
+                $0.alpha = 0
+                $0.run(.fadeIn(withDuration: fade), withKey: ActionKey.glassCrossfade)
+            }
+            glassPlaceholderNode.isHidden = false
+            glassPlaceholderNode.run(
+                .sequence([.fadeOut(withDuration: fade), .hide(), .fadeIn(withDuration: 0)]),
+                withKey: ActionKey.glassCrossfade
+            )
+            requestRedraw(for: fade + JarScene.redrawHold)
+        } else {
+            requestRedraw()
+        }
+#if DEBUG && targetEnvironment(simulator)
+        if view != nil { JarFrameProbe.shared?.noteGlassReady() }
+#endif
+    }
+
+    /// The strips map the shown texture onto the bottle as the whole layer
+    /// did: stretched to the bottle's exact (or, while a new size bakes,
+    /// new) size.
+    private func fitGlassHighlights() {
+        guard let textureSize = shownGlassSize, textureSize.width > 0, textureSize.height > 0 else { return }
+        let outer = outerJarRect.size
+        glassHighlightNode.xScale = outer.width / textureSize.width
+        glassHighlightNode.yScale = outer.height / textureSize.height
+    }
+
+    /// The highlight strips follow their node's blend mode (a capture draws
+    /// them as ordinary alpha).
+    private func applyGlassHighlightBlendMode() {
+        for case let strip as SKSpriteNode in glassHighlightNode.children {
+            strip.blendMode = glassHighlightNode.blendMode
+        }
+    }
+
+    /// The baked glass at full strength and the placeholder gone.
+    private func settleGlassNodes() {
+        glassTextureNodes.forEach {
+            $0.removeAction(forKey: ActionKey.glassCrossfade)
+            $0.alpha = 1
+            $0.isHidden = false
+        }
+        glassPlaceholderNode.removeAction(forKey: ActionKey.glassCrossfade)
+        glassPlaceholderNode.alpha = 1
+        glassPlaceholderNode.isHidden = true
+    }
+
+    /// Ends a cross-fade in progress (a resting jar or a capture must never
+    /// keep a half-faded bottle).
+    private func finishGlassCrossfade() {
+        guard glassPresentation == .baked,
+              glassPlaceholderNode.action(forKey: ActionKey.glassCrossfade) != nil
+                || glassTextureNodes.contains(where: { $0.action(forKey: ActionKey.glassCrossfade) != nil })
+        else { return }
+        settleGlassNodes()
+    }
+
+    /// A capture shows the final glass. A bake still out (only in the first
+    /// moments after Home appears) is waited for here.
+    func settleGlassForCapture() {
+        startGlassBakeIfNeeded()
+        if let key = awaitedGlassKey {
+            Self.waitForGlassBake(key)
+        }
+        finishGlassCrossfade()
+    }
+
+    private static func cachedGlass(for key: GlassTextureKey) -> GlassTextures? {
+        guard let index = glassCache.firstIndex(where: { $0.key == key }) else { return nil }
+        let entry = glassCache.remove(at: index)
+        glassCache.insert(entry, at: 0)
+        return entry.textures
+    }
+
+    private static func storeGlass(_ textures: GlassTextures, for key: GlassTextureKey) {
+        glassCache.removeAll { $0.key == key }
+        glassCache.insert((key, textures), at: 0)
+        if glassCache.count > glassCacheLimit {
+            glassCache.removeLast(glassCache.count - glassCacheLimit)
+        }
+    }
+
+    /// One background bake per size, whoever asks for it.
+    private static func bakeGlassInBackground(
+        _ request: GlassBakeRequest,
+        completion: @escaping @MainActor (GlassTextures) -> Void
+    ) {
+        if let job = glassBakesInFlight[request.key] {
+            job.completions.append(completion)
+            return
+        }
+        let job = GlassBakeJob(request: request)
+        job.completions.append(completion)
+        glassBakesInFlight[request.key] = job
+        DispatchQueue.global(qos: .userInitiated).async {
+            job.finish(JarScene.bakeGlassTextures(request))
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    JarScene.deliverGlassBake(job)
+                }
+            }
+        }
+    }
+
+    /// Caches a finished bake and hands it to the scenes waiting for it.
+    private static func deliverGlassBake(_ job: GlassBakeJob) {
+        guard !job.isDelivered else { return }
+        job.isDelivered = true
+        let textures = job.waitForResult()
+        if glassBakesInFlight[job.request.key] === job {
+            glassBakesInFlight[job.request.key] = nil
+        }
+        storeGlass(textures, for: job.request.key)
+        let completions = job.completions
+        job.completions.removeAll()
+        completions.forEach { $0(textures) }
+    }
+
+    private static func waitForGlassBake(_ key: GlassTextureKey) {
+        guard let job = glassBakesInFlight[key] else { return }
+        deliverGlassBake(job)
+    }
+
+#if DEBUG
+    /// Forgets every baked glass size (tests start from a cold launch).
+    static func resetGlassCacheForTesting() {
+        glassCache.removeAll()
+        glassBakesInFlight.removeAll()
+        glassBakeLedger.reset()
+    }
+
+    static var cachedGlassKeysForTesting: [GlassTextureKey] { glassCache.map(\.key) }
+#endif
 
     /// Glass v2 (Docs/GemExperienceDesign.md §7.8), pre-rendered once per jar
     /// size. Back: absorption tint and inner shadows. Front: 7 pt wall band,
     /// warm left rim, cool right rim with a lower-right flare, a 14 pt base
     /// lens with its caustic line, neck ridges and a faint outline.
     /// Highlights (additive, moved ±6 pt with tilt): two vertical reflection
-    /// bands and the shoulder light. No SKEffectNode or CIFilter.
-    private static func glassTextures(for size: CGSize, neckInset: CGFloat) -> GlassTextures {
-        let width = max(1, size.width.rounded())
-        let height = max(1, size.height.rounded())
-        let key = NSString(string: "\(Int(width))x\(Int(height))-\(Int(neckInset.rounded()))")
-        if let cached = glassTextureCache.object(forKey: key) as? [SKTexture], cached.count == 3 {
-            return GlassTextures(back: cached[0], front: cached[1], highlights: cached[2])
+    /// bands and the shoulder light. No SKEffectNode or CIFilter. Safe off
+    /// the main thread (launch-perf (a)); it touches no scene state.
+    nonisolated static func bakeGlassTextures(_ request: GlassBakeRequest) -> GlassTextures {
+        let width = CGFloat(request.key.width)
+        let height = CGFloat(request.key.height)
+        let neckInset = request.neckInset
+        glassBakeLedger.record(GlassBakeLedger.Entry(key: request.key, onMainThread: Thread.isMainThread))
+#if DEBUG && targetEnvironment(simulator)
+        let bakeStart = CACurrentMediaTime()
+        defer {
+            let line = String(
+                format: "glass-bake size=%.0fx%.0f ms=%.1f main=%d",
+                width, height, (CACurrentMediaTime() - bakeStart) * 1_000, Thread.isMainThread ? 1 : 0
+            )
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { JarFrameProbe.shared?.note(line) }
+            }
         }
+#endif
         let renderSize = CGSize(width: width, height: height)
         // Jar path in y-down texture space.
         var flip = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: height)
@@ -3089,7 +4036,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             neckInset: neckInset
         ).copy(using: &flip) ?? CGPath(rect: CGRect(origin: .zero, size: renderSize), transform: nil)
         let space = CGColorSpaceCreateDeviceRGB()
-        let format = UIGraphicsImageRendererFormat.preferred()
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = request.key.scale
         format.opaque = false
         format.preferredRange = .standard
         let renderer = UIGraphicsImageRenderer(size: renderSize, format: format)
@@ -3416,8 +4364,168 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             texture.filteringMode = .linear
             return texture
         }
-        glassTextureCache.setObject(textures as NSArray, forKey: key)
-        return GlassTextures(back: textures[0], front: textures[1], highlights: textures[2])
+        return GlassTextures(
+            back: textures[0],
+            front: textures[1],
+            highlights: textures[2],
+            size: renderSize,
+            highlightRegions: highlights.cgImage.map { litRegions(of: $0, scale: request.key.scale) }
+                ?? [CGRect(origin: .zero, size: renderSize)]
+        )
+    }
+
+    /// launch-perf (c): the parts of `image` that hold any light, as
+    /// rectangles in points (y up, from its bottom-left) on a `tile`-point
+    /// grid. A tile counts when a pixel within 2 px of it is lit (linear
+    /// filtering reads one texel over), and rectangles that would overlap
+    /// or touch are merged, so no pixel is drawn twice or lies on a seam.
+    /// The glass highlights are ~38 % of the bottle's rectangle this way.
+    nonisolated static func litRegions(of image: CGImage, scale: CGFloat, tile tilePoints: CGFloat = 12) -> [CGRect] {
+        let width = image.width
+        let height = image.height
+        let whole = [CGRect(x: 0, y: 0, width: CGFloat(width) / scale, height: CGFloat(height) / scale)]
+        guard width > 0, height > 0, scale > 0 else { return whole }
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        let drawn = bytes.withUnsafeMutableBytes { buffer -> Bool in
+            guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+                  let context = CGContext(
+                      data: buffer.baseAddress,
+                      width: width,
+                      height: height,
+                      bitsPerComponent: 8,
+                      bytesPerRow: width * 4,
+                      space: space,
+                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                  )
+            else { return false }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        guard drawn else { return whole }
+        // Tiles in pixels; row 0 is the image's top.
+        let tile = max(1, Int((tilePoints * scale).rounded()))
+        let columns = (width + tile - 1) / tile
+        let rows = (height + tile - 1) / tile
+        var lit = [Bool](repeating: false, count: columns * rows)
+        let margin = 2
+        for y in 0 ..< height {
+            let rowStart = y * width * 4
+            for x in 0 ..< width where bytes[rowStart + x * 4 + 3] != 0 {
+                let c0 = max(0, x - margin) / tile
+                let c1 = min(width - 1, x + margin) / tile
+                let r0 = max(0, y - margin) / tile
+                let r1 = min(height - 1, y + margin) / tile
+                for r in r0 ... r1 {
+                    for c in c0 ... c1 { lit[r * columns + c] = true }
+                }
+            }
+        }
+        // Connected groups of lit tiles, as bounding boxes (inclusive).
+        typealias Box = (c0: Int, r0: Int, c1: Int, r1: Int)
+        var boxes: [Box] = []
+        var seen = [Bool](repeating: false, count: lit.count)
+        for start in lit.indices where lit[start] && !seen[start] {
+            seen[start] = true
+            var stack = [start]
+            var box: Box = (start % columns, start / columns, start % columns, start / columns)
+            while let index = stack.popLast() {
+                let c = index % columns
+                let r = index / columns
+                box = (min(box.c0, c), min(box.r0, r), max(box.c1, c), max(box.r1, r))
+                for (dc, dr) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                    let nc = c + dc
+                    let nr = r + dr
+                    guard nc >= 0, nc < columns, nr >= 0, nr < rows else { continue }
+                    let neighbour = nr * columns + nc
+                    if lit[neighbour], !seen[neighbour] {
+                        seen[neighbour] = true
+                        stack.append(neighbour)
+                    }
+                }
+            }
+            boxes.append(box)
+        }
+        // Boxes that overlap or touch (an edge or a corner) become one.
+        var merging = true
+        while merging {
+            merging = false
+            search: for i in boxes.indices {
+                for j in boxes.indices where j > i {
+                    let a = boxes[i]
+                    let b = boxes[j]
+                    guard a.c0 <= b.c1 + 1, b.c0 <= a.c1 + 1, a.r0 <= b.r1 + 1, b.r0 <= a.r1 + 1 else { continue }
+                    boxes[i] = (min(a.c0, b.c0), min(a.r0, b.r0), max(a.c1, b.c1), max(a.r1, b.r1))
+                    boxes.remove(at: j)
+                    merging = true
+                    break search
+                }
+            }
+        }
+        return boxes.map { box in
+            let x0 = box.c0 * tile
+            let y0 = box.r0 * tile
+            let x1 = min(width, (box.c1 + 1) * tile)
+            let y1 = min(height, (box.r1 + 1) * tile)
+            return CGRect(
+                x: CGFloat(x0) / scale,
+                y: CGFloat(height - y1) / scale,
+                width: CGFloat(x1 - x0) / scale,
+                height: CGFloat(y1 - y0) / scale
+            )
+        }
+    }
+
+    /// launch-perf (c): the moving highlights as strips of their one baked
+    /// texture, one per lit region (largest first), placed from the
+    /// texture's centre. They share the texture, the shader and the blend
+    /// mode, so SpriteKit draws them in one batch, and they draw the same
+    /// pixels as the whole layer
+    /// (`testGlassHighlightStripsDrawTheWholeLayersPixels`).
+    /// Shows the highlights on `node` as strips: the node draws the first
+    /// (its anchor keeps its origin at the bottle's centre, where the tilt
+    /// moves it) and holds the others as children with its blend mode and
+    /// the edge fade.
+    static func arrangeGlassHighlights(_ textures: GlassTextures, on node: SKSpriteNode, fade: JarLightEdgeFade?) {
+        node.removeAllChildren()
+        var strips = glassHighlightStrips(textures)
+        guard !strips.isEmpty else {
+            node.texture = nil
+            node.size = .zero
+            return
+        }
+        let first = strips.removeFirst()
+        node.texture = first.texture
+        node.size = first.size
+        node.anchorPoint = CGPoint(
+            x: 0.5 - first.position.x / max(first.size.width, 1),
+            y: 0.5 - first.position.y / max(first.size.height, 1)
+        )
+        for strip in strips {
+            strip.blendMode = node.blendMode
+            fade?.apply(to: strip)
+            node.addChild(strip)
+        }
+    }
+
+    static func glassHighlightStrips(_ textures: GlassTextures) -> [SKSpriteNode] {
+        let size = textures.size
+        let regions = textures.highlightRegions.sorted { $0.width * $0.height > $1.width * $1.height }
+        return regions.map { region in
+            let texture = SKTexture(
+                rect: CGRect(
+                    x: region.minX / size.width,
+                    y: region.minY / size.height,
+                    width: region.width / size.width,
+                    height: region.height / size.height
+                ),
+                in: textures.highlights
+            )
+            texture.filteringMode = .linear
+            let strip = SKSpriteNode(texture: texture, size: region.size)
+            strip.name = "jar.glass.highlights.strip"
+            strip.position = CGPoint(x: region.midX - size.width / 2, y: region.midY - size.height / 2)
+            return strip
+        }
     }
 
     // MARK: Copper collar
@@ -3657,9 +4765,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         dropQueue.append(
             QueuedDrop(
                 descriptor: descriptor,
-                horizontalUnit: origin == .sceneTop ? 0 : CGFloat.random(in: -1 ... 1),
+                horizontalUnit: origin == .sceneTop ? 0 : interiorDropHorizontalUnit(),
                 origin: origin,
-                readyUptime: ProcessInfo.processInfo.systemUptime + delay,
+                readyUptime: interactionClock() + delay,
                 needsSpecialAnticipation: shouldShowSpecialAnticipation(for: descriptor)
             )
         )
@@ -3684,7 +4792,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
     private func processDropQueue() {
         guard !isBakeInProgress, !dropQueue.isEmpty else { return }
-        let now = ProcessInfo.processInfo.systemUptime
+        let now = interactionClock()
         guard dropQueue[0].readyUptime <= now,
               now - lastSpawnUptime >= Constants.Jar.dropInterval else { return }
 
@@ -3746,6 +4854,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
         let node = makePebbleNode(descriptor, studyScale: arrivalScale)
         let xRange = interiorRect.width * Constants.Jar.dropHorizontalRangeFraction
+        // F3: every new gem enters through the mouth — a completion drop
+        // from the scene top down the neck, any other just under the mouth —
+        // never from a side wall or the floor, whatever the phone's pose.
+        let entryPhase: EntryPhase?
         if origin == .sceneTop {
             let entryRange = allowedHorizontalRange(at: size.height, radius: node.radius)
             node.position = CGPoint(
@@ -3759,11 +4871,26 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             node.physicsBody?.categoryBitMask = CompletionEntryPhysics.category
             node.physicsBody?.collisionBitMask &= ~JarPhysicsCategory.wall
             node.physicsBody?.contactTestBitMask &= ~JarPhysicsCategory.wall
+            entryPhase = .throughMouth
         } else {
             node.position = CGPoint(
                 x: interiorRect.midX + min(max(horizontalUnit, -1), 1) * xRange,
                 y: interiorRect.maxY - node.radius
             )
+            // Just under the mouth. Gems the gravity presses against the
+            // cap there (held upside down) are passed first, like a
+            // completion drop past the collar; a pile leaning on a wall
+            // that lies across the mouth is waited on in the neck (review
+            // S2); under a downward gravity an overlapping gem joins at
+            // once, as before F3.
+            if let wait = mouthWaitY(for: node, x: node.position.x) {
+                node.position.y = wait
+                entryPhase = .heldAtMouth(since: lastSceneUpdateTime)
+            } else if JarGravityMapping.pullsTowardTheMouth(appliedGravityVector), overlapsRestingBody(node) {
+                entryPhase = .clearingPile(since: lastSceneUpdateTime)
+            } else {
+                entryPhase = nil
+            }
         }
         node.physicsBody?.velocity = CGVector(
             dx: origin == .sceneTop ? 0 : CGFloat.random(
@@ -3775,6 +4902,15 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             in: -Constants.Jar.dropHorizontalSpeed ... Constants.Jar.dropHorizontalSpeed
         )
         insertPebble(node)
+        if let entryPhase {
+            beginEntryRitual(for: node, phase: entryPhase)
+            if case .heldAtMouth = entryPhase {
+                node.physicsBody?.velocity = .zero
+                node.physicsBody?.angularVelocity = 0
+            }
+        }
+        // Onboarding's timed arc still begins at the mouth. Its body keeps
+        // the entry masks until it has passed the collar.
         startTrialArc(for: node)
         if origin == .sceneTop {
             completionDropSequence &+= 1
@@ -3805,13 +4941,349 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
     }
 
-    private func finishCompletionEntryPhysics(for pebble: PebbleNode) {
-        guard let body = pebble.physicsBody,
-              body.categoryBitMask == CompletionEntryPhysics.category
+    // MARK: Entry ritual and landing (F3)
+
+    /// Starts (or moves on) a new gem's entry ritual: the jar's own
+    /// downward gravity (the entry field, not the phone's), no contacts
+    /// reported, and collisions per phase — none above the collar (walls
+    /// are passed at the mouth, gems ignored), walls and floor only inside
+    /// (contained, passing resting gems).
+    private func beginEntryRitual(for pebble: PebbleNode, phase: EntryPhase) {
+        guard let body = pebble.physicsBody else { return }
+        enteringPhases[pebble.descriptor.id] = phase
+        slowNewGemSince[pebble.descriptor.id] = nil
+        body.affectedByGravity = false
+        body.fieldBitMask = CompletionEntryPhysics.fieldCategory
+        body.categoryBitMask = CompletionEntryPhysics.category
+        body.contactTestBitMask = 0
+        switch phase {
+        case .throughMouth:
+            body.collisionBitMask = 0
+        case .clearingPile:
+            body.collisionBitMask = JarPhysicsCategory.wall | JarPhysicsCategory.floor
+        case .heldAtMouth:
+            // Still, touching nothing, pulled by nothing: placed each frame.
+            body.collisionBitMask = 0
+            body.fieldBitMask = 0
+            body.velocity = .zero
+            body.angularVelocity = 0
+        }
+    }
+
+    /// Ends the ritual: an ordinary gem under the phone's gravity, keeping
+    /// its momentum (held sideways it drifts to that wall; upside down it
+    /// is pulled back to the invisible cap). Nothing for a gem not in it.
+    private func finishEntryRitual(for pebble: PebbleNode) {
+        guard enteringPhases.removeValue(forKey: pebble.descriptor.id) != nil,
+              let body = pebble.physicsBody
         else { return }
+        body.affectedByGravity = true
+        body.fieldBitMask = 0
         body.categoryBitMask = JarPhysicsCategory.pebble
-        body.collisionBitMask |= JarPhysicsCategory.wall
-        body.contactTestBitMask |= JarPhysicsCategory.wall
+        let contained = JarPhysicsCategory.pebble | JarPhysicsCategory.wall | JarPhysicsCategory.floor
+        body.collisionBitMask = contained
+        body.contactTestBitMask = contained
+    }
+
+    /// Advances every ritual after a physics step. Above the collar the gem
+    /// is held in the neck (walls are off there, so nothing may carry it
+    /// sideways past them); once its whole body is under the collar it is
+    /// inside the walls, and it joins the jar at once — or, into a pile the
+    /// gravity presses against the cap, as soon as it overlaps no other gem,
+    /// the gravity turns away from the mouth, or `clearingTimeout` passes.
+    private func advanceEntryRituals() {
+        guard !enteringPhases.isEmpty else { return }
+        let now = lastSceneUpdateTime
+        let entering = livePebbles.filter { enteringPhases[$0.descriptor.id] != nil }
+        if entering.count < enteringPhases.count {
+            // A body removed mid-ritual (restore, rotation, a fusion).
+            let live = Set(entering.map(\.descriptor.id))
+            enteringPhases = enteringPhases.filter { live.contains($0.key) }
+        }
+        for pebble in entering {
+            guard let phase = enteringPhases[pebble.descriptor.id],
+                  let body = pebble.physicsBody
+            else { continue }
+            switch phase {
+            case .throughMouth:
+                let neck = allowedHorizontalRange(at: pebble.position.y, radius: pebble.radius)
+                if !neck.contains(pebble.position.x) {
+                    pebble.position.x = min(max(pebble.position.x, neck.lowerBound), neck.upperBound)
+                }
+                if body.velocity.dx != 0 { body.velocity.dx = 0 }
+                // Review S2: a pile leaning on a wall across the mouth is
+                // waited on where the gem meets it in the neck.
+                if let wait = mouthWaitY(for: pebble, x: pebble.position.x), pebble.position.y <= wait {
+                    pebble.position.y = wait
+                    beginEntryRitual(for: pebble, phase: .heldAtMouth(since: now))
+                    continue
+                }
+                guard pebble.position.y + pebble.radius <= interiorRect.maxY else { continue }
+                if JarGravityMapping.pullsTowardTheMouth(appliedGravityVector), overlapsRestingBody(pebble) {
+                    beginEntryRitual(for: pebble, phase: .clearingPile(since: now))
+                } else {
+                    finishEntryRitual(for: pebble)
+                }
+            case let .clearingPile(since):
+                if !JarGravityMapping.pullsTowardTheMouth(appliedGravityVector)
+                    || !overlapsRestingBody(pebble)
+                    || now < since {
+                    finishEntryRitual(for: pebble)
+                } else if now - since >= CompletionEntryPhysics.clearingTimeout {
+                    entryClearingTimeoutCount &+= 1
+                    finishEntryRitual(for: pebble)
+                }
+            case let .heldAtMouth(since):
+                body.velocity = .zero
+                body.angularVelocity = 0
+                if let wait = mouthWaitY(for: pebble, x: pebble.position.x) {
+                    // The pile may shift under it (a gem settling, the
+                    // phone turning a little): it keeps resting on it.
+                    pebble.position.y = wait
+                    if !pebble.hasLanded, now >= since, now - since >= CompletionEntryPhysics.heldLandingDelay {
+                        land(pebble, impactSpeed: 0, at: CGPoint(x: pebble.position.x, y: pebble.position.y - pebble.radius), finishingEntry: false)
+                    }
+                } else {
+                    // Room where it joins, or a gravity that no longer
+                    // leans the pile on a wall: it goes on down the neck
+                    // from where it waited, and joins at the collar.
+                    beginEntryRitual(for: pebble, phase: .throughMouth)
+                    body.velocity = .zero
+                }
+            }
+        }
+    }
+
+    /// Review S2: where a gem entering through the mouth at `x` must wait in
+    /// the neck (the scene y of its centre), or nil when it may go on. It
+    /// waits only while the gravity leans the pile on a wall (neither on
+    /// the floor nor toward the mouth, where the entry passes the pile,
+    /// `clearingPile`) and joining just under the collar
+    /// (`interiorRect.maxY − r`) would overlap a gem already in the jar; it
+    /// then rests on the highest of those gems, on the neck's line at `x`.
+    private func mouthWaitY(for pebble: PebbleNode, x: CGFloat) -> CGFloat? {
+        let gravity = appliedGravityVector
+        guard !JarGravityMapping.restsOnTheFloor(gravity),
+              !JarGravityMapping.pullsTowardTheMouth(gravity)
+        else { return nil }
+        let joinY = interiorRect.maxY - pebble.radius
+        let others = livePebbles.filter { other in
+            other.descriptor.id != pebble.descriptor.id
+                && other.physicsBody != nil
+                && enteringPhases[other.descriptor.id]?.isInTheNeck != true
+        }
+        var y = joinY
+        // Raise the gem past every gem it would overlap on that line, until
+        // it overlaps none (each pass clears at least one).
+        for _ in 0 ... others.count {
+            var raised = false
+            for other in others {
+                let reach = pebble.radius + other.radius - CompletionEntryPhysics.overlapTolerance
+                let dx = other.position.x - x
+                guard abs(dx) < reach else { continue }
+                let half = (reach * reach - dx * dx).squareRoot()
+                if y > other.position.y - half, y < other.position.y + half {
+                    y = other.position.y + half
+                    raised = true
+                }
+            }
+            if !raised { break }
+        }
+        guard y.isFinite, y > joinY + 0.5 else { return nil }
+        return min(y, size.height + pebble.radius)
+    }
+
+    /// Whether `pebble` overlaps another live body already in the jar
+    /// (bodies still above the collar do not count).
+    private func overlapsRestingBody(_ pebble: PebbleNode) -> Bool {
+        let id = pebble.descriptor.id
+        return livePebbles.contains { other in
+            guard other.descriptor.id != id,
+                  other.physicsBody != nil,
+                  enteringPhases[other.descriptor.id]?.isInTheNeck != true
+            else { return false }
+            let reach = pebble.radius + other.radius - CompletionEntryPhysics.overlapTolerance
+            return hypot(other.position.x - pebble.position.x, other.position.y - pebble.position.y) < reach
+        }
+    }
+
+    /// Where across the mouth an interior drop enters (−1…1 of
+    /// `dropHorizontalRangeFraction`): random, or fixed by a test.
+    private func interiorDropHorizontalUnit() -> CGFloat {
+#if DEBUG
+        if let unit = interiorDropHorizontalUnitForTesting { return min(max(unit, -1), 1) }
+#endif
+        return CGFloat.random(in: -1 ... 1)
+    }
+
+#if DEBUG
+    /// Fixes where interior drops enter across the mouth (tests).
+    var interiorDropHorizontalUnitForTesting: CGFloat?
+
+    /// The entry-ritual phase of a gem (tests): "throughMouth",
+    /// "clearingPile", or nil for a gem not in its ritual.
+    func entryPhaseNameForTesting(_ id: UUID) -> String? {
+        switch enteringPhases[id] {
+        case .throughMouth: "throughMouth"
+        case .clearingPile: "clearingPile"
+        case .heldAtMouth: "heldAtMouth"
+        case nil: nil
+        }
+    }
+#endif
+
+    private func forgetEntryState(for ids: Set<UUID>) {
+        for id in ids {
+            enteringPhases[id] = nil
+            slowNewGemSince[id] = nil
+        }
+    }
+
+    /// The applied gravity's direction, or the jar's own down while it is
+    /// too weak to have one (`JarGravityMapping.weakGravityMagnitude`).
+    private var gravityDirection: CGVector {
+        let gravity = appliedGravityVector
+        let magnitude = hypot(gravity.dx, gravity.dy)
+        guard magnitude.isFinite, magnitude >= JarGravityMapping.weakGravityMagnitude else {
+            return CGVector(dx: 0, dy: -1)
+        }
+        return CGVector(dx: gravity.dx / magnitude, dy: gravity.dy / magnitude)
+    }
+
+    /// Whether gravity presses `pebble` against a contact at `point`: the
+    /// point lies within 60° of straight down (along the applied gravity)
+    /// from its center. Under the default gravity only a floor corner
+    /// qualifies, so wall contacts land nothing new there.
+    private func gravityPresses(_ pebble: PebbleNode, toward point: CGPoint) -> Bool {
+        let gravity = appliedGravityVector
+        let magnitude = hypot(gravity.dx, gravity.dy)
+        guard magnitude.isFinite, magnitude >= JarGravityMapping.weakGravityMagnitude else { return false }
+        let dx = point.x - pebble.position.x
+        let dy = point.y - pebble.position.y
+        let distance = hypot(dx, dy)
+        guard distance > 0.001, distance.isFinite else { return false }
+        return (dx * gravity.dx + dy * gravity.dy) / (distance * magnitude) >= 0.5
+    }
+
+    /// Marks `pebble` landed and delivers its landing (sound, haptics,
+    /// light and Home's landing callback), unless its landing is muted.
+    /// A gem waiting at the mouth (`EntryPhase.heldAtMouth`) lands there
+    /// without `finishingEntry`: it keeps waiting until there is room.
+    private func land(
+        _ pebble: PebbleNode,
+        impactSpeed: CGFloat,
+        at point: CGPoint,
+        finishingEntry: Bool = true
+    ) {
+        pebble.markLanded()
+        if scheduledJarScale != nil {
+            // Rescaling inside the contact callback would resize bodies
+            // mid-step; the next update applies it.
+            appliesScheduledJarScale = true
+        }
+        if finishingEntry { finishEntryRitual(for: pebble) }
+        aboveEntryPebbleIDs.remove(pebble.descriptor.id)
+        slowNewGemSince[pebble.descriptor.id] = nil
+        updateCompletionDropTrackingIfNeeded()
+        if mutedLandingIDs.remove(pebble.descriptor.id) != nil { return }
+        deliverLandingFeedback(
+            for: pebble,
+            speed: max(impactSpeed, Constants.Jar.minimumLandingSpeed),
+            point: point
+        )
+    }
+
+    /// F3 landing fallback: a new gem that has come to rest without a
+    /// landing contact lands once it has stayed slower than
+    /// `restingLandingSpeed` for `restingLandingDelay` of scene time. Held
+    /// sideways or upside down it may come to rest against a wall or the
+    /// cap it already touched, on a gem that had not landed yet, or float
+    /// while the flat-phone blend passes through zero gravity; Home's
+    /// receipts, the onboarding trial and the completion-drop guard all
+    /// wait for this landing, so it must never starve. Under the default
+    /// gravity a new gem is slow only once a landing contact has landed it.
+    private func landRestingNewGemsIfNeeded() {
+        let now = lastSceneUpdateTime
+        for pebble in livePebbles where !pebble.hasLanded {
+            let id = pebble.descriptor.id
+            guard enteringPhases[id] == nil, let body = pebble.physicsBody else {
+                slowNewGemSince[id] = nil
+                continue
+            }
+            let speed = hypot(body.velocity.dx, body.velocity.dy)
+            guard speed.isFinite, speed <= Self.restingLandingSpeed else {
+                slowNewGemSince[id] = nil
+                continue
+            }
+            guard let since = slowNewGemSince[id], since <= now else {
+                slowNewGemSince[id] = now
+                continue
+            }
+            guard now - since >= Self.restingLandingDelay else { continue }
+            let down = gravityDirection
+            land(
+                pebble,
+                impactSpeed: speed,
+                at: CGPoint(
+                    x: pebble.position.x + down.dx * pebble.radius,
+                    y: pebble.position.y + down.dy * pebble.radius
+                )
+            )
+        }
+    }
+
+    // MARK: Gestures in the gravity frame (F3)
+
+    /// The axes taps, shakes and nudges throw along: up against the applied
+    /// gravity, across it (the screen's axes for an upright phone).
+    private var gestureFrame: JarGestureFrame {
+        JarGestureFrame(gravity: appliedGravityVector)
+    }
+
+    /// The gems a gesture may move: never one still in its entry ritual.
+    private var gesturePebbles: [PebbleNode] {
+        guard !enteringPhases.isEmpty else { return livePebbles }
+        return livePebbles.filter { enteringPhases[$0.descriptor.id] == nil }
+    }
+
+    /// How far a body of `radius` at `point` can travel along the unit
+    /// `direction` before it meets the containment (the walls with their
+    /// shoulders at its height, the floor, the mouth). Straight up this is
+    /// the former upward room, `interior.maxY − r − y`; sideways the room
+    /// to that wall.
+    private func containmentRoom(
+        from point: CGPoint,
+        radius: CGFloat,
+        along direction: CGVector
+    ) -> CGFloat {
+        let horizontal = allowedHorizontalRange(at: point.y, radius: radius)
+        let epsilon: CGFloat = 1e-9
+        var room = CGFloat.greatestFiniteMagnitude
+        if direction.dx > epsilon {
+            room = min(room, (horizontal.upperBound - point.x) / direction.dx)
+        } else if direction.dx < -epsilon {
+            room = min(room, (point.x - horizontal.lowerBound) / -direction.dx)
+        }
+        if direction.dy > epsilon {
+            room = min(room, (interiorRect.maxY - radius - point.y) / direction.dy)
+        } else if direction.dy < -epsilon {
+            room = min(room, (point.y - currentFloorY - radius) / -direction.dy)
+        }
+        guard room.isFinite, room < .greatestFiniteMagnitude else { return 0 }
+        return max(0, room)
+    }
+
+    /// `velocity` with its component along the unit `axis` set to
+    /// `component` and the rest kept: exactly `(dx, component)` along the
+    /// upright axis.
+    nonisolated static func velocity(
+        _ velocity: CGVector,
+        withComponent component: CGFloat,
+        along axis: CGVector
+    ) -> CGVector {
+        let current = velocity.dx * axis.dx + velocity.dy * axis.dy
+        let rest = CGVector(dx: velocity.dx - axis.dx * current, dy: velocity.dy - axis.dy * current)
+        return CGVector(dx: rest.dx + axis.dx * component, dy: rest.dy + axis.dy * component)
     }
 
     @discardableResult
@@ -4001,9 +5473,11 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             )
             aggregateNode.setScale(0.38 * aggregateNode.jarScale)
             aggregateNode.alpha = 0.25
+            // A small lift against gravity (F3; straight up when upright).
+            let up = gestureFrame.up
             aggregateNode.physicsBody?.velocity = CGVector(
-                dx: 0,
-                dy: Constants.Jar.aggregateBirthImpulse
+                dx: up.dx * Constants.Jar.aggregateBirthImpulse,
+                dy: up.dy * Constants.Jar.aggregateBirthImpulse
             )
             insertPebble(aggregateNode)
             presentFusionFinale(for: aggregateNode)
@@ -4515,7 +5989,11 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             bodies: CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY),
             jar: outerJarRect,
             interior: interiorRect,
-            bedTop: currentFloorY + (gemBed.map { $0.height(interiorHeight: interiorRect.height) } ?? 0)
+            bedTop: currentFloorY + (gemBed.map { $0.height(interiorHeight: interiorRect.height) } ?? 0),
+            // The live gravity while awake: a pile returning to the floor
+            // takes the floor band as the gravity turns (animated), not
+            // with a jump when it rests (`pileRestsOnTheFloor` waits).
+            seatedOnFloor: JarGravityMapping.restsOnTheFloor(pileGravityVector)
         )
         // The lit interior (JarStageArtwork) already glows toward the
         // floor, so the pile adds a softer light than before.
@@ -4559,12 +6037,16 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// 1.3 × their width (at least 96 pt, at most 0.9 × the jar width),
     /// 1.8 × their height (at least 64 pt, at most 0.45 of the interior and
     /// 0.75 of its own width), seated on the floor with its centre no higher
-    /// than the gem bed's top + 40 pt.
+    /// than the gem bed's top + 40 pt. F3: a pile resting against a wall or
+    /// the cap (`seatedOnFloor` false: held sideways or upside down) keeps
+    /// the light on its bodies instead, inside the interior; the gem bed
+    /// itself stays on the floor.
     nonisolated static func pileLightFrame(
         bodies: CGRect,
         jar: CGRect,
         interior: CGRect,
-        bedTop: CGFloat
+        bedTop: CGFloat,
+        seatedOnFloor: Bool = true
     ) -> CGRect {
         let width = min(max(96, bodies.width * 1.3), jar.width * 0.9)
         let height = min(
@@ -4573,11 +6055,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             interior.height * 0.45
         )
         let floorY = interior.minY
-        let centerY = min(
-            max(bodies.midY, floorY + height * 0.22),
-            max(bedTop, floorY) + 40,
-            floorY + height * 0.5
-        )
+        let centerY = seatedOnFloor
+            ? min(
+                max(bodies.midY, floorY + height * 0.22),
+                max(bedTop, floorY) + 40,
+                floorY + height * 0.5
+            )
+            : min(max(bodies.midY, floorY + height * 0.5), interior.maxY - height * 0.5)
         let centerX = min(max(bodies.midX, jar.minX + width / 2), jar.maxX - width / 2)
         return CGRect(x: centerX - width / 2, y: centerY - height / 2, width: width, height: height)
     }
@@ -4587,6 +6071,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         guard size.width > 0 else { return }
         let binWidth = size.width / CGFloat(count)
         var profile = [CGFloat](repeating: 0, count: count)
+        var bodies: [JarHUDScrimPolicy.Body] = []
         for pebble in livePebbles where !pebble.isRemovedForBake {
             if let velocity = pebble.physicsBody?.velocity,
                hypot(velocity.dx, velocity.dy) > Self.pileProfileRestingSpeed {
@@ -4596,8 +6081,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             // never trap the Int conversion below.
             guard pebble.position.x.isFinite, pebble.position.y.isFinite else { continue }
             let top = min(max(0, pebble.position.y + pebble.radius), size.height)
+            let bottom = min(max(0, pebble.position.y - pebble.radius), size.height)
             let left = min(max(pebble.position.x - pebble.radius, 0), size.width)
             let right = min(max(pebble.position.x + pebble.radius, 0), size.width)
+            bodies.append(JarHUDScrimPolicy.Body(
+                center: CGPoint(x: pebble.position.x.rounded(), y: pebble.position.y.rounded()),
+                radius: pebble.radius.rounded(.up)
+            ))
             let first = max(0, Int(left / binWidth))
             let last = min(count - 1, Int(right / binWidth))
             guard first <= last else { continue }
@@ -4605,7 +6095,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 profile[bin] = max(profile[bin], (top / 4).rounded(.up) * 4)
             }
         }
+        // Set before the published values, which SwiftUI reads it with.
+        settledPileStandsUpright = JarGravityMapping.standsUpright(pileGravityVector)
         if profile != settledPileProfile { settledPileProfile = profile }
+        if bodies != settledPileBodies { settledPileBodies = bodies }
     }
 
     /// Bakes gem bed textures off the main thread (tests may bake inline).
@@ -4978,13 +6471,18 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         } else {
             let isSettlingInteraction = interactionMotionWindow != nil
             livePebbles.forEach { pebble in
+                pebble.rememberObservedPosition()
+                // A calm re-settle (Reduce Motion) keeps its pile calm.
+                if takesCalmResettle(pebble) {
+                    applyCalmResettle(to: pebble)
+                    return
+                }
                 pebble.physicsBody?.linearDamping = isSettlingInteraction
                     ? Constants.Jar.interactionSettlingDamping
                     : Constants.Jar.linearDamping
                 pebble.physicsBody?.angularDamping = isSettlingInteraction
                     ? Constants.Jar.interactionSettlingDamping
                     : Constants.Jar.angularDamping
-                pebble.rememberObservedPosition()
             }
             idleSampleStartedAt = currentTime
         }
@@ -4998,6 +6496,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         uptime: TimeInterval
     ) {
         updateIdlePause(currentTime: currentTime, uptime: uptime)
+    }
+
+    /// When the open interaction window stops the physics at the latest
+    /// (`interactionClock` time), or nil without one.
+    var interactionHardStopForTesting: TimeInterval? {
+        interactionMotionWindow?.hardStopAt
     }
 #endif
 
@@ -5032,9 +6536,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             body.usesPreciseCollisionDetection = false
             body.isResting = true
         }
-        // The light enters the idle state exactly where gravity is, so the
+        // The light enters the idle state exactly where the tilt is, so the
         // idle gate's small residual can only come from later samples.
-        updateOpticalTilt(horizontal: appliedGravityVector.dx)
+        updateOpticalTilt(horizontal: appliedLightHorizontal)
         // Never freeze a half-lit flare: settle every star to its resting
         // (or tilt-lit) value before the frame stops.
         livePebbles.forEach {
@@ -5046,6 +6550,24 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         // A settled pile over the core or the HUD steps down first: the jar
         // stays awake for the 0.5 s transition and settles anew after it.
         if enforcePileClearances() { return }
+        // F3: the pose this pile settled under: the slow pose average
+        // (review S1), not the reading at this instant, so a pile that
+        // stops in the middle of a hand's sway records the sway's centre,
+        // and the sway does not wake it again. A turn away from it wakes
+        // the jar again (`setGravityReading`, `JarIdleTiltFilter`). A
+        // deliberate turn (past 15°) the pile has not followed yet reopened
+        // the interaction window (`followTurn`), so the stop rarely comes
+        // before the pile has had its settle time under that pose; one
+        // that `Refollow` declined, or a smaller turn late in a window, may
+        // leave the pile partly moved, as any tilt did before F3 — the
+        // average then still moves on toward the new pose and wakes it.
+        settledReading = poseReading ?? appliedReading ?? .flat
+        settledGravityVector = appliedGravityVector
+        refollow = JarGravityMapping.Refollow(wakePose: settledReading)
+        // The settled gravity decides whether this pile rests on the floor.
+        awakePileLeftTheFloor = false
+        // The frozen frame shows the glass whole, never mid-fade.
+        finishGlassCrossfade()
         if !isIdlePaused {
             isIdlePaused = true
             onIdlePauseChanged?(true)
@@ -5061,6 +6583,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// (additive colour over a clear texture would be lost or saturated when
     /// the PNG is un-premultiplied). Returns the restore closure.
     func prepareForSnapshot() -> () -> Void {
+        settleGlassForCapture()
         let pebbles = allPebbleNodes
         pebbles.forEach {
             $0.settleGemTwinkle()
@@ -5074,6 +6597,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         // pile lights are halved for the capture (no pink haze).
         let sceneLights = [floorGlowNode, pileGlowNode, glassHighlightNode].map { ($0, $0.blendMode, $0.alpha) }
         sceneLights.forEach { $0.0.blendMode = .alpha }
+        applyGlassHighlightBlendMode()
         floorGlowNode.alpha *= 0.5
         pileGlowNode.alpha *= 0.45
         // The capture's texture is the bottle's rectangle, not the view:
@@ -5090,6 +6614,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 $0.0.blendMode = $0.1
                 $0.0.alpha = $0.2
             }
+            self?.applyGlassHighlightBlendMode()
             // A resting jar's render loop is stopped: show the restored
             // (settled) frame, so the screen never lags the scene.
             self?.requestRedraw()
@@ -5099,8 +6624,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private func resetIdleObservation() {
         idleSampleStartedAt = nil
         livePebbles.forEach {
-            $0.physicsBody?.linearDamping = Constants.Jar.linearDamping
-            $0.physicsBody?.angularDamping = Constants.Jar.angularDamping
+            // A calm re-settle (Reduce Motion) keeps its pile calm through
+            // a landing or a content change inside its window.
+            if takesCalmResettle($0) {
+                applyCalmResettle(to: $0)
+            } else {
+                $0.physicsBody?.linearDamping = Constants.Jar.linearDamping
+                $0.physicsBody?.angularDamping = Constants.Jar.angularDamping
+            }
             $0.rememberObservedPosition()
         }
     }
@@ -5155,7 +6686,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 horizontalRange.upperBound
             )
             let previousY = pebble.position.y
-            let upperY = aboveEntryPebbleIDs.contains(pebble.descriptor.id) && !pebble.hasLanded
+            let upperY = enteringPhases[pebble.descriptor.id]?.isInTheNeck == true
                 ? size.height
                 : interiorRect.maxY - pebble.radius
             pebble.position.y = min(pebble.position.y, upperY)
@@ -5218,6 +6749,17 @@ struct JarInteractionMotionWindow: Equatable {
 
     func canSettle(at uptime: TimeInterval) -> Bool {
         uptime.isFinite && uptime >= settleAt
+    }
+
+    /// The same window, every deadline `gap` seconds later (time the scene
+    /// did not step, review B2).
+    func shifted(by gap: TimeInterval) -> JarInteractionMotionWindow {
+        guard gap.isFinite, gap > 0 else { return self }
+        return JarInteractionMotionWindow(
+            openedAt: openedAt + gap,
+            settleDelay: settleAt - openedAt,
+            hardStopDelay: hardStopAt - openedAt
+        )
     }
 
     func mustStop(at uptime: TimeInterval) -> Bool {
@@ -5314,9 +6856,42 @@ enum JarTapLaunchPolicy {
     }
 }
 
+/// F3: the axes a jar gesture throws along. `up` points straight against
+/// the applied gravity (`JarGravityMapping.launchDirection`), `across` a
+/// quarter turn clockwise from it. Components are (across, up): for an
+/// upright phone exactly the screen's (x, y), so taps and shakes are
+/// unchanged there; held sideways or upside down they turn with gravity.
+struct JarGestureFrame: Equatable {
+    let up: CGVector
+    let across: CGVector
+
+    init(gravity: CGVector) {
+        up = JarGravityMapping.launchDirection(for: gravity)
+        across = CGVector(dx: up.dy, dy: -up.dx)
+    }
+
+    /// `vector`'s components along (across, up).
+    func components(of vector: CGVector) -> CGVector {
+        CGVector(
+            dx: vector.dx * across.dx + vector.dy * across.dy,
+            dy: vector.dx * up.dx + vector.dy * up.dy
+        )
+    }
+
+    /// The scene vector with `components` along (across, up).
+    func vector(from components: CGVector) -> CGVector {
+        CGVector(
+            dx: across.dx * components.dx + up.dx * components.dy,
+            dy: across.dy * components.dx + up.dy * components.dy
+        )
+    }
+}
+
 /// Converts the same physical impulse to a mass-aware velocity change, then
 /// applies an explicit component-wise ceiling. This keeps tiny bodies stable
-/// without flattening the slower response of a larger aggregate.
+/// without flattening the slower response of a larger aggregate. The scene
+/// applies it in the gravity frame (`JarGestureFrame`): the horizontal
+/// ceiling across gravity, the vertical one along it.
 enum JarShakeVelocityPolicy {
     static func velocity(
         current: CGVector,
@@ -5590,9 +7165,11 @@ struct JarShakeDetector {
 /// applies every sample, as before. When the jar comes to rest it drops
 /// to `JarMotionRate.idleUpdatesPerSecond` on a background queue, where
 /// `JarIdleTiltMonitor` keeps the smoothed tilt; only a tilt that would move
-/// the drawn light (or a shake peak) hops to main, which restores the full
-/// rate and the render loop. Stopped whenever the jar's owner says so (Home
-/// hidden or covered, the app not active, no study gem).
+/// the drawn light, a turn the resting pile must re-settle for (F3), or a
+/// shake peak hops to main, which restores the full rate and the render
+/// loop (and, for a turn, the physics through its bounded interaction
+/// window). Stopped whenever the jar's owner says so (Home hidden or
+/// covered, the app not active, no study gem).
 @MainActor
 final class JarMotionObserver: ObservableObject {
     private static weak var activeOwner: JarMotionObserver?
@@ -5719,7 +7296,7 @@ final class JarMotionObserver: ObservableObject {
         // Set first: the gravity catch-up below can itself raise the jar's
         // demand, which must find the full rate already running.
         rate = .full
-        let latestIdleGravity = idleMonitor.disarm()
+        let latestIdleReadings = idleMonitor.disarm()
         let generation = updateGate.begin()
         shakeDetector.reset()
         source.start(
@@ -5734,10 +7311,15 @@ final class JarMotionObserver: ObservableObject {
             }
         }
         // What the idle check saw last becomes the gravity now, so a jar
-        // woken by a tap never starts from a stale tilt, and a tilt that
-        // woke it moves the light at once.
-        if appliesGravity, let latestIdleGravity {
-            scene?.setGravityVector(latestIdleGravity, smoothing: false)
+        // woken by a tap never starts from a stale tilt, a tilt that woke
+        // it moves the light at once, and a turn that woke it re-settles
+        // the pile (F3; the scene makes the same check).
+        if appliesGravity, let latestIdleReadings {
+            scene?.setGravityReading(
+                latestIdleReadings.reading,
+                smoothing: false,
+                pose: latestIdleReadings.poseReading
+            )
         }
     }
 
@@ -5748,7 +7330,9 @@ final class JarMotionObserver: ObservableObject {
         let generation = updateGate.begin()
         idleMonitor.arm(
             JarIdleTiltFilter(
-                gravity: scene.appliedGravityVector,
+                reading: scene.appliedReading,
+                poseReading: scene.poseReading,
+                settledReading: scene.settledReading,
                 drawnLight: scene.opticalTiltFraction,
                 followsTilt: !scene.reduceMotion
             ),
@@ -5775,8 +7359,9 @@ final class JarMotionObserver: ObservableObject {
               let scene
         else { return }
         // The sample that woke the jar starts a gesture: full rate at once.
-        // Its smoothed gravity is applied there; a tilt that moves the light
-        // restarts the render loop and holds the full rate (JarScene).
+        // Its smoothed reading is applied there; a tilt that moves the light
+        // restarts the render loop and holds the full rate, and a turn from
+        // the settled pose wakes the physics (JarScene).
         runFullRate()
         if wake.reason == .shake {
             // The reversal of a shake follows within 0.42 s.
@@ -5795,8 +7380,9 @@ final class JarMotionObserver: ObservableObject {
               updateGate.accepts(generation)
         else { return }
         if appliesGravity,
-           updateGate.acceptsGravity(generation, reduceMotion: scene.reduceMotion) {
-            scene.setGravityVector(sample.proposedGravity)
+           updateGate.acceptsGravity(generation, reduceMotion: scene.reduceMotion),
+           let reading = sample.gravityReading {
+            scene.setGravityReading(reading)
         }
         ingestShake(sample)
     }
