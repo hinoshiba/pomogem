@@ -116,8 +116,11 @@ enum FocusEndAlarmMaintenance {
             ? .ringtone
             : (choice.synthesizedSound != nil ? .cue : nil)
         guard let kind else { return }
+        let generation = AlarmSoundLibrary.preparationGeneration
         Task { @MainActor in
-            _ = try? await AlarmSoundLibrary.preparedFile(kind, for: choice)
+            _ = try? await AlarmSoundLibrary.preparedFile(
+                kind, for: choice, generation: generation
+            )
         }
     }
 
@@ -127,9 +130,9 @@ enum FocusEndAlarmMaintenance {
     static func eraseForCompleteDataDeletion(
         scheduler: FocusEndAlarmScheduler? = nil,
         libraryDirectory: URL? = nil
-    ) {
+    ) async {
         (scheduler ?? .shared).cancelAll()
-        try? AlarmSoundLibrary.removeAllRingtoneFiles(libraryDirectory: libraryDirectory)
+        try? await AlarmSoundLibrary.erasePreparedFiles(libraryDirectory: libraryDirectory)
     }
 }
 

@@ -423,7 +423,7 @@ final class SystemCompleteDataDeletionDeviceState: CompleteDataDeletionDeviceSta
         await NotificationManager.shared.cancelAllTimerNotifications()
         // F5: every system alarm of this app, orphans included, and the
         // alarm sounds rendered into Library/Sounds.
-        FocusEndAlarmMaintenance.eraseForCompleteDataDeletion()
+        await FocusEndAlarmMaintenance.eraseForCompleteDataDeletion()
         notificationCenter.removeAllPendingNotificationRequests()
         notificationCenter.removeAllDeliveredNotifications()
         try await notificationCenter.setBadgeCount(0)

@@ -80,7 +80,8 @@ enum AlarmChannelPolicy {
     static let gentleRepeatInterval: TimeInterval = 1.3
     /// When the app is active this close before the end, the in-app alarm
     /// takes over and the AlarmKit alarm is cancelled, so only one channel
-    /// rings.
+    /// rings. The hand-off needs notification permission: if the person locks
+    /// the screen before the end, that notification is the only fallback.
     static let foregroundHandoffLead: TimeInterval = 1.5
     /// An end sooner than this is not booked with AlarmKit: the person is
     /// looking at the timer they just started or resumed.
@@ -147,10 +148,11 @@ enum AlarmChannelPolicy {
     /// (`TimerCompletionForegroundFeedbackPolicy.Cue.repeating`).
     static func shouldHandOffToForeground(
         applicationIsActive: Bool,
+        notificationsAuthorized: Bool,
         endDate: Date,
         now: Date
     ) -> Bool {
-        guard applicationIsActive else { return false }
+        guard applicationIsActive, notificationsAuthorized else { return false }
         let remaining = endDate.timeIntervalSince(now)
         return remaining.isFinite && remaining > 0 && remaining <= foregroundHandoffLead
     }

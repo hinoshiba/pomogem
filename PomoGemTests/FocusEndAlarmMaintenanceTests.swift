@@ -240,11 +240,79 @@ final class FocusEndAlarmMaintenanceTests: XCTestCase {
             fileManager.createFile(atPath: sounds.appendingPathComponent(name).path, contents: Data([1]))
         }
 
-        FocusEndAlarmMaintenance.eraseForCompleteDataDeletion(scheduler: scheduler, libraryDirectory: library)
+        await FocusEndAlarmMaintenance.eraseForCompleteDataDeletion(scheduler: scheduler, libraryDirectory: library)
 
         XCTAssertNil(scheduler.booking)
         XCTAssertTrue(client.states.isEmpty, "Orphans too, even one that is ringing")
         XCTAssertEqual(try fileManager.contentsOfDirectory(atPath: sounds.path), ["someone-else.caf"])
+    }
+
+    func testCompleteDeletionWaitsForARingtoneWriteAlreadyInFlight() async throws {
+        let gate = HeldRenderedSoundWrite()
+        let sounds = try AlarmSoundLibrary.soundsDirectory(libraryDirectory: library)
+        let destination = sounds.appendingPathComponent(AlarmSoundLibrary.fileName(for: .bell))
+        let generation = AlarmSoundLibrary.preparationGeneration
+        let preparation = Task {
+            try await AlarmSoundLibrary.preparedFile(
+                .ringtone,
+                for: .bell,
+                libraryDirectory: library,
+                prepareFile: {
+                    await gate.waitToWrite()
+                    try Data([1]).write(to: destination)
+                    return destination
+                }
+            )
+        }
+        await gate.waitUntilHeld()
+
+        let erasure = Task {
+            await FocusEndAlarmMaintenance.eraseForCompleteDataDeletion(
+                scheduler: scheduler,
+                libraryDirectory: library
+            )
+        }
+        var turns = 0
+        while AlarmSoundLibrary.preparationGeneration == generation, turns < 10_000 {
+            turns += 1
+            await Task.yield()
+        }
+        XCTAssertNotEqual(AlarmSoundLibrary.preparationGeneration, generation)
+
+        await gate.release()
+        await erasure.value
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
+        do {
+            _ = try await preparation.value
+            XCTFail("A prepared file from before complete deletion must be invalidated")
+        } catch is CancellationError {
+            // The caller cannot book the file after deletion.
+        }
+    }
+
+    func testPreparationQueuedBeforeDeletionCannotWriteAfterward() async throws {
+        let staleGeneration = AlarmSoundLibrary.preparationGeneration
+        await FocusEndAlarmMaintenance.eraseForCompleteDataDeletion(
+            scheduler: scheduler,
+            libraryDirectory: library
+        )
+        let sounds = try AlarmSoundLibrary.soundsDirectory(libraryDirectory: library)
+        let destination = sounds.appendingPathComponent(AlarmSoundLibrary.fileName(for: .bell))
+        do {
+            _ = try await AlarmSoundLibrary.preparedFile(
+                .ringtone,
+                for: .bell,
+                libraryDirectory: library,
+                generation: staleGeneration,
+                prepareFile: {
+                    try Data([1]).write(to: destination)
+                    return destination
+                }
+            )
+            XCTFail("A queued pre-deletion preparation must be rejected")
+        } catch is CancellationError {
+            XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
+        }
     }
 
     // MARK: Device-local preferences
@@ -279,5 +347,28 @@ final class FocusEndAlarmMaintenanceTests: XCTestCase {
             UITestFocusEndAlarmClient(environment: [UITestFocusEndAlarmClient.environmentKey: "unsupported"]).authorization,
             .unsupported
         )
+    }
+}
+
+private actor HeldRenderedSoundWrite {
+    private var didStart = false
+    private var waiter: CheckedContinuation<Void, Never>?
+
+    func waitToWrite() async {
+        didStart = true
+        await withCheckedContinuation { waiter = $0 }
+    }
+
+    func waitUntilHeld() async {
+        var turns = 0
+        while !didStart, turns < 10_000 {
+            turns += 1
+            await Task.yield()
+        }
+    }
+
+    func release() {
+        waiter?.resume()
+        waiter = nil
     }
 }

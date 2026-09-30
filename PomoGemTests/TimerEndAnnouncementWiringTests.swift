@@ -60,7 +60,7 @@ final class TimerEndAnnouncementWiringTests: XCTestCase {
             timerEndSounds: TimerEndNotificationSounds(
                 strength: { preferences.strength },
                 choice: { preferences.sound(legacy: $0) },
-                file: { _ in nil }
+                file: { _, _ in nil }
             ),
             systemAlarms: scheduler
         )
@@ -74,7 +74,7 @@ final class TimerEndAnnouncementWiringTests: XCTestCase {
             notifications: manager,
             systemAlarms: scheduler,
             preferences: preferences,
-            ringtoneFileName: { choice in
+            ringtoneFileName: { choice, _ in
                 if let ringtone { return await ringtone.provide() }
                 return AlarmSoundLibrary.fileName(for: choice)
             }

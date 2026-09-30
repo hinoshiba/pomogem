@@ -337,19 +337,29 @@ enum AlarmSoundLibrary {
     static func preparedFile(
         _ kind: AlarmSoundFileKind,
         for choice: AlarmSoundChoice,
-        libraryDirectory: URL? = nil
+        libraryDirectory: URL? = nil,
+        generation expectedGeneration: UInt64? = nil,
+        prepareFile: (@Sendable () async throws -> URL)? = nil
     ) async throws -> URL {
+        guard !isErasing,
+              expectedGeneration == nil || expectedGeneration == preparationGeneration
+        else { throw CancellationError() }
+        let generation = preparationGeneration
         if kind == .cue, choice.legacySound != nil {
             throw CocoaError(.fileNoSuchFile)
         }
         let name = fileName(kind, for: choice)
         let key = "\(libraryDirectory?.path ?? "")/\(name)"
         if let inFlight = preparations[key] {
-            return try await inFlight.value
+            let url = try await inFlight.task.value
+            guard generation == preparationGeneration else { throw CancellationError() }
+            return url
         }
         let legacyChime = legacyChime(for: choice)
+        let operationID = UUID()
         let task = Task<URL, Error> {
-            try await Task.detached(priority: .utility) {
+            if let prepareFile { return try await prepareFile() }
+            return try await Task.detached(priority: .utility) {
                 if let existing = try existingFile(kind, for: choice, libraryDirectory: libraryDirectory) {
                     return existing
                 }
@@ -357,22 +367,56 @@ enum AlarmSoundLibrary {
                 return try writeFile(kind, for: choice, source: source, libraryDirectory: libraryDirectory)
             }.value
         }
-        preparations[key] = task
-        defer { preparations[key] = nil }
-        return try await task.value
+        preparations[key] = Preparation(id: operationID, task: task)
+        defer {
+            if preparations[key]?.id == operationID {
+                preparations.removeValue(forKey: key)
+            }
+        }
+        let url = try await task.value
+        guard generation == preparationGeneration else { throw CancellationError() }
+        return url
     }
 
     @MainActor
-    private static var preparations: [String: Task<URL, Error>] = [:]
+    private struct Preparation {
+        let id: UUID
+        let task: Task<URL, Error>
+    }
+
+    @MainActor
+    private static var preparations: [String: Preparation] = [:]
+    @MainActor
+    private(set) static var preparationGeneration: UInt64 = 0
+    @MainActor
+    private static var erasureCount = 0
+    @MainActor
+    private static var isErasing: Bool { erasureCount > 0 }
+
+    /// Invalidates callers that were queued before deletion, waits for every
+    /// writer already running, then removes their files. A late writer cannot
+    /// recreate a ringtone after complete data deletion returns.
+    @MainActor
+    static func erasePreparedFiles(libraryDirectory: URL? = nil) async throws {
+        preparationGeneration &+= 1
+        erasureCount += 1
+        defer { erasureCount -= 1 }
+        let pending = preparations.values.map(\.task)
+        for task in pending { _ = try? await task.value }
+        try removeAllRingtoneFiles(libraryDirectory: libraryDirectory)
+    }
 
     /// The notification sound for a prepared file, or nil when it could not
     /// be written (the caller falls back to the short chime).
     @MainActor
     static func notificationSound(
         _ kind: AlarmSoundFileKind,
-        for choice: AlarmSoundChoice
+        for choice: AlarmSoundChoice,
+        generation: UInt64? = nil
     ) async -> UNNotificationSound? {
-        guard let url = try? await preparedFile(kind, for: choice) else { return nil }
+        guard let url = try? await preparedFile(
+            kind, for: choice, generation: generation
+        ) else { return nil }
         return UNNotificationSound(named: UNNotificationSoundName(rawValue: url.lastPathComponent))
     }
 

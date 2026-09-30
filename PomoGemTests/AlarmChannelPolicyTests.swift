@@ -81,13 +81,20 @@ final class AlarmChannelPolicyTests: XCTestCase {
 
     func testTheInAppAlarmTakesOverOnlyWhenActiveJustBeforeTheEnd() {
         let end = Date(timeIntervalSinceReferenceDate: 2_000)
-        func handsOff(_ offset: TimeInterval, active: Bool = true) -> Bool {
-            AlarmChannelPolicy.shouldHandOffToForeground(applicationIsActive: active, endDate: end, now: end.addingTimeInterval(offset))
+        func handsOff(_ offset: TimeInterval, active: Bool = true, notificationsAuthorized: Bool = true) -> Bool {
+            AlarmChannelPolicy.shouldHandOffToForeground(
+                applicationIsActive: active,
+                notificationsAuthorized: notificationsAuthorized,
+                endDate: end,
+                now: end.addingTimeInterval(offset)
+            )
         }
         XCTAssertTrue(handsOff(-1.5))
         XCTAssertTrue(handsOff(-0.1))
         XCTAssertFalse(handsOff(-2), "too early: the person may still leave")
         XCTAssertFalse(handsOff(-1, active: false))
+        XCTAssertFalse(handsOff(-1, notificationsAuthorized: false),
+                       "Without notifications, leaving during the hand-off must keep the system alarm armed")
         // At or after the end the system alarm may be ringing or may have
         // rung: that is resolved through the witness and Stop, never by a
         // cancel that would erase the witness.

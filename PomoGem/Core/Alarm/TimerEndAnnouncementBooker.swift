@@ -61,15 +61,17 @@ final class TimerEndAnnouncementBooker {
         case noChannel
     }
 
-    typealias RingtoneFileName = @MainActor (AlarmSoundChoice) async -> String?
+    typealias RingtoneFileName = @MainActor (AlarmSoundChoice, UInt64) async -> String?
 
     static let shared = TimerEndAnnouncementBooker(
         notifications: .shared,
         systemAlarms: .shared,
         preferences: AlarmPreferences(),
-        ringtoneFileName: { choice in
+        ringtoneFileName: { choice, generation in
             guard AlarmSoundLibrary.systemAlarmUsesRenderedRingtone,
-                  let url = try? await AlarmSoundLibrary.preparedFile(.ringtone, for: choice)
+                  let url = try? await AlarmSoundLibrary.preparedFile(
+                      .ringtone, for: choice, generation: generation
+                  )
             else { return nil }
             return url.lastPathComponent
         }
@@ -150,6 +152,7 @@ final class TimerEndAnnouncementBooker {
     ) -> Date? {
         guard AlarmChannelPolicy.shouldHandOffToForeground(
             applicationIsActive: applicationIsActive,
+            notificationsAuthorized: notifications.isAuthorized,
             endDate: endDate,
             now: now
         ) else { return nil }
@@ -270,12 +273,13 @@ final class TimerEndAnnouncementBooker {
             // while the ringtone is prepared books nothing.
             let choice = preferences.sound(legacy: completionSound)
             let ringtoneFileName = ringtoneFileName
+            let soundGeneration = AlarmSoundLibrary.preparationGeneration
             let result = await systemAlarms.schedule(
                 sessionID: sessionID,
                 phase: phase,
                 endDate: endDate
             ) {
-                await ringtoneFileName(choice)
+                await ringtoneFileName(choice, soundGeneration)
             }
             switch result {
             case let .booked(booking):

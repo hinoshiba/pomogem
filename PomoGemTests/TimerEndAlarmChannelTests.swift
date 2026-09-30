@@ -39,7 +39,10 @@ final class TimerEndAlarmChannelTests: XCTestCase {
         try await super.tearDown()
     }
 
-    private func makeManager(sounds: Bool = true) -> NotificationManager {
+    private func makeManager(
+        sounds: Bool = true,
+        authorization: UNAuthorizationStatus = .authorized
+    ) -> NotificationManager {
         let client = NotificationRequestClient(
             add: { [unowned self] in self.pending[$0.identifier] = $0 },
             pending: { [unowned self] in Array(self.pending.values) },
@@ -51,7 +54,7 @@ final class TimerEndAlarmChannelTests: XCTestCase {
         return NotificationManager(
             requestClient: client,
             focusReturnReminderClient: FocusReturnReminderNotificationClient(
-                authorizationStatus: { .authorized },
+                authorizationStatus: { authorization },
                 add: client.add,
                 removePending: client.removePending,
                 removeDelivered: { _ in }
@@ -59,7 +62,7 @@ final class TimerEndAlarmChannelTests: XCTestCase {
             timerEndSounds: sounds ? TimerEndNotificationSounds(
                 strength: { preferences.strength },
                 choice: { preferences.sound(legacy: $0) },
-                file: { [unowned self] selection in
+                file: { [unowned self] selection, _ in
                     self.requestedFiles.append(selection)
                     return self.fileAvailable ? Self.fakeSound(selection) : nil
                 }
@@ -250,7 +253,7 @@ final class TimerEndAlarmChannelTests: XCTestCase {
             notifications: manager,
             systemAlarms: scheduler,
             preferences: preferences,
-            ringtoneFileName: { AlarmSoundLibrary.fileName(for: $0) }
+            ringtoneFileName: { choice, _ in AlarmSoundLibrary.fileName(for: choice) }
         )
     }
 
@@ -350,7 +353,7 @@ final class TimerEndAlarmChannelTests: XCTestCase {
             notifications: manager,
             systemAlarms: scheduler,
             preferences: preferences,
-            ringtoneFileName: { _ in await ringtone.provide() }
+            ringtoneFileName: { _, _ in await ringtone.provide() }
         )
     }
 
@@ -372,7 +375,7 @@ final class TimerEndAlarmChannelTests: XCTestCase {
             ("reset recovery", .focus, { manager, _ in await manager.prepareTimerNotificationCleanup()() }),
             ("account boundary", .focus, { manager, _ in manager.suspendTimerSchedulingForAccountBoundary() }),
             ("complete deletion", .breakTime, { _, _ in
-                FocusEndAlarmMaintenance.eraseForCompleteDataDeletion(scheduler: scheduler, libraryDirectory: library)
+                await FocusEndAlarmMaintenance.eraseForCompleteDataDeletion(scheduler: scheduler, libraryDirectory: library)
             })
         ]
         for (name, phase, cancel) in cancels {
@@ -516,6 +519,56 @@ final class TimerEndAlarmChannelTests: XCTestCase {
     }
 
     // MARK: The end (part 2 calls these too)
+
+    func testDeniedNotificationsKeepTheSystemAlarmThroughForegroundHandoffWindow() async throws {
+        let manager = makeManager(authorization: .denied)
+        await manager.refreshAuthorizationStatus()
+        preferences.setStrength(.maximum)
+        let booker = makeBooker(manager)
+        let session = UUID()
+        let end = clock.addingTimeInterval(600)
+        guard case let .systemAlarm(booking) = try await booker.bookFocusEnd(
+            sessionID: session, endDate: end, playsSound: true, completionSound: .standard
+        ) else { return XCTFail("The alarm must book without notification permission") }
+
+        XCTAssertNil(booker.handOffToForegroundIfDue(
+            sessionID: session,
+            endDate: end,
+            applicationIsActive: true,
+            now: end.addingTimeInterval(-1)
+        ))
+        XCTAssertEqual(scheduler.booking, booking)
+        XCTAssertNotNil(client.scheduled[booking.alarmID],
+                        "Locking the screen before the end must still leave an audible alarm")
+        XCTAssertTrue(client.cancelled.isEmpty)
+        let afterLeaving = try await booker.bookFocusEndAfterLeavingDuringHandoff(
+            sessionID: session,
+            endDate: end,
+            playsSound: true,
+            completionSound: .standard,
+            now: end.addingTimeInterval(-0.5)
+        )
+        XCTAssertNil(afterLeaving)
+        XCTAssertNotNil(client.scheduled[booking.alarmID])
+
+        clock = end.addingTimeInterval(0.2)
+        client.states[booking.alarmID] = .alerting
+        XCTAssertEqual(TimerCompletionForegroundFeedbackPolicy.cue(
+            recoveredAfterExpiration: false,
+            returnedFromBackground: false,
+            notificationMayHaveDelivered: booker.externalAlertMayHaveFired(
+                sessionID: session,
+                notificationAuthorized: false,
+                notificationDeliveryDate: nil,
+                now: clock
+            ),
+            endedAt: end,
+            now: clock
+        ), .repeating, "An on-screen end still starts the in-app alarm")
+        booker.acknowledgeEnd(sessionID: session)
+        XCTAssertEqual(client.stopped, [booking.alarmID],
+                       "The system alarm is stopped before the in-app cue starts")
+    }
 
     func testTheHandOffCancelsTheAlarmOnlyWhenTheAppIsActiveJustBeforeTheEnd() async throws {
         let manager = makeManager()

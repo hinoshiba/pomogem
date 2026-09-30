@@ -129,16 +129,18 @@ struct TimerEndNotificationSounds {
     var choice: @MainActor (TimerCompletionSound) -> AlarmSoundChoice
     /// A playable file for `.alarmCue` or `.ringtone`, written off the main
     /// thread when missing. Nil falls back to the synced short chime.
-    var file: @MainActor (TimerEndNotificationSound) async -> UNNotificationSound?
+    var file: @MainActor (TimerEndNotificationSound, UInt64) async -> UNNotificationSound?
 
     @MainActor
     static func live(preferences: AlarmPreferences = AlarmPreferences()) -> Self {
         Self(
             strength: { preferences.strength },
             choice: { preferences.sound(legacy: $0) },
-            file: { selection in
+            file: { selection, generation in
                 guard let file = selection.alarmSoundFile else { return nil }
-                return await AlarmSoundLibrary.notificationSound(file.kind, for: file.choice)
+                return await AlarmSoundLibrary.notificationSound(
+                    file.kind, for: file.choice, generation: generation
+                )
             }
         )
     }
@@ -802,6 +804,7 @@ final class NotificationManager {
         )
         focusNotificationGeneration &+= 1
         let generation = focusNotificationGeneration
+        let soundGeneration = AlarmSoundLibrary.preparationGeneration
         focusNotificationIntents[sessionID] = generation
         let previousTask = focusNotificationOperations[sessionID]?.task
         let operationTask = Task<TimerCompletionNotificationScheduleResult, Error> {
@@ -821,7 +824,8 @@ final class NotificationManager {
                 to: content,
                 playsSound: playsSound,
                 completionSound: completionSound,
-                channel: channel
+                channel: channel,
+                soundGeneration: soundGeneration
             )
             guard focusNotificationIntents[sessionID] == generation else {
                 return .superseded
@@ -1197,6 +1201,7 @@ final class NotificationManager {
         )
         breakNotificationGeneration &+= 1
         let generation = breakNotificationGeneration
+        let soundGeneration = AlarmSoundLibrary.preparationGeneration
         breakNotificationIntents[id] = generation
         let previousTask = breakNotificationOperations[id]?.task
         let operationTask = Task<TimerCompletionNotificationScheduleResult, Error> {
@@ -1216,7 +1221,8 @@ final class NotificationManager {
                 to: content,
                 playsSound: playsSound,
                 completionSound: completionSound,
-                channel: channel
+                channel: channel,
+                soundGeneration: soundGeneration
             )
             guard breakNotificationIntents[id] == generation else {
                 return .superseded
@@ -1575,7 +1581,8 @@ final class NotificationManager {
         to content: UNMutableNotificationContent,
         playsSound: Bool,
         completionSound: TimerCompletionSound,
-        channel: AlarmBackgroundChannel?
+        channel: AlarmBackgroundChannel?,
+        soundGeneration: UInt64
     ) async {
         guard playsSound, let timerEndSounds else { return }
         let resolvedChannel = channel ?? AlarmChannelPolicy.notificationChannel(
@@ -1593,7 +1600,7 @@ final class NotificationManager {
         case let .legacyChime(sound):
             content.sound = TimerCompletionSoundLibrary.notificationSound(for: sound)
         case .alarmCue, .ringtone:
-            content.sound = await timerEndSounds.file(selection)
+            content.sound = await timerEndSounds.file(selection, soundGeneration)
                 ?? TimerCompletionSoundLibrary.notificationSound(for: completionSound)
         }
     }
