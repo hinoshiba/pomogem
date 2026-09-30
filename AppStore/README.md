@@ -6,7 +6,7 @@ APIのcredentialやdownloadしたprofileは置きません。
 - `configuration.yml`: product identifierと提供範囲
 - `connect-entry-plan.md`: App Store Connectへ保存するfield値と未完了項目
 - `metadata/ja-JP/`: 日本語listing原稿
-- `metadata/en-US/`: 全世界配信用の英語listing原稿（App UI／supportが日本語である旨を明記）
+- `metadata/en-US/`: 全世界配信用の英語listing原稿（App UIは日本語・英語、supportは現在日本語である旨を明記）
 - `screenshots/`: production UIをDebug-only deterministic fixtureでcaptureした提出予定画像と再現手順
 - `review-notes-connect.txt`: App Store Connectへ貼り付ける4,000文字以内のApp Review notes正本
 - `review-notes.md`: App Review確認と実機検証の詳細版

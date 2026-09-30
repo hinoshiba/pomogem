@@ -18,24 +18,6 @@
         }
       }
     },
-    "%@t" : {
-      "comment" : "Mass in metric tonnes; the argument is the number, already formatted (e.g. 3.68). en: '%@ t'.",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ t"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@t"
-          }
-        }
-      }
-    },
     "%@の予測" : {
       "comment" : "Plan results title; the argument is 今日 or a time from now such as 3年後",
       "localizations" : {
@@ -382,24 +364,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "60分 = 600g = 25分×2 + 10分 = 10分×6"
-          }
-        }
-      }
-    },
-    "BOTTLE CYCLE" : {
-      "comment" : "Eyebrow above the jar-cycle title (shown uppercased). en: 'Jar Cycle', never 'bottle'.",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Jar Cycle"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "BOTTLE CYCLE"
           }
         }
       }

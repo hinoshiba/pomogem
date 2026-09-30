@@ -938,24 +938,6 @@
         }
       }
     },
-    "任意の体験です。0g・記録には入りません。「次へ」で省略できます。" : {
-      "comment" : "Trial page: optional, adds 0 g and no record; Next skips it",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This is optional. It adds 0 g and no record. Tap “Next” to skip it."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "任意の体験です。0g・記録には入りません。「次へ」で省略できます。"
-          }
-        }
-      }
-    },
     "任意の設定" : {
       "comment" : "Eyebrow of the optional rare-gem choice page",
       "localizations" : {

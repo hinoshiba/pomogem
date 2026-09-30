@@ -35,24 +35,6 @@
         }
       }
     },
-    "%@t" : {
-      "comment" : "Mass in metric tons. %@ is the number, already formatted. en: '%@ t' (with a space; never converted).",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ t"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@t"
-          }
-        }
-      }
-    },
     "%@、%@" : {
       "comment" : "VoiceOver, one color of a crystal: color or theme name, spoken percentage",
       "localizations" : {

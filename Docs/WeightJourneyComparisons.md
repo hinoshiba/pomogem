@@ -4,7 +4,7 @@
 |---|---|
 | 作成日 | 2026-09-29 |
 | 対象 | v1.3a「重さの旅」の名所（GemExperienceDesign §5.3、§5.7） |
-| 状態 | 日本語版は確定。英語版は「英語ロケールの注記」の候補から、英語を有効にするときに選ぶ |
+| 状態 | 日本語版と英語版の比較対象を確定。英語は§5の採用値を使用 |
 | コード | `PomoGem/Features/Home/WeightJourney.swift`（`WeightJourney.Comparison` と `label`）。表示の文言はこの台帳の「表示」列と一字一句同じにする |
 | テスト | `PomoGemTests/WeightJourneyTests.swift`（`testEveryLandmarkOfTheLadderSitsAtItsHourWithItsLedgerComparison`） |
 
@@ -190,11 +190,11 @@
 
 候補のうち、確認して残したもの：コーギー（犬種標準の幅が狭い）、コウテイペンギン（季節の端も帯に入る）、ジャイアントパンダ（平均で帯に入る）、キリン（雌雄の中央で帯に入る）。
 
-## 5. 英語ロケールの注記（英語を有効にするときに選ぶ）
+## 5. 英語ロケールの採用内容
 
-英語は、各画面の翻訳がそろった時点で有効にします（Docs/Localization.md）。それまで、英語の候補は `Home.xcstrings` の各キーのコメントに書いてあります（例：「About an apple」）。表示の文は、日本語と同じく「about」を付け、「as heavy as」とは断定しません。
+英語の比較対象は `Home.xcstrings` に登録します（Docs/Localization.md）。表示の文は、日本語と同じく「about」を付け、「as heavy as」とは断定しません。
 
-**米俵は英語圏では伝わりません。** 英語では、定義どおりの量の代わりに、次のどちらかを選び直します（どちらも60kg の±30%、42〜78kg に入る）。
+**米俵は英語圏では伝わりません。** 英語では `About a newborn giraffe` を採用しました。約65kgで60kgから+8%です。比較した候補は次のとおりです。
 
 | 候補（英語） | 重さ | 代表値と差 | 備考 |
 |---|---|---|---|
@@ -202,10 +202,10 @@
 | a male red kangaroo（アカカンガルーのオス） | オス55〜90kg（メスは18〜40kg） | 72kg、+21% | 英語圏（特にオーストラリア）で身近。オスとメスで2倍違うので「male」を付ける |
 
 - グレート・デーンは候補から外しました。英国とニュージーランドのケネルクラブは最低体重（オス54kg、メス45kg）だけを決めていて、アメリカンケネルクラブは体重の基準を外しているため、上限が分からず±30%の判定ができません。
-- どちらを選んでも「exact」ではなくなるので、英語では米俵の行も「about」を付けます（`Comparison.isExact` はロケールで分けず、英語の文言だけ「about」を含める）。選んだら、この表に出典を足して一覧を更新します。
+- 英語では米俵の行にも「about」を付けます（`Comparison.isExact` はロケールで分けず、英語の文言だけ「about」を含める）。上記の出典を採用値の根拠とします。
 - **人の体重は候補にしません**（60kg は大人の体重に近く、英語で「an adult」と書きたくなるが使わない）。
 - ほかの比較物の英語の注意：
-  - サケ：英語の「a salmon」は種によって重さが大きく違う。英語では「a chum salmon」と種名を添えるか、選び直す。
+  - サケ：英語の「a salmon」は種によって重さが大きく違うため、`About a chum salmon` と種名を添えました。
   - 卵10個：英語圏の卵は12個入りが多い。「10 eggs」のまま書き、「a carton」とは書かない。
   - 大玉スイカ：「a large watermelon」で通じる。
   - 乳牛：「a dairy cow」（ホルスタイン）で通じる。
@@ -213,7 +213,7 @@
   - [Giraffe Conservation Foundation「Baby giraffe: your questions, answered」](https://giraffeconservation.org/facts-about-giraffe/faqs-about-baby-giraffe/)
   - [Red kangaroo - Wikipedia](https://en.wikipedia.org/wiki/Red_kangaroo)
   - [Great Dane - Wikipedia](https://en.wikipedia.org/wiki/Great_Dane)（体重の基準）
-- 英語の比較物を選び直したら、`WeightJourney.Comparison` の各ケースの英語の値（catalog）と、この台帳の両方を更新します。コードの日本語のキーは変えません。
+- 比較物を今後変えるときは、`WeightJourney.Comparison` の各ケースの英語の値（catalog）と、この台帳の両方を更新します。コードの日本語のキーは変えません。
 
 ## 6. 更新の手順
 

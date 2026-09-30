@@ -137,24 +137,6 @@
         }
       }
     },
-    "%lld粒、%lld個のまとまりを含むまとまり粒" : {
-      "comment" : "VoiceOver, a ×100 or larger crystal: the number of gems it holds, then the number of smaller crystals in it",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "crystal holding %1$lld gems (smaller crystals inside: %2$lld)"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld粒、%lld個のまとまりを含むまとまり粒"
-          }
-        }
-      }
-    },
     "%lld粒、%lld個の結晶を含む結晶" : {
       "comment" : "VoiceOver, a ×100 or larger crystal: the number of gems it holds, then the number of smaller crystals in it",
       "localizations" : {
@@ -168,36 +150,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld粒、%lld個の結晶を含む結晶"
-          }
-        }
-      }
-    },
-    "%lld粒を含むまとまり粒" : {
-      "comment" : "VoiceOver, a ×10 crystal: the number of gems it holds",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "crystal holding %lld gem"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "crystal holding %lld gems"
-                }
-              }
-            }
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld粒を含むまとまり粒"
           }
         }
       }
@@ -333,60 +285,6 @@
         }
       }
     },
-    "スクリーンタイムのつぶ" : {
-      "comment" : "VoiceOver, a gem from time in study apps recorded by Screen Time",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Screen Time gem"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "スクリーンタイムのつぶ"
-          }
-        }
-      }
-    },
-    "スクリーンタイムの虹のつぶ" : {
-      "comment" : "VoiceOver, a rare rainbow gem from Screen Time (in-app only)",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Screen Time rainbow gem"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "スクリーンタイムの虹のつぶ"
-          }
-        }
-      }
-    },
-    "スクリーンタイムの金のつぶ" : {
-      "comment" : "VoiceOver, a rare gold gem from Screen Time (in-app only)",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Screen Time gold gem"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "スクリーンタイムの金のつぶ"
-          }
-        }
-      }
-    },
     "勉強の積み上げには含まれません" : {
       "comment" : "VoiceOver, the jar's black stones, last sentence (no final period): they never count toward study",
       "localizations" : {
@@ -410,7 +308,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gem from a study app"
+            "value" : "Study-app gem"
           }
         },
         "ja" : {
@@ -513,31 +411,13 @@
         }
       }
     },
-    "実測のつぶ" : {
-      "comment" : "VoiceOver, a gem measured by the timer",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "timed gem"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "実測のつぶ"
-          }
-        }
-      }
-    },
     "実測の粒" : {
       "comment" : "VoiceOver, a gem measured by the timer",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Measured gem"
+            "value" : "Timed gem"
           }
         },
         "ja" : {
@@ -548,31 +428,13 @@
         }
       }
     },
-    "実測の虹のつぶ" : {
-      "comment" : "VoiceOver, a rare rainbow gem measured by the timer (in-app only)",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "timed rainbow gem"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "実測の虹のつぶ"
-          }
-        }
-      }
-    },
     "実測の虹の粒" : {
       "comment" : "VoiceOver, a prism (rainbow) gem measured by the timer",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Measured rainbow gem"
+            "value" : "Timed rainbow gem"
           }
         },
         "ja" : {
@@ -583,31 +445,13 @@
         }
       }
     },
-    "実測の金のつぶ" : {
-      "comment" : "VoiceOver, a rare gold gem measured by the timer (in-app only)",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "timed gold gem"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "実測の金のつぶ"
-          }
-        }
-      }
-    },
     "実測の金の粒" : {
       "comment" : "VoiceOver, a gold gem measured by the timer",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Measured gold gem"
+            "value" : "Timed gold gem"
           }
         },
         "ja" : {
@@ -984,24 +828,6 @@
         }
       }
     },
-    "自己申告のつぶ" : {
-      "comment" : "VoiceOver, a gem entered by hand",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "self-reported gem"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自己申告のつぶ"
-          }
-        }
-      }
-    },
     "自己申告の粒" : {
       "comment" : "VoiceOver, a gem entered by hand",
       "localizations" : {
@@ -1019,24 +845,6 @@
         }
       }
     },
-    "自己申告の虹のつぶ" : {
-      "comment" : "VoiceOver, a rare rainbow gem entered by hand (in-app only)",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "self-reported rainbow gem"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自己申告の虹のつぶ"
-          }
-        }
-      }
-    },
     "自己申告の虹の粒" : {
       "comment" : "VoiceOver, a prism (rainbow) gem entered by hand",
       "localizations" : {
@@ -1050,24 +858,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "自己申告の虹の粒"
-          }
-        }
-      }
-    },
-    "自己申告の金のつぶ" : {
-      "comment" : "VoiceOver, a rare gold gem entered by hand (in-app only)",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "self-reported gold gem"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自己申告の金のつぶ"
           }
         }
       }

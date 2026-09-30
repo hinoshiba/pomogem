@@ -1,24 +1,6 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
-    "%@t" : {
-      "comment" : "Mass in metric tonnes; the argument is the number, already formatted (e.g. 1.2). en: '%@ t'.",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ t"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@t"
-          }
-        }
-      }
-    },
     "%@、%@" : {
       "comment" : "VoiceOver: two parts read together, e.g. a period and its date range, or a day and its spoken mass",
       "localizations" : {
@@ -417,24 +399,6 @@
         }
       }
     },
-    "SUBJECTS" : {
-      "comment" : "Eyebrow above テーマの構成 (shown uppercased). en: 'Themes', never 'Subjects'.",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Themes"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "SUBJECTS"
-          }
-        }
-      }
-    },
     "iCloudの結晶を再集計中です。この端末で確認できた個別記録は引き続き表示しています。" : {
       "localizations" : {
         "en" : {
@@ -463,24 +427,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "iCloudを再集計中です。この端末で確認できた記録だけを表示しています。"
-          }
-        }
-      }
-    },
-    "log.month-review.eyebrow" : {
-      "comment" : "Eyebrow above the 月の振り返り (Month in Review) title on the Log card (shown uppercased). en: a category word like the other Log eyebrows (Mass, Themes, Milestones) that does not repeat the title; never 'Wrapped'.",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Months"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "MONTHLY WRAPPED"
           }
         }
       }

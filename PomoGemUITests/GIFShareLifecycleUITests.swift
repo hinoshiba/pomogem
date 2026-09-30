@@ -632,11 +632,11 @@ final class GIFShareLifecycleUITests: XCTestCase {
         // title was hyphenated mid-word on a 375 pt iPhone. It must still be
         // reachable, and show the choice the inline button just made.
         let adjustments = app.buttons["調整"]
-        XCTAssertTrue(scrollUntilHittable(adjustments, avoiding: primaryShare))
+        XCTAssertTrue(scrollUntilHittable(adjustments, avoiding: shareActionBar))
         adjustments.tap()
         let includeSwitch = app.switches["share.include-self-reported"]
         XCTAssertTrue(
-            scrollUntilHittable(includeSwitch, avoiding: primaryShare),
+            scrollUntilHittable(includeSwitch, avoiding: shareActionBar),
             "The self-reported switch must be reachable at AX5"
         )
         XCTAssertEqual(String(describing: includeSwitch.value ?? ""), "1")

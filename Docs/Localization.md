@@ -1,8 +1,8 @@
 # ローカライズ（多言語化）の決まり
 
-状態: 英語を有効化しました（2026-09-28、統合ブランチ`claude/l10n`の準備（prep）変更）。
-各画面の英語は機能ごとのパッケージが`claude/l10n`へ入れている途中で、すべてそろってから`main`へ統合します
-（「英語を有効にする手順」）。日本語の表示は1文字も変えません。
+状態: 日本語・英語の画面翻訳を統合しました（2026-09-30）。すべての出荷キーに両言語の値を置き、
+CIで`check --strict`、英語の画面スモークテスト、バンドルの言語確認を行います。
+App Store用の英語スクリーンショットと製品サイトの新機能表記は、対応するアプリ版の公開時に更新します。
 
 ## 原則
 
@@ -212,12 +212,13 @@ catalogの同期は必ず全テーブルまとめて行います（一部だけ�
   iOSの確認ダイアログのアプリ名が「PomoGem」になり、アプリ内は英語の文字列（まだ訳していない画面は日本語のキー）に
   なりました。書式は`PomoGemLocale`が英語と利用者の地域（en_KR）で決めます。日本語（ja-JP）では、変更前のビルドと
   画面が画素単位で同じでした（アイコン名とダイアログは「ポモジェム」）。`CommonLocalizationTests.testThirdLanguagesFallBackToEnglish`も参照。
-- 英語の訳がまだないキーは、英語や第3の言語の端末でも日本語のキーがそのまま出ます。統合の`check --strict`がすべての
-  テーブルの英語を求めるまでは、翻訳途中の画面に日本語が混ざります。
+- 新しいキーに英語の値がないと、英語や第3の言語の端末には日本語のキーが出ます。`check --strict`で
+  全テーブルの英語と日本語の値を要求します。
 
 ## 英語を有効にする手順（統合ブランチ）
 
-準備（prep）の変更で1〜3が済んでいます。各パッケージが4を、統合が5を行います。
+準備（prep）の変更で1〜3、機能別パッケージと統合で4が完了しました。5のうち、
+CIの厳格検査と英語の画面スモークテストは実装済みです。公開素材は対応版のリリース時に更新します。
 
 1. 3つのInfoPlist catalogへ英語を入れる: `CFBundleDisplayName`（PomoGem／PomoGem Screen Time）、
    `NSMotionUsageDescription`、`NSPhotoLibraryAddUsageDescription`、`NSAppleMusicUsageDescription`、
@@ -245,7 +246,8 @@ catalogの同期は必ず全テーブルまとめて行います（一部だけ�
    App Shortcutのフレーズ（`PomoGemShortcuts`）は、このとき`PomoGem/Localization/AppShortcuts.xcstrings`を
    作って英語のフレーズを入れる（どのフレーズにも`${applicationName}`を含める。「App IntentsとApp Shortcuts」）。
 5. 統合: CIを`check --strict`にし、英語のsmoke UI test（`PomoGemUITestLanguage`に英語の起動を追加）、
-   英語のスクリーンショット、App Storeの英語資料、README・サイトの対応言語を更新する。
+   App Storeの英語原稿とREADMEを更新する。英語のApp Storeスクリーンショットと製品サイトの新機能表記は、
+   対応するアプリ版を公開する際に更新する。現行版より先の機能を自動公開されるサイトで案内しない。
 
 ## 用語と文体
 

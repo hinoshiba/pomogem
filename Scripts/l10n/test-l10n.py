@@ -350,6 +350,30 @@ class CatalogCheckTests(unittest.TestCase):
         finally:
             fixture.close()
 
+    def test_action_label_glossary_does_not_force_label_into_a_sentence(self):
+        fixture = FixtureRepo(shipping=("ja", "en"))
+        try:
+            fixture.catalog("PomoGem/Localization/Paywall.xcstrings", {
+                "購入を復元": {"localizations": {"en": unit("Restore Purchases")}},
+                "購入を復元しました。Proの機能を使えます。": {
+                    "localizations": {"en": unit("Your purchase has been restored. You can use Pro features.")}
+                },
+            })
+            _, output = fixture.run("check", "--strict")
+            self.assertNotIn("glossary term 購入を復元", output)
+
+            fixture.catalog("PomoGem/Localization/Paywall.xcstrings", {
+                "購入を復元": {"localizations": {"en": unit("Restore your purchase")}},
+                "購入を復元しました。Proの機能を使えます。": {
+                    "localizations": {"en": unit("Your purchase has been restored. You can use Pro features.")}
+                },
+            })
+            _, output = fixture.run("check", "--strict")
+            self.assertIn("'購入を復元' [en]: glossary term 購入を復元", output)
+            self.assertNotIn("'購入を復元しました。Proの機能を使えます。' [en]: glossary term 購入を復元", output)
+        finally:
+            fixture.close()
+
     def test_brand_spelling_is_matched_by_case(self):
         fixture = FixtureRepo(shipping=("ja", "en"))
         try:

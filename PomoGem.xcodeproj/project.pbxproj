@@ -318,6 +318,7 @@
 		AB92A5C29B406BE9B5100044 /* RareRewardLedgerLocalState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C496D64AA5AC2AD3BE657462 /* RareRewardLedgerLocalState.swift */; };
 		ACBAD0B80D98ADEFB7302823 /* ProgressPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4876B16EDE82FFACCC197D8 /* ProgressPresentationTests.swift */; };
 		AD7FDC560F7FC694572FFF9B /* Focus.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = E2727267D5F4CC4A24BF49E0 /* Focus.xcstrings */; };
+		ADB0498CA621351118B0B16D /* EnglishLocalizationSmokeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 977449AC82B48D163BB56C65 /* EnglishLocalizationSmokeUITests.swift */; };
 		ADB73894F8EFAB0939250580 /* RealDeviceCloudEvidenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 074F0B06F095448D8DB5E302 /* RealDeviceCloudEvidenceTests.swift */; };
 		ADD121AA11447EDF633F01FC /* StorageTransferCloudScopeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 309EEEAE86F7DA78EA6C5841 /* StorageTransferCloudScopeTests.swift */; };
 		ADD4DB9F72353D5D81C1A655 /* StorageTransferJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6DACC9E7792C2200EE2C699 /* StorageTransferJournal.swift */; };
@@ -803,6 +804,7 @@
 		9509CFC48334FF1DFC0E39F0 /* GemBrillianceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GemBrillianceTests.swift; sourceTree = "<group>"; };
 		9586DF68F7ACB90B66A80E66 /* FocusShieldController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusShieldController.swift; sourceTree = "<group>"; };
 		96AE0782A746922D4BA63F6E /* SupportMailDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportMailDraft.swift; sourceTree = "<group>"; };
+		977449AC82B48D163BB56C65 /* EnglishLocalizationSmokeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnglishLocalizationSmokeUITests.swift; sourceTree = "<group>"; };
 		9855214B03B999942916D121 /* ScreenTimeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeStore.swift; sourceTree = "<group>"; };
 		98EDB4FDF1C23AC205D37EA6 /* CloudRestoreOnboardingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudRestoreOnboardingTests.swift; sourceTree = "<group>"; };
 		99F924237133573619ABB027 /* Products.storekit */ = {isa = PBXFileReference; path = Products.storekit; sourceTree = "<group>"; };
@@ -1249,6 +1251,7 @@
 				FBB208751F81B5A19E732706 /* CrystalCardPlacementUITests.swift */,
 				6D5BBBD0771D0437A32FFB64 /* DecimalFusionEndToEndUITests.swift */,
 				4383D72800A4EF0F5C7823FE /* EngagementOverviewUITests.swift */,
+				977449AC82B48D163BB56C65 /* EnglishLocalizationSmokeUITests.swift */,
 				F8A7F4C18A24AEDA3A35FEBD /* FirstRunUITests.swift */,
 				88643D553679C84D93A636AE /* FocusCompletionFailureRecoveryUITests.swift */,
 				3AE53ECAB8E226DD5BE4DE3B /* FocusLeavePauseUITests.swift */,
@@ -2434,6 +2437,7 @@
 				6C2AAC86BE56509D7570C459 /* CrystalCardPlacementUITests.swift in Sources */,
 				D71C1C4A72E145D141128C66 /* DecimalFusionEndToEndUITests.swift in Sources */,
 				1F96B5E7B41F562BB1529DA4 /* EngagementOverviewUITests.swift in Sources */,
+				ADB0498CA621351118B0B16D /* EnglishLocalizationSmokeUITests.swift in Sources */,
 				7D2B1A6965287AA687B73370 /* FirstRunUITests.swift in Sources */,
 				5DB48410BC347FAE6BD91C78 /* FocusCompletionFailureRecoveryUITests.swift in Sources */,
 				8473F6BB9323E50AF0D07A91 /* FocusLeavePauseUITests.swift in Sources */,

@@ -154,24 +154,6 @@
         }
       }
     },
-    "%@、%@、%@。" : {
-      "comment" : "VoiceOver announcement after a focus: the theme, the spoken mass it added, the same in standard units",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@, %2$@, %3$@."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@、%@、%@。"
-          }
-        }
-      }
-    },
     "%@、%@、%@の一粒。" : {
       "comment" : "VoiceOver: the completion card main line. %1$@ theme name (user data), %2$@ spoken focus time, %3$@ spoken mass. en: '%1$@, %2$@, a %3$@ gem'",
       "localizations" : {
@@ -291,24 +273,6 @@
         }
       }
     },
-    "%@。今回の記録は保存済みです。これまでの合計は確認が済むと表示します" : {
-      "comment" : "VoiceOver announcement after a focus while iCloud is checked: the status; this focus is saved; the total shows once the check is done",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@. This session is saved. Your total will show once the check is done"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@。今回の記録は保存済みです。これまでの合計は確認が済むと表示します"
-          }
-        }
-      }
-    },
     "%@。瓶の整理：%@" : {
       "comment" : "VoiceOver announcement after a focus: time-core progress, then the count toward the next crystal",
       "localizations" : {
@@ -322,24 +286,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@。瓶の整理：%@"
-          }
-        }
-      }
-    },
-    "%@。瓶の物理整理：%@" : {
-      "comment" : "VoiceOver, completion card progress: time-core progress, then the count toward the next crystal",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@. Tidying the jar: %2$@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@。瓶の物理整理：%@"
           }
         }
       }
@@ -696,42 +642,6 @@
         }
       }
     },
-    "%lld分休憩できます" : {
-      "comment" : "VoiceOver announcement after a focus, as its last sentence: the break length in minutes",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "You can take a %lld-minute break"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld分休憩できます"
-          }
-        }
-      }
-    },
-    "%lld分休憩できます。" : {
-      "comment" : "VoiceOver announcement after a focus, followed by the share sentence: the break length in minutes",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "You can take a %lld-minute break."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld分休憩できます。"
-          }
-        }
-      }
-    },
     "%lld分休憩を利用できます" : {
       "comment" : "VoiceOver, completion card: the break it offers; the argument is its length in minutes",
       "localizations" : {
@@ -875,54 +785,6 @@
         }
       }
     },
-    "%lld粒を、ひとつに整理した" : {
-      "comment" : "Fusion sheet title; the argument is how many gems the crystal holds",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Tidied %lld gem into one"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Tidied %lld gems into one"
-                }
-              }
-            }
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld粒を、ひとつに整理した"
-          }
-        }
-      }
-    },
-    "10 → 1 ・記録と質量は保持" : {
-      "comment" : "Completion card footnote for an old receipt: ten gems become one, records and mass are kept",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "10 → 1 · records and mass kept"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "10 → 1 ・記録と質量は保持"
-          }
-        }
-      }
-    },
     "10粒がそろうと、瓶の中でひとつの結晶にまとまります。瓶を軽く保つための整理で、一粒ずつの時間も、%@の重さも、記録にそのまま残ります。" : {
       "comment" : "Fusion sheet 「しくみ」: fusing ten gems keeps the jar light and loses nothing. %@ is the crystal's mass",
       "localizations" : {
@@ -970,24 +832,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "1分0秒〜360分0秒"
-          }
-        }
-      }
-    },
-    "25分 = 1.0標準単位 ・ 粒の10→1は瓶の整理" : {
-      "comment" : "Completion card footnote: 25 minutes is one standard unit; ten gems becoming one only tidies the jar",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "25 min = 1.0 standard unit · 10 gems → 1 only tidies the jar"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "25分 = 1.0標準単位 ・ 粒の10→1は瓶の整理"
           }
         }
       }
@@ -1221,8 +1065,7 @@
       }
     },
     "ここで休む" : {
-      "comment" : "Fusion sheet button: close it and rest",
-      "extractionState" : "stale",
+      "comment" : "Fusion sheet secondary action: dismiss and rest here",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1542,24 +1385,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "この結晶をカードにする"
-          }
-        }
-      }
-    },
-    "これは瓶を軽く保つための二次的な整理です。保存表示だけを圧縮し、一粒ずつの時間も、%@の質量も100%%保持します。時間の核は回数でなく質量から進みます。次へ急ぐ必要はありません。" : {
-      "comment" : "Fusion sheet explanation; the argument is the crystal's mass (2.5kg)",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This is a secondary tidy-up that keeps your jar light. Only how the gems are stored and shown is compressed: the time of every gem and all %@ of mass are kept 100%%. Time cores grow from mass, not from counts. There's no need to rush to the next one."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "これは瓶を軽く保つための二次的な整理です。保存表示だけを圧縮し、一粒ずつの時間も、%@の質量も100%%保持します。時間の核は回数でなく質量から進みます。次へ急ぐ必要はありません。"
           }
         }
       }
@@ -1900,24 +1725,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "まだ空っぽ"
-          }
-        }
-      }
-    },
-    "まとまり" : {
-      "comment" : "Fusion sheet stat title: the gems in the crystal, or for Pro the month it was made",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bundle"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "まとまり"
           }
         }
       }
@@ -2609,24 +2416,6 @@
         }
       }
     },
-    "・ 記録 100% 保持" : {
-      "comment" : "Fusion sheet pill after 10 → 1: every record is kept",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "· records 100% kept"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "・ 記録 100% 保持"
-          }
-        }
-      }
-    },
     "一粒、着地。" : {
       "comment" : "Completion card title once the gem has landed in the jar",
       "localizations" : {
@@ -2729,24 +2518,6 @@
         }
       }
     },
-    "今の瓶をカードにして共有できます" : {
-      "comment" : "VoiceOver announcement after a focus: the jar can be shared as a card",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "You can share the current jar as a card"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "今の瓶をカードにして共有できます"
-          }
-        }
-      }
-    },
     "今の瓶をカードにして共有できます。" : {
       "comment" : "VoiceOver announcement: the completion card's share button is available",
       "localizations" : {
@@ -2794,24 +2565,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "今回の %@ は保存済みです。これまでの合計は確認が済むと表示します。"
-          }
-        }
-      }
-    },
-    "今回の +%@ は保存済みです。これまでの合計は確認が済むと表示します。" : {
-      "comment" : "Completion card while iCloud is checked: this focus's mass (+250g) is saved; the total shows once the check is done",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This session's +%@ is saved. Your total will show once the check is done."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "今回の +%@ は保存済みです。これまでの合計は確認が済むと表示します。"
           }
         }
       }
@@ -2880,12 +2633,12 @@
       }
     },
     "今週の実測 %@" : {
-      "comment" : "Completion card: this calendar week's measured focus time (timer and Screen Time). en: 'This week, measured: %@'",
+      "comment" : "Completion card: this calendar week's timed focus time (timer and Screen Time). en: 'This week: %@ timed'",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This week, measured: %@"
+            "value" : "This week: %@ timed"
           }
         },
         "ja" : {
@@ -2897,12 +2650,12 @@
       }
     },
     "今週の実測 %@・自己申告 %@" : {
-      "comment" : "Completion card: this calendar week's measured focus time, then its self-reported focus time. en: 'This week, measured: %1$@ · self-reported: %2$@'",
+      "comment" : "Completion card: this calendar week's timed focus time, then its self-reported focus time. en: 'This week: %1$@ timed · %2$@ self-reported'",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This week, measured: %1$@ · self-reported: %2$@"
+            "value" : "This week: %1$@ timed · %2$@ self-reported"
           }
         },
         "ja" : {
@@ -2919,7 +2672,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This week, measured: %1$@; self-reported: %2$@."
+            "value" : "This week: %1$@ timed; %2$@ self-reported."
           }
         },
         "ja" : {
@@ -2936,7 +2689,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This week, measured: %@."
+            "value" : "This week: %@ timed."
           }
         },
         "ja" : {
@@ -2960,24 +2713,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "今週・時間の核・結晶・年月の瓶"
-          }
-        }
-      }
-    },
-    "今週記録した集中時間の質量%@。" : {
-      "comment" : "VoiceOver, completion card: this week's measured mass",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mass of the focus time recorded this week: %@."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "今週記録した集中時間の質量%@。"
           }
         }
       }
@@ -3556,36 +3291,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "大玉スイカ1玉ほど"
-          }
-        }
-      }
-    },
-    "完走した回数%lld回。回数は時間の価値とは別です" : {
-      "comment" : "VoiceOver, completion card: timers completed this week, which says nothing about the value of the time",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld completed session. The count is separate from the value of your time"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld completed sessions. The count is separate from the value of your time"
-                }
-              }
-            }
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "完走した回数%lld回。回数は時間の価値とは別です"
           }
         }
       }
@@ -4243,42 +3948,6 @@
         }
       }
     },
-    "瓶の整理" : {
-      "comment" : "Fusion sheet pill before 10 → 1: ten gems tidied into one",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Jar tidy-up"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "瓶の整理"
-          }
-        }
-      }
-    },
-    "瓶の整理として、10個の記録を1個の%@へ圧縮。記録と質量は100パーセント保持。時間の価値は変わりません" : {
-      "comment" : "VoiceOver, fusion sheet artwork: ten records became one; the argument is the crystal's name (結晶, 星片…)",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Jar tidy-up: 10 records became 1 %@. Records and mass are 100 percent kept. The value of your time doesn't change"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "瓶の整理として、10個の記録を1個の%@へ圧縮。記録と質量は100パーセント保持。時間の価値は変わりません"
-          }
-        }
-      }
-    },
     "瓶の粒をまとめています" : {
       "comment" : "Toast: the jar is full, so its gems are being combined into crystals",
       "localizations" : {
@@ -4631,24 +4300,6 @@
         }
       }
     },
-    "積んだ質量" : {
-      "comment" : "Fusion sheet stat title: the mass the crystal holds",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mass Added"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "積んだ質量"
-          }
-        }
-      }
-    },
     "米俵1俵" : {
       "comment" : "Weight Journey comparison for 60kg (名所 at 100 hours). Exactly 60kg by definition, so no 'about'. Needs a different object in English (see Docs/WeightJourneyComparisons.md); literal en: 'One rice bale'.",
       "localizations" : {
@@ -4831,42 +4482,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "結晶の保存を再試行します"
-          }
-        }
-      }
-    },
-    "結晶の進みを確認し、休憩、共有、または閉じるを選べます" : {
-      "comment" : "VoiceOver hint of the completion card heading when sharing is offered",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Check your crystal progress, then take a break, share or close"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "結晶の進みを確認し、休憩、共有、または閉じるを選べます"
-          }
-        }
-      }
-    },
-    "結晶の進みを確認し、休憩または閉じるを選べます" : {
-      "comment" : "VoiceOver hint of the completion card heading",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Check your crystal progress, then take a break or close"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "結晶の進みを確認し、休憩または閉じるを選べます"
           }
         }
       }
@@ -5708,8 +5323,7 @@
       }
     },
     "閉じると、一粒が瓶に落ちます。" : {
-      "comment" : "Completion card before the gem has dropped: closing the card drops it into the jar",
-      "extractionState" : "stale",
+      "comment" : "Completion card note: closing drops the saved gem into the jar",
       "localizations" : {
         "en" : {
           "stringUnit" : {

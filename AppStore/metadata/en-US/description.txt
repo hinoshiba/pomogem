@@ -1,15 +1,17 @@
 Turn focused time into colorful gems.
 
-PomoGem turns study and work time into a bottle of visible progress. Taking a day off never removes the gems you earned. The app interface and customer support are currently provided in Japanese.
+PomoGem turns study and work time into a jar of visible progress. Taking a day off never removes the gems you earned. The app interface is available in English and Japanese. Customer support is currently provided in Japanese.
 
 CHOOSE A THEME AND START
 
-Choose a theme and a free 25-, 45-, 60-, or 90-minute timer. Finish a session and a gem drops into your bottle with sound and haptic feedback. Each completed minute becomes 10 grams: 25 minutes adds 250 grams.
+Choose a theme and a free 25-, 45-, 60-, or 90-minute timer. Finish a session and a gem drops into your jar with sound and haptic feedback. Each completed minute becomes 10 grams: 25 minutes adds 250 grams.
 
 • Custom themes for study and work
-• A tactile bottle that responds to taps, tilt, and gentle shaking
+• A tactile jar that responds to taps, tilt, and gentle shaking
 • Ten gems combine into a larger crystal
-• Weekly and lifetime views, milestone stones, and optional manual records kept separate from measured time
+• Weekly and lifetime views, milestone stones, and optional manual records kept separate from timed focus
+• Weight Journey shows your next milestone and compares your total with the approximate weights of familiar objects
+• Focus and break-end alarms with a choice of sound and strength
 • Images and short GIFs for sharing, always with PomoGem branding and its official website
 • Home and Lock Screen widgets that start a focus without displaying your records
 
@@ -21,7 +23,7 @@ You can also choose apps you want to use less. Each combined 10 minutes adds a b
 
 POMOGEM PRO
 
-A one-time, non-consumable In-App Purchase unlocks custom timers from 1 minute 00 seconds to 360 minutes 00 seconds, month labels on grouped gems, and unlimited learning apps for Screen Time recording. Enter minutes and seconds or use scroll wheels. Update both devices before handing off timers set with seconds. No subscription, trial, or automatic renewal. The purchase screen shows your App Store price.
+A one-time, non-consumable In-App Purchase unlocks custom timers from 1 minute 00 seconds to 360 minutes 00 seconds, month stamps on crystals, and unlimited learning apps for Screen Time recording. Enter minutes and seconds or use scroll wheels. Update both devices before handing off timers set with seconds. No subscription, trial, or automatic renewal. The purchase screen shows your App Store price.
 
 YOUR STORAGE CHOICE
 

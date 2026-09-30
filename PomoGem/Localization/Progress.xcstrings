@@ -120,24 +120,6 @@
         }
       }
     },
-    "%lldg相当" : {
-      "comment" : "Focus progress that is not whole minutes, as the grams it equals",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld g equivalent"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lldg相当"
-          }
-        }
-      }
-    },
     "%lld段融合が完成。小さな一粒も消えていません" : {
       "comment" : "Several crystal levels completed at once; the argument is how many levels",
       "localizations" : {
