@@ -8,71 +8,46 @@ import Foundation
 /// timer screens call it whether or not notifications are allowed: someone
 /// who allowed alarms but declined notifications still gets the alarm.
 ///
-/// Part 2 wiring (the timer screens; #49's `TimerForegroundResolution`
+/// How the timer screens use it (FocusView, BreakTimerView and
+/// `RewardBreakNotificationHandoff`; #49's `TimerForegroundResolution` still
 /// decides whether an end rings in the app, this only books how it is
-/// announced while away):
+/// announced while away). The screens' decisions are in
+/// `TimerEndAnnouncementWiring` and tested there.
 ///
-/// 1. Booking. Replace every `NotificationManager.scheduleFocusCompletion`
-///    / `scheduleBreakCompletion` call of a timer screen with
-///    `bookFocusEnd` / `bookBreakEnd`: FocusView start, resume, activation
-///    reschedule, recovery, adoption and the 「終了通知を設定」 retry;
-///    BreakTimerView prepare, the sensory-preference reschedule and the
-///    reschedule after the permission request; and
-///    `RewardBreakNotificationHandoff.begin` (the 「N分休憩」 tap in
-///    HomeView), which must store the delivery date only for
-///    `.notification(.accepted)`.
-/// 2. The permission gate. Gate those calls on
-///    `channel(playsSound:) != .none` instead of
-///    `notifications.isAuthorized` (FocusView's
-///    `scheduleCurrentCompletionNotification` guard, its resume and
-///    running-row gates; BreakTimerView's sensory `onChange` and
-///    `requestNotificationAuthorizationAndSchedule`). BreakTimerView's
-///    `.denied` / `.permissionNotDetermined` paths must still call the
-///    booker when the channel is `.systemAlarm`; only the notification UI
-///    shows the denied state. The first-focus notification ask stays as it
-///    is (once, never on recovery).
-/// 3. The outcome. Before the call the screen sets its scheduling state;
-///    `TimerForegroundResolution` returns `.wait` while
-///    `isSchedulingNotification` (`notificationScheduleState.isScheduling`),
-///    so a booker call in flight must count as scheduling and every outcome
-///    must leave that state:
-///    `.notification(.accepted(date))` as today; `.systemAlarm` settles it
-///    with no notification delivery date (for example `.scheduled` with a
-///    nil date, then save recovery state) and shows an alarm variant of the
-///    running notice (today's notice needs `notifications.isAuthorized`);
-///    `.notification(.superseded)` leaves it to the call that superseded it;
-///    `.noChannel` settles it as not scheduled. Today's
-///    `guard case .accepted = result else { return }` would leave
-///    `.scheduling` for `.systemAlarm`, and #49 would never resolve the end
-///    on screen.
-/// 4. Cancels need no change: `NotificationManager.cancelFocusCompletion`
-///    and `cancelBreakCompletion` (pause, F1's auto-pause, abandon,
-///    ownership loss, skip) also cancel the alarm, including a booking
-///    still preparing its sound, and stop one that is ringing while keeping
-///    it as the witness. Reset recovery, iCloud retirement, the account
-///    boundary and complete deletion are wired in `NotificationManager` and
+/// 1. Booking. Every end a timer screen books goes through `bookFocusEnd` /
+///    `bookBreakEnd`: FocusView start, resume, activation, recovery,
+///    adoption and the 「終了通知を設定」 retry; BreakTimerView prepare,
+///    activation, the sensory-preference change and the permission request;
+///    and the 「N分休憩」 tap (`RewardBreakNotificationHandoff`), which
+///    stores a delivery date only for `.notification(.accepted)`. The calls
+///    are not gated on notification permission; the first-focus
+///    notification ask stays as it is (once, never on recovery).
+/// 2. The outcome. While a call is in flight the screen shows "scheduling"
+///    only when `channel(playsSound:)` books something, and #49 waits for
+///    it. Every outcome leaves that state
+///    (`TimerEndAnnouncementWiring.settlement`): `.systemAlarm` settles with
+///    no notification delivery date and an alarm version of the running
+///    row, `.noChannel` as not scheduled.
+/// 3. Cancels: `NotificationManager.cancelFocusCompletion` and
+///    `cancelBreakCompletion` (pause, F1's auto-pause, abandon, ownership
+///    loss, skip) also cancel the alarm, including a booking still preparing
+///    its sound, and stop one that is ringing while keeping it as the
+///    witness. Reset recovery, iCloud retirement, the account boundary and
+///    complete deletion are wired in `NotificationManager` and
 ///    `FocusEndAlarmMaintenance`.
-/// 5. The end. From the ticker, `handOffToForegroundIfDue`; when the scene
-///    stops being active after a hand-off returned an end,
-///    `book…EndAfterLeavingDuringHandoff`. For the cue decision,
-///    `externalAlertMayHaveFired` in place of the notification-only witness
-///    (FocusView's `completionCueForElapsedTimer` and BreakTimerView's
-///    `notificationMayHaveDelivered(at:uptime:)` call
-///    `TimerCompletionForegroundFeedbackPolicy.notificationMayHaveDelivered`
-///    today; keep their trustworthy-timing gate on the notification date).
-///    When the completion resolves on screen,
-///    `FocusEndAlarmScheduler.shared.acknowledge(sessionID:)` (Stop while
-///    the system alarm rings). While the in-app alarm rings,
-///    `TimerCompletionAlertController.keepsScreenAwake(sessionID:)` joins
-///    the idle-timer decision through
-///    `TimerCompletionAlarmScreenAwakePolicy`.
-/// 6. Activation. Rebooking a running timer's end on every activation (as
-///    FocusView does today) is free: the same end and sound keep the booked
-///    alarm (`FocusEndAlarmScheduler.schedule`). That rebooking also covers
-///    `FocusEndAlarmReconciliation.ownerNeedsBooking` and a change of the
-///    Alarms permission in the Settings app, so the host needs no extra
-///    booking. BreakTimerView has no activation reschedule today; add one
-///    for a running break (or book on `ownerNeedsBooking`).
+/// 4. The end. The ticker calls `handOffToForegroundIfDue`; when the scene
+///    stops being active after a hand-off returned an end, the screen calls
+///    `book…EndAfterLeavingDuringHandoff` (`TimerEndHandoff`). The cue reads
+///    `externalAlertMayHaveFired` (the notification date still passes the
+///    trustworthy-timing gate first). A completion resolved on screen calls
+///    `acknowledgeEnd`. While the in-app alarm rings,
+///    `TimerCompletionAlertController.keepsScreenAwake(sessionID:)` joins the
+///    idle-timer decision through `TimerCompletionAlarmScreenAwakePolicy`.
+/// 5. Activation. Both screens rebook a running timer's end on every
+///    activation and remount; the same end and sound keep the booked alarm
+///    (`FocusEndAlarmScheduler.schedule`), so this also covers
+///    `FocusEndAlarmReconciliation.ownerNeedsBooking` and an Alarms
+///    permission changed in the Settings app.
 @MainActor
 final class TimerEndAnnouncementBooker {
     enum Outcome: Equatable, Sendable {
@@ -157,7 +132,7 @@ final class TimerEndAnnouncementBooker {
         )
     }
 
-    // MARK: The end (part 2 calls these from the timer screens)
+    // MARK: The end (the timer screens call these)
 
     /// The app is active at most `AlarmChannelPolicy.foregroundHandoffLead`
     /// before `endDate`: the session's system alarm that has not rung is
@@ -225,8 +200,8 @@ final class TimerEndAnnouncementBooker {
     /// The delivery witness for the in-app cue at a resolved end: an
     /// accepted notification whose delivery date passed, or a system alarm
     /// AlarmKit confirmed whose time came (while alarms are still allowed).
-    /// Part 2 hands this to the foreground cue decision (#49's resolver) in
-    /// place of the notification-only witness. Reading it changes nothing.
+    /// The timer screens hand this to the foreground cue decision in place
+    /// of the notification-only witness. Reading it changes nothing.
     func externalAlertMayHaveFired(
         sessionID: UUID,
         notificationAuthorized: Bool,
@@ -240,6 +215,15 @@ final class TimerEndAnnouncementBooker {
             systemAlarmFireDate: systemAlarms.deliveryWitnessFireDate(sessionID: sessionID),
             now: now
         )
+    }
+
+    /// The completion of `sessionID` resolved on screen (the person is
+    /// looking at it): Stop its system alarm if it rings, cancel it if it
+    /// has not rung, and keep one that rang as the delivery witness
+    /// (`FocusEndAlarmScheduler.acknowledge`). Read
+    /// `externalAlertMayHaveFired` before or after; the answer is the same.
+    func acknowledgeEnd(sessionID: UUID) {
+        systemAlarms.acknowledge(sessionID: sessionID)
     }
 
     private func bookAfterLeavingDuringHandoff(

@@ -33,6 +33,9 @@ struct BreakTimerView: View {
     @State private var didEnterBackgroundSinceLastActive = false
     @State private var foregroundResolution: TimerForegroundResolution
     @State private var scheduledCompletionNotificationDeliveryDate: Date? = nil
+    /// F5. The end this screen took over from its system alarm just before
+    /// it; leaving before that end books the notification instead.
+    @State private var endHandoff = TimerEndHandoff()
     @AccessibilityFocusState private var breakEndButtonFocused: Bool
     private let ticker = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
@@ -89,6 +92,14 @@ struct BreakTimerView: View {
 
     private var sensoryPreferences: PrefsSyncPolicy.ResolvedSensoryState {
         PrefsConsumerPolicy.resolvedSensoryState(in: preferences)
+    }
+
+    /// F5. Announces the end while the app is away (alarm or notification).
+    private var endBooker: TimerEndAnnouncementBooker { .shared }
+
+    /// F5. The ringing break-end alarm holds the display.
+    private var alarmKeepsScreenAwake: Bool {
+        completionAlert.keepsScreenAwake(sessionID: sessionID)
     }
 
     private var sensoryPreferenceValues: [String] {
@@ -163,10 +174,14 @@ struct BreakTimerView: View {
             guard remaining == 0 else { return }
             closeBreak()
         }
+#if DEBUG && targetEnvironment(simulator)
+        .overlay(alignment: .topLeading) { TimerScreenAwakeUITestProbe() }
+#endif
         .task { await prepareBreak() }
         .onReceive(ticker) { date in
             now = date
             updateIdleTimer(at: date)
+            handOffEndToThisScreenIfDue(at: date)
             guard case let .resolve(recoveredAfterExpiration) =
                     foregroundResolution.tick(
                         isElapsed: remaining == 0,
@@ -191,11 +206,15 @@ struct BreakTimerView: View {
             guard isBreakActive,
                   !didSignalCompletion,
                   let endDate,
-                  endDate > .now,
-                  notifications.isAuthorized else { return }
-            scheduleBreakNotification(endDate: endDate)
+                  endDate > .now else { return }
+            // Rebooked whatever the permission (F5): turning the sound off
+            // must also withdraw an alarm booked without notifications.
+            Task { await refreshNotificationScheduling() }
         }
         .onChange(of: resolvedPreferences?.keepScreenAwake) { _, _ in
+            updateIdleTimer()
+        }
+        .onChange(of: alarmKeepsScreenAwake) { _, _ in
             updateIdleTimer()
         }
         .onChange(of: scenePhase) { _, newPhase in
@@ -214,6 +233,9 @@ struct BreakTimerView: View {
             }
             if newPhase == .background {
                 didEnterBackgroundSinceLastActive = true
+            }
+            if newPhase != .active {
+                rebookEndAfterLeavingDuringHandoff()
             }
             let refreshGeneration = foregroundResolution.observeScene(
                 isActive: newPhase == .active
@@ -415,6 +437,20 @@ struct BreakTimerView: View {
                 .foregroundStyle(PomoGemTheme.muted)
                 .accessibilityElement(children: .combine)
 
+        case .systemAlarm:
+            Label {
+                Text(
+                    "画面を閉じても、休憩終了時にアラームで知らせます",
+                    tableName: "Focus",
+                    comment: "Running break whose end is announced by a system alarm (iOS 26 AlarmKit, strength 最大). Suggested English: An alarm rings when the break ends, even with the screen off"
+                )
+            } icon: {
+                Image(systemName: "alarm.fill")
+            }
+            .font(.caption)
+            .foregroundStyle(PomoGemTheme.muted)
+            .accessibilityElement(children: .combine)
+
         case .failed:
             VStack(spacing: 8) {
                 Label("終了通知を予約できませんでした", systemImage: "exclamationmark.triangle")
@@ -587,8 +623,11 @@ struct BreakTimerView: View {
     ) {
         guard !didSignalCompletion else { return }
         didSignalCompletion = true
-        UIApplication.shared.isIdleTimerDisabled = false
         stopNotificationScheduling(state: .idle)
+        // The person is looking at the end: a system alarm that rings stops
+        // (Stop), and one that rang stays the delivery witness.
+        endBooker.acknowledgeEnd(sessionID: sessionID)
+        endHandoff = TimerEndHandoff()
 
         let soundOn = sensoryPreferences.soundOn
         let hapticsOn = sensoryPreferences.hapticsOn
@@ -617,6 +656,9 @@ struct BreakTimerView: View {
                 }
             }
         }
+        // The running break no longer holds the display; the ringing alarm
+        // does (F5), so auto-lock cannot end it.
+        updateIdleTimer()
         guard completionAlert.isActive(sessionID: sessionID),
               UIAccessibility.isVoiceOverRunning else {
             UIAccessibility.post(notification: .announcement, argument: "休憩が終わりました")
@@ -670,14 +712,20 @@ struct BreakTimerView: View {
             endDate: endDate,
             at: date
         )
+        let sceneIsActive = sceneIsActive ?? (scenePhase == .active)
         let shouldKeepScreenAwake =
-            TimerScreenAwakePolicy.shouldKeepScreenAwake(
-                preferenceEnabled:
-                    resolvedPreferences?.keepScreenAwake ?? false,
-                sceneIsActive: sceneIsActive ?? (scenePhase == .active),
-                timerIsRunning:
-                    isBreakActive && !didSignalCompletion,
-                remainingSeconds: currentRemainingSeconds
+            TimerCompletionAlarmScreenAwakePolicy.shouldKeepScreenAwake(
+                runningTimerKeepsScreenAwake:
+                    TimerScreenAwakePolicy.shouldKeepScreenAwake(
+                        preferenceEnabled:
+                            resolvedPreferences?.keepScreenAwake ?? false,
+                        sceneIsActive: sceneIsActive,
+                        timerIsRunning:
+                            isBreakActive && !didSignalCompletion,
+                        remainingSeconds: currentRemainingSeconds
+                    ),
+                sceneIsActive: sceneIsActive,
+                alarmKeepsScreenAwake: isBreakActive && alarmKeepsScreenAwake
             )
         guard UIApplication.shared.isIdleTimerDisabled != shouldKeepScreenAwake
         else { return }
@@ -715,18 +763,20 @@ struct BreakTimerView: View {
               generationBeforeRefresh == notificationGeneration else { return }
         foregroundResolution.finishAuthorizationRefresh(startedIn: refreshGeneration)
 
-        switch notifications.authorizationStatus {
-        case .authorized, .provisional, .ephemeral:
+        switch BreakEndAlertPolicy.action(
+            notificationStatus: notifications.authorizationStatus,
+            channel: endBooker.channel(playsSound: sensoryPreferences.soundOn),
+            requestsAuthorization: requestAuthorizationIfNeeded
+        ) {
+        case .book:
             scheduleBreakNotification(endDate: endDate)
-        case .denied:
+        case .requestAuthorization:
+            await requestNotificationAuthorizationAndSchedule()
+        case .showDenied:
             stopNotificationScheduling(state: .denied)
-        case .notDetermined:
-            if requestAuthorizationIfNeeded {
-                await requestNotificationAuthorizationAndSchedule()
-            } else {
-                stopNotificationScheduling(state: .permissionNotDetermined)
-            }
-        @unknown default:
+        case .showPermissionNotDetermined:
+            stopNotificationScheduling(state: .permissionNotDetermined)
+        case .showFailed:
             stopNotificationScheduling(state: .failed)
         }
     }
@@ -746,7 +796,10 @@ struct BreakTimerView: View {
             return
         }
 
-        if granted, notifications.isAuthorized {
+        // F5: alarms the person allowed announce the end without
+        // notifications.
+        if (granted && notifications.isAuthorized)
+            || endBooker.channel(playsSound: sensoryPreferences.soundOn) == .systemAlarm {
             scheduleBreakNotification(endDate: endDate)
             return
         }
@@ -778,9 +831,13 @@ struct BreakTimerView: View {
         let scheduledSessionID = sessionID
         let previousTask = notificationSchedulingTask
         previousTask?.cancel()
-        notificationScheduleState = .scheduling
         let playsSound = sensoryPreferences.soundOn
         let completionSound = sensoryPreferences.timerCompletionSound
+        if TimerEndAnnouncementWiring.showsScheduling(
+            for: endBooker.channel(playsSound: playsSound)
+        ) {
+            notificationScheduleState = .scheduling
+        }
 
         notificationSchedulingTask = Task { @MainActor in
             // Serializing generations prevents an old cancellation from removing
@@ -797,15 +854,14 @@ struct BreakTimerView: View {
             }
 
             do {
-                let scheduleResult = try await notifications
-                    .scheduleBreakCompletion(
+                // F5: the system alarm at 最大 when alarms are allowed,
+                // otherwise the Time Sensitive notification.
+                let outcome = try await endBooker.bookBreakEnd(
                     id: scheduledSessionID,
                     endDate: endDate,
                     playsSound: playsSound,
                     completionSound: completionSound
                 )
-                guard case let .accepted(notificationDeliveryDate) = scheduleResult
-                else { return }
                 guard notificationRequestIsCurrent(
                     generation: generation,
                     sessionID: scheduledSessionID,
@@ -813,10 +869,31 @@ struct BreakTimerView: View {
                 ) else {
                     return
                 }
-                notificationScheduleState = .scheduled
-                scheduledCompletionNotificationDeliveryDate =
-                    notificationDeliveryDate
-                persistBreakRecovery()
+                switch TimerEndAnnouncementWiring.settlement(for: outcome) {
+                case let .notification(deliveryDate):
+                    notificationScheduleState = .scheduled
+                    scheduledCompletionNotificationDeliveryDate = deliveryDate
+                    persistBreakRecovery()
+                case .systemAlarm:
+                    notificationScheduleState = .systemAlarm
+                    persistBreakRecovery()
+                case .noChannel:
+                    switch BreakEndAlertPolicy.actionWithoutChannel(
+                        notificationStatus: notifications.authorizationStatus
+                    ) {
+                    case .showDenied: notificationScheduleState = .denied
+                    case .showPermissionNotDetermined:
+                        notificationScheduleState = .permissionNotDetermined
+                    default: notificationScheduleState = .failed
+                    }
+                case .superseded:
+                    if TimerEndAnnouncementWiring.settlesSupersededAsIdle(
+                        generationIsCurrent: true,
+                        isScheduling: notificationScheduleState.isScheduling
+                    ) {
+                        notificationScheduleState = .idle
+                    }
+                }
             } catch {
                 await notifications.refreshAuthorizationStatus()
                 guard notificationRequestIsCurrent(
@@ -829,6 +906,69 @@ struct BreakTimerView: View {
                 notificationScheduleState = notifications.authorizationStatus == .denied
                     ? .denied
                     : .failed
+            }
+        }
+    }
+
+    /// F5: just before the end with the app on screen, the in-app alarm
+    /// takes over from the system alarm, so only one of them rings.
+    @MainActor
+    private func handOffEndToThisScreenIfDue(at date: Date) {
+        guard isBreakActive,
+              !didSignalCompletion,
+              let endDate,
+              let handedOff = endBooker.handOffToForegroundIfDue(
+                  sessionID: sessionID,
+                  endDate: endDate,
+                  applicationIsActive: scenePhase == .active,
+                  now: date
+              )
+        else { return }
+        endHandoff.record(sessionID: sessionID, endDate: handedOff)
+        // A booking still in flight was superseded; the end is this screen's
+        // now, so #49 must not wait for that booking's answer.
+        notificationGeneration += 1
+        if notificationScheduleState.isScheduling {
+            notificationScheduleState = .systemAlarm
+        }
+    }
+
+    /// F5: the scene stopped being active after the hand-off and before the
+    /// end. Nothing else would announce it, so the notification is booked at
+    /// once (never AlarmKit again: the end is too close).
+    @MainActor
+    private func rebookEndAfterLeavingDuringHandoff() {
+        let date = Date.now
+        guard let endDate = endHandoff.endToRebookOnLeaving(
+            sessionID: sessionID,
+            endDate: self.endDate,
+            isRunning: isBreakActive && !didSignalCompletion,
+            now: date
+        ) else { return }
+        notificationGeneration += 1
+        let generation = notificationGeneration
+        let scheduledSessionID = sessionID
+        notificationScheduleState = .scheduling
+        let playsSound = sensoryPreferences.soundOn
+        let completionSound = sensoryPreferences.timerCompletionSound
+        Task { @MainActor in
+            let result = try? await endBooker.bookBreakEndAfterLeavingDuringHandoff(
+                id: scheduledSessionID,
+                endDate: endDate,
+                playsSound: playsSound,
+                completionSound: completionSound
+            )
+            guard notificationRequestIsCurrent(
+                generation: generation,
+                sessionID: scheduledSessionID,
+                endDate: endDate
+            ) else { return }
+            if case let .accepted(deliveryDate)? = result {
+                notificationScheduleState = .scheduled
+                scheduledCompletionNotificationDeliveryDate = deliveryDate
+                persistBreakRecovery()
+            } else {
+                notificationScheduleState = .idle
             }
         }
     }
@@ -897,14 +1037,15 @@ struct BreakTimerView: View {
                 now: date,
                 uptime: uptime
             )
-        return TimerCompletionForegroundFeedbackPolicy
-            .notificationMayHaveDelivered(
-                isAuthorized: notifications.isAuthorized,
-                expectedDeliveryDate: timingIsTrustworthy
-                    ? currentNotificationDeliveryWitness
-                    : nil,
-                now: date
-            )
+        // F5: a system alarm whose time came announced the end as well.
+        return endBooker.externalAlertMayHaveFired(
+            sessionID: sessionID,
+            notificationAuthorized: notifications.isAuthorized,
+            notificationDeliveryDate: timingIsTrustworthy
+                ? currentNotificationDeliveryWitness
+                : nil,
+            now: date
+        )
     }
 
     @MainActor
@@ -997,14 +1138,16 @@ enum RewardBreakNotificationHandoff {
                   current.id == recovery.id, current.endDate == recovery.endDate,
                   current.endDate > .now else { return }
             do {
-                let result = try await NotificationManager.shared.scheduleBreakCompletion(
+                // F5: the system alarm at 最大 when alarms are allowed;
+                // only an accepted notification has a delivery date.
+                let outcome = try await TimerEndAnnouncementBooker.shared.bookBreakEnd(
                     id: recovery.id,
                     endDate: recovery.endDate,
                     playsSound: playsSound,
                     completionSound: completionSound
                 )
                 if !Task.isCancelled,
-                   case let .accepted(deliveryDate) = result,
+                   case let .notification(.accepted(deliveryDate)) = outcome,
                    key == FocusPersistence.breakKey,
                    var saved = FocusPersistence.loadBreak(),
                    saved.id == recovery.id, saved.endDate == recovery.endDate {
@@ -1055,6 +1198,9 @@ private enum BreakNotificationScheduleState: Equatable {
     case denied
     case scheduling
     case scheduled
+    /// F5: a system alarm announces the end (no notification witness), or
+    /// this screen took the end over from it just before.
+    case systemAlarm
     case failed
 
     var isScheduling: Bool {

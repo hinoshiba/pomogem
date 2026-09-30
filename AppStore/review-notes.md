@@ -168,8 +168,7 @@ UIKitが届ける向きの通知に追従します。手動固定はすべての
   保存し送信しない。reviewerの確認手順: iOS 26以降の実機で Settings → 音と触覚 →「終了アラームの強さ」→
   「最大」を選ぶと許可を1回求める（拒否時は設定行に理由と「「設定」アプリを開く」）。許可後、Homeで集中を
   開始し（Proなら「自由な時間を設定」で1分）画面をロックすると、終了時刻にシステムのアラーム
-  （「集中時間が終わりました」、「アプリを開く」）が鳴る。タイマー画面への予約の組み込み（F5 part 2）が
-  済むまでは出荷しない（`configuration.yml`のrelease blocker）
+  （「集中時間が終わりました」、「アプリを開く」）が鳴る
 - Photos add-only: 利用者が静止画の保存を選んだ場合だけrequest
 - StoreKit 2: productとverified entitlementの確認。独自purchase serverなし
 

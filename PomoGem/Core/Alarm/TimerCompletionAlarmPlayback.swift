@@ -85,8 +85,9 @@ struct TimerCompletionAlarmRequest: Equatable, Sendable {
 /// (`TimerCompletionAlertController.keepsScreenAwake(sessionID:)`), whatever
 /// the keep-awake preference, so auto-lock cannot end it: leaving the app
 /// counts as Stop. Only while the scene is active, and released once the
-/// alarm stops or goes quiet by itself. Part 2 combines this with the
-/// running timer's `TimerScreenAwakePolicy`.
+/// alarm stops or goes quiet by itself. FocusView and BreakTimerView combine
+/// this with the running timer's `TimerScreenAwakePolicy` in their
+/// `updateIdleTimer`.
 enum TimerCompletionAlarmScreenAwakePolicy {
     static func shouldKeepScreenAwake(
         runningTimerKeepsScreenAwake: Bool,

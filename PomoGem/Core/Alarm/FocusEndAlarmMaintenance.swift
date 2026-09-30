@@ -64,8 +64,8 @@ enum FocusEndAlarmMaintenance {
     /// persistence host (the saved timer's key names the active account).
     /// Cancels orphan and stale alarms (never a ringing one) and retries
     /// failed cancels. It never books: when the owner needs an alarm
-    /// (`ownerNeedsBooking`), the timer screen books it through
-    /// `TimerEndAnnouncementBooker` (part 2).
+    /// (`ownerNeedsBooking`), the timer screen's own activation rebooks it
+    /// through `TimerEndAnnouncementBooker`.
     @discardableResult
     static func reconcileOnActivation(
         scheduler: FocusEndAlarmScheduler? = nil,
