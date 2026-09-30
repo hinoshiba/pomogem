@@ -345,8 +345,9 @@ extension EnvironmentValues {
 }
 
 enum AggregateProjectionPresentationPolicy {
-    static let cloudPendingNotice =
-        "iCloudを確認中です。この端末で確認できた記録だけを表示しています。"
+    static let cloudPendingNotice = String(
+        localized: "iCloudを確認中です。この端末で確認できた記録だけを表示しています。", table: "Storage",
+        comment: "Progress notice while iCloud is checked: only records confirmed on this device are shown")
 
     /// sync-03 (owner-approved, 2026-09-24; narrowed after review of PR #40).
     /// While iCloud verification is pending, the headline mass is a value this
@@ -364,7 +365,8 @@ enum AggregateProjectionPresentationPolicy {
     ) -> String? {
         guard context.isCloudVerificationPending else { return nil }
         return isCloudOfflineSession
-            ? String(localized: "このiPhoneの集計を確認中", table: "Storage")
+            ? String(localized: "このiPhoneの集計を確認中", table: "Storage",
+                     comment: "Caption under the jar's mass while an offline session re-checks this iPhone's totals")
             : String(localized: "iCloudを確認中", table: "Storage",
                      comment: "Caption under the jar's mass while iCloud records are being checked")
     }
@@ -392,7 +394,10 @@ enum AggregateProjectionPresentationPolicy {
         hasLocalLowerBound: Bool,
         context: AggregateProjectionPresentationContext
     ) -> String {
-        hasLocalLowerBound ? "\(verifiedUnit)以上" : verifiedUnit
+        hasLocalLowerBound
+            ? String(localized: "\(verifiedUnit)以上", table: "Storage",
+                     comment: "At least this much. %@ is a mass or its unit (kg), shown after the number")
+            : verifiedUnit
     }
 
     /// The menu's mass metric: the same value as the headline, captioned by
@@ -410,11 +415,18 @@ enum AggregateProjectionPresentationPolicy {
         hasLocalLowerBound: Bool,
         context: AggregateProjectionPresentationContext
     ) -> String {
+        // `milestoneSuffix` is the caller's own, already localized phrase and
+        // is appended as given.
+        let gems = max(0, count)
         if context.isCloudVerificationPending {
-            return "この端末で確認済み \(max(0, count).formatted())粒\(milestoneSuffix)"
+            return String(localized: "この端末で確認済み \(gems)粒", table: "Storage",
+                          comment: "Gems this device has confirmed while iCloud is checked. %lld is the count (en: plural)")
+                + milestoneSuffix
         }
-        let suffix = hasLocalLowerBound ? "+" : ""
-        return "\(max(0, count).formatted())\(suffix)粒\(milestoneSuffix)"
+        guard hasLocalLowerBound else { return CountText.gems(gems) + milestoneSuffix }
+        return String(localized: "\(gems)+粒", table: "Storage",
+                      comment: "At least this many gems (still being tallied). %lld is the count (en: plural)")
+            + milestoneSuffix
     }
 
     static func overviewLifetimeValue(
@@ -423,7 +435,9 @@ enum AggregateProjectionPresentationPolicy {
         context: AggregateProjectionPresentationContext
     ) -> String {
         if context.isCloudVerificationPending { return verifiedValue }
-        return verifiedValue + (isLocalLowerBound ? "以上" : "")
+        guard isLocalLowerBound else { return verifiedValue }
+        return String(localized: "\(verifiedValue)以上", table: "Storage",
+                      comment: "At least this much. %@ is a mass or its unit (kg), shown after the number")
     }
 }
 

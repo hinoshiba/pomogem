@@ -55,7 +55,8 @@ actor CompleteDataDeletionFileStateStore: CompleteDataDeletionStateStoring {
               receipt.sequence >= 0
         else {
             throw CompleteDataDeletionError.invalidState(
-                "未対応または不正なgeneration receiptです"
+                String(localized: "未対応または不正なgeneration receiptです", table: "Storage",
+                       comment: "Diagnostic after “the resume information is invalid:”. Keep generation receipt untranslated")
             )
         }
         return receipt

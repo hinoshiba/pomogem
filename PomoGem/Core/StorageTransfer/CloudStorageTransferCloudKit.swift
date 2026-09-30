@@ -25,13 +25,16 @@ enum CloudStorageTransferCloudError: Error, LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .timedOut:
-            "iCloudの全データの確認に時間がかかっています。保存先は変更していません。通信状態を確認して再試行してください。"
+            String(localized: "iCloudの全データの確認に時間がかかっています。保存先は変更していません。通信状態を確認して再試行してください。",
+                   table: "Storage", comment: "Storage switch: checking every iCloud record timed out")
         case .changedDuringRead:
-            "確認中にiCloudの保存領域が変わりました。保存先は変更していません。ほかの端末での操作が落ち着いてから再試行してください。"
+            String(localized: "確認中にiCloudの保存領域が変わりました。保存先は変更していません。ほかの端末での操作が落ち着いてから再試行してください。",
+                   table: "Storage", comment: "Storage switch: iCloud changed while it was being read")
         case .cloud(let failure): failure.errorDescription
         case .incomplete, .malformedRecord, .unsupportedSchema, .unsupportedZone,
              .missingRelationship, .limitExceeded:
-            "iCloudの全データを安全に確認できませんでした。保存先は変更していません。アプリを最新版へ更新して再試行してください。"
+            String(localized: "iCloudの全データを安全に確認できませんでした。保存先は変更していません。アプリを最新版へ更新して再試行してください。",
+                   table: "Storage", comment: "Storage switch: iCloud's records could not be read safely (unknown or malformed data)")
         }
     }
 

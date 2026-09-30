@@ -54,7 +54,8 @@ struct CompleteDataDeletionLaunchPreflight: Sendable {
               current.sequence == expectedFence.sequence
         else {
             throw CompleteDataDeletionError.invalidState(
-                "ローカル削除中にiCloudのgeneration fenceが変更されました"
+                String(localized: "ローカル削除中にiCloudのgeneration fenceが変更されました", table: "Storage",
+                       comment: "Diagnostic after “the resume information is invalid:”. Keep generation fence untranslated")
             )
         }
         try await stateStore.saveGenerationReceipt(

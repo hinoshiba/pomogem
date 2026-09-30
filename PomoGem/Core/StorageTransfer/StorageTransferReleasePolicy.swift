@@ -10,11 +10,14 @@ enum StorageTransferReleaseError: Error, LocalizedError, Equatable {
         case .cloudReplacementUnavailable:
             // UNCHANGED TEXT. It is pinned by the Settings UI tests and now
             // scopes only the legacy localOnly -> cloud Settings replacement.
-            "複数端末での同時操作から記録を保護するため、iCloudの置き換えと、その復旧の再開は一時的に利用できません。端末のデータと復旧用コピーは削除せず保持します。"
+            String(localized: "複数端末での同時操作から記録を保護するため、iCloudの置き換えと、その復旧の再開は一時的に利用できません。端末のデータと復旧用コピーは削除せず保持します。",
+                   table: "Storage", comment: "Replacing iCloud from Settings is disabled in this build")
         case .datasetOverwriteUnavailable:
-            "この端末のデータでiCloudを置き換える操作は、いまは利用できません。端末のデータと復旧用コピーは削除せず保持します。"
+            String(localized: "この端末のデータでiCloudを置き換える操作は、いまは利用できません。端末のデータと復旧用コピーは削除せず保持します。",
+                   table: "Storage", comment: "Replacing iCloud with this device's data is disabled in this build")
         case .remoteReplacementResumeUnavailable:
-            "別の端末が始めた置き換えを、このiPhoneからは再開できません。二重に実行しないよう停止しています。端末のデータと復旧用コピーは削除せず保持します。"
+            String(localized: "別の端末が始めた置き換えを、このiPhoneからは再開できません。二重に実行しないよう停止しています。端末のデータと復旧用コピーは削除せず保持します。",
+                   table: "Storage", comment: "A replacement started on another device cannot be resumed here")
         }
     }
 }

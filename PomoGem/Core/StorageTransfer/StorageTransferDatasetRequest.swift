@@ -62,7 +62,8 @@ enum StorageTransferDatasetRequestError: Error, LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .transferInFlight:
-            "iCloudで未完了のデータ切り替えが進んでいるため、この操作はまだ実行できません。完了してから、もう一度お試しください。どちらの記録も削除していません。"
+            String(localized: "iCloudで未完了のデータ切り替えが進んでいるため、この操作はまだ実行できません。完了してから、もう一度お試しください。どちらの記録も削除していません。",
+                   table: "Storage", comment: "Settings replacement refused: another data switch is still in progress in iCloud")
         }
     }
 }

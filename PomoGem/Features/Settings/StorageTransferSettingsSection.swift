@@ -88,7 +88,9 @@ final class StorageTransferController {
         guard (error as? FocusCloudSyncError) == .timerHistoryRequiresMaintenance else {
             return error.localizedDescription
         }
-        return "タイマーの履歴を確認できなかったため、保存先を切り替えられませんでした。少し時間をおいてから、もう一度お試しください。解決しない場合は、設定のサポートからお問い合わせください。"
+        return String(
+            localized: "タイマーの履歴を確認できなかったため、保存先を切り替えられませんでした。少し時間をおいてから、もう一度お試しください。解決しない場合は、設定のサポートからお問い合わせください。",
+            table: "Storage", comment: "Storage switch failed because the timer history could not be checked")
     }
 
     /// Only an acknowledged direction reaches this method. The policy is passed
@@ -137,22 +139,35 @@ struct StorageTransferSettingsSection: View {
 
     /// The iCloud-mode entry, named after the sheet it opens. Other screens
     /// that send the user here quote this constant.
-    static let cloudEntryTitle = "iCloudと保存先の変更"
+    static let cloudEntryTitle = String(
+        localized: "iCloudと保存先の変更", table: "Storage",
+        comment: "Settings button (iCloud mode) and the title of the sheet it opens: change iCloud and storage")
+    /// The local-only entry, and the title of the sheet it opens.
+    static let enableCloudTitle = String(
+        localized: "iCloudを有効にする", table: "Storage",
+        comment: "Settings button (local-only mode) and the title of the sheet it opens: turn on iCloud")
 
     var body: some View {
         if persistenceMode == .cloudKit || persistenceMode == .localOnly {
             Section {
-                LabeledContent("現在の保存先", value: persistenceMode == .cloudKit ? "iCloud" : "このiPhoneのみ")
+                LabeledContent(
+                    String(localized: "現在の保存先", table: "Storage", comment: "Settings row label: where records are stored now"),
+                    value: persistenceMode == .cloudKit
+                        ? "iCloud"
+                        : String(localized: "このiPhoneのみ", table: "Storage", comment: "Current storage: this iPhone only")
+                )
                 // transfer-08. In iCloud mode the sheet this opens is no longer
                 // only 「解除」: it also holds 「iCloudから再取得」. The entry is
                 // named after the sheet, so nobody has to guess that re-fetching
                 // lives behind a button that says it unlinks iCloud.
-                Button(persistenceMode == .cloudKit ? Self.cloudEntryTitle : "iCloudを有効にする") {
+                Button(persistenceMode == .cloudKit ? Self.cloudEntryTitle : Self.enableCloudTitle) {
                     showsChoices = true
                 }
                 .accessibilityHint(persistenceMode == .cloudKit
-                    ? "このiPhoneへの引き継ぎや、iCloudからの再取得を選べます"
-                    : "iCloudのデータをこのiPhoneで使う方法を選べます")
+                    ? Text("このiPhoneへの引き継ぎや、iCloudからの再取得を選べます", tableName: "Storage",
+                           comment: "VoiceOver hint for the iCloud-mode storage button")
+                    : Text("iCloudのデータをこのiPhoneで使う方法を選べます", tableName: "Storage",
+                           comment: "VoiceOver hint for the local-only storage button"))
                 .disabled(!controller.isAvailable || otherWorkIsActive)
                 .accessibilityIdentifier("settings.storage-switch")
                 // List flattens Section into rows. Attach presentation to the
@@ -176,16 +191,18 @@ struct StorageTransferSettingsSection: View {
                     .dynamicTypeSize(dynamicTypeSize)
                 }
                 if controller.isStarting {
-                    ProgressView("保存先の切り替えを準備しています")
+                    ProgressView(String(localized: "保存先の切り替えを準備しています", table: "Storage",
+                                        comment: "Progress while a confirmed storage switch starts"))
                 }
                 if let error = controller.error {
                     Text(error).foregroundStyle(.red)
                         .accessibilityIdentifier("settings.storage-switch-error")
                 }
             } header: {
-                Text("iCloudと保存先")
+                Text("iCloudと保存先", tableName: "Storage", comment: "Settings section header: iCloud and storage")
             } footer: {
-                Text("切り替え前に確認画面を表示します。実行中・一時停止中のタイマーは、先に終了してください。")
+                Text("切り替え前に確認画面を表示します。実行中・一時停止中のタイマーは、先に終了してください。",
+                     tableName: "Storage", comment: "Footer of the iCloud and storage section")
             }
         }
     }
@@ -234,25 +251,37 @@ private struct StorageTransferChoiceView: View {
             List {
                 if persistenceMode == .cloudKit {
                     Section {
-                        Text("iCloudのデータをこのiPhoneにコピーしてから、同期を解除します。iCloud側のデータは残ります。")
-                        Text("解除後の変更は他の端末へ同期されません。このiPhoneのアプリを削除すると、解除後に端末で追加・変更したデータは失われます。")
-                        Button("このiPhoneへ引き継ぐ") { choice = .disableCloudKeepingCopy }
-                            .accessibilityIdentifier("storage-switch.disable-keep-copy")
+                        Text("iCloudのデータをこのiPhoneにコピーしてから、同期を解除します。iCloud側のデータは残ります。",
+                             tableName: "Storage", comment: "What moving to this iPhone does")
+                        Text("解除後の変更は他の端末へ同期されません。このiPhoneのアプリを削除すると、解除後に端末で追加・変更したデータは失われます。",
+                             tableName: "Storage", comment: "What happens to changes after moving to this iPhone")
+                        Button(String(localized: "このiPhoneへ引き継ぐ", table: "Storage",
+                                      comment: "Button: copy iCloud's data to this iPhone and turn off sync")) {
+                            choice = .disableCloudKeepingCopy
+                        }
+                        .accessibilityIdentifier("storage-switch.disable-keep-copy")
                     }
                     datasetDoors
                 } else {
                     enableDoors
                 }
                 Section {
-                    Text("通信状態やデータ量によって時間がかかります。安全のため、画面の案内に従ってアプリを終了し、開き直す手順があります。アプリ自体は削除しないでください。中断した場合は、次回起動時に復旧画面を表示します。")
+                    Text("通信状態やデータ量によって時間がかかります。安全のため、画面の案内に従ってアプリを終了し、開き直す手順があります。アプリ自体は削除しないでください。中断した場合は、次回起動時に復旧画面を表示します。",
+                         tableName: "Storage", comment: "Storage switch sheet: how long it takes and the planned relaunch")
                 }
             }
             // The cloud-mode screen no longer only unlinks iCloud: it also
             // offers the generation-fenced device -> iCloud replacement.
             .navigationTitle(persistenceMode == .cloudKit
-                ? StorageTransferSettingsSection.cloudEntryTitle : "iCloudを有効にする")
+                ? StorageTransferSettingsSection.cloudEntryTitle : StorageTransferSettingsSection.enableCloudTitle)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("キャンセル") { dismiss() } } }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(String(localized: "キャンセル", table: "Storage", comment: "Closes the storage switch sheet")) {
+                        dismiss()
+                    }
+                }
+            }
             .sheet(item: $choice) { selected in choiceConfirmation(selected) }
             .sheet(item: $datasetDirection) { direction in datasetConfirmation(direction) }
         }
@@ -262,10 +291,13 @@ private struct StorageTransferChoiceView: View {
     @ViewBuilder
     private var enableDoors: some View {
         Section {
-            Text("残すデータを選んでください。2つの保存先のデータは結合しません。")
+            Text("残すデータを選んでください。2つの保存先のデータは結合しません。",
+                 tableName: "Storage", comment: "Turn-on-iCloud sheet: choose which side's data to keep")
         }
-        Section("iCloudのデータを残す") {
-            Text("現在このiPhoneにあるテーマ・記録・設定を削除し、iCloudのデータに置き換えます。端末だけの記録は失われます。")
+        Section(String(localized: "iCloudのデータを残す", table: "Storage",
+                       comment: "Section title: keep iCloud's data (this iPhone's is deleted)")) {
+            Text("現在このiPhoneにあるテーマ・記録・設定を削除し、iCloudのデータに置き換えます。端末だけの記録は失われます。",
+                 tableName: "Storage", comment: "Irreversible: keeping iCloud's data deletes this iPhone's")
             if isReadingChoicePreview {
                 ProgressView(StorageTransferOverwriteCopy.comparisonReading)
                     .accessibilityIdentifier("storage-switch.keep-cloud-reading")
@@ -284,16 +316,19 @@ private struct StorageTransferChoiceView: View {
             .disabled(isReadingChoicePreview)
             .accessibilityIdentifier("storage-switch.keep-cloud")
         }
-        Section("このiPhoneのデータを残す") {
-            Text("現在iCloudにあるPomoGemのテーマ・記録・設定を削除し、このiPhoneのデータに置き換えます。同じApple Accountの他の端末にも影響します。")
+        Section(String(localized: "このiPhoneのデータを残す", table: "Storage",
+                       comment: "Section title: keep this iPhone's data (iCloud's is deleted)")) {
+            Text("現在iCloudにあるPomoGemのテーマ・記録・設定を削除し、このiPhoneのデータに置き換えます。同じApple Accountの他の端末にも影響します。",
+                 tableName: "Storage", comment: "Irreversible: keeping this iPhone's data deletes iCloud's")
             Text(StorageTransferOverwriteCopy.doorUnavailable)
                 .accessibilityIdentifier("storage-switch.replace-cloud-unavailable")
-            Button("このiPhoneのデータで置き換える", role: .destructive) { choice = .enableCloudReplacingCloud }
+            Button(StorageTransferOverwriteCopy.confirmTitle, role: .destructive) { choice = .enableCloudReplacingCloud }
                 .disabled(!StorageTransferReleasePolicy.standard.allowsCloudReplacement)
                 .accessibilityIdentifier("storage-switch.replace-cloud")
         }
         Section {
-            Text("テーマ名・成果メモ・記録・設定・タイマーの整合用データが、あなたのApple AccountのプライベートiCloud領域に保存されます。")
+            Text("テーマ名・成果メモ・記録・設定・タイマーの整合用データが、あなたのApple AccountのプライベートiCloud領域に保存されます。",
+                 tableName: "Storage", comment: "Turn-on-iCloud sheet: what is saved to the user's private iCloud")
         }
     }
 
@@ -359,7 +394,8 @@ private struct StorageTransferChoiceView: View {
                 .disabled(isReadingDatasetPreview)
                 .accessibilityIdentifier("storage-switch.refresh-from-cloud")
             }
-            Section("このiPhoneのデータでiCloudを置き換える") {
+            Section(String(localized: "このiPhoneのデータでiCloudを置き換える", table: "Storage",
+                           comment: "Section title: the device → iCloud direction, which deletes iCloud's data")) {
                 // transfer-08. The long irreversible-deletion warning belongs to
                 // a door that can open. A closed door states only its reason.
                 if releasePolicy.allowsDatasetOverwriteFromDevice {
@@ -546,9 +582,14 @@ struct StorageTransferDatasetConfirmationView: View {
                         .accessibilityIdentifier(identifier("confirm"))
                 }
             }
-            .navigationTitle("最後の確認")
+            .navigationTitle(StorageTransferOverwriteCopy.sheetTitle)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("戻る") { dismiss() } } }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(String(localized: "戻る", table: "Storage",
+                                  comment: "Leaves the final confirmation without switching")) { dismiss() }
+                }
+            }
         }
     }
 
@@ -563,7 +604,7 @@ struct StorageTransferDatasetConfirmationView: View {
         // 「確認できませんでした」, which would claim a look that failed as if
         // it were evidence; the overwrite direction always shows both rows.
         guard preview?.device != nil || direction == .overwriteCloudFromDevice else { return cloud }
-        return StorageTransferOverwriteCopy.side("このiPhone", preview: preview?.device)
+        return StorageTransferOverwriteCopy.side(StorageTransferOverwriteCopy.thisIPhoneSide, preview: preview?.device)
             + "\n" + cloud
     }
 
@@ -627,7 +668,7 @@ private struct StorageTransferConfirmationView: View {
                         // The device side is the one deleted, so it comes first.
                         // The iCloud side carries counts only: its newest
                         // mirrored timestamp may be a Prefs stamp.
-                        Text(StorageTransferOverwriteCopy.side("このiPhone", preview: preview.device)
+                        Text(StorageTransferOverwriteCopy.side(StorageTransferOverwriteCopy.thisIPhoneSide, preview: preview.device)
                              + "\n" + StorageTransferOverwriteCopy.countsOnly("iCloud", preview: preview.cloud))
                             .accessibilityIdentifier("storage-switch.keep-cloud-comparison")
                         if StorageTransferRefreshCopy.cloudSideIsEmpty(preview.cloud) {
@@ -647,13 +688,19 @@ private struct StorageTransferConfirmationView: View {
                     // Every choice that replaces the iCloud dataset stages a
                     // recovery copy first, not only the legacy one.
                     if choice.replacesCloud {
-                        Text("置き換えるデータの復旧用コピーをiCloudに保存し、受領を確認してから削除を始めます。復旧用コピーには、このiPhoneだけの過去の記録も含まれます。処理完了後に復旧用コピーを削除します。通信が途切れた場合は、削除の再試行までiCloudに残ることがあります。")
+                        Text(StorageTransferOverwriteCopy.recoveryCopy)
                     }
                     if choice != .disableCloudKeepingCopy {
-                        Toggle("削除される保存先とデータを確認しました", isOn: $understandsDeletion)
+                        Toggle(String(localized: "削除される保存先とデータを確認しました", table: "Storage",
+                                      comment: "Acknowledgement toggle before a storage switch deletes one side's data"),
+                               isOn: $understandsDeletion)
                             .accessibilityIdentifier("storage-switch.confirm-data-loss")
                     }
-                    Button(choice == .disableCloudKeepingCopy ? "コピーしてiCloudを解除" : "置き換えてiCloudを有効にする",
+                    Button(choice == .disableCloudKeepingCopy
+                               ? String(localized: "コピーしてiCloudを解除", table: "Storage",
+                                        comment: "Button: copy iCloud's data to this iPhone, then turn off iCloud")
+                               : String(localized: "置き換えてiCloudを有効にする", table: "Storage",
+                                        comment: "Destructive button: replace one side's data and turn on iCloud"),
                            role: choice == .disableCloudKeepingCopy ? nil : .destructive,
                            action: confirmed)
                         // Per choice, not per bit: the three release bits are
@@ -668,22 +715,30 @@ private struct StorageTransferConfirmationView: View {
                         .accessibilityIdentifier("storage-switch.confirm")
                 }
             }
-            .navigationTitle("最後の確認")
+            .navigationTitle(StorageTransferOverwriteCopy.sheetTitle)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("戻る") { dismiss() } } }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(String(localized: "戻る", table: "Storage",
+                                  comment: "Leaves the final confirmation without switching")) { dismiss() }
+                }
+            }
         }
     }
 
     private var message: String {
         switch choice {
         case .disableCloudKeepingCopy:
-            "このiPhoneにコピーしたデータと、iCloudのデータの両方が残ります。コピーを検証できるまで同期を解除しません。"
+            String(localized: "このiPhoneにコピーしたデータと、iCloudのデータの両方が残ります。コピーを検証できるまで同期を解除しません。",
+                   table: "Storage", comment: "Final confirmation for moving to this iPhone: both copies are kept")
         case .enableCloudKeepingCloud:
-            "このiPhoneだけにあるPomoGemのデータを削除します。iCloudのデータは残ります。削除後に元の端末データへ戻すことはできません。"
+            String(localized: "このiPhoneだけにあるPomoGemのデータを削除します。iCloudのデータは残ります。削除後に元の端末データへ戻すことはできません。",
+                   table: "Storage", comment: "Final confirmation for keeping iCloud's data: this iPhone's data is deleted for good")
         case .enableCloudReplacingCloud:
-            "iCloudにあるPomoGemのデータを削除します。このiPhoneのデータを残して同期を有効にします。削除するiCloudデータを元に戻すことはできません。"
+            String(localized: "iCloudにあるPomoGemのデータを削除します。このiPhoneのデータを残して同期を有効にします。削除するiCloudデータを元に戻すことはできません。",
+                   table: "Storage", comment: "Final confirmation for keeping this iPhone's data: iCloud's data is deleted for good")
         case .overwriteCloudFromDevice:
-            "現在iCloudにあるPomoGemのテーマ・記録・設定をすべて削除し、この端末のデータに置き換えます。削除するiCloudのデータを元に戻すことはできません。"
+            StorageTransferOverwriteCopy.sheetWarning
         }
     }
 }
