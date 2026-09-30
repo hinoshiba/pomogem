@@ -9,9 +9,17 @@ enum WidgetSnapshotStoreError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .accountIdentityUnavailable:
-            return "このバージョンではアカウント情報をウィジェットへ共有しません。"
+            return String(
+                localized: "このバージョンではアカウント情報をウィジェットへ共有しません。",
+                table: "Focus",
+                comment: "Error: this version never shares account data with the widgets"
+            )
         case .pngEncodingFailed:
-            return "瓶の画像を保存できませんでした。"
+            return String(
+                localized: "瓶の画像を保存できませんでした。",
+                table: "Focus",
+                comment: "Error: the jar image for the widget could not be saved"
+            )
         }
     }
 }

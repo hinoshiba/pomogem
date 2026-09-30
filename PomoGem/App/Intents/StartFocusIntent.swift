@@ -87,8 +87,9 @@ struct StartFocusIntent: AppIntent {
 }
 
 /// Siri, Spotlight, the Shortcuts app and the Action Button offer these with
-/// no setup. The phrases are Japanese, the development language; English
-/// phrases come with the localization wave in `AppShortcuts.xcstrings`
+/// no setup. The phrases below are the Japanese source; their English (and
+/// the Japanese, which `l10n.py sync` writes explicitly because the
+/// development region is English) live in `AppShortcuts.xcstrings`
 /// (Docs/Localization.md).
 struct PomoGemShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {

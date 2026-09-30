@@ -414,7 +414,7 @@ final class ScreenTimeMonitoring {
             try store.update { state in
                 try generation.requireCurrent(state)
                 for index in state.runs.indices { state.runs[index].active = false }
-                state.monitoringError = "スクリーンタイムの監視を開始できませんでした。もう一度お試しください。"
+                state.monitoringError = ScreenTimeStoredMonitoringError.monitoringFailed
                 state.pruneConsumedRuns()
             }
             throw error

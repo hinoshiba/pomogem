@@ -91,7 +91,10 @@ final class ScreenTimeController: ObservableObject {
 
     enum OperationError: LocalizedError {
         case busy
-        var errorDescription: String? { "スクリーンタイムの設定を反映中です。完了するまでお待ちください。" }
+        var errorDescription: String? {
+            String(localized: "スクリーンタイムの設定を反映中です。完了するまでお待ちください。", table: "ScreenTime",
+                   comment: "Error: another Screen Time change is still being applied")
+        }
     }
 
     init(
@@ -495,7 +498,9 @@ final class ScreenTimeController: ObservableObject {
                 return
             }
             let configuration = state.configuration
-            var error = state.monitoringError
+            // The ledger stores Japanese; only the published copy is
+            // translated, and it is never written back.
+            var error = state.monitoringError.map { ScreenTimeStoredMonitoringError.displayText(for: $0) }
             if !granted && configuration.enabled {
                 error = ScreenTimeError.unauthorized.localizedDescription
             } else if !state.learningAllowedBySubscription && configuration.enabled {
@@ -805,6 +810,32 @@ final class ScreenTimeController: ObservableObject {
         _ value: Value
     ) {
         if self[keyPath: keyPath] != value { self[keyPath: keyPath] = value }
+    }
+}
+
+extension ScreenTimeStoredMonitoringError {
+    /// What the app shows for a stored `monitoringError`: the two sentences
+    /// the ledger is known to hold, in the app's language; anything else
+    /// (the app's own errors, already localized when they were published)
+    /// passes through unchanged. Display only: the result is never written
+    /// back to the ledger.
+    static func displayText(
+        for stored: String,
+        bundle: Bundle = .main,
+        locale: Locale = PomoGemLocale.current
+    ) -> String {
+        switch stored {
+        case authorizationRevoked:
+            String(localized: "スクリーンタイムの許可が解除されました。再び許可して、アプリを選び直してください。",
+                   table: "ScreenTime", bundle: bundle, locale: locale,
+                   comment: "Recording stopped: Screen Time access was turned off, which also clears the chosen apps")
+        case monitoringFailed:
+            String(localized: "スクリーンタイムの監視を開始できませんでした。もう一度お試しください。",
+                   table: "ScreenTime", bundle: bundle, locale: locale,
+                   comment: "Recording stopped: iOS refused to start Screen Time monitoring")
+        default:
+            stored
+        }
     }
 }
 

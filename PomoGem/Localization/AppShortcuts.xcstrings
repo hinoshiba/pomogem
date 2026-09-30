@@ -3,6 +3,17 @@
   "strings" : {
     "${applicationName}で集中を始める" : {
       "localizations" : {
+        "en" : {
+          "stringSet" : {
+            "state" : "translated",
+            "values" : [
+              "Start focus in ${applicationName}",
+              "Focus with ${applicationName}",
+              "Focus for ${length} with ${applicationName}",
+              "Start a Pomodoro in ${applicationName}"
+            ]
+          }
+        },
         "ja" : {
           "stringSet" : {
             "state" : "translated",

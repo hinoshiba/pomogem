@@ -131,7 +131,8 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
                           comment: "Alert title: imported Screen Time records are on hold"), isPresented: Binding(
                 get: { importError != nil }, set: { if !$0 { importError = nil } }
             )) {
-                Button("閉じる", role: .cancel) { importError = nil }
+                Button(String(localized: "閉じる", table: "ScreenTime", comment: "Alert button: dismiss"),
+                       role: .cancel) { importError = nil }
             } message: {
                 Text(importError ?? "")
             }
