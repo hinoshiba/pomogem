@@ -377,7 +377,7 @@ final class JarRenderingPerformanceTests: XCTestCase {
         scene.evaluateInteractionMotionForTesting(currentTime: 100, uptime: 100)
         scene.evaluateInteractionMotionForTesting(currentTime: 110, uptime: 110)
         XCTAssertTrue(scene.isIdlePaused)
-        let scale = Constants.Jar.tiltGravityHorizontalScale
+        let scale = Constants.Jar.tiltLightHorizontalScale
         let start = scene.idleTiltFrameCount
 
         // Hand tremor below the threshold touches no node (no frame).

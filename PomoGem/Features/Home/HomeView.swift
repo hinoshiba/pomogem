@@ -144,6 +144,9 @@ struct HomeView: View {
     /// Home's own follow-up to a landing, run once the jar has settled.
     @State private var landingSettle = LandingSettleScheduler()
     @State private var sceneInitialized = false
+    /// The jar stage's frame in the card's coordinate space, used to map
+    /// settled gems behind the HUD's ink (F3).
+    @State private var measuredJarStageFrame: CGRect = .zero
     /// Room for a tapped crystal's card under the bottle
     /// (`AggregateCardPlacementPolicy`), in the Home content's coordinates.
     @State private var measuredPickerRowTop: CGFloat?
@@ -1586,10 +1589,11 @@ struct HomeView: View {
                 onAggregateTapped: revealAggregateInspection,
                 onAggregateAccessibilityAction: presentAggregateDetail
             )
-                .onGeometryChange(for: CGFloat.self) { geometry in
-                    geometry.frame(in: .named(Self.jarCardCoordinateSpace)).minY
-                } action: { top in
-                    jarStageState.measuredStageTop = top
+                .onGeometryChange(for: CGRect.self) { geometry in
+                    geometry.frame(in: .named(Self.jarCardCoordinateSpace))
+                } action: { frame in
+                    measuredJarStageFrame = frame
+                    jarStageState.measuredStageTop = frame.minY
                 }
                 .padding(.horizontal, 4)
                 .padding(.top, Self.previewsHUDAboveJar ? Self.hudAboveJarHeight : 0)
@@ -1934,18 +1938,17 @@ struct HomeView: View {
         // A soft ink scrim keeps the value legible over the brighter core,
         // orbit markers and glowing gems behind the glass. The text shadow
         // is applied first, so the blurred scrim is not shadowed again.
+        // F3: a settled pile behind the HUD (held upside down, it rests
+        // against the cap) gets the same scrim in a stronger ink; the HUD
+        // neither moves nor shrinks, and the gems do not fade. The scrim
+        // follows the pile itself, so a moving pile never re-renders Home.
         .background {
-            Ellipse()
-                .fill(
-                    RadialGradient(
-                        colors: [Color.black.opacity(0.34), Color.black.opacity(0.14), .clear],
-                        center: .center,
-                        startRadius: 4,
-                        endRadius: 120
-                    )
-                )
-                .frame(width: 250, height: 150)
-                .blur(radius: 8)
+            JarHUDInkScrim(
+                scene: scene,
+                stageFrame: measuredJarStageFrame,
+                coordinateSpace: Self.jarCardCoordinateSpace,
+                followsPile: !Self.previewsHUDAboveJar
+            )
         }
         .accessibilityHidden(true)
     }

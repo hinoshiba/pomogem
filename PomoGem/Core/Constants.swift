@@ -84,8 +84,14 @@ enum Constants {
 
         static let gravity: CGFloat = -7.2
         static let gravityVector = CGVector(dx: 0, dy: gravity)
-        static let tiltGravityHorizontalScale: CGFloat = 7.2
-        static let tiltGravityMinimumDownward: CGFloat = 2.2
+        /// The light's full tilt (scene units per g of sideways reading):
+        /// the glints and the glass highlight reach their end stops when the
+        /// phone reads 1 g sideways. The gems' gravity itself follows
+        /// `JarGravityMapping` (F3: sideways and upward too). Formerly
+        /// `tiltGravityHorizontalScale`, which also scaled the gravity; the
+        /// "some downward pull always remains" clamp that came with it
+        /// (`tiltGravityMinimumDownward`) is retired.
+        static let tiltLightHorizontalScale: CGFloat = 7.2
         static let maximumExternalGravityMagnitude: CGFloat = 9.4
         static let gravitySmoothingFactor: CGFloat = 0.16
         static let restitution: CGFloat = 0.06
@@ -175,6 +181,16 @@ enum Constants {
         static let idleMovementThreshold: CGFloat = 0.5
         static let interactionSettlingDamping: CGFloat = 0.72
         static let restingDamping: CGFloat = 0.997
+        /// F3, Reduce Motion (Docs/JarOrientationGravity.md): the damping a
+        /// turn's calm re-settle gives the resting pile for its window, so
+        /// the gems slide to the new wall or the cap without a bounce. It is
+        /// the calm re-settle's only change (owner ruling 2026-09-29:
+        /// damping only; friction and contacts stay as they are).
+        /// SpriteKit damps like Box2D (not clamped to 1): the jar's gravity
+        /// (7.2 m/s², 150 pt/m) then tops out near 1080 / damping pt/s.
+        /// The angular damping stills a gem that was already spinning.
+        static let calmResettleLinearDamping: CGFloat = 3
+        static let calmResettleAngularDamping: CGFloat = 60
 
         static let completionDropDelay: TimeInterval = 0.350
         static let dropSpawnDelay = completionDropDelay
