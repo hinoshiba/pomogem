@@ -19,6 +19,18 @@
         }
       }
     },
+    "NSAlarmKitUsageDescription" : {
+      "comment" : "Alarms permission prompt (iOS 26+): why the end of a focus or break may ring as a system alarm. Suggested English: Used to ring an alarm when a focus or break ends, even in silent mode or a Focus.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中や休憩の終わりを、マナーモードや集中モード中でもアラームでお知らせするために使います。"
+          }
+        }
+      }
+    },
     "NSAppleMusicUsageDescription" : {
       "comment" : "Apple Music permission prompt: why the timer controls the Music app (focus background music)",
       "extractionState" : "manual",

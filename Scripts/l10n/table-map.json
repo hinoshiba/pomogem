@@ -124,6 +124,12 @@
       "note": "tells a lock apart from leaving during a focus; the reminder copy lives in NotificationManager.swift (Notifications)"
     },
     {
+      "glob": "PomoGem/Core/Alarm/**",
+      "table": "Focus",
+      "package": "l10n-02-focus-system",
+      "note": "F5 end-of-timer alarm: sound names, strength presets and the AlarmKit alert text"
+    },
+    {
       "glob": "PomoGem/Core/WidgetSnapshotStore.swift",
       "table": "Focus",
       "package": "l10n-02-focus-system"

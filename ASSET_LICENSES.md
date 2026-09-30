@@ -77,5 +77,20 @@ StoreKit設定ファイルなしで実表示価格$0.99を撮影しました。s
 | 休憩タイマー・下 | `Docs/images/timer-orientation/break-down.png` | 2026-09-09、iPhone 17 Pro / iOS 26.5 Simulatorの実UIをXCTestでcapture。テスト専用の空の保存領域と初期テーマ「英語」を使用、加工・合成なし。詳細は Docs/TimerOrientation.md | Copyright 2026 hinoshiba. MIT License（本プロジェクトが保有する権利） | `f7973db86f9ccb3278b1a61c2c8b95649d42cb3273b0849546be51c2b258ce3e` |
 | 休憩タイマー・左 | `Docs/images/timer-orientation/break-left.png` | 2026-09-09、iPhone 17 Pro / iOS 26.5 Simulatorの実UIをXCTestでcapture。テスト専用の空の保存領域と初期テーマ「英語」を使用、加工・合成なし。詳細は Docs/TimerOrientation.md | Copyright 2026 hinoshiba. MIT License（本プロジェクトが保有する権利） | `482cc6fb71c22e66886db4f38a4641648ad5c2154c2420dce658bb448f3f805e` |
 
+## 音
+
+アプリが鳴らす音（瓶の効果音、タイマー終了の音、終了アラーム8種）は、すべてsource code内の
+数式から実行時に合成します。録音、第三者のsample、AHAP、生成AI音源、音声ファイルは同梱せず、
+`Scripts/check-oss-readiness.sh`がtreeとGit履歴の音声ファイルを拒否します。音はsourceと同じ
+MIT Licenseの対象で、商用利用できます。
+
+- 終了アラームの「ベル」「デジタル」「マリンバ」「学校のチャイム」「目覚まし時計」は
+  `PomoGem/Core/Alarm/AlarmSoundSynthesis.swift`のFM・modal・加算合成です。既存の3種は
+  `PomoGem/Juice/SoundSynth.swift`の音を音量だけ上げて使います。
+- 「学校のチャイム」の旋律はWestminster Quarters（1793年）で、著作権の保護期間を過ぎた
+  public domainの旋律です。音名から独自に実装し、録音、楽譜の版、編曲物は参照していません。
+- 通知とAlarmKitが鳴らすCAFは、端末上で`Library/Sounds`へ書き出す生成物です。repositoryにも
+  app bundleにも含めず、backupの対象外にしています。
+
 AI生成素材の生成経緯とpromptの要約は`PomoGem/Resources/GENERATED-ASSETS.md`に記録しています。
 SF Symbolsは`Image(systemName:)`で参照し、書き出したSymbol画像を同梱していません。

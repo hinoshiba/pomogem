@@ -220,8 +220,8 @@ catalogの同期は必ず全テーブルまとめて行います（一部だけ�
 準備（prep）の変更で1〜3が済んでいます。各パッケージが4を、統合が5を行います。
 
 1. 3つのInfoPlist catalogへ英語を入れる: `CFBundleDisplayName`（PomoGem／PomoGem Screen Time）、
-   `NSMotionUsageDescription`、`NSPhotoLibraryAddUsageDescription`、`NSAppleMusicUsageDescription`。
-   Info.plist自体は日本語のままです。
+   `NSMotionUsageDescription`、`NSPhotoLibraryAddUsageDescription`、`NSAppleMusicUsageDescription`、
+   `NSAlarmKitUsageDescription`。Info.plist自体は日本語のままです。
 2. `Scripts/l10n/table-map.json`の`shipping_languages`へ`"en"`を加え、`xcodegen generate`で`knownRegions`に`en`が入ることを確認する。
 3. 第3の言語（韓国語・中国語など、日本語も英語も持たない端末）に出す言語を決め、Simulatorの
    `-AppleLanguages (ko-KR) -AppleLocale ko_KR`と`(ja-JP) ja_JP`の両方で確認する。

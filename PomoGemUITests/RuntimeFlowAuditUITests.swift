@@ -784,6 +784,123 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         finishReceiptAfterReturn(named: "Recovered focus — receipt after Stop")
     }
 
+    /// F5: a focus that ends on screen at 標準 (the default strength) holds
+    /// the display while its alarm rings, so auto-lock cannot end it (leaving
+    /// counts as Stop), and lets it go at Stop. The ledger behind
+    /// `timer.screen-awake.probe` samples the real `isIdleTimerDisabled`
+    /// every 50 ms; the break the reward opens shows what it saw after the
+    /// focus screen closed.
+    func testAFocusThatEndsOnScreenKeepsTheScreenAwakeUntilStop() throws {
+        executionTimeAllowance = 420
+        let probe = relaunchWithScreenAwakeProbe("1")
+        selectDemoDurationForVisualAudit()
+        startDemoFocusForVisualAudit()
+        let stop = app.buttons["focus.completion-alert.stop"]
+        XCTAssertTrue(stop.waitForExistence(timeout: 25), "The demo must end on screen with its alarm")
+        XCTAssertTrue(
+            waitForValue(of: probe, containing: "awake=1;ringing=1", timeout: 5),
+            "The ringing alarm must hold the display: \(String(describing: probe.value))"
+        )
+        sleep(2)
+        XCTAssertTrue(
+            waitForValue(of: probe, containing: "awake=1;ringing=1", timeout: 2),
+            "Still held while it rings: \(String(describing: probe.value))"
+        )
+        retainScreenshot(named: "Focus ended on screen at 標準 — ringing, display held")
+        XCTAssertTrue(stopCompletionAlertIfPresented(in: app))
+        verifyTheAlarmHeldTheScreenAndReleasedItAtStop(magicTaps: 0)
+    }
+
+    /// The VoiceOver Magic Tap stops the ringing alarm like Stop. XCUITest
+    /// cannot perform that gesture, so the probe's ledger runs the screen's
+    /// own Magic Tap handler two seconds into the ring.
+    func testMagicTapStopsTheCompletionAlarmAndReleasesTheScreen() throws {
+        executionTimeAllowance = 420
+        let probe = relaunchWithScreenAwakeProbe("magic-tap")
+        selectDemoDurationForVisualAudit()
+        startDemoFocusForVisualAudit()
+        let stop = app.buttons["focus.completion-alert.stop"]
+        XCTAssertTrue(stop.waitForExistence(timeout: 25), "The demo must end on screen with its alarm")
+        XCTAssertTrue(
+            waitForValue(of: probe, containing: "awake=1;ringing=1", timeout: 5),
+            "The ringing alarm must hold the display: \(String(describing: probe.value))"
+        )
+        XCTAssertTrue(
+            waitForAbsence(stop, timeout: 10),
+            "Magic Tap must stop the alarm without touching Stop"
+        )
+        verifyTheAlarmHeldTheScreenAndReleasedItAtStop(magicTaps: 1)
+    }
+
+    /// F2 follow-up: while the focus shield is up (the fixture runs the real
+    /// shield controller over in-memory doubles), the focus screen's one
+    /// notice line says 「気が散るアプリを制限中」, running and paused (a pause
+    /// keeps the shield), in place of the end-alert rows.
+    func testTheShieldNoticeLineShowsWhileTheFocusIsShielded() throws {
+        app.terminate()
+        app.launchEnvironment["POMOGEM_UI_TEST_FOCUS_SHIELD"] = "1"
+        app.launch()
+        XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 10))
+        app.buttons["home.duration-picker"].tap()
+        app.buttons["25分"].tap()
+        app.buttons["home.focus-launcher"].tap()
+        let notice = app.descendants(matching: .any)["focus.shield-notice"].firstMatch
+        XCTAssertTrue(notice.waitForExistence(timeout: 10), "The shield is up during the focus")
+        XCTAssertTrue(notice.label.contains("気が散るアプリを制限中"), notice.label)
+        retainScreenshot(named: "Shielded focus — notice line")
+
+        let pause = app.buttons["一時停止"]
+        XCTAssertTrue(waitForHittable(pause, timeout: 4))
+        pause.tap()
+        XCTAssertTrue(waitForHittable(app.buttons["再開する"], timeout: 4))
+        XCTAssertTrue(notice.waitForExistence(timeout: 5), "A pause keeps the shield, and the line")
+        XCTAssertFalse(
+            app.descendants(matching: .any)["focus.paused-notice"].exists,
+            "One line in the row: the shield outranks the paused note"
+        )
+        retainScreenshot(named: "Shielded focus paused — notice line")
+        cancelPresentedFocusIfNeeded()
+    }
+
+    private func relaunchWithScreenAwakeProbe(_ mode: String) -> XCUIElement {
+        app.terminate()
+        app.launchEnvironment["POMOGEM_UI_TEST_SCREEN_AWAKE_PROBE"] = mode
+        // The reward then offers a five-minute break, whose screen shows the
+        // ledger after the focus screen closed.
+        app.launchArguments += ["-focus.rest-cadence.v2", "break-return-ui-test-reset"]
+        app.launch()
+        XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 10))
+        return app.descendants(matching: .any)["timer.screen-awake.probe"].firstMatch
+    }
+
+    /// Reads the ledger on the break the reward opens: every sample taken
+    /// while the alarm rang found the display held, and the first one after
+    /// it stopped found it released (before the focus screen closed).
+    private func verifyTheAlarmHeldTheScreenAndReleasedItAtStop(magicTaps: Int) {
+        let startBreak = app.buttons["5分休憩する"]
+        XCTAssertTrue(waitForHittable(startBreak, timeout: 20))
+        startBreak.tap()
+        XCTAssertTrue(app.staticTexts["休憩"].waitForExistence(timeout: 12))
+        let probe = app.descendants(matching: .any)["timer.screen-awake.probe"].firstMatch
+        XCTAssertTrue(waitForValue(of: probe, containing: "stopsReleased=1", timeout: 5),
+                      String(describing: probe.value))
+        var ledger: [String: Int] = [:]
+        for field in ((probe.value as? String) ?? "").split(separator: ";") {
+            let pair = field.split(separator: "=", maxSplits: 1)
+            if pair.count == 2, let number = Int(pair[1]) { ledger[String(pair[0])] = number }
+        }
+        let rang = ledger["ringingSamples"] ?? 0
+        XCTAssertGreaterThan(rang, 10, "The alarm rang for a while: \(ledger)")
+        XCTAssertEqual(ledger["ringingAwake"], rang, "Auto-lock could never end the alarm: \(ledger)")
+        XCTAssertEqual(ledger["stopsHeld"], 0, "Stop released the display: \(ledger)")
+        XCTAssertEqual(ledger["magicTaps"], magicTaps, "\(ledger)")
+        let skip = app.buttons["休憩をスキップ"].firstMatch
+        XCTAssertTrue(waitForHittable(skip, timeout: 5))
+        skip.tap()
+        XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 8))
+        waitForLauncherEnabled()
+    }
+
     func testPausedFocusIsHonestAndTheRingDoesNotMove() throws {
         app.buttons["home.duration-picker"].tap()
         app.buttons["25分"].tap()

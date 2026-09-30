@@ -123,6 +123,27 @@ IFS=' ' read -r POMOGEM_AUDIT_MARKETING_VERSION POMOGEM_AUDIT_BUILD_NUMBER <<< "
 readonly POMOGEM_AUDIT_MARKETING_VERSION POMOGEM_AUDIT_BUILD_NUMBER
 export POMOGEM_AUDIT_MARKETING_VERSION POMOGEM_AUDIT_BUILD_NUMBER
 
+# The reviewed permission prompts are the app_usage_descriptions list in this
+# checkout's AppStore/configuration.yml, the same list validate-store-metadata.py
+# compares with PomoGem/Info.plist. A new prompt is reviewed by adding it there.
+if ! app_usage_descriptions=$(PYTHONDONTWRITEBYTECODE=1 python3 - "$POMOGEM_AUDIT_SCRIPT_DIRECTORY" <<'PYUSAGE'
+from pathlib import Path
+import sys
+sys.path.insert(0, sys.argv[1])
+from release_profile_policy import read_app_usage_descriptions
+try:
+    keys = read_app_usage_descriptions(
+        (Path(sys.argv[1]).parent / "AppStore/configuration.yml").read_text(encoding="utf-8"))
+except (OSError, ValueError):
+    raise SystemExit("error: could not determine the reviewed permission prompts")
+print(",".join(keys))
+PYUSAGE
+); then
+  fail 'reviewed permission prompts (app_usage_descriptions) are missing or malformed'
+fi
+readonly POMOGEM_AUDIT_APP_USAGE_DESCRIPTIONS="$app_usage_descriptions"
+export POMOGEM_AUDIT_APP_USAGE_DESCRIPTIONS
+
 readonly archive_info="$archive_path/Info.plist"
 readonly app_bundle="$archive_path/Products/Applications/PomoGem.app"
 readonly widget_bundle="$app_bundle/PlugIns/PomoGemWidgets.appex"
@@ -220,11 +241,22 @@ TEAM_ID = os.environ["POMOGEM_AUDIT_TEAM_ID"]
 VERSION = os.environ["POMOGEM_AUDIT_MARKETING_VERSION"]
 BUILD = os.environ["POMOGEM_AUDIT_BUILD_NUMBER"]
 MINIMUM_IOS = os.environ["POMOGEM_AUDIT_MINIMUM_IOS"]
+# From AppStore/configuration.yml app_usage_descriptions (read above).
+REVIEWED_APP_USAGE_DESCRIPTIONS = set(
+    os.environ.get("POMOGEM_AUDIT_APP_USAGE_DESCRIPTIONS", "").split(",")
+)
 
 
 def fail(message: str) -> None:
     print(f"error: {message}", file=sys.stderr)
     raise SystemExit(1)
+
+
+if not REVIEWED_APP_USAGE_DESCRIPTIONS or any(
+    re.fullmatch(r"NS[A-Za-z]+UsageDescription", key) is None
+    for key in REVIEWED_APP_USAGE_DESCRIPTIONS
+):
+    fail("reviewed permission prompts are missing or malformed")
 
 
 def load(path: Path, label: str) -> dict:
@@ -403,6 +435,27 @@ if (
     fail("app must not request frequent Live Activity updates")
 if "NSSupportsLiveActivities" in widget_plist and widget_plist.get("NSSupportsLiveActivities") is not False:
     fail("Widget must not independently enable Live Activities")
+# Permission prompts are reviewed like capabilities (AlarmKit, for one, is
+# authorized by its usage description alone and has no entitlement). The
+# reviewed set is AppStore/configuration.yml app_usage_descriptions.
+# Extensions ask for nothing.
+
+
+def usage_description_keys(plist: dict) -> set:
+    return {key for key in plist if key.startswith("NS") and key.endswith("UsageDescription")}
+
+
+if usage_description_keys(app_plist) != REVIEWED_APP_USAGE_DESCRIPTIONS:
+    unreviewed = sorted(usage_description_keys(app_plist) - REVIEWED_APP_USAGE_DESCRIPTIONS)
+    missing = sorted(REVIEWED_APP_USAGE_DESCRIPTIONS - usage_description_keys(app_plist))
+    fail("app permission prompts differ from the reviewed usage descriptions "
+         f"(not in configuration.yml app_usage_descriptions: {', '.join(unreviewed) or 'none'}; "
+         f"missing from the app: {', '.join(missing) or 'none'})")
+if any(not isinstance(app_plist[key], str) or not app_plist[key].strip()
+       for key in REVIEWED_APP_USAGE_DESCRIPTIONS):
+    fail("app permission prompt is missing its purpose string")
+if usage_description_keys(widget_plist) or usage_description_keys(monitor_plist):
+    fail("extensions must not declare permission prompts")
 extension = widget_plist.get("NSExtension")
 if not isinstance(extension, dict) or extension.get("NSExtensionPointIdentifier") != "com.apple.widgetkit-extension":
     fail("embedded extension is not a WidgetKit extension")

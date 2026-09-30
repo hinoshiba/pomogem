@@ -32,6 +32,10 @@ final class Haptics {
     /// asynchronous start completes (jar-03).
     private var deferredCues = DeferredHapticCues<Cue>()
     private var timerCompletionPlayer: CHHapticPatternPlayer?
+    /// F5: the looping completion pattern playing, or waiting for the
+    /// engine to start. Forgotten whenever the engine stops or resets, so
+    /// the next `sustainTimerCompletionLoop` starts it again.
+    private var timerCompletionLoop: AlarmHapticPattern?
     private var didBecomeActiveObserver: NSObjectProtocol?
     private let lightFallback = UIImpactFeedbackGenerator(style: .light)
     private let mediumFallback = UIImpactFeedbackGenerator(style: .medium)
@@ -196,12 +200,35 @@ final class Haptics {
         }
     }
 
+    /// F5, the standard and maximum presets: loops `pattern` (a continuous
+    /// full-intensity vibration with the chosen style's taps as accents)
+    /// through `CHHapticAdvancedPatternPlayer` with `loopEnabled`, or leaves
+    /// it looping. Like every cue it waits for the asynchronous engine start
+    /// (jar-03) instead of starting the engine on the main thread; a looping
+    /// player keeps the engine from its idle auto-shutdown until
+    /// `stopTimerCompletion`. Without Core Haptics each call is one UIKit
+    /// impact, so the caller's cycle still reaches the hand.
+    func sustainTimerCompletionLoop(_ pattern: AlarmHapticPattern) {
+        guard isEnabled, let cue = Self.timerCompletionLoopCue(pattern) else { return }
+        guard supportsCoreHaptics, engine != nil else {
+            playFallback(cue)
+            return
+        }
+        guard timerCompletionLoop != pattern else { return }
+        timerCompletionLoop = pattern
+        deliver(cue, kind: .timerCompletion)
+    }
+
+    /// Whether a completion loop plays or waits for the engine.
+    var isTimerCompletionLoopRequested: Bool { timerCompletionLoop != nil }
+
     /// Stops only the retained completion pattern. Jar/drop haptics use their
     /// own short players and must not be interrupted by acknowledging a timer.
     func stopTimerCompletion() {
         deferredCues.cancelTimerCompletion()
         try? timerCompletionPlayer?.stop(atTime: CHHapticTimeImmediate)
         timerCompletionPlayer = nil
+        timerCompletionLoop = nil
     }
 
     func playGold() {
@@ -337,7 +364,9 @@ final class Haptics {
                 playOnRunningEngine(entry.cue, kind: entry.kind)
             } else {
                 // The start failed: a UIKit impact remains available when
-                // the haptic server is interrupted or reset.
+                // the haptic server is interrupted or reset. A loop that
+                // could not start is forgotten, so the next cycle retries.
+                if entry.kind == .timerCompletion { timerCompletionLoop = nil }
                 playFallback(entry.cue)
             }
         }
@@ -350,10 +379,20 @@ final class Haptics {
         }
         do {
             let pattern = try CHHapticPattern(events: cue.events, parameters: [])
-            let player = try engine.makePlayer(with: pattern)
+            let player: CHHapticPatternPlayer
+            switch cue.playerConfiguration {
+            case let .advanced(loopEnd):
+                let looping = try engine.makeAdvancedPlayer(with: pattern)
+                looping.loopEnabled = true
+                looping.loopEnd = loopEnd
+                player = looping
+            case .oneShot:
+                player = try engine.makePlayer(with: pattern)
+            }
             if kind == .timerCompletion {
                 try? timerCompletionPlayer?.stop(atTime: CHHapticTimeImmediate)
                 timerCompletionPlayer = player
+                if cue.loopDuration == nil { timerCompletionLoop = nil }
             }
             postWillPlay(duration: cue.duration)
             do {
@@ -361,14 +400,20 @@ final class Haptics {
             } catch {
                 // The notification was already emitted for this physical
                 // attempt, so the fallback must not emit a duplicate.
-                if kind == .timerCompletion { timerCompletionPlayer = nil }
+                if kind == .timerCompletion {
+                    timerCompletionPlayer = nil
+                    timerCompletionLoop = nil
+                }
                 engineIsRunning = false
                 playFallbackImpact(cue)
             }
         } catch {
             // Pattern/player construction did not reach hardware. Fall
             // through to one announced UIKit impact.
-            if kind == .timerCompletion { timerCompletionPlayer = nil }
+            if kind == .timerCompletion {
+                timerCompletionPlayer = nil
+                timerCompletionLoop = nil
+            }
             engineIsRunning = false
             playFallback(cue)
         }
@@ -389,6 +434,7 @@ final class Haptics {
                     self?.isStartingEngine = false
                     self?.engineIsRunning = false
                     self?.timerCompletionPlayer = nil
+                    self?.timerCompletionLoop = nil
                     self?.deferredCues.removeAll()
                 }
             }
@@ -401,6 +447,7 @@ final class Haptics {
                     self?.isStartingEngine = false
                     self?.engineIsRunning = false
                     self?.timerCompletionPlayer = nil
+                    self?.timerCompletionLoop = nil
                     self?.deferredCues.removeAll()
                 }
             }
@@ -416,6 +463,7 @@ final class Haptics {
         engineIsRunning = false
         deferredCues.removeAll()
         timerCompletionPlayer = nil
+        timerCompletionLoop = nil
         engine?.stop(completionHandler: nil)
     }
 
@@ -464,11 +512,44 @@ final class Haptics {
 
 extension Haptics {
     /// One pattern and the UIKit impact that stands in for it.
-    fileprivate struct Cue {
+    struct Cue {
         let events: [CHHapticEvent]
         let duration: TimeInterval
         let fallbackIntensity: CGFloat
         let fallbackSharpness: CGFloat
+        /// Set for the F5 completion loop: played through an advanced player
+        /// with `loopEnabled` and this `loopEnd`.
+        var loopDuration: TimeInterval? = nil
+
+        /// How `playOnRunningEngine` builds the player.
+        enum PlayerConfiguration: Equatable {
+            case oneShot
+            /// `CHHapticAdvancedPatternPlayer` with `loopEnabled` and this
+            /// `loopEnd`: without both, the standard and maximum presets
+            /// would vibrate one cycle and stop while the alarm still rings
+            /// (`sustainTimerCompletionLoop` does not restart a loop it
+            /// believes is playing).
+            case advanced(loopEnd: TimeInterval)
+        }
+
+        var playerConfiguration: PlayerConfiguration {
+            loopDuration.map { .advanced(loopEnd: $0) } ?? .oneShot
+        }
+    }
+
+    /// The completion loop's cue for `pattern`, or nil for a pattern that
+    /// does not loop.
+    static func timerCompletionLoopCue(_ pattern: AlarmHapticPattern) -> Cue? {
+        guard let loopDuration = pattern.loopDuration, loopDuration > 0 else { return nil }
+        let events = pattern.makeHapticEvents()
+        guard !events.isEmpty else { return nil }
+        return Cue(
+            events: events,
+            duration: loopDuration,
+            fallbackIntensity: 1,
+            fallbackSharpness: 0.5,
+            loopDuration: loopDuration
+        )
     }
 }
 
