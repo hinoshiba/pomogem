@@ -15,13 +15,49 @@ struct HomeSceneSessionSnapshotGeneration: Equatable {
     }
 }
 
+/// launch-perf (e): what a silent restore lays out, i.e. everything a new
+/// snapshot generation can change in the jar: the activity epoch, the
+/// aggregate roots and the loose bodies' complete presentation.
+struct HomeSceneContent: Equatable {
+    let epochID: UUID?
+    let rootGrams: [UUID: Int]
+    let pebblePresentations: [UUID: PebbleDescriptor]
+
+    init(epochID: UUID?, roots: [(id: UUID, grams: Int)], pebbles: [PebbleDescriptor]) {
+        self.epochID = epochID
+        rootGrams = Dictionary(roots.map { ($0.id, $0.grams) }, uniquingKeysWith: { $1 })
+        pebblePresentations = Dictionary(pebbles.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.epochID == rhs.epochID
+            && lhs.rootGrams == rhs.rootGrams
+            && lhs.pebblePresentations.count == rhs.pebblePresentations.count
+            && lhs.pebblePresentations.allSatisfy { entry in
+                guard let other = rhs.pebblePresentations[entry.key] else { return false }
+                return entry.value.hasSamePresentation(as: other)
+            }
+    }
+}
+
 enum HomeSceneSessionSnapshotPolicy {
+    /// A new generation re-lays the jar out silently, so rows that become
+    /// loose or leave never replay as new drops. launch-perf (e): only when
+    /// the content or a loose gem's presentation changed. A restore keeps
+    /// the jar awake ~6 s, and while the totals read 「iCloudを確認中」 it ran at
+    /// each landing and again ~7 s later when verification flipped (device
+    /// audit 2026-09-29). An unknown content (nil) restores, as before.
     static func shouldRestoreSilently(
         sceneIsInitialized: Bool,
         appliedGeneration: HomeSceneSessionSnapshotGeneration?,
-        acceptedGeneration: HomeSceneSessionSnapshotGeneration
+        acceptedGeneration: HomeSceneSessionSnapshotGeneration,
+        appliedContent: HomeSceneContent? = nil,
+        acceptedContent: HomeSceneContent? = nil
     ) -> Bool {
-        !sceneIsInitialized || appliedGeneration != acceptedGeneration
+        guard sceneIsInitialized else { return true }
+        guard appliedGeneration != acceptedGeneration else { return false }
+        guard let appliedContent, let acceptedContent else { return true }
+        return appliedContent != acceptedContent
     }
 }
 
@@ -159,6 +195,9 @@ struct HomeView: View {
     @State private var lastSettledLifetimeReadout = SettledLifetimeReadoutBox()
     @State private var appliedSceneSessionSnapshotGeneration:
         HomeSceneSessionSnapshotGeneration?
+    /// What the jar was last synced to (launch-perf (e)). A box, not
+    /// observed state: recording it must not cost another body pass.
+    @State private var appliedSceneContent = HomeSceneContentBox()
     @State private var resolvedAchievementStones: [AchievementStone] = []
     @State private var projectedAchievementCount = 0
     @State private var achievementCountIsLowerBound = false
@@ -251,6 +290,9 @@ struct HomeView: View {
     @State private var focusStartEntryTask: Task<Void, Never>?
 
     init() {
+#if DEBUG && targetEnvironment(simulator)
+        JarFrameProbe.shared?.markHomeStart()
+#endif
         _storedSubjects = Query(SubjectSyncPolicy.liveRowsDescriptor(sortBy: [
             SortDescriptor(\Subject.sortOrder),
             SortDescriptor(\Subject.syncRecordID)
@@ -883,7 +925,15 @@ struct HomeView: View {
         VStack(spacing: 0) {
             GeometryReader { proxy in
                 let jarHeight = homeJarHeight(availableHeight: proxy.size.height)
-                let cardPlacement = aggregateCardPlacement(jarHeight: jarHeight)
+                // launch-perf (d): one theme read per pass for the card's
+                // placement and the picker row. `activeSubjects` canonicalises
+                // every theme row; the card's extra read cost 19–21 ms of main
+                // thread per landing on an iPhone 12 mini.
+                let hasActiveSubjects = !activeSubjects.isEmpty
+                let cardPlacement = aggregateCardPlacement(
+                    jarHeight: jarHeight,
+                    hasActiveSubjects: hasActiveSubjects
+                )
                 // One readout for the jar and its large-text companion; both
                 // readers take their values from it.
                 let stage = jarStageSnapshot
@@ -909,7 +959,7 @@ struct HomeView: View {
                             }
                         }
                         Spacer(minLength: 14)
-                        if !activeSubjects.isEmpty {
+                        if hasActiveSubjects {
                             // The crystal's card under the bottle takes this
                             // row for its few seconds when it reaches it
                             // (`AggregateCardPlacementPolicy`).
@@ -2332,7 +2382,8 @@ struct HomeView: View {
     /// Where a tapped crystal's card shows over a jar `jarHeight` tall. The
     /// tip's row holds it while that row is there.
     private func aggregateCardPlacement(
-        jarHeight: CGFloat
+        jarHeight: CGFloat,
+        hasActiveSubjects: Bool
     ) -> AggregateCardPlacementPolicy.Placement {
         guard !showsAggregateTipRow else { return .row }
         return AggregateCardPlacementPolicy.placement(
@@ -2340,7 +2391,7 @@ struct HomeView: View {
             bottleBase: Self.bottleBaseInset(stageHeight: jarHeight),
             cardHeight: measuredAggregateCardHeight ?? AggregateCardPlacementPolicy.estimatedCardHeight,
             // Controls not measured yet count as right under the jar.
-            pickerTop: activeSubjects.isEmpty ? nil : (measuredPickerRowTop ?? 0),
+            pickerTop: hasActiveSubjects ? (measuredPickerRowTop ?? 0) : nil,
             launcherTop: pinsFocusLauncher ? nil : measuredLauncherTop
         )
     }
@@ -4237,10 +4288,19 @@ struct HomeView: View {
         let snapshotGeneration = HomeSceneSessionSnapshotGeneration(
             aggregateProjectionPresentation
         )
+        let sceneContent = HomeSceneContent(
+            epochID: currentActivityEpochID,
+            roots: acceptedAggregateRoots.map { (id: $0.id, grams: $0.grams) }
+                + activeLegacyStrata.map { (id: $0.id, grams: $0.grams) },
+            pebbles: current
+        )
+        defer { appliedSceneContent.value = sceneContent }
         if HomeSceneSessionSnapshotPolicy.shouldRestoreSilently(
             sceneIsInitialized: sceneInitialized,
             appliedGeneration: appliedSceneSessionSnapshotGeneration,
-            acceptedGeneration: snapshotGeneration
+            acceptedGeneration: snapshotGeneration,
+            appliedContent: appliedSceneContent.value,
+            acceptedContent: sceneContent
         ) {
             let restored = current.filter { !awaitingDropIDs.contains($0.id) }
             scene.restore(pebbles: restored)
@@ -4253,6 +4313,10 @@ struct HomeView: View {
             scheduleWidgetSnapshot()
             return
         }
+        // launch-perf (e): a new generation with the same content (e.g. a
+        // pure pending → verified flip) is adopted without a restore; the
+        // incremental pass below then finds nothing to add or remove.
+        appliedSceneSessionSnapshotGeneration = snapshotGeneration
 
         let newDescriptors = current.filter { !knownLooseIDs.contains($0.id) }
         let newSessionIDs = Set(newDescriptors.filter { !$0.isAchievement }.map(\.id))
@@ -6507,6 +6571,13 @@ enum HomeLifetimeMassText {
             ? MassText.grams(value: grams, locale: locale)
             : MassText.kilograms(fromGrams: grams, fractionDigits: kilogramFractionDigits, locale: locale)
     }
+}
+
+/// Home's last synced jar content (launch-perf (e)), kept in `@State`
+/// without observation.
+@MainActor
+final class HomeSceneContentBox {
+    var value: HomeSceneContent?
 }
 
 /// Runs Home's follow-up to a landing once the jar has settled

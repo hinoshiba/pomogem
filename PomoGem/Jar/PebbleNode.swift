@@ -415,6 +415,11 @@ struct PebbleDescriptor: Identifiable {
     /// Cloud reconciliation can legitimately update a row in place, so the
     /// scene also compares every field that affects geometry, appearance or
     /// accessibility before deciding an existing body is current.
+    /// Same bodies in the same order, each with the same presentation.
+    static func haveSamePresentation(_ lhs: [PebbleDescriptor], _ rhs: [PebbleDescriptor]) -> Bool {
+        lhs.count == rhs.count && zip(lhs, rhs).allSatisfy { $0.hasSamePresentation(as: $1) }
+    }
+
     func hasSamePresentation(as other: PebbleDescriptor) -> Bool {
         id == other.id
             && subjectName == other.subjectName

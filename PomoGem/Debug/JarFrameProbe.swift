@@ -1,4 +1,5 @@
 #if DEBUG && targetEnvironment(simulator)
+import Darwin
 import Foundation
 import QuartzCore
 import SpriteKit
@@ -120,6 +121,63 @@ final class JarFrameProbe {
         frameStart = CACurrentMediaTime()
     }
 
+    // MARK: Home start to the first jar frame (launch-perf, 2026-09-29)
+
+    /// Where Home began (the first `HomeView` or `JarScene` init, whichever
+    /// comes first): wall time and the main thread's CPU time.
+    private var homeStart: (wall: CFTimeInterval, cpu: Double)?
+    private var loggedFirstFrame = false
+    private var loggedGlassReady = false
+
+    /// Idempotent: only the first call marks Home's start.
+    func markHomeStart() {
+        guard homeStart == nil else { return }
+        homeStart = (CACurrentMediaTime(), Self.currentThreadCPUMilliseconds())
+        note("home-start")
+    }
+
+    /// `first-jar-frame` once, after the first frame the jar rendered:
+    /// wall time and main-thread CPU time since Home's start.
+    private func noteFirstFrameIfNeeded() {
+        guard !loggedFirstFrame, let start = homeStart else { return }
+        loggedFirstFrame = true
+        note(String(
+            format: "first-jar-frame wallMs=%.1f mainCpuMs=%.1f",
+            (CACurrentMediaTime() - start.wall) * 1_000,
+            Self.currentThreadCPUMilliseconds() - start.cpu
+        ))
+    }
+
+    /// `glass-ready` once, when the jar first shows its final glass.
+    func noteGlassReady() {
+        guard !loggedGlassReady, let start = homeStart else { return }
+        loggedGlassReady = true
+        note(String(
+            format: "glass-ready wallMs=%.1f mainCpuMs=%.1f",
+            (CACurrentMediaTime() - start.wall) * 1_000,
+            Self.currentThreadCPUMilliseconds() - start.cpu
+        ))
+    }
+
+    /// CPU time (user + system) of the calling thread, in milliseconds.
+    nonisolated static func currentThreadCPUMilliseconds() -> Double {
+        let port = mach_thread_self()
+        defer { mach_port_deallocate(mach_task_self_, port) }
+        var info = thread_basic_info()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<thread_basic_info_data_t>.size / MemoryLayout<integer_t>.size
+        )
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                thread_info(port, thread_flavor_t(THREAD_BASIC_INFO), $0, &count)
+            }
+        }
+        guard result == KERN_SUCCESS else { return 0 }
+        let seconds = Double(info.user_time.seconds + info.system_time.seconds)
+        let micros = Double(info.user_time.microseconds + info.system_time.microseconds)
+        return seconds * 1_000 + micros / 1_000
+    }
+
     /// Called at the end of the scene's update; the async block runs after
     /// SpriteKit has finished this frame's run-loop turn (render included).
     func sceneFinishedUpdate() {
@@ -128,6 +186,7 @@ final class JarFrameProbe {
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
                 JarFrameProbe.shared?.workMilliseconds.append((CACurrentMediaTime() - start) * 1_000)
+                JarFrameProbe.shared?.noteFirstFrameIfNeeded()
             }
         }
     }
