@@ -3779,7 +3779,8 @@ struct HomeView: View {
     @ViewBuilder
     private func postDropAwaitingDropNote(_ offer: BreakOffer) -> some View {
         if offer.isAwaitingDrop {
-            Text("閉じると、一粒が瓶に落ちます。")
+            Text("閉じると、一粒が瓶に落ちます。", tableName: "Home",
+                 comment: "Completion card note: closing drops the saved gem into the jar")
                 .font(.caption)
                 .foregroundStyle(PomoGemTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -8437,7 +8438,10 @@ private struct StratumCelebrationView: View {
                                             comment: "Fusion sheet action: makes a share card of the new crystal"))
             }
             .buttonStyle(PomoGemSecondaryButtonStyle())
-            Button("ここで休む", action: onContinue)
+            Button(action: onContinue) {
+                Text("ここで休む", tableName: "Home",
+                     comment: "Fusion sheet secondary action: dismiss and rest here")
+            }
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(PomoGemTheme.muted)
                 .frame(minHeight: 44)

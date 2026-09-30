@@ -505,12 +505,12 @@ struct AccumulationTimelineBrowser: View {
 private enum AccumulationTimelineMassText {
     static func short(_ grams: Int64) -> String {
         if grams >= 1_000_000 {
-            return EffortConstellationPresentation.metricTons(String(format: "%.1f", Double(grams) / 1_000_000))
+            return MassText.tonnes(fromGrams: Int(clamping: grams), fractionDigits: 1)
         }
         if grams >= 1_000 {
-            return MassText.kilograms(String(format: "%.1f", Double(grams) / 1_000))
+            return MassText.kilograms(fromGrams: Int(clamping: grams), fractionDigits: 1)
         }
-        return MassText.grams("\(grams)")
+        return MassText.grams(value: Int(clamping: grams))
     }
 
     static func spoken(_ grams: Int64) -> String {

@@ -949,6 +949,23 @@
         }
       }
     },
+    "シェアカード" : {
+      "comment" : "Eyebrow over the share composer title 積み重ねを、動く一枚に",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Share Card"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "シェアカード"
+          }
+        }
+      }
+    },
     "ストーリー 9:16" : {
       "comment" : "Share card shape (segmented control): the 9:16 story. en: Story 9:16",
       "localizations" : {
@@ -1471,9 +1488,6 @@
         }
       }
     },
-    "シェアカード" : {
-      "comment" : "Eyebrow over the share composer title 積み重ねを、動く一枚に"
-    },
     "写真に保存しています" : {
       "localizations" : {
         "en" : {
@@ -1802,6 +1816,23 @@
         }
       }
     },
+    "新機能" : {
+      "comment" : "Badge on the 動くGIF choice",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新機能"
+          }
+        }
+      }
+    },
     "最初の一粒へ" : {
       "comment" : "Share composer empty state button: close and go to the jar to add a first gem",
       "localizations" : {
@@ -2073,9 +2104,6 @@
           }
         }
       }
-    },
-    "新機能" : {
-      "comment" : "Badge on the 動くGIF choice"
     },
     "瓶に積んだ集中 %@（%@）" : {
       "comment" : "Share sheet title for the GIF. Arguments: mass, focus time",

@@ -751,6 +751,11 @@ def check_translation(repo, findings, table, key, entry, language, localization,
     for term in glossary_rules(repo):
         if term["ja"] not in source:
             continue
+        # Action labels keep their exact UI wording. In a sentence the same
+        # Japanese verb may be inflected, so requiring the label verbatim
+        # would make an otherwise natural English sentence read incorrectly.
+        if term.get("scope") == "exact_key" and source != term["ja"]:
+            continue
         if term.get("lint") in ("error", "warn") and not english_mentions(combined, term["en"]):
             message = f"{where}: glossary term {term['ja']} should read {term['en']!r}"
             if term.get("lint") == "error":

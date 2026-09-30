@@ -37,6 +37,7 @@
     },
     "%@t" : {
       "comment" : "Mass in metric tons. %@ is the number, already formatted. en: '%@ t' (with a space; never converted).",
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1753,7 +1754,21 @@
       }
     },
     "今週" : {
-      "comment" : "Eyebrow over this week's headline in 積み上がり"
+      "comment" : "Eyebrow over this week's headline in 積み上がり",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This Week"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今週"
+          }
+        }
+      }
     },
     "今週の実測" : {
       "comment" : "Weekly card tile: measured mass this week",
@@ -2210,6 +2225,23 @@
         }
       }
     },
+    "年月の瓶" : {
+      "comment" : "Eyebrow over 年月をたどる: the section's name, as the Home menu's 積み上がり row lists it",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jars by Year and Month"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "年月の瓶"
+          }
+        }
+      }
+    },
     "年月の範囲を確認できませんでした。" : {
       "localizations" : {
         "en" : {
@@ -2325,9 +2357,6 @@
           }
         }
       }
-    },
-    "年月の瓶" : {
-      "comment" : "Eyebrow over 年月をたどる: the section's name, as the Home menu's 積み上がり row lists it"
     },
     "日ごとの記録" : {
       "comment" : "Heading of a month's list of days",
