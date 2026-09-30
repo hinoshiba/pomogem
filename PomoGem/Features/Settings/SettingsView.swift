@@ -2288,6 +2288,10 @@ struct SettingsView: View {
         PendingStratumCelebrationStore.removeAll()
         PendingRewardReceiptStore.removeAll()
         FocusRestCadenceStore.removeAll()
+        // 重さの旅 (§5.6): how far this device celebrated, and its Home line
+        // toggle, belong to the records that were reset.
+        WeightJourneyCelebrationStore.removeAll()
+        WeightJourneyHomePreference.removeAll()
         UserDefaults.standard.removeObject(forKey: FocusPersistence.localCompletionIDKey)
         UserDefaults.standard.removeObject(
             forKey: AccountScopedLocalState.defaultsKey(

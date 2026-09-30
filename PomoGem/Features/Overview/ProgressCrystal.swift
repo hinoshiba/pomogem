@@ -216,12 +216,9 @@ struct FusionRewardBridgeState: Equatable, Sendable {
 /// from 10/10 to 1/10. The just-finished effort remains certain, so the partial
 /// state celebrates only that particle until the hierarchy is exact again.
 struct FusionRewardBridgeDisplayState: Equatable, Sendable {
-    /// Not shown anywhere (「NEXT CRYSTAL」「CRYSTAL SYNC」): the completion
-    /// card lost its English eyebrow when it was rebuilt around this focus's
-    /// own gem (Docs/GemExperienceDesign.md, round 15), and nothing else reads
-    /// it. Left in place, and unlocalized, only because the card belongs to
-    /// the gem session and older branches still read it; drop it with them.
-    let eyebrow: String
+    // The English eyebrows (「NEXT CRYSTAL」「CRYSTAL SYNC」) are gone: the
+    // completion card lost them when it was rebuilt around this focus's own
+    // gem (Docs/GemExperienceDesign.md, round 15), and Home reads none.
     let progressLabel: String
     let nextStepLabel: String
     let longTermContextLabel: String?
@@ -259,7 +256,6 @@ enum FusionRewardBridgePresentation {
             .compactMap { $0 }
             .joined(separator: "、")
             return FusionRewardBridgeDisplayState(
-                eyebrow: "NEXT CRYSTAL",
                 progressLabel: state.progressLabel,
                 nextStepLabel: state.nextStepLabel,
                 longTermContextLabel: state.longTermContextLabel,
@@ -269,7 +265,6 @@ enum FusionRewardBridgePresentation {
         }
 
         return FusionRewardBridgeDisplayState(
-            eyebrow: "CRYSTAL SYNC",
             progressLabel: "今回 +1粒",
             nextStepLabel: "結晶進捗を整理中",
             longTermContextLabel: "保存データの読み込み後に正確な位置を表示します",
@@ -294,9 +289,7 @@ enum FusionRewardBridgePresentation {
 /// This lives beside the count-based bridge so a receipt written by an older
 /// build can still render its original, internally consistent payload.
 struct EffortProgressDisplayState: Equatable, Sendable {
-    /// Not shown anywhere (「TIME CORE」「TIME CORE SYNC」), for the same
-    /// reason as `FusionRewardBridgeDisplayState.eyebrow`.
-    let eyebrow: String
+    // No English eyebrow (「TIME CORE」), as `FusionRewardBridgeDisplayState`.
     let progressLabel: String
     let nextStepLabel: String
     let longTermContextLabel: String?
@@ -314,7 +307,6 @@ enum EffortProgressPresentation {
 
         guard !projectionIsLowerBound else {
             return EffortProgressDisplayState(
-                eyebrow: "TIME CORE SYNC",
                 progressLabel: "今回 +\(contribution)",
                 nextStepLabel: "時間の核を整理中",
                 longTermContextLabel: accountingDisclosure,
@@ -330,7 +322,6 @@ enum EffortProgressPresentation {
                 ? "超過した\(formattedDuration(grams: overflow))も次の段へ保持"
                 : "到達分は次の段の進みとして保持"
             state = EffortProgressDisplayState(
-                eyebrow: "TIME CORE",
                 progressLabel: "\(targetTitle(level: snapshot.displayedTargetLevel)) 到達",
                 nextStepLabel: nextStep,
                 longTermContextLabel: "次：\(formattedDuration(grams: snapshot.totalGrams)) / \(formattedDuration(grams: snapshot.nextTargetGrams))",
@@ -339,7 +330,6 @@ enum EffortProgressPresentation {
             )
         } else {
             state = EffortProgressDisplayState(
-                eyebrow: "TIME CORE",
                 progressLabel: "\(targetTitle(level: snapshot.displayedTargetLevel))へ \(formattedDuration(grams: snapshot.displayedProgressGrams)) / \(formattedDuration(grams: snapshot.displayedTargetGrams))",
                 nextStepLabel: "あと\(formattedDuration(grams: snapshot.remainingGrams))",
                 longTermContextLabel: accountingDisclosure,
@@ -357,7 +347,6 @@ enum EffortProgressPresentation {
         .compactMap { $0 }
         .joined(separator: "、")
         return EffortProgressDisplayState(
-            eyebrow: state.eyebrow,
             progressLabel: state.progressLabel,
             nextStepLabel: state.nextStepLabel,
             longTermContextLabel: state.longTermContextLabel,
@@ -1381,6 +1370,37 @@ struct JarAccumulationPresenceBackdrop: View {
     let state: JarAccumulationPresenceState
     let colorHex: String
     let showsLifetimeCore: Bool
+    /// D5: false when Home's readout above the mouth carries 「瓶N杯」
+    /// (`JarFilledJarPill`) instead of this chip behind the glass.
+    var showsCycleChip = true
+    /// F3 (review F1, 2026-09-29): the 「N巡」 pill is part of the HUD. Held
+    /// upside down, the settled pile rests against the cap, over the pill:
+    /// while it does, the copy behind the scene leaves the pill out and a
+    /// second copy in front of the scene draws only the pill, where it
+    /// always is and at its size, over the strengthened ink scrim
+    /// (`JarHUDScrimPolicy.cyclePill`).
+    var cyclePill: CyclePillLayer = .behindTheScene(lifted: false)
+    /// Reports the pill's frame in `JarSpriteView.stageCoordinateSpace`.
+    var onCyclePillFrame: ((CGRect) -> Void)?
+
+    enum CyclePillLayer: Equatable {
+        /// The whole backdrop behind the scene; `lifted` leaves the pill
+        /// out (still laid out and measured) while a front copy draws it.
+        case behindTheScene(lifted: Bool)
+        /// Only the pill, in front of the scene, over the strengthened ink.
+        case inFrontOfTheScene
+    }
+
+    /// Where the 「N巡」 pill's centre is on a stage of `stageSize` (y down).
+    static func cyclePillCenter(stageSize: CGSize, showsLifetimeCore: Bool) -> CGPoint {
+        return CGPoint(
+            x: stageSize.width / 2,
+            y: JarAccumulationPresenceLayoutPresentation.cycleChipCenterY(
+                stageHeight: stageSize.height,
+                showsLifetimeCore: showsLifetimeCore
+            )
+        )
+    }
 
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
@@ -1404,7 +1424,6 @@ struct JarAccumulationPresenceBackdrop: View {
             let stageHeight = min(Constants.Jar.height, max(1, proxy.size.height))
             let lightFieldHeight = max(1, stageHeight - 28)
             let lightFieldWidth = max(1, min(342, proxy.size.width - 48))
-            let lightFieldTop = (proxy.size.height - lightFieldHeight) / 2
             let layout = JarAccumulationPresenceLayoutPresentation.state(
                 showsLifetimeCore: showsLifetimeCore
             )
@@ -1413,76 +1432,79 @@ struct JarAccumulationPresenceBackdrop: View {
                 cycleBeat: cycleBeat
             )
 
+            let drawsField = cyclePill != .inFrontOfTheScene
+            let pillCenter = Self.cyclePillCenter(stageSize: proxy.size, showsLifetimeCore: showsLifetimeCore)
             ZStack {
-                JarAccumulationLightParticleField(
-                    state: state,
-                    presentation: lightField,
-                    colorHex: colorHex,
-                    showsMajorMilestoneBeat: majorMilestoneBeat != nil,
-                    reduceTransparency: reduceTransparency
-                )
-                .frame(width: lightFieldWidth, height: lightFieldHeight)
-                .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+                if drawsField {
+                    JarAccumulationLightParticleField(
+                        state: state,
+                        presentation: lightField,
+                        colorHex: colorHex,
+                        showsMajorMilestoneBeat: majorMilestoneBeat != nil,
+                        reduceTransparency: reduceTransparency
+                    )
+                    .frame(width: lightFieldWidth, height: lightFieldHeight)
+                    .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
 
-                // This monotonic memory glow is deliberately separate from the
-                // repeating vertical fill. Once the time core exists it recedes
-                // so the two optical summaries do not wash each other out.
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                Color(hex: colorHex).opacity(reduceTransparency ? 0.12 : 0.25),
-                                PomoGemTheme.auroraViolet.opacity(reduceTransparency ? 0.04 : 0.11),
-                                .clear
-                            ],
-                            center: .center,
-                            startRadius: 3,
-                            endRadius: glowDimension * 0.47
+                    // This monotonic memory glow is deliberately separate from the
+                    // repeating vertical fill. Once the time core exists it recedes
+                    // so the two optical summaries do not wash each other out.
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    Color(hex: colorHex).opacity(reduceTransparency ? 0.12 : 0.25),
+                                    PomoGemTheme.auroraViolet.opacity(reduceTransparency ? 0.04 : 0.11),
+                                    .clear
+                                ],
+                                center: .center,
+                                startRadius: 3,
+                                endRadius: glowDimension * 0.47
+                            )
                         )
-                    )
-                    .frame(width: glowDimension, height: glowDimension)
-                    .blur(radius: reduceTransparency ? 2 : 9)
-                    .opacity(
-                        (reduceTransparency ? 0.76 : state.fieldOpacity)
-                            * layout.centerGlowOpacityScale
-                    )
-                    .position(x: proxy.size.width / 2, y: proxy.size.height * 0.54)
+                        .frame(width: glowDimension, height: glowDimension)
+                        .blur(radius: reduceTransparency ? 2 : 9)
+                        .opacity(
+                            (reduceTransparency ? 0.76 : state.fieldOpacity)
+                                * layout.centerGlowOpacityScale
+                        )
+                        .position(x: proxy.size.width / 2, y: proxy.size.height * 0.54)
+                }
 
-                if state.completedCycleCount > 0 {
+                if state.completedCycleCount > 0, showsCycleChip {
                     // 「瓶N杯」 reads at a glance; the long-term milestone traces
                     // moved to the engraved marks on the jar's copper collar.
-                    HStack(spacing: 5) {
-                        Text(compactCycleCount)
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
-                            .monospacedDigit()
-                            .foregroundStyle(.white.opacity(0.9))
-                        Circle()
-                            .fill(Color(hex: colorHex))
-                            .frame(width: 6, height: 6)
-                    }
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 4)
-                    .background(
-                        PomoGemTheme.raised.opacity(
-                            reduceTransparency ? 0.94 : 0.72
-                        ),
-                        in: Capsule()
+                    JarFilledJarPill.Capsule(
+                        count: state.completedCycleCount,
+                        colorHex: colorHex,
+                        reduceTransparency: reduceTransparency
                     )
                     .overlay {
                         Capsule()
                             .stroke(Color.white.opacity(0.16), lineWidth: 0.7)
                     }
-                    .position(
-                        x: proxy.size.width / 2,
-                        y: JarAccumulationPresenceLayoutPresentation.cycleChipCenterY(
-                            stageHeight: proxy.size.height,
-                            showsLifetimeCore: showsLifetimeCore
-                        )
-                    )
+                    .background {
+                        // F3 (review F1): in front of a settled pile, the
+                        // same strengthened ink as the HUD's value.
+                        if cyclePill == .inFrontOfTheScene {
+                            JarInkScrimShape(
+                                ink: JarHUDScrimPolicy.strengthenedInk,
+                                size: CGSize(width: 120, height: 64),
+                                endRadius: 56
+                            )
+                        }
+                    }
+                    .onGeometryChange(for: CGRect.self) { geometry in
+                        geometry.frame(in: .named(JarSpriteView.stageCoordinateSpace))
+                    } action: { frame in
+                        onCyclePillFrame?(frame)
+                    }
+                    .position(pillCenter)
                     // Round 14: a landing or manual-entry toast rests over
                     // the collar for about 3 s; the pill steps back under
-                    // it instead of showing through.
-                    .opacity(router?.toast == nil ? 1 : 0)
+                    // it instead of showing through. Lifted in front of
+                    // the scene, the behind copy leaves it out (F3).
+                    .opacity(router?.toast == nil && cyclePill != .behindTheScene(lifted: true) ? 1 : 0)
                     .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: router?.toast == nil)
                 }
             }
@@ -1546,9 +1568,64 @@ struct JarAccumulationPresenceBackdrop: View {
             }
         }
     }
+}
 
-    private var compactCycleCount: String {
-        let count = AggregatePresentation.countLabel(state.completedCycleCount)
+/// 「瓶N杯」: how many times the jar has filled (2.5 kg each), #50's chip.
+/// Behind the glass inside the jar (`JarAccumulationPresenceBackdrop`), or
+/// on the first row of Home's readout above the mouth (D5). Either way it
+/// steps back under a toast, which rests over the same place for about
+/// 3 s, and VoiceOver reads the count from the jar itself.
+struct JarFilledJarPill: View {
+    let count: Int
+    let colorHex: String
+
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    /// The app's toast (optional: previews and share renders have none).
+    @Environment(AppRouter.self) private var router: AppRouter?
+
+    var body: some View {
+        Capsule(count: count, colorHex: colorHex, reduceTransparency: reduceTransparency)
+            .opacity(router?.toast == nil ? 1 : 0)
+            .animation(
+                (reduceMotionOverride ?? systemReduceMotion) ? nil : .easeInOut(duration: 0.2),
+                value: router?.toast == nil
+            )
+            .accessibilityHidden(true)
+    }
+
+    /// The chip itself, 13 pt bold with the core's colour dot.
+    struct Capsule: View {
+        let count: Int
+        let colorHex: String
+        let reduceTransparency: Bool
+
+        var body: some View {
+            HStack(spacing: 5) {
+                Text(JarFilledJarPill.text(count: count))
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.white.opacity(0.9))
+                Circle()
+                    .fill(Color(hex: colorHex))
+                    .frame(width: 6, height: 6)
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(
+                PomoGemTheme.raised.opacity(reduceTransparency ? 0.94 : 0.72),
+                in: SwiftUI.Capsule()
+            )
+            .overlay {
+                SwiftUI.Capsule()
+                    .stroke(Color.white.opacity(0.16), lineWidth: 0.7)
+            }
+        }
+    }
+
+    static func text(count rawCount: Int) -> String {
+        let count = AggregatePresentation.countLabel(rawCount)
         return String(
             localized: "瓶\(String(count.dropFirst()))杯",
             table: "Progress",
@@ -1799,6 +1876,18 @@ struct JarLifetimeCoreState: Equatable, Sendable {
     /// ten-to-one storage event from a legacy count projection.
     let nextFusionLabel: String?
     let progressLabel: String
+    /// D7: the 一里塚 the orbit shows (◇ = `litOrbitSlotCount`, then 星 on a
+    /// second ring, 冠 and ゾウ at its apex). Nil for a lower bound (its fold
+    /// would not be the real one) and for the count-only compatibility path.
+    var journeyMarkers: WeightJourney.MarkerFold? = nil
+
+    /// Orbits drawn around the core: the stage's own (one, two from 250 kg,
+    /// three from 25 t), and the 星 ring once the first 100 hours are in.
+    var orbitCount: Int {
+        let stageOrbits = JarLifetimeCoreBackdrop.orbitCount(level: coreLevel)
+        guard let journeyMarkers, journeyMarkers.count >= WeightJourney.fold else { return stageOrbits }
+        return max(stageOrbits, 2)
+    }
 }
 
 enum JarLifetimeCorePresentation {
@@ -1922,6 +2011,9 @@ enum JarLifetimeCorePresentation {
         let horizon = hierarchy.homeFusionHorizon
         let immediateHorizon = hierarchy.nextFusionHorizon
         if let effortSnapshot {
+            let journeyMarkers = WeightJourney.MarkerFold(
+                count: effortSnapshot.totalGrams / WeightJourney.markerGrams
+            )
             let reachedMilestone = effortSnapshot.progressFraction >= 1
                 && effortSnapshot.displayedProgressGrams
                     == effortSnapshot.displayedTargetGrams
@@ -1935,16 +2027,10 @@ enum JarLifetimeCorePresentation {
                     coreLevel: level
                 ),
                 visibleHaloRingCount: AggregatePresentation.ringCount(level: level),
-                litOrbitSlotCount: min(
-                    orbitSlotCount,
-                    max(
-                        0,
-                        Int(
-                            (effortSnapshot.progressFraction * Double(orbitSlotCount))
-                                .rounded(.down)
-                        )
-                    )
-                ),
+                // D7 (v1.3): the orbit's ◇ are the 一里塚 (one per 10 hours)
+                // that fold into 星, 冠 and ゾウ, no longer a share of the way
+                // to the next 10× core stage (D6: the core's shape shows that).
+                litOrbitSlotCount: journeyMarkers.diamonds,
                 title: "時間の核",
                 countLabel: EffortProgressPresentation.formattedMass(
                     grams: effortSnapshot.totalGrams
@@ -1952,7 +2038,8 @@ enum JarLifetimeCorePresentation {
                 nextFusionLabel: reachedMilestone
                     ? "次の核：\(EffortProgressPresentation.formattedDuration(grams: effortSnapshot.nextTargetGrams))"
                     : "核まであと\(EffortProgressPresentation.formattedDuration(grams: effortSnapshot.remainingGrams))",
-                progressLabel: "時間 \(EffortProgressPresentation.formattedDuration(grams: effortSnapshot.displayedProgressGrams)) / \(EffortProgressPresentation.formattedDuration(grams: effortSnapshot.displayedTargetGrams))"
+                progressLabel: "時間 \(EffortProgressPresentation.formattedDuration(grams: effortSnapshot.displayedProgressGrams)) / \(EffortProgressPresentation.formattedDuration(grams: effortSnapshot.displayedTargetGrams))",
+                journeyMarkers: journeyMarkers
             )
         }
 
@@ -2335,7 +2422,7 @@ struct JarLifetimeCoreBackdrop: View {
         GeometryReader { proxy in
             let jarWidth = max(1, proxy.size.width - Constants.Jar.horizontalMargin * 2)
             let core = Self.coreDiameter(jarWidth: jarWidth, level: state.coreLevel)
-            let orbitCount = Self.orbitCount(level: state.coreLevel)
+            let orbitCount = state.orbitCount
             let layout = JarLifetimeCoreLayout.resolve(
                 stageHeight: proxy.size.height,
                 core: core,
@@ -2388,6 +2475,14 @@ struct JarLifetimeCoreBackdrop: View {
                         }
 
                         orbit(diameter: orbitDiameter, shares: quantized, showsMarkers: layout.showsMarkers)
+
+                        if layout.showsMarkers, orbitCount >= 2, let journey = state.journeyMarkers {
+                            journeyMarks(
+                                journey,
+                                radius: layout.orbitRadius + layout.extraOrbitSpacing,
+                                shares: quantized
+                            )
+                        }
                     }
                 }
 
@@ -2519,6 +2614,60 @@ struct JarLifetimeCoreBackdrop: View {
                 }
             }
         }
+        // §5.6 小: a ◇ reached by the gem that just landed lights in place
+        // (the count follows the landed readout), without a flash.
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.6), value: lit)
+    }
+
+    /// D7 (§5.2): 星 on the second ring, one per 100 hours (0–9), between
+    /// the ◇ angles so the two rings never touch; and at the ring's apex a
+    /// small copper clasp engraved with 冠 (1,000 hours) and ゾウ (10,000
+    /// hours), with a count from two on. Lit 星 take the fan's colour and a
+    /// white rim like a lit ◇; waiting ones are faint copper points. All of
+    /// it stays inside the column the layout reserves (ring + half a
+    /// marker), so it never reaches the HUD or the pile.
+    private func journeyMarks(
+        _ journey: WeightJourney.MarkerFold,
+        radius: CGFloat,
+        shares: [GemColorShare]
+    ) -> some View {
+        let increased = colorSchemeContrast == .increased
+        let slotCount = WeightJourney.fold
+        return ZStack {
+            ForEach(0 ..< slotCount, id: \.self) { index in
+                let angle = Angle.degrees(-90 + (Double(index) + 0.5) * 360 / Double(max(slotCount, 1)))
+                let isLit = index < journey.stars
+                let slotColor = Color(hex: Self.shareColorHex(
+                    shares: shares,
+                    position: (Double(index) + 0.5) / Double(max(slotCount, 1))
+                ))
+                Group {
+                    if isLit {
+                        JourneyStarShape()
+                            .fill(slotColor)
+                            .overlay {
+                                JourneyStarShape()
+                                    .stroke(Color.white.opacity(0.9), lineWidth: 0.6)
+                            }
+                            .frame(width: 10, height: 10)
+                            .shadow(color: slotColor.opacity(0.85), radius: 4)
+                    } else {
+                        Circle()
+                            .fill(Self.orbitCopper.opacity(increased ? 0.7 : 0.30))
+                            .frame(width: increased ? 3.5 : 2.5, height: increased ? 3.5 : 2.5)
+                    }
+                }
+                .frame(width: JarLifetimeCoreLayout.markerSize, height: JarLifetimeCoreLayout.markerSize)
+                .offset(
+                    x: CGFloat(cos(angle.radians)) * radius,
+                    y: CGFloat(sin(angle.radians)) * radius
+                )
+            }
+            if journey.crowns > 0 || journey.elephants > 0 {
+                JourneyApexClasp(crowns: journey.crowns, elephants: journey.elephants, increased: increased)
+                    .offset(y: -radius - 1)
+            }
+        }
     }
 
     /// The share colour at a clockwise position (0…1) of the 20-slot fan.
@@ -2632,6 +2781,10 @@ struct JarLifetimeCoreLabels: View {
     /// How much of the block shows (`JarLifetimeCoreLabelFit`; `.hidden`
     /// lays out like `.full`).
     var fit: JarLifetimeCoreLabelFit = .full
+    /// D6 (v1.3): Home names the core only; its way to the next 10× stage
+    /// is shown by the core's shape, and Home's one next-target line is the
+    /// 重さの旅 in the HUD. Other jars keep the progress card.
+    var showsProgressCard = true
     /// Whether this copy reports `metrics`. The owner keeps one whole copy
     /// at opacity 0 that measures, so a shorter fit never changes them.
     var measures = true
@@ -2663,7 +2816,7 @@ struct JarLifetimeCoreLabels: View {
         return JarLifetimeCoreLayout.resolve(
             stageHeight: stageSize.height,
             core: JarLifetimeCoreBackdrop.coreDiameter(jarWidth: jarWidth, level: state.coreLevel),
-            orbitCount: JarLifetimeCoreBackdrop.orbitCount(level: state.coreLevel),
+            orbitCount: state.orbitCount,
             topClearance: topClearance,
             bottomLimit: bottomLimit,
             labelBottomLimit: labelBottomLimit,
@@ -2701,12 +2854,12 @@ struct JarLifetimeCoreLabels: View {
     private var shownHeight: CGFloat {
         fit.labelHeight(
             full: metrics.size.height,
-            secondLine: state.nextFusionLabel == nil ? 0 : metrics.secondLine,
+            secondLine: state.nextFusionLabel == nil || !showsProgressCard ? 0 : metrics.secondLine,
             name: metrics.namePlate
         )
     }
 
-    private var showsProgress: Bool { fit != .nameOnly }
+    private var showsProgress: Bool { showsProgressCard && fit != .nameOnly }
     private var showsSecondLine: Bool { fit == .full || fit == .hidden }
 
     private var labels: some View {
@@ -2920,6 +3073,110 @@ private struct LifetimeCoreShape: Shape {
         }
         path.closeSubpath()
         return path
+    }
+}
+
+/// A four-pointed 星 (D7): one per 100 hours on the time core's outer ring.
+private struct JourneyStarShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let outer = min(rect.width, rect.height) / 2
+        let inner = outer * 0.36
+        var path = Path()
+        for index in 0 ..< 8 {
+            let angle = -Double.pi / 2 + Double(index) * Double.pi / 4
+            let reach = index.isMultiple(of: 2) ? outer : inner
+            let point = CGPoint(
+                x: center.x + CGFloat(cos(angle)) * reach,
+                y: center.y + CGFloat(sin(angle)) * reach
+            )
+            if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
+        }
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// 冠 (1,000 hours): a three-pointed band, engraved in copper.
+private struct JourneyCrownShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let w = rect.width
+        let h = rect.height
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY + h))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + h * 0.30))
+        path.addLine(to: CGPoint(x: rect.minX + w * 0.27, y: rect.minY + h * 0.58))
+        path.addLine(to: CGPoint(x: rect.minX + w * 0.50, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.minX + w * 0.73, y: rect.minY + h * 0.58))
+        path.addLine(to: CGPoint(x: rect.minX + w, y: rect.minY + h * 0.30))
+        path.addLine(to: CGPoint(x: rect.minX + w, y: rect.minY + h))
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// ゾウ (10,000 hours): a small side silhouette facing left (body, head,
+/// ear, trunk and four legs), engraved in copper.
+private struct JourneyElephantShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let w = rect.width
+        let h = rect.height
+        func r(_ x: CGFloat, _ y: CGFloat, _ width: CGFloat, _ height: CGFloat) -> CGRect {
+            CGRect(x: rect.minX + x * w, y: rect.minY + y * h, width: width * w, height: height * h)
+        }
+        var path = Path()
+        path.addEllipse(in: r(0.30, 0.10, 0.68, 0.62))
+        path.addEllipse(in: r(0.08, 0.06, 0.36, 0.50))
+        path.addRoundedRect(in: r(0.02, 0.36, 0.13, 0.64), cornerSize: CGSize(width: 0.06 * w, height: 0.06 * w))
+        for x in [0.36, 0.52, 0.72, 0.86] as [CGFloat] {
+            path.addRect(r(x, 0.55, 0.10, 0.45))
+        }
+        return path
+    }
+}
+
+/// The apex of the 星 ring: 冠 and ゾウ side by side on a small dark plate
+/// with a copper rim, a count beside each glyph from two on. Bounded: at
+/// most two glyphs and two short numbers, whatever the lifetime.
+private struct JourneyApexClasp: View {
+    let crowns: Int
+    let elephants: Int
+    let increased: Bool
+
+    var body: some View {
+        HStack(spacing: 3) {
+            if crowns > 0 {
+                glyph(JourneyCrownShape(), width: 9, height: 7, count: crowns)
+            }
+            if elephants > 0 {
+                glyph(JourneyElephantShape(), width: 11, height: 7.5, count: elephants)
+            }
+        }
+        .padding(.horizontal, 4)
+        .frame(height: 10)
+        .background(PomoGemTheme.background.opacity(increased ? 0.85 : 0.60), in: Capsule())
+        .overlay {
+            Capsule().stroke(
+                JarLifetimeCoreBackdrop.orbitCopper.opacity(increased ? 0.95 : 0.55),
+                lineWidth: increased ? 1 : 0.7
+            )
+        }
+        .fixedSize()
+    }
+
+    private func glyph<S: Shape>(_ shape: S, width: CGFloat, height: CGFloat, count: Int) -> some View {
+        HStack(spacing: 1) {
+            shape
+                .fill(JarLifetimeCoreBackdrop.orbitCopper.opacity(increased ? 1 : 0.92))
+                .frame(width: width, height: height)
+            if count > 1 {
+                Text(verbatim: PomoGemLocale.grouped(count, locale: PomoGemLocale.current))
+                    .font(.system(size: 7.5, weight: .heavy, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(JarLifetimeCoreBackdrop.orbitCopper)
+                    .fixedSize()
+            }
+        }
     }
 }
 

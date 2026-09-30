@@ -47,6 +47,34 @@ enum UITestLocalStateIsolation {
         ScreenTimeGemDropStore.removeAll(defaults: defaults)
         FocusRestCadenceStore.removeAll(defaults: defaults)
         defaults.removeObject(forKey: FocusPersistence.localCompletionIDKey)
+        seedWeightJourneyWatermark(defaults: defaults)
+    }
+
+    /// 重さの旅 (§5.6): how far the device celebrated describes the store it
+    /// was written with. A new store starts as an existing device's would:
+    /// the watermark is above anything, so Home's first settled total lowers
+    /// it silently (no 「重さの旅を読み込みました」 in every fixture test).
+    /// `POMOGEM_UI_TEST_JOURNEY=fresh` starts as a new device instead (no
+    /// watermark), and a number starts from that many grams, so a test can
+    /// see what arrived "while away".
+    static let journeyEnvironmentKey = "POMOGEM_UI_TEST_JOURNEY"
+
+    static func seedWeightJourneyWatermark(
+        defaults: UserDefaults = .standard,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) {
+        switch environment[journeyEnvironmentKey] {
+        case "fresh":
+            WeightJourneyCelebrationStore.save(nil, defaults: defaults)
+        case let value?:
+            if let grams = Int(value) {
+                WeightJourneyCelebrationStore.save(grams, defaults: defaults)
+            } else {
+                WeightJourneyCelebrationStore.save(Int.max, defaults: defaults)
+            }
+        case nil:
+            WeightJourneyCelebrationStore.save(Int.max, defaults: defaults)
+        }
     }
 
     /// Call once per process, before anything reads the saved timer or
@@ -78,6 +106,8 @@ enum UITestLocalStateIsolation {
             base: HomeView.aggregateDetailSeenStorageBase,
             defaults: defaults
         ))
+        // 設定の「Home に次の目標を表示」 starts on in every test.
+        WeightJourneyHomePreference.removeAll(defaults: defaults)
         defaults.set(scenario, forKey: scenarioDefaultsKey)
         return true
     }

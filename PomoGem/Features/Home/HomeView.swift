@@ -15,13 +15,49 @@ struct HomeSceneSessionSnapshotGeneration: Equatable {
     }
 }
 
+/// launch-perf (e): what a silent restore lays out, i.e. everything a new
+/// snapshot generation can change in the jar: the activity epoch, the
+/// aggregate roots and the loose bodies' complete presentation.
+struct HomeSceneContent: Equatable {
+    let epochID: UUID?
+    let rootGrams: [UUID: Int]
+    let pebblePresentations: [UUID: PebbleDescriptor]
+
+    init(epochID: UUID?, roots: [(id: UUID, grams: Int)], pebbles: [PebbleDescriptor]) {
+        self.epochID = epochID
+        rootGrams = Dictionary(roots.map { ($0.id, $0.grams) }, uniquingKeysWith: { $1 })
+        pebblePresentations = Dictionary(pebbles.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.epochID == rhs.epochID
+            && lhs.rootGrams == rhs.rootGrams
+            && lhs.pebblePresentations.count == rhs.pebblePresentations.count
+            && lhs.pebblePresentations.allSatisfy { entry in
+                guard let other = rhs.pebblePresentations[entry.key] else { return false }
+                return entry.value.hasSamePresentation(as: other)
+            }
+    }
+}
+
 enum HomeSceneSessionSnapshotPolicy {
+    /// A new generation re-lays the jar out silently, so rows that become
+    /// loose or leave never replay as new drops. launch-perf (e): only when
+    /// the content or a loose gem's presentation changed. A restore keeps
+    /// the jar awake ~6 s, and while the totals read 「iCloudを確認中」 it ran at
+    /// each landing and again ~7 s later when verification flipped (device
+    /// audit 2026-09-29). An unknown content (nil) restores, as before.
     static func shouldRestoreSilently(
         sceneIsInitialized: Bool,
         appliedGeneration: HomeSceneSessionSnapshotGeneration?,
-        acceptedGeneration: HomeSceneSessionSnapshotGeneration
+        acceptedGeneration: HomeSceneSessionSnapshotGeneration,
+        appliedContent: HomeSceneContent? = nil,
+        acceptedContent: HomeSceneContent? = nil
     ) -> Bool {
-        !sceneIsInitialized || appliedGeneration != acceptedGeneration
+        guard sceneIsInitialized else { return true }
+        guard appliedGeneration != acceptedGeneration else { return false }
+        guard let appliedContent, let acceptedContent else { return true }
+        return appliedContent != acceptedContent
     }
 }
 
@@ -118,6 +154,9 @@ struct HomeView: View {
     /// Home's own follow-up to a landing, run once the jar has settled.
     @State private var landingSettle = LandingSettleScheduler()
     @State private var sceneInitialized = false
+    /// The jar stage's frame in the card's coordinate space, used to map
+    /// settled gems behind the HUD's ink (F3).
+    @State private var measuredJarStageFrame: CGRect = .zero
     /// Room for a tapped crystal's card under the bottle
     /// (`AggregateCardPlacementPolicy`), in the Home content's coordinates.
     @State private var measuredPickerRowTop: CGFloat?
@@ -156,6 +195,9 @@ struct HomeView: View {
     @State private var lastSettledLifetimeReadout = SettledLifetimeReadoutBox()
     @State private var appliedSceneSessionSnapshotGeneration:
         HomeSceneSessionSnapshotGeneration?
+    /// What the jar was last synced to (launch-perf (e)). A box, not
+    /// observed state: recording it must not cost another body pass.
+    @State private var appliedSceneContent = HomeSceneContentBox()
     @State private var resolvedAchievementStones: [AchievementStone] = []
     @State private var projectedAchievementCount = 0
     @State private var achievementCountIsLowerBound = false
@@ -246,8 +288,31 @@ struct HomeView: View {
     @State private var announcedPostDropShareOfferID: UUID?
     /// The short settle before an outside focus start (FocusStartEntryPolicy).
     @State private var focusStartEntryTask: Task<Void, Never>?
+    /// 設定の「Home に次の目標を表示」 (GemExperienceDesign §5.5): device-local,
+    /// on by default, cleared by an activity reset.
+    @AppStorage(WeightJourneyHomePreference.defaultsKey)
+    private var showsNextTarget = true
+    /// D5: the height of the readout above the mouth, measured from a hidden
+    /// copy with every row (「瓶N杯」 and a two-line count row), so the jar
+    /// keeps its size when a row comes or goes. Changes with the text size.
+    @State private var aboveMouthReadoutHeight: CGFloat?
+    /// D5: the room the jar card had with no completion card up, so the
+    /// readout stays where it is while a card shortens the jar.
+    @State private var restingJarRoom: CGFloat = 0
+    /// D11: the study day's records and the rest cadence, re-read (bounded)
+    /// when the store changes; the line derives its signals from them.
+    @State private var journeyDay = WeightJourneyDayRecords.empty
+    /// §5.6: the completion card's journey chip, resolved once per offer.
+    @State private var journeyCardChip: WeightJourneyCardChipState?
+    /// §5.6: what Home last observed and whether it was opened since; a
+    /// plain reference, so an observation never re-renders Home.
+    @State private var journeyTracker = WeightJourneyHomeTracker()
+    @State private var journeyChipTask: Task<Void, Never>?
 
     init() {
+#if DEBUG && targetEnvironment(simulator)
+        JarFrameProbe.shared?.markHomeStart()
+#endif
         _storedSubjects = Query(SubjectSyncPolicy.liveRowsDescriptor(sortBy: [
             SortDescriptor(\Subject.sortOrder),
             SortDescriptor(\Subject.syncRecordID)
@@ -879,34 +944,50 @@ struct HomeView: View {
     private var mainContent: some View {
         VStack(spacing: 0) {
             GeometryReader { proxy in
-                let jarHeight = homeJarHeight(availableHeight: proxy.size.height)
-                let cardPlacement = aggregateCardPlacement(jarHeight: jarHeight)
+                let jarLayout = homeJarLayout(availableHeight: proxy.size.height)
+                // launch-perf (d): one theme read per pass for the card's
+                // placement and the picker row. `activeSubjects` canonicalises
+                // every theme row; the card's extra read cost 19–21 ms of main
+                // thread per landing on an iPhone 12 mini.
+                let hasActiveSubjects = !activeSubjects.isEmpty
+                let cardPlacement = aggregateCardPlacement(
+                    jarLayout: jarLayout,
+                    hasActiveSubjects: hasActiveSubjects
+                )
                 // One readout for the jar and its large-text companion; both
                 // readers take their values from it.
                 let stage = jarStageSnapshot
+                let journeyObservation = weightJourneyObservation(stage)
                 ScrollViewReader { scrollProxy in
                 ScrollView {
                     VStack(spacing: 0) {
-                        jarCard(height: jarHeight, cardPlacement: cardPlacement, stage: stage)
+                        jarCard(layout: jarLayout, cardPlacement: cardPlacement, stage: stage)
                             .id("home.jar")
+                            // D5: every row of the readout above the mouth,
+                            // never drawn, sizes the room it takes.
+                            .background(alignment: .top) {
+                                if !dynamicTypeSize.isAccessibilitySize {
+                                    aboveMouthReadoutTemplate
+                                }
+                            }
                         if showsAggregateInspectionSlot(cardPlacement) {
                             aggregateInspectionSlot
                                 .padding(.top, 8)
                                 .id(Self.aggregateInspectionSlotID)
                         }
-                        if showsLargeTextFusionProgress(stage.readout) {
+                        if showsLargeTextJourneyCard(stage.readout) {
                             // Counts a gem when it lands, like the readout it
                             // repeats; a landing re-runs only this reader,
                             // which reads nothing but the snapshot.
                             JarStageReader(state: jarStageState, stage: stage) { readout in
-                                if let state = largeTextFusionProgressState(readout) {
+                                if let line = stage.journey.line(readout: readout, now: .now) {
                                     Spacer(minLength: 12)
-                                    largeTextFusionProgressCard(state, colorHex: readout.coreColorHex)
+                                    largeTextJourneyCard(line, stage: stage, readout: readout)
                                 }
                             }
                         }
                         Spacer(minLength: 14)
-                        if !activeSubjects.isEmpty {
+                        if hasActiveSubjects {
                             // The crystal's card under the bottle takes this
                             // row for its few seconds when it reaches it
                             // (`AggregateCardPlacementPolicy`).
@@ -942,7 +1023,7 @@ struct HomeView: View {
                     // home-11 (#50 follow-up): under the bottle, in front of
                     // the rows below it; the jar card starts at this stack's top.
                     .overlay(alignment: .top) {
-                        aggregateCardUnderBottle(jarHeight: jarHeight, placement: cardPlacement)
+                        aggregateCardUnderBottle(jarLayout: jarLayout, placement: cardPlacement)
                     }
                     .coordinateSpace(.named(Self.homeContentCoordinateSpace))
                     .padding(.horizontal, 16)
@@ -978,7 +1059,16 @@ struct HomeView: View {
                         with: scrollProxy
                     )
                 }
+                // §5.6: what a settled, verified Home shows now.
+                .onChange(of: journeyObservation, initial: true) { _, observation in
+                    observeWeightJourney(observation)
                 }
+                }
+            }
+            // D5: the room the jar had with no completion card up.
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                guard breakOffer == nil, router.deferredFocusRecovery == nil else { return }
+                restingJarRoom = height
             }
             // history-02. Over the scroll area only: at accessibility sizes
             // the start button pinned below it stays uncovered.
@@ -1230,9 +1320,12 @@ struct HomeView: View {
             scheduleTiltHintIfNeeded()
             schedulePendingReviewRequestIfPossible()
             refreshSupportedSessionBackfill()
+            refreshWeightJourneyDay()
+            armWeightJourney()
         }
         .onDisappear {
             homeIsVisible = false
+            cancelPendingWeightJourneyChip()
             commitPendingManualEntry()
             widgetRefreshTask?.cancel()
             celebrationRecoveryTask?.cancel()
@@ -1256,17 +1349,28 @@ struct HomeView: View {
         .onChange(of: scenePhase) { _, phase in
             // Never keep an unsaved entry in memory while iOS may suspend or
             // end the app.
-            if phase != .active { commitPendingManualEntry() }
+            if phase != .active {
+                commitPendingManualEntry()
+                cancelPendingWeightJourneyChip()
+            }
+            if phase == .active {
+                // Back in front: the study day may have turned, and what
+                // arrived meanwhile may be named once (§5.6).
+                refreshWeightJourneyDay()
+                armWeightJourney()
+            }
         }
         .onChange(of: router.focusPresentationIsActive) { _, isActive in
             guard !isActive else {
                 commitPendingManualEntry()
+                cancelPendingWeightJourneyChip()
                 return
             }
             configureScene()
             syncScene()
             continueRewardDropIfPossible()
             recoverPendingRewardReceipt()
+            evaluateWeightJourney()
         }
         .onChange(of: rewardDropSurfaceIsObscured) { _, isObscured in
             guard !isObscured else {
@@ -1274,11 +1378,16 @@ struct HomeView: View {
                 // add, share) must see the entry as saved, and 元に戻す is only
                 // offered here on Home.
                 commitPendingManualEntry()
+                cancelPendingWeightJourneyChip()
                 return
             }
             syncScene()
             continueRewardDropIfPossible()
             recoverPendingRewardReceipt()
+            // A chip held back while a sheet covered Home (a new device's
+            // first verified total) may show now; closing a sheet is not a
+            // new open, so nothing is armed.
+            evaluateWeightJourney()
         }
     }
 
@@ -1295,6 +1404,11 @@ struct HomeView: View {
         }
         .onChange(of: weeklyRestampRequest, initial: true) { _, request in
             rederiveWeeklyMetrics(for: request)
+        }
+        // §5.6: the completion card's journey chip, once its totals can be
+        // trusted.
+        .onChange(of: weightJourneyCardKey, initial: true) { _, key in
+            resolveWeightJourneyCardChip(key)
         }
     }
 
@@ -1322,6 +1436,7 @@ struct HomeView: View {
         }
         .onChange(of: storedSessionChangeTokens) { _, _ in
             refreshSupportedSessionBackfill()
+            refreshWeightJourneyDay()
         }
         .onChange(of: achievementChangeTokens) { _, _ in
             refreshAchievementProjection()
@@ -1488,7 +1603,12 @@ struct HomeView: View {
             uniqueAchievementCount: uniqueAchievementCount,
             accentHex: selectedSubject?.colorHex ?? Constants.Color.amberLamp,
             inspectableAggregateID: latestInspectableAggregateID,
-            aggregateInspectionSummary: aggregateInspectionSummary
+            aggregateInspectionSummary: aggregateInspectionSummary,
+            journey: WeightJourneyStageInputs(
+                showsNextTarget: showsNextTarget,
+                selectedMinutes: max(0, selectedDuration.seconds / Constants.Timer.secondsPerMinute),
+                day: journeyDay
+            )
         )
     }
 
@@ -1496,22 +1616,23 @@ struct HomeView: View {
     /// pass, remembers a settled one, and re-runs only this stage when a gem
     /// lands.
     private func jarCard(
-        height: CGFloat,
+        layout: JarHUDLayout,
         cardPlacement: AggregateCardPlacementPolicy.Placement,
         stage: JarStageSnapshot
     ) -> some View {
         JarStageReader(state: jarStageState, stage: stage, recordsSettledReadout: true) { readout in
-            jarStage(height: height, cardPlacement: cardPlacement, stage: stage, readout: readout)
+            jarStage(layout: layout, cardPlacement: cardPlacement, stage: stage, readout: readout)
         }
     }
 
     private func jarStage(
-        height: CGFloat,
+        layout: JarHUDLayout,
         cardPlacement: AggregateCardPlacementPolicy.Placement,
         stage: JarStageSnapshot,
         readout: LifetimeReadoutContinuityPolicy.Readout
     ) -> some View {
-        ZStack {
+        let height = layout.cardHeight
+        return ZStack {
             // sync-03 (review of PR #40). While iCloud is checked the jar's
             // lifetime core describes the same total as the headline above,
             // not the newest sessions Home happens to hold. dev-D7: otherwise
@@ -1532,13 +1653,18 @@ struct HomeView: View {
                 accentHex: stage.accentHex,
                 lifetimeCoreColorHex: readout.coreColorHex,
                 lifetimeCoreColorShares: readout.coreColorShares,
-                coreTopClearance: Self.previewsHUDAboveJar ? nil : jarMetricHUDClearance(readout),
+                // D5: above the mouth nothing overlays the bottle, so the
+                // core's column starts under the neck.
+                coreTopClearance: layout.isAboveMouth ? nil : jarMetricHUDClearance(readout),
+                showsCycleChip: !layout.isAboveMouth,
+                showsCoreProgressCard: false,
+                reportsCoreFrame: true,
                 projectionIsLowerBound: readout.jarGrams == nil || readout.isLowerBound,
                 projectionIsUnverified: readout.isCloudVerificationPending,
                 pendingMass: readout.jarGrams.map {
                     .init(grams: $0, isLowerBound: readout.isLowerBound)
                 },
-                fusionProgressDescription: fusionAccessibilityDescription(readout),
+                fusionProgressDescription: fusionAccessibilityDescription(readout, stage: stage),
                 isLoadingRecords: readout.isLoading,
                 isMotionEnabled: homeJarMotionIsEnabled,
                 inspectableAggregateID: stage.inspectableAggregateID,
@@ -1546,15 +1672,22 @@ struct HomeView: View {
                 onAggregateTapped: revealAggregateInspection,
                 onAggregateAccessibilityAction: presentAggregateDetail
             )
-                .onGeometryChange(for: CGFloat.self) { geometry in
-                    geometry.frame(in: .named(Self.jarCardCoordinateSpace)).minY
-                } action: { top in
-                    jarStageState.measuredStageTop = top
+                .onGeometryChange(for: CGRect.self) { geometry in
+                    geometry.frame(in: .named(Self.jarCardCoordinateSpace))
+                } action: { frame in
+                    measuredJarStageFrame = frame
+                    jarStageState.measuredStageTop = frame.minY
                 }
+                .frame(height: layout.stageHeight)
                 .padding(.horizontal, 4)
-                .padding(.top, Self.previewsHUDAboveJar ? Self.hudAboveJarHeight : 0)
+                .frame(maxHeight: .infinity, alignment: .top)
+                .padding(.top, layout.stageTop)
 
-            jarMetricHUD(stageHeight: height, readout: readout, stage: stage)
+            if layout.isAboveMouth {
+                aboveMouthHUD(layout: layout, readout: readout, stage: stage)
+            } else {
+                jarMetricHUD(stageHeight: height, readout: readout, stage: stage)
+            }
 
             if readout.jarIsEmpty, !showsEmptyJarMessageUnderReadout(readout) {
                 emptyJarMessage(readout)
@@ -1563,7 +1696,10 @@ struct HomeView: View {
                 .frame(maxWidth: 320)
                 // The metrics keep a fixed position below the bottle's rim.
                 // On a short canvas, move the empty-state copy below them.
-                .offset(y: max(0, 456 - height) / 2)
+                // Above the mouth, the copy sits in the middle of the bottle.
+                .offset(y: layout.isAboveMouth
+                    ? layout.stageTop + layout.stageHeight / 2 - height / 2
+                    : max(0, 456 - height) / 2)
             }
 
             if let remaining = capacityRemaining, remaining <= 15 {
@@ -1587,7 +1723,7 @@ struct HomeView: View {
                 .overlay { Capsule().stroke(PomoGemTheme.amber.opacity(0.28), lineWidth: 1) }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 // Placed by offset, so the card's layout never changes.
-                .offset(y: Self.capacityChipTopInset(stageHeight: height))
+                .offset(y: Self.capacityChipTopInset(layout: layout))
                 // A tapped crystal's card hangs in the same place for its
                 // few seconds; the chip steps aside meanwhile.
                 .opacity(stage.aggregateInspectionSummary != nil && cardPlacement != .row ? 0 : 1)
@@ -1623,7 +1759,9 @@ struct HomeView: View {
                         Capsule().stroke(PomoGemTheme.amber.opacity(0.38), lineWidth: 1)
                     }
                     .padding(.horizontal, 20)
-                    .padding(.top, 188)
+                    // Under the readout inside the jar, or under the neck
+                    // when the readout is above the mouth.
+                    .padding(.top, layout.isAboveMouth ? layout.stageTop + 64 : 188)
                     Spacer()
                 }
                 .transition(.opacity)
@@ -1661,17 +1799,17 @@ struct HomeView: View {
 
     /// The capacity chip hangs 6 pt under the bottle's base, over the 内訳
     /// hint's row when the stage has no room below the bottle.
-    private static func capacityChipTopInset(stageHeight: CGFloat) -> CGFloat {
-        bottleBaseInset(stageHeight: stageHeight) + 6
+    private static func capacityChipTopInset(layout: JarHUDLayout) -> CGFloat {
+        bottleBaseInset(layout: layout) + 6
     }
 
     /// The bottle's base, from the top of the jar card: the bottle is centred
-    /// in the stage and at most `Constants.Jar.height` tall.
-    private static func bottleBaseInset(stageHeight: CGFloat) -> CGFloat {
-        let top: CGFloat = previewsHUDAboveJar ? hudAboveJarHeight : 0
-        let sceneHeight = max(0, stageHeight - top)
+    /// in the stage and at most `Constants.Jar.height` tall; above the mouth
+    /// (D5) the stage starts under the readout.
+    private static func bottleBaseInset(layout: JarHUDLayout) -> CGFloat {
+        let sceneHeight = max(0, layout.stageHeight)
         let outer = JarScene.outerJarRect(sceneSize: CGSize(width: 1, height: sceneHeight))
-        return top + sceneHeight - outer.minY
+        return layout.stageTop + sceneHeight - outer.minY
     }
 
     /// The chip above is showing (the 内訳 hint under the jar steps aside).
@@ -1702,20 +1840,20 @@ struct HomeView: View {
             && router.cloudFocusRecoveryOffer == nil
     }
 
-    /// D5 (owner decision pending, Docs/GemExperienceDesign.md §8.1): a
-    /// Simulator-only preview that moves the metric HUD above the jar mouth
-    /// so the jar holds only the core and the gems. Requires the in-memory
-    /// UI-test launch plus `POMOGEM_UI_TEST_HUD=outside`; never in release.
-    private static let previewsHUDAboveJar: Bool = {
+    /// D5 review seam (Docs/GemExperienceDesign.md §8.1: the inside and the
+    /// above-the-mouth readout side by side on a GemShowcase fixture). The
+    /// in-memory UI-test launch plus `POMOGEM_UI_TEST_HUD=inside` keeps the
+    /// readout inside the jar wherever it would go above the mouth; never in
+    /// Release or on a device.
+    private static let forcesHUDInside: Bool = {
 #if DEBUG && targetEnvironment(simulator)
         return LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess
             && LocalPreviewLaunchPolicy.persistenceModeForCurrentProcess == .inMemoryPreview
-            && ProcessInfo.processInfo.environment["POMOGEM_UI_TEST_HUD"] == "outside"
+            && ProcessInfo.processInfo.environment["POMOGEM_UI_TEST_HUD"] == "inside"
 #else
         return false
 #endif
     }()
-    private static let hudAboveJarHeight: CGFloat = 104
 
     private static let jarCardCoordinateSpace = "home.jarCard"
 
@@ -1731,8 +1869,8 @@ struct HomeView: View {
             return max(0, measuredHUDBottom - jarStageState.measuredStageTop)
         }
         let valueRow: CGFloat = dynamicTypeSize.isAccessibilitySize && readout.jarIsEmpty ? 36 : 47
-        let rail: CGFloat = showsPreFusionRail(readout) ? 52 : 0
-        return 88 + 15 + 3 + valueRow + 3 + 24 + rail
+        let line: CGFloat = dynamicTypeSize.isAccessibilitySize ? 0 : 19
+        return 88 + 15 + 3 + valueRow + 3 + 24 + line
     }
 
     /// The bottle is at most `Constants.Jar.height` tall and centred in a
@@ -1777,10 +1915,87 @@ struct HomeView: View {
         }
         // Keep every glyph behind the mouth instead of straddling its bright
         // rim; the occlusion cue is what makes the glass depth believable.
-        .padding(.top, Self.previewsHUDAboveJar ? 0 : Self.jarMetricHUDTopInset(stageHeight: stageHeight))
+        .padding(.top, Self.jarMetricHUDTopInset(stageHeight: stageHeight))
         .frame(maxHeight: .infinity, alignment: .top)
         .allowsHitTesting(false)
     }
+
+    /// D5 (§8.1): the same readout, compact, above the jar's mouth — the
+    /// 「瓶N杯」 chip on top, 積み上げた集中 and the mass, then the count pill
+    /// and the next-target line on one row when they fit — so the bottle
+    /// holds only the time core and the gems. Its bottom hugs the collar; a
+    /// taller readout than the room measured for it (the iCloud caption, a
+    /// wrapped line) grows upward, never into the bottle. The one-time
+    /// hint moves under the neck, above the first gem.
+    private func aboveMouthHUD(
+        layout: JarHUDLayout,
+        readout: LifetimeReadoutContinuityPolicy.Readout,
+        stage: JarStageSnapshot
+    ) -> some View {
+        ZStack(alignment: .top) {
+            jarMetricReadout(readout, stage, isAboveMouth: true)
+                // Its own height, never squeezed into the room measured for
+                // it: a longer line wraps and the readout grows upward.
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(height: layout.hudBottom ?? 0, alignment: .bottom)
+                .frame(maxHeight: .infinity, alignment: .top)
+
+            if stage.aggregateInspectionSummary == nil, showsTiltHint, !readout.jarIsEmpty, !readout.isLoading {
+                jarInteractionHint(compact: false)
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                    .padding(.top, layout.stageTop + Self.aboveMouthHintInset(stageHeight: layout.stageHeight))
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .transition(
+                        reduceMotion
+                            ? .opacity
+                            : .opacity.combined(with: .offset(y: -8))
+                    )
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    /// Under the bottle's neck and collar: the bottle fills a stage of at
+    /// most `Constants.Jar.height` from its top.
+    private static func aboveMouthHintInset(stageHeight: CGFloat) -> CGFloat {
+        let outer = JarScene.outerJarRect(sceneSize: CGSize(width: 1, height: stageHeight))
+        return max(0, stageHeight - outer.maxY) + min(64, outer.height * 0.16)
+    }
+
+    /// D5: every row the readout above the mouth can show (「瓶N杯」, the
+    /// label, the mass, the count pill and a two-line next-target line),
+    /// never drawn, so the room it takes changes with the text size only.
+    private var aboveMouthReadoutTemplate: some View {
+        VStack(spacing: 3) {
+            JarFilledJarPill.Capsule(count: 9, colorHex: Constants.Color.amberLamp, reduceTransparency: false)
+                .padding(.bottom, Self.aboveMouthPillGap)
+            Text(verbatim: "0")
+                .font(.system(.caption2, design: .rounded, weight: .bold))
+            Text(verbatim: "0")
+                .font(.system(size: 39, weight: .black, design: .rounded))
+            VStack(spacing: 4) {
+                jarMetricPill("0")
+                // The line may take two lines (a long 名所 with its stretch).
+                Text(verbatim: "0\n0")
+                    .font(Self.journeyLineFont)
+            }
+        }
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        .hidden()
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+            aboveMouthReadoutHeight = height
+        }
+        .accessibilityHidden(true)
+        .allowsHitTesting(false)
+    }
+
+    private static let aboveMouthPillGap: CGFloat = 4
+    /// 12 pt at the default size (§8.1), following Dynamic Type up to the
+    /// readout's xxxLarge cap.
+    private static let journeyLineFont = Font.system(.caption, design: .rounded, weight: .bold)
+    /// Inside the jar the line takes the old rail's 11 pt (caption2), so it
+    /// leaves the core as much of the stage as the rail did.
+    private static let insideJourneyLineFont = Font.system(.caption2, design: .rounded, weight: .bold)
 
     /// `compact`: a short jar at accessibility sizes. The hint is then one
     /// line at the default text size. Since #47 a young jar's first gem is
@@ -1823,12 +2038,20 @@ struct HomeView: View {
 
     private func jarMetricReadout(
         _ readout: LifetimeReadoutContinuityPolicy.Readout,
-        _ stage: JarStageSnapshot
+        _ stage: JarStageSnapshot,
+        isAboveMouth: Bool = false
     ) -> some View {
         // Before this Home's first settled readout the rows keep their place
         // but show nothing: no 「再集計中」, no 0粒 (device-verify-2 P2).
         let lifetimeGrams = readout.isLoading ? 0 : readout.jarGrams
+        let filledJars = JarAccumulationPresencePresentation
+            .state(totalGrams: readout.jarCoreGrams).completedCycleCount
         return VStack(spacing: 3) {
+            if isAboveMouth, filledJars > 0 {
+                // #50's 「瓶N杯」 chip, moved from behind the glass (D5).
+                JarFilledJarPill(count: filledJars, colorHex: readout.coreColorHex)
+                    .padding(.bottom, Self.aboveMouthPillGap)
+            }
             Text("積み上げた集中")
                 // This HUD is excluded from VoiceOver; the jar's accessibility
                 // value carries the same information. Its captions follow
@@ -1853,26 +2076,32 @@ struct HomeView: View {
                     .foregroundStyle(Color.white.opacity(0.76))
             }
 
-            VStack(spacing: 4) {
-                jarMetricPill(jarMetricSummary(readout, stage: stage))
-                // sync-03. While iCloud is checked the mass above is one this
-                // device can stand behind (`PendingMassPresentationPolicy`);
-                // the caption says so. Hidden while the in-jar pending message
-                // says the same.
-                if !readout.jarIsEmpty, let caption = AggregateProjectionPresentationPolicy.verificationCaption(
-                    context: presentationContext(for: readout),
-                    isCloudOfflineSession: isCloudOfflineSession
-                ) {
-                    // The only visible qualifier of the number above: readable
-                    // at 11 pt and scaled with Dynamic Type up to the HUD's
-                    // xxxLarge cap (a fixed 9 pt caption was too small).
-                    Text(caption)
-                        .font(.system(size: verificationCaptionSize, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color.white.opacity(0.78))
-                        .accessibilityIdentifier("home.mass.verification-caption")
+            if isAboveMouth {
+                // §8.1: the count pill and the next-target line share a row
+                // when they fit, and stack when they do not.
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        jarMetricPill(jarMetricSummary(readout, stage: stage))
+                        journeyLineText(readout, stage, lineLimit: 1)
+                    }
+                    VStack(spacing: 4) {
+                        jarMetricPill(jarMetricSummary(readout, stage: stage))
+                        journeyLineText(readout, stage, lineLimit: nil)
+                    }
                 }
-                if showsPreFusionRail(readout) {
-                    preFusionRail(readout)
+                jarMetricVerificationCaption(readout)
+            } else {
+                VStack(spacing: 4) {
+                    jarMetricPill(jarMetricSummary(readout, stage: stage))
+                    jarMetricVerificationCaption(readout)
+                    // D6: the one next-target line takes the place of the
+                    // pre-fusion rail (「最初の時間の核まで 30分 / 4時間10分」). At
+                    // accessibility sizes the card under the jar says it in
+                    // full-size text, as the rail's did.
+                    if !dynamicTypeSize.isAccessibilitySize {
+                        journeyLineText(readout, stage, lineLimit: 2, font: Self.insideJourneyLineFont)
+                            .padding(.horizontal, 20)
+                    }
                 }
             }
         }
@@ -1888,24 +2117,24 @@ struct HomeView: View {
 #if DEBUG
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: {
             HomeRenderDiagnostics.jarHUDWindowFrame = $0
+            HomeRenderDiagnostics.hudPlacement = isAboveMouth ? "above" : "inside"
         }
 #endif
         .shadow(color: .black.opacity(0.52), radius: 3, y: 1)
         // A soft ink scrim keeps the value legible over the brighter core,
         // orbit markers and glowing gems behind the glass. The text shadow
         // is applied first, so the blurred scrim is not shadowed again.
+        // F3: a settled pile behind the HUD (held upside down, it rests
+        // against the cap) gets the same scrim in a stronger ink; the HUD
+        // neither moves nor shrinks, and the gems do not fade. The scrim
+        // follows the pile itself, so a moving pile never re-renders Home.
         .background {
-            Ellipse()
-                .fill(
-                    RadialGradient(
-                        colors: [Color.black.opacity(0.34), Color.black.opacity(0.14), .clear],
-                        center: .center,
-                        startRadius: 4,
-                        endRadius: 120
-                    )
-                )
-                .frame(width: 250, height: 150)
-                .blur(radius: 8)
+            JarHUDInkScrim(
+                scene: scene,
+                stageFrame: measuredJarStageFrame,
+                coordinateSpace: Self.jarCardCoordinateSpace,
+                followsPile: !isAboveMouth
+            )
         }
         .accessibilityHidden(true)
     }
@@ -2029,70 +2258,73 @@ struct HomeView: View {
         isCloudOfflineSession ? "このiPhoneの集計を確認中" : "iCloudを確認中"
     }
 
-    /// The small rail inside the jar. At accessibility sizes the card under
-    /// the jar shows the same progress in full-size text instead.
-    /// Only for an exact, verified readout: its landed totals
-    /// (`fusionProgressTotals`), held with the headline while Home re-reads.
-    private func showsPreFusionRail(_ readout: LifetimeReadoutContinuityPolicy.Readout) -> Bool {
-        guard let totals = readout.fusionProgressTotals else { return false }
-        return !readout.isLowerBound
-            && !dynamicTypeSize.isAccessibilitySize
-            && totals.pebbleCount > 0
-            && !JarLifetimeCorePresentation.shouldShowCore(
-                totalPebbleCount: totals.pebbleCount,
-                totalGrams: totals.grams
-            )
-    }
-
-    /// Names what 「4時間10分」 leads to (walk-std-10): without a name the
-    /// target read like a daily quota. The explanation of 標準単位 and 10→1
-    /// lives in 積み上がり, not in the jar.
-    private func preFusionRail(_ readout: LifetimeReadoutContinuityPolicy.Readout) -> some View {
-        let state = EffortProgressPolicy.snapshot(totalGrams: readout.fusionProgressTotals?.grams ?? 0)
-        return VStack(spacing: 4) {
-            ProgressView(value: state.progressFraction)
-                .tint(Color(hex: readout.coreColorHex))
-                .frame(width: 118)
-            Text(
-                "\(EffortProgressPresentation.targetTitle(level: state.displayedTargetLevel))まで",
-                tableName: "Home",
-                comment: "Jar rail caption; the argument is 最初の時間の核 or 時間の核・N段目"
-            )
-                .font(.system(.caption2, design: .rounded, weight: .bold))
+    /// sync-03. While iCloud is checked the mass above is one this device
+    /// can stand behind (`PendingMassPresentationPolicy`); the caption says
+    /// so. Hidden while the in-jar pending message says the same.
+    @ViewBuilder
+    private func jarMetricVerificationCaption(_ readout: LifetimeReadoutContinuityPolicy.Readout) -> some View {
+        if !readout.jarIsEmpty, let caption = AggregateProjectionPresentationPolicy.verificationCaption(
+            context: presentationContext(for: readout),
+            isCloudOfflineSession: isCloudOfflineSession
+        ) {
+            // The only visible qualifier of the number above: readable at
+            // 11 pt and scaled with Dynamic Type up to the HUD's xxxLarge cap
+            // (a fixed 9 pt caption was too small).
+            Text(caption)
+                .font(.system(size: verificationCaptionSize, weight: .bold, design: .rounded))
                 .foregroundStyle(Color.white.opacity(0.78))
-            Text(
-                "\(EffortProgressPresentation.formattedDuration(grams: state.displayedProgressGrams)) / \(EffortProgressPresentation.formattedDuration(grams: state.displayedTargetGrams))",
-                tableName: "Home",
-                comment: "Jar rail: focus time so far / time the next time core needs"
-            )
-                .font(.system(.caption2, design: .rounded, weight: .black))
-                .monospacedDigit()
-                .foregroundStyle(Color.white.opacity(0.92))
+                .accessibilityIdentifier("home.mass.verification-caption")
         }
-        .lineLimit(1)
-        .minimumScaleFactor(0.85)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(PomoGemTheme.raised.opacity(0.72), in: Capsule())
-        .overlay {
-            Capsule().stroke(Color.white.opacity(0.12), lineWidth: 0.7)
-        }
-        .accessibilityHidden(true)
     }
 
-    /// The time core's progress for the jar's VoiceOver value, from the same
-    /// snapshot as its headline (`fusionProgressTotals`).
-    private func fusionAccessibilityDescription(_ readout: LifetimeReadoutContinuityPolicy.Readout) -> String? {
+    /// D6/§5.5: the one next-target line, from the readout on screen (a gem
+    /// counts when it lands) and Home's own inputs. It re-reads the clock
+    /// only at the moments D11 can change by itself (21:00, 04:00, the end
+    /// of a long break's quiet time), and never runs Home's body for it.
+    @ViewBuilder
+    private func journeyLineText(
+        _ readout: LifetimeReadoutContinuityPolicy.Readout,
+        _ stage: JarStageSnapshot,
+        lineLimit: Int?,
+        font: Font = Self.journeyLineFont
+    ) -> some View {
+        let now = Date.now
+        if stage.journey.line(readout: readout, now: now) != nil {
+            TimelineView(.explicit([now] + stage.journey.boundaries(after: now))) { context in
+                if let line = stage.journey.line(readout: readout, now: context.date) {
+                    Text(line.text)
+                        .font(font)
+                        .foregroundStyle(Color.white.opacity(0.88))
+                        .monospacedDigit()
+                        .multilineTextAlignment(.center)
+                        .lineLimit(lineLimit)
+                        .minimumScaleFactor(0.85)
+#if DEBUG
+                        .onChange(of: line.text, initial: true) { _, text in
+                            HomeRenderDiagnostics.journeyLineText = text
+                        }
+                        .onDisappear { HomeRenderDiagnostics.journeyLineText = nil }
+#endif
+                }
+            }
+        }
+    }
+
+    /// The jar's VoiceOver value after its mass: the next-target line in
+    /// place of the 10× core's remaining time (D6), the count toward the next
+    /// crystal and 「瓶N杯」, from the same snapshot as its headline
+    /// (`fusionProgressTotals`).
+    private func fusionAccessibilityDescription(
+        _ readout: LifetimeReadoutContinuityPolicy.Readout,
+        stage: JarStageSnapshot
+    ) -> String? {
         guard let totals = readout.fusionProgressTotals,
               totals.pebbleCount > 0 || readout.isLowerBound
         else { return nil }
-        guard let state = JarLifetimeCorePresentation.state(
-            totalPebbleCount: totals.pebbleCount,
-            totalGrams: totals.grams,
-            projectionIsLowerBound: readout.isLowerBound
-        ) else { return nil }
-        var components = [state.progressLabel, state.nextFusionLabel]
-            .compactMap { $0 }
+        var components: [String] = []
+        if let line = stage.journey.line(readout: readout, now: .now) {
+            components.append(line.text)
+        }
         if let physicalState = JarLifetimeCorePresentation.state(
             totalPebbleCount: totals.pebbleCount,
             projectionIsLowerBound: readout.isLowerBound
@@ -2105,85 +2337,75 @@ struct HomeView: View {
         let filledJarCount = JarAccumulationPresencePresentation
             .state(totalGrams: totals.grams).completedCycleCount
         if filledJarCount > 0 {
-            // The 「瓶N杯」 chip behind the glass is hidden from VoiceOver.
+            // The 「瓶N杯」 chip is hidden from VoiceOver.
             components.append(String(
                 localized: "瓶\(filledJarCount)杯ぶん満ちました",
                 table: "Home",
                 comment: "VoiceOver, jar value: how many times the jar has filled (2.5 kg each)"
             ))
         }
+        guard !components.isEmpty else { return nil }
         return components.joined(separator: "、")
     }
 
     /// The documented large-text companion of the jar's fixed HUD
-    /// (EngagementArchitecture 大きい文字). It used to wait for the first
-    /// time core (2.5 kg), so the first ~10 focuses, when the rail is the only
-    /// progress on Home, had no readable version at accessibility sizes.
+    /// (EngagementArchitecture 大きい文字): at accessibility sizes the readout
+    /// stays inside the jar without its next-target line, and this card says
+    /// that line in full-size text, from the first gem (#50) — 「重さの旅」 in
+    /// place of the 10× core's progress (D6).
     ///
     /// Home places the card's reader from its own pass: a landing changes a
     /// readout's count, never whether it is verified or loaded.
-    private func showsLargeTextFusionProgress(_ readout: LifetimeReadoutContinuityPolicy.Readout) -> Bool {
-        dynamicTypeSize.isAccessibilitySize && readout.fusionProgressTotals != nil
-    }
-
-    private func largeTextFusionProgressState(
-        _ readout: LifetimeReadoutContinuityPolicy.Readout
-    ) -> JarLifetimeCoreState? {
-        guard dynamicTypeSize.isAccessibilitySize,
-              let totals = readout.fusionProgressTotals,
-              totals.pebbleCount > 0
-        else { return nil }
-        return JarLifetimeCorePresentation.state(
-            totalPebbleCount: totals.pebbleCount,
-            totalGrams: totals.grams,
-            projectionIsLowerBound: readout.isLowerBound
-        )
+    private func showsLargeTextJourneyCard(_ readout: LifetimeReadoutContinuityPolicy.Readout) -> Bool {
+        dynamicTypeSize.isAccessibilitySize && showsNextTarget && readout.fusionProgressTotals != nil
     }
 
     /// Runs inside `JarStageReader`, so its colour comes from the readout
     /// Home resolved on its own pass, not from Home's projections, which
     /// re-derive the sessions on each read.
-    private func largeTextFusionProgressCard(
-        _ state: JarLifetimeCoreState,
-        colorHex: String
+    private func largeTextJourneyCard(
+        _ line: WeightJourneyHomeLine.Line,
+        stage: JarStageSnapshot,
+        readout: LifetimeReadoutContinuityPolicy.Readout
     ) -> some View {
-        PomoGemCard {
-            HStack(alignment: .top, spacing: 13) {
-                Image(systemName: "hourglass.bottomhalf.filled")
-                    .font(.title2.weight(.black))
-                    .foregroundStyle(Color(hex: colorHex))
-                    .frame(width: 44, height: 44)
-                    .background(
-                        Color(hex: colorHex).opacity(0.13),
-                        in: Circle()
-                    )
-                    .accessibilityHidden(true)
+        let colorHex = readout.coreColorHex
+        let now = Date.now
+        return TimelineView(.explicit([now] + stage.journey.boundaries(after: now))) { context in
+            let shown = stage.journey.line(readout: readout, now: context.date) ?? line
+            PomoGemCard {
+                HStack(alignment: .top, spacing: 13) {
+                    Image(systemName: "diamond")
+                        .font(.title2.weight(.black))
+                        .foregroundStyle(Color(hex: colorHex))
+                        .frame(width: 44, height: 44)
+                        .background(
+                            Color(hex: colorHex).opacity(0.13),
+                            in: Circle()
+                        )
+                        .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("時間の核の進み")
-                        .font(.headline)
-                        .foregroundStyle(PomoGemTheme.text)
-                    Text(state.progressLabel)
-                        .font(.system(.title3, design: .rounded, weight: .black))
-                        .monospacedDigit()
-                        .foregroundStyle(PomoGemTheme.text)
-                    if let nextFusionLabel = state.nextFusionLabel {
-                        Text(nextFusionLabel)
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(PomoGemTheme.muted)
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("重さの旅", tableName: "Home",
+                             comment: "Title of the large-text card under the jar that repeats the Weight Journey (重さの旅) next-target line. Suggested en: 'Weight Journey'")
+                            .font(.headline)
+                            .foregroundStyle(PomoGemTheme.text)
+                        Text(shown.text)
+                            .font(.system(.title3, design: .rounded, weight: .black))
+                            .monospacedDigit()
+                            .foregroundStyle(PomoGemTheme.text)
                     }
+                    .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
                 }
-                .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityIdentifier("home.fusion-progress.large-text")
+            .accessibilityLabel(String(
+                localized: "重さの旅、\(shown.text)",
+                table: "Home",
+                comment: "VoiceOver: the large-text Weight Journey card. %@ is the next-target line (つぎの一里塚　80時間・あと4時間50分). Suggested en: 'Weight Journey, %@'"
+            ))
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityIdentifier("home.fusion-progress.large-text")
-        .accessibilityLabel(
-            ["時間の核の進み", state.progressLabel, state.nextFusionLabel]
-                .compactMap { $0 }
-                .joined(separator: "、")
-        )
     }
 
     private func jarMetricPill(_ text: String) -> some View {
@@ -2290,21 +2512,37 @@ struct HomeView: View {
         )
     }
 
-    private func homeJarHeight(availableHeight: CGFloat) -> CGFloat {
+    /// The jar card and where its readout goes (D5, `JarHUDLayout`).
+    private func homeJarLayout(availableHeight: CGFloat) -> JarHUDLayout {
         if dynamicTypeSize.isAccessibilitySize {
             // home-03. The launcher sits below the scroll view
             // (`pinnedFocusLauncher`), so this height already excludes it.
             // Leave the top of the theme picker in view so the scrollable
             // controls are discoverable; 300 pt still holds the HUD and the
             // short empty message without overlap.
-            return min(520, max(300, availableHeight - 72))
+            let height = min(520, max(300, availableHeight - 72))
+            return JarHUDLayout(placement: .inside, cardHeight: height, stageTop: 0, stageHeight: height)
         }
         // Reserve room for the visible theme/time controls and start button,
         // including on compact iPhones, and for the crystal tip's row while
         // it shows. A tapped crystal's card never resizes the jar.
         let tipRowHeight: CGFloat = showsAggregateTipRow ? 72 : 0
-        return min(520, max(320, availableHeight - 216 - tipRowHeight))
+        let controls = 216 + tipRowHeight
+        // While a completion card shortens the jar, keep the placement of
+        // the room without it.
+        let cardIsUp = breakOffer != nil || router.deferredFocusRecovery != nil
+        let restingHeight = cardIsUp ? max(restingJarRoom, availableHeight) : availableHeight
+        return JarHUDLayout.resolve(
+            keepsReadoutInside: Self.forcesHUDInside,
+            restingRoom: restingHeight - controls,
+            room: availableHeight - controls,
+            readoutHeight: aboveMouthReadoutHeight ?? Self.estimatedAboveMouthReadoutHeight
+        )
     }
+
+    /// Before the hidden template's first measurement: 「瓶N杯」, the label,
+    /// the mass, the count pill and a two-line line at the default size.
+    private static let estimatedAboveMouthReadoutHeight: CGFloat = 158
 
     /// home-11. Until the first crystal detail has been opened, the row
     /// under the jar holds a tip that crystals can be tapped, and a tapped
@@ -2326,18 +2564,19 @@ struct HomeView: View {
                 && aggregateInspectionSummary != nil)
     }
 
-    /// Where a tapped crystal's card shows over a jar `jarHeight` tall. The
-    /// tip's row holds it while that row is there.
+    /// Where a tapped crystal's card shows under a jar laid out as
+    /// `jarLayout`. The tip's row holds it while that row is there.
     private func aggregateCardPlacement(
-        jarHeight: CGFloat
+        jarLayout: JarHUDLayout,
+        hasActiveSubjects: Bool
     ) -> AggregateCardPlacementPolicy.Placement {
         guard !showsAggregateTipRow else { return .row }
         return AggregateCardPlacementPolicy.placement(
             isAccessibilitySize: dynamicTypeSize.isAccessibilitySize,
-            bottleBase: Self.bottleBaseInset(stageHeight: jarHeight),
+            bottleBase: Self.bottleBaseInset(layout: jarLayout),
             cardHeight: measuredAggregateCardHeight ?? AggregateCardPlacementPolicy.estimatedCardHeight,
             // Controls not measured yet count as right under the jar.
-            pickerTop: activeSubjects.isEmpty ? nil : (measuredPickerRowTop ?? 0),
+            pickerTop: hasActiveSubjects ? (measuredPickerRowTop ?? 0) : nil,
             launcherTop: pinsFocusLauncher ? nil : measuredLauncherTop
         )
     }
@@ -2367,7 +2606,7 @@ struct HomeView: View {
     /// measured height places it before it first shows.
     @ViewBuilder
     private func aggregateCardUnderBottle(
-        jarHeight: CGFloat,
+        jarLayout: JarHUDLayout,
         placement: AggregateCardPlacementPolicy.Placement
     ) -> some View {
         if !dynamicTypeSize.isAccessibilitySize, !showsAggregateTipRow,
@@ -2382,7 +2621,7 @@ struct HomeView: View {
                 .allowsHitTesting(isPresented)
                 .accessibilityHidden(!isPresented)
                 .frame(maxWidth: .infinity)
-                .padding(.top, Self.bottleBaseInset(stageHeight: jarHeight) + AggregateCardPlacementPolicy.gap)
+                .padding(.top, Self.bottleBaseInset(layout: jarLayout) + AggregateCardPlacementPolicy.gap)
         }
     }
 
@@ -3142,6 +3381,7 @@ struct HomeView: View {
                     postDropHeading(shown)
                     postDropActions(offer)
                     postDropCoreBirthLine(shown)
+                    postDropJourneyChip(offer)
                     postDropAwaitingDropNote(offer)
                     HStack(alignment: .center, spacing: 12) {
                         CompletionCardHero(
@@ -3195,6 +3435,7 @@ struct HomeView: View {
                         .layoutPriority(1)
                     }
                     postDropCoreBirthLine(shown)
+                    postDropJourneyChip(offer)
                     postDropAwaitingDropNote(offer)
                     postDropReminderOffer(shown)
                     postDropMechanics(offer)
@@ -4234,10 +4475,19 @@ struct HomeView: View {
         let snapshotGeneration = HomeSceneSessionSnapshotGeneration(
             aggregateProjectionPresentation
         )
+        let sceneContent = HomeSceneContent(
+            epochID: currentActivityEpochID,
+            roots: acceptedAggregateRoots.map { (id: $0.id, grams: $0.grams) }
+                + activeLegacyStrata.map { (id: $0.id, grams: $0.grams) },
+            pebbles: current
+        )
+        defer { appliedSceneContent.value = sceneContent }
         if HomeSceneSessionSnapshotPolicy.shouldRestoreSilently(
             sceneIsInitialized: sceneInitialized,
             appliedGeneration: appliedSceneSessionSnapshotGeneration,
-            acceptedGeneration: snapshotGeneration
+            acceptedGeneration: snapshotGeneration,
+            appliedContent: appliedSceneContent.value,
+            acceptedContent: sceneContent
         ) {
             let restored = current.filter { !awaitingDropIDs.contains($0.id) }
             scene.restore(pebbles: restored)
@@ -4250,6 +4500,10 @@ struct HomeView: View {
             scheduleWidgetSnapshot()
             return
         }
+        // launch-perf (e): a new generation with the same content (e.g. a
+        // pure pending → verified flip) is adopted without a restore; the
+        // incremental pass below then finds nothing to add or remove.
+        appliedSceneSessionSnapshotGeneration = snapshotGeneration
 
         let newDescriptors = current.filter { !knownLooseIDs.contains($0.id) }
         let newSessionIDs = Set(newDescriptors.filter { !$0.isAchievement }.map(\.id))
@@ -6326,6 +6580,214 @@ struct HomeView: View {
     private func formattedMass(_ grams: Int) -> String {
         HomeLifetimeMassText.text(grams)
     }
+
+    // MARK: 重さの旅 (GemExperienceDesign §5.5, §5.6; D11)
+
+    /// D11: re-reads the study day's saved focus (bounded: the last 26
+    /// hours, 256 rows, the current reset epoch) and the rest cadence's
+    /// recent suggestions. Only a read: nothing is stored for 「あと1本」.
+    private func refreshWeightJourneyDay() {
+        let now = Date.now
+        let descriptor = BoundedHistoryPolicy.sessionDescriptor(
+            epochID: currentActivityEpochID,
+            start: now.addingTimeInterval(-26 * 60 * 60),
+            limit: 256
+        )
+        let rows = (try? modelContext.fetch(descriptor)) ?? []
+        let records = StudySessionSyncPolicy.canonicalSessions(from: rows)
+            .filter { StudySessionIntegrityPolicy.isSupported($0) }
+            .map {
+                WeightJourneyOneMorePolicy.Record(
+                    id: $0.id,
+                    startAt: $0.startAt,
+                    endAt: $0.endAt,
+                    grams: $0.grams,
+                    isTimerCompletion: $0.effectiveSource.isTimerCompletion
+                )
+            }
+        let day = WeightJourneyDayRecords(
+            records: records,
+            restRecords: FocusRestCadenceStore.load().recentRecords
+        )
+        if day != journeyDay { journeyDay = day }
+    }
+
+    /// §5.6: the saved total Home may celebrate from on this pass — settled
+    /// inputs, not a lower bound, iCloud not being checked — and only while
+    /// no completion card or falling timer gem holds a total back (the card
+    /// celebrates its own completion). Never the landed readout, which a
+    /// landing changes without a Home pass.
+    private func weightJourneyObservation(_ stage: JarStageSnapshot) -> WeightJourneyObservation {
+        guard stage.settledRecord != nil,
+              let landing = stage.landing,
+              !stage.readout.isCloudVerificationPending,
+              !stage.readout.isLowerBound,
+              !stage.readout.isLoading,
+              landing.pendingOnHomePass.isEmpty,
+              breakOffer == nil,
+              router.deferredFocusRecovery == nil
+        else { return WeightJourneyObservation(grams: nil) }
+        return WeightJourneyObservation(grams: landing.savedTotals.grams)
+    }
+
+    private func observeWeightJourney(_ observation: WeightJourneyObservation) {
+        journeyTracker.lastObservation = observation
+        evaluateWeightJourney()
+    }
+
+    /// Home was opened (it appeared, or the app came back to the front):
+    /// what arrived meanwhile may be named once, from the total Home shows
+    /// after this update (hence the next turn of the main queue, once the
+    /// observation of this same update has been recorded).
+    private func armWeightJourney() {
+        journeyTracker.isArmed = true
+        DispatchQueue.main.async {
+            evaluateWeightJourney()
+        }
+    }
+
+    private func evaluateWeightJourney() {
+        guard journeyChipTask == nil,
+              homeIsVisible,
+              !rewardDropSurfaceIsObscured,
+              focusConfiguration == nil,
+              let grams = journeyTracker.lastObservation.grams
+        else { return }
+        let watermark = WeightJourneyCelebrationStore.load()
+        let outcome = WeightJourneyCelebration.observe(
+            watermark: watermark,
+            grams: grams,
+            isArmed: journeyTracker.isArmed
+        )
+        if outcome.consumesArm { journeyTracker.isArmed = false }
+        if let chip = outcome.chip {
+            // The chip may wait behind a toast or be cancelled when Home is
+            // covered. Commit the watermark only after it is actually shown,
+            // so returning to Home can still name an unseen arrival.
+            presentWeightJourneyChip(chip.text, watermark: outcome.watermark)
+        } else if outcome.watermark != watermark {
+            WeightJourneyCelebrationStore.save(outcome.watermark)
+        }
+    }
+
+    /// One quiet chip at a time, after whatever toast is up (a landing's,
+    /// Screen Time's), on Home only.
+    private func presentWeightJourneyChip(_ text: String, watermark: Int?) {
+        journeyChipTask = Task { @MainActor in
+            try? await Task.sleep(for: Self.journeyChipDelay)
+            while router.toast != nil, !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+            guard !Task.isCancelled else { return }
+            guard scenePhase == .active,
+                  homeIsVisible,
+                  !rewardDropSurfaceIsObscured,
+                  focusConfiguration == nil,
+                  journeyTracker.lastObservation.grams != nil
+            else {
+                journeyChipTask = nil
+                journeyTracker.isArmed = true
+                return
+            }
+            router.showToast(text, symbol: "diamond", duration: .seconds(5))
+            WeightJourneyCelebrationStore.save(watermark)
+            journeyChipTask = nil
+        }
+    }
+
+    private func cancelPendingWeightJourneyChip() {
+        guard journeyChipTask != nil else { return }
+        journeyChipTask?.cancel()
+        journeyChipTask = nil
+        journeyTracker.isArmed = true
+    }
+
+    private static let journeyChipDelay: Duration = {
+#if DEBUG && targetEnvironment(simulator)
+        if LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess,
+           let value = ProcessInfo.processInfo.environment["POMOGEM_UI_TEST_JOURNEY_CHIP_DELAY_MS"],
+           let milliseconds = Int(value),
+           (0...10_000).contains(milliseconds) {
+            return .milliseconds(milliseconds)
+        }
+#endif
+        return .milliseconds(900)
+    }()
+
+    /// What decides the completion card's chip: the offer, and whether its
+    /// totals can be trusted yet (a restamp may verify them later).
+    private var weightJourneyCardKey: WeightJourneyCardKey? {
+        guard let breakOffer else { return nil }
+        let shown = presentedOffer(breakOffer)
+        return WeightJourneyCardKey(
+            offerID: breakOffer.id,
+            afterGrams: shown.effortProgress?.totalGrams,
+            isVerified: !shown.projectionIsLowerBound && !shown.projectionWasCloudUnverified
+        )
+    }
+
+    /// §5.6: the card names what lies between this device's watermark and
+    /// the receipt's total after the focus, once per offer, and only from a
+    /// receipt that is neither a lower bound nor read before iCloud was
+    /// checked. The watermark follows, so nothing is celebrated twice.
+    private func resolveWeightJourneyCardChip(_ key: WeightJourneyCardKey?) {
+        guard let key, journeyCardChip?.offerID != key.offerID,
+              key.isVerified, let after = key.afterGrams
+        else { return }
+        let watermark = WeightJourneyCelebrationStore.load()
+        let completion = WeightJourneyCelebration.completion(
+            watermark: watermark,
+            afterGrams: after,
+            isVerified: true
+        )
+        if completion.watermark != watermark {
+            WeightJourneyCelebrationStore.save(completion.watermark)
+        }
+        journeyCardChip = WeightJourneyCardChipState(
+            offerID: key.offerID,
+            chip: WeightJourneyCelebration.CardChip(completion.thresholds)
+        )
+    }
+
+    /// §5.3 小: one line on the completion card, 「2時間。キャベツ1玉ほどの重さ
+    /// になりました」 or 「◇ 30時間」 (the ◇ lights on the orbit once the gem has
+    /// landed), with anything else this focus reached listed under it.
+    @ViewBuilder
+    private func postDropJourneyChip(_ offer: BreakOffer) -> some View {
+        if let state = journeyCardChip, state.offerID == offer.id, let chip = state.chip {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(chip.headline)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(PomoGemTheme.text)
+                if let others = chip.others {
+                    Text(others)
+                        .font(.caption)
+                        .foregroundStyle(PomoGemTheme.muted)
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                JarLifetimeCoreBackdrop.orbitCopper.opacity(0.10),
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(JarLifetimeCoreBackdrop.orbitCopper.opacity(0.32), lineWidth: 0.8)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("reward.journey")
+        }
+    }
+}
+
+/// What resolves the completion card's journey chip (`HomeView`).
+private struct WeightJourneyCardKey: Equatable {
+    let offerID: UUID
+    let afterGrams: Int?
+    let isVerified: Bool
 }
 
 private extension PendingStratumCelebration {
@@ -6506,6 +6968,13 @@ enum HomeLifetimeMassText {
     }
 }
 
+/// Home's last synced jar content (launch-perf (e)), kept in `@State`
+/// without observation.
+@MainActor
+final class HomeSceneContentBox {
+    var value: HomeSceneContent?
+}
+
 /// Runs Home's follow-up to a landing once the jar has settled
 /// (`HomeView.scheduleLandingSettle`). A plain reference kept in `@State`, so
 /// scheduling from the landing callback never invalidates Home. Each landing
@@ -6537,6 +7006,9 @@ private struct JarStageSnapshot {
     let accentHex: String
     let inspectableAggregateID: UUID?
     let aggregateInspectionSummary: AccumulationClusterSummary?
+    /// 重さの旅 (D6, D11): the toggle, the chosen length and the study day,
+    /// for the readout's next-target line.
+    let journey: WeightJourneyStageInputs
 
     /// Home's `lastSettledLifetimeReadout` and the reset epoch its readout
     /// describes.
@@ -7813,6 +8285,10 @@ enum HomeRenderDiagnostics {
     private(set) static var bodyEvaluationCountAtLastLanding = 0
     static var jarHintWindowFrame: CGRect?
     static var jarHUDWindowFrame: CGRect?
+    /// D5: "above" (over the jar's mouth) or "inside".
+    static var hudPlacement: String?
+    /// The readout's next-target line as drawn (重さの旅), or nil.
+    static var journeyLineText: String?
     /// The stone (or, before the core, its vessel) and the label block under it.
     static var jarCoreWindowFrame: CGRect?
 
@@ -7884,6 +8360,9 @@ private struct JarUITestPresentationProbe: View {
     @State private var coreFrame: CGRect?
     /// The bottle (`JarScene.outerJarRect`): every gem rests inside it.
     @State private var bottleFrame: CGRect?
+    /// D5 and §5.5: where the readout is, and its next-target line.
+    @State private var hudPlacement = "none"
+    @State private var journeyLine = "none"
 
     var body: some View {
         Text("Jar presentation probe")
@@ -7908,7 +8387,7 @@ private struct JarUITestPresentationProbe: View {
 
     private var presentationValue: String {
         String(
-            format: "count=%d;maxY=%.3f;records=%@;bounceSequence=%d;bounceRise=%.3f;targetX=%.5f;targetY=%.5f;dropSequence=%d;dropFall=%.3f;dropLanded=%d;targetWindowX=%.1f;targetWindowY=%.1f;homeBodyEvaluations=%d;homeLandings=%d;homeBodyAtLanding=%d;homeSettles=%d;homeBodyAtSettle=%d;jarHint=%@;crystalWindowX=%.1f;crystalWindowY=%.1f;hud=%@;core=%@;bottle=%@",
+            format: "count=%d;maxY=%.3f;records=%@;bounceSequence=%d;bounceRise=%.3f;targetX=%.5f;targetY=%.5f;dropSequence=%d;dropFall=%.3f;dropLanded=%d;targetWindowX=%.1f;targetWindowY=%.1f;homeBodyEvaluations=%d;homeLandings=%d;homeBodyAtLanding=%d;homeSettles=%d;homeBodyAtSettle=%d;jarHint=%@;crystalWindowX=%.1f;crystalWindowY=%.1f;hud=%@;core=%@;bottle=%@;hudPlacement=%@;journey=%@",
             count,
             Double(maximumY),
             records,
@@ -7931,7 +8410,9 @@ private struct JarUITestPresentationProbe: View {
             Double(crystalWindowY),
             Self.corners(hudFrame),
             Self.corners(coreFrame),
-            Self.corners(bottleFrame)
+            Self.corners(bottleFrame),
+            hudPlacement,
+            journeyLine
         )
     }
 
@@ -7950,6 +8431,8 @@ private struct JarUITestPresentationProbe: View {
         jarHintFrame = HomeRenderDiagnostics.jarHintWindowFrame
         hudFrame = HomeRenderDiagnostics.jarHUDWindowFrame
         coreFrame = HomeRenderDiagnostics.jarCoreWindowFrame
+        hudPlacement = HomeRenderDiagnostics.hudPlacement ?? "none"
+        journeyLine = HomeRenderDiagnostics.journeyLineText ?? "none"
         dropSequence = Int(truncatingIfNeeded: scene.completionDropSequence)
         dropFall = scene.completionDropMaximumFall
         dropLanded = scene.completionDropHasLanded
