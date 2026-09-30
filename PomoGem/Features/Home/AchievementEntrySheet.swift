@@ -190,7 +190,7 @@ struct AchievementEntrySheet: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(kind.title)
                         .font(PomoGemTheme.brand(24))
-                    Text(selectedSubject?.safeDisplayName ?? String(
+                    Text(selectedSubject?.localizedDisplayName ?? String(
                         localized: "テーマを選んでください",
                         table: "Home",
                         comment: "Achievement details: shown under the kind while no theme is chosen"

@@ -2656,7 +2656,7 @@ private struct AggregateArchiveRow: View {
                             Circle()
                                 .fill(Color(hex: subject.colorHex))
                                 .frame(width: 7, height: 7)
-                            Text(SubjectNamePolicy.displayName(subject.name))
+                            Text(SubjectNamePolicy.localizedDisplayName(subject.name))
                                 .font(.caption2.weight(.semibold))
                                 .lineLimit(1)
                             Spacer()
@@ -3014,19 +3014,23 @@ private struct AchievementEditorSheet: View {
     }
 
     private var selectedSubjectTitle: String? {
-        keepsOriginalSubject ? selection.subjectName : selectedSubject?.safeDisplayName
+        keepsOriginalSubject ? keptSubjectDisplayName : selectedSubject?.localizedDisplayName
+    }
+
+    private var keptSubjectDisplayName: String {
+        SubjectNamePolicy.localizedDisplayName(selection.subjectName, subjectID: selection.subjectID)
     }
 
     private var keptSubjectMenuTitle: String {
         selection.subjectIsDeleted
-            ? String(localized: "\(selection.subjectName)（削除したテーマ）", table: "Log", comment: "Milestone editor theme menu: keep the milestone's deleted theme; the argument is the theme name")
-            : String(localized: "\(selection.subjectName)（今のまま）", table: "Log", comment: "Milestone editor theme menu: keep the milestone's theme as it is; the argument is the theme name")
+            ? String(localized: "\(keptSubjectDisplayName)（削除したテーマ）", table: "Log", comment: "Milestone editor theme menu: keep the milestone's deleted theme; the argument is the theme name")
+            : String(localized: "\(keptSubjectDisplayName)（今のまま）", table: "Log", comment: "Milestone editor theme menu: keep the milestone's theme as it is; the argument is the theme name")
     }
 
     private var keptSubjectNotice: String {
         selection.subjectIsDeleted
-            ? String(localized: "「\(selection.subjectName)」は設定で削除したテーマです。ほかのテーマを選ばなければ、このまま残ります。", table: "Log", comment: "Milestone editor: why a deleted theme is shown; the argument is the theme name")
-            : String(localized: "「\(selection.subjectName)」は今のテーマ一覧にありません。ほかのテーマを選ばなければ、このまま残ります。", table: "Log", comment: "Milestone editor: why a theme missing from the list is shown; the argument is the theme name")
+            ? String(localized: "「\(keptSubjectDisplayName)」は設定で削除したテーマです。ほかのテーマを選ばなければ、このまま残ります。", table: "Log", comment: "Milestone editor: why a deleted theme is shown; the argument is the theme name")
+            : String(localized: "「\(keptSubjectDisplayName)」は今のテーマ一覧にありません。ほかのテーマを選ばなければ、このまま残ります。", table: "Log", comment: "Milestone editor: why a theme missing from the list is shown; the argument is the theme name")
     }
 
     var body: some View {
@@ -3182,9 +3186,9 @@ private struct AchievementEditorSheet: View {
                         selectedSubjectID = subject.id
                     } label: {
                         if selectedSubjectID == subject.id {
-                            Label(subject.safeDisplayName, systemImage: "checkmark")
+                            Label(subject.localizedDisplayName, systemImage: "checkmark")
                         } else {
-                            Text(subject.safeDisplayName)
+                            Text(subject.localizedDisplayName)
                         }
                     }
                 }
@@ -3402,7 +3406,7 @@ private struct AchievementHistoryRow: View {
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel(String(
-            localized: "\(stone.displaySubjectName)、\(stone.kind.title)、\(stone.displayTitle)、\(stone.achievedAt.formatted(date: .long, time: .omitted))",
+            localized: "\(stone.localizedDisplaySubjectName)、\(stone.kind.title)、\(stone.displayTitle)、\(stone.achievedAt.formatted(date: .long, time: .omitted))",
             table: "Log",
             comment: "VoiceOver milestone row: theme, kind, title, date"
         ))
@@ -3437,7 +3441,7 @@ private struct AchievementHistoryRow: View {
         VStack(alignment: .leading, spacing: 3) {
             Text(stone.displayTitle)
                 .font(.subheadline.weight(.semibold))
-            Text(ListText.compact([stone.displaySubjectName, stone.kind.title]))
+            Text(ListText.compact([stone.localizedDisplaySubjectName, stone.kind.title]))
                 .font(.caption)
                 .foregroundStyle(PomoGemTheme.muted)
         }

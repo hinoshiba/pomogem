@@ -37,9 +37,14 @@ final class ScreenTimeArrivalAnnouncer {
         self.quietInterval = quietInterval
     }
 
-    /// A Screen Time learning pebble reached the jar.
-    func noteLearningLanding(subjectName: String, announce: @escaping (String, String) -> Void) {
-        learning.addLearning(subjectName: subjectName)
+    /// A Screen Time learning pebble reached the jar. Group by the stored
+    /// name; only the final sentence uses the localized display name.
+    func noteLearningLanding(
+        subjectName: String,
+        displayName: String? = nil,
+        announce: @escaping (String, String) -> Void
+    ) {
+        learning.addLearning(subjectName: subjectName, displayName: displayName)
         scheduleFlush(announce)
     }
 
@@ -84,6 +89,7 @@ final class ScreenTimeArrivalAnnouncer {
 struct ScreenTimeArrivalTally: Equatable {
     struct Entry: Equatable {
         let name: String
+        var displayName: String
         var count: Int
     }
 
@@ -91,11 +97,12 @@ struct ScreenTimeArrivalTally: Equatable {
     private(set) var learningBySubject: [Entry] = []
     private(set) var blackStones = 0
 
-    mutating func addLearning(subjectName: String) {
+    mutating func addLearning(subjectName: String, displayName: String? = nil) {
         if let index = learningBySubject.firstIndex(where: { $0.name == subjectName }) {
             learningBySubject[index].count += 1
+            learningBySubject[index].displayName = displayName ?? subjectName
         } else {
-            learningBySubject.append(Entry(name: subjectName, count: 1))
+            learningBySubject.append(Entry(name: subjectName, displayName: displayName ?? subjectName, count: 1))
         }
     }
 
@@ -126,7 +133,7 @@ struct ScreenTimeArrivalTally: Equatable {
         case (false, false):
             return nil
         case (true, false):
-            if learningBySubject.count == 1, let subject = learningBySubject.first?.name {
+            if learningBySubject.count == 1, let subject = learningBySubject.first?.displayName {
                 return String(localized: "スクリーンタイム：\(subject) +\(minutes)分（\(gems)）", table: "ScreenTime",
                               bundle: bundle, locale: locale,
                               comment: "Toast: study-app time added. 1 = theme name, 2 = minutes, 3 = gem count such as 3粒 (3 gems)")
@@ -143,7 +150,7 @@ struct ScreenTimeArrivalTally: Equatable {
                           table: "ScreenTime", bundle: bundle, locale: locale,
                           comment: "Toast: black stones added. 1 = such as 黒い石 +2 (+2 black stones), 2 = minutes in the apps to use less")
         case (true, true):
-            if learningBySubject.count == 1, let subject = learningBySubject.first?.name {
+            if learningBySubject.count == 1, let subject = learningBySubject.first?.displayName {
                 return String(localized: "スクリーンタイム：\(subject) +\(minutes)分（\(gems)）、\(stones)",
                               table: "ScreenTime", bundle: bundle, locale: locale,
                               comment: "Toast: study time and black stones added. 1 = theme, 2 = minutes, 3 = gem count such as 3粒, 4 = such as 黒い石 +2")

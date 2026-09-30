@@ -118,7 +118,7 @@ final class HomeLocalizationTests: XCTestCase {
         XCTAssertEqual(try english("記念石\(1)個"), "1 milestone stone")
         XCTAssertEqual(try english("\(1)粒が、ひとつの結晶になった"), "1 gem became one crystal")
         XCTAssertEqual(try english("\(10)粒が、ひとつの結晶になった"), "10 gems became one crystal")
-        XCTAssertEqual(try english("\(100)粒を、ひとつに整理した"), "Tidied 100 gems into one")
+        XCTAssertEqual(try english("\(100)粒が、ひとつの結晶になった"), "100 gems became one crystal")
         XCTAssertEqual(try english("瓶\(1)杯ぶん満ちました"), "Filled 1 jar")
         XCTAssertEqual(try english("瓶\(2)杯ぶん満ちました"), "Filled 2 jars")
         XCTAssertEqual(try english("小さな粒が\(2)段階で結晶になり、瓶に余白ができた"), "Small gems became crystals in 2 steps, making room in your jar")
@@ -137,20 +137,20 @@ final class HomeLocalizationTests: XCTestCase {
             try english("\(CountText.gems(100, bundle: bundle, locale: en))の結晶、\("details")"),
             "A crystal of 100 gems, details"
         )
-        XCTAssertEqual(try english("今週記録した集中時間の質量\("1.25 kg")。"), "Mass of the focus time recorded this week: 1.25 kg.")
+        XCTAssertEqual(try english("今週の実測は\("1.25 kg")。"), "This week: 1.25 kg timed.")
         XCTAssertEqual(
-            try english("完走した回数\(1)回。回数は時間の価値とは別です"),
-            "1 completed session. The count is separate from the value of your time"
+            try english("今週のタイマー完走は\(1)回です。回数は時間の価値とは別です。"),
+            "You completed 1 timer this week. The count is separate from the value of your time."
         )
         XCTAssertEqual(
-            try english("完走した回数\(5)回。回数は時間の価値とは別です"),
-            "5 completed sessions. The count is separate from the value of your time"
+            try english("今週のタイマー完走は\(5)回です。回数は時間の価値とは別です。"),
+            "You completed 5 timers this week. The count is separate from the value of your time."
         )
-        XCTAssertEqual(try english("今週 \("1.25 kg") ・ 完走\(5)回"), "This week: 1.25 kg · 5 completed")
+        XCTAssertEqual(try english("今週の実測 \("1.25 kg")・自己申告 \("300 g")"), "This week: 1.25 kg timed · 300 g self-reported")
         // Japanese joins the two sentences with nothing between them, as before.
         XCTAssertEqual(
-            SentenceText.join(["今週記録した集中時間の質量1.25kg。", "完走した回数5回。回数は時間の価値とは別です"]),
-            "今週記録した集中時間の質量1.25kg。完走した回数5回。回数は時間の価値とは別です"
+            SentenceText.join(["今週の実測は1.25kg。", "今週のタイマー完走は5回です。回数は時間の価値とは別です。"]),
+            "今週の実測は1.25kg。今週のタイマー完走は5回です。回数は時間の価値とは別です。"
         )
     }
 
@@ -158,15 +158,15 @@ final class HomeLocalizationTests: XCTestCase {
         XCTAssertEqual(try english("一粒、着地。"), "A gem landed.")
         XCTAssertEqual(try english("集中を記録しました。"), "Focus recorded.")
         XCTAssertEqual(try english("\(5)分休憩"), "5-Min Break")
-        XCTAssertEqual(try english("\(15)分休憩できます"), "You can take a 15-minute break")
+        XCTAssertEqual(try english("\(15)分休憩を利用できます"), "You can take a 15-minute break")
         XCTAssertEqual(try english("\("Math") +\("250 g")（\("1.0 standard units")）"), "Math +250 g (1.0 standard units)")
         XCTAssertEqual(try english("\("Math") +\("1,125 g") 積んだ"), "Added 1,125 g to Math")
         XCTAssertEqual(try english("ここで休む"), "Rest Here")
         XCTAssertEqual(try english("この結晶をカードにする"), "Make a Card of This Crystal")
-        XCTAssertEqual(try english("積んだ質量"), "Mass Added")
+        XCTAssertEqual(try english("時間の核の進み"), "Time Core Progress")
         XCTAssertEqual(
-            try english("これは瓶を軽く保つための二次的な整理です。保存表示だけを圧縮し、一粒ずつの時間も、\("2.5 kg")の質量も100%保持します。時間の核は回数でなく質量から進みます。次へ急ぐ必要はありません。"),
-            "This is a secondary tidy-up that keeps your jar light. Only how the gems are stored and shown is compressed: the time of every gem and all 2.5 kg of mass are kept 100%. Time cores grow from mass, not from counts. There's no need to rush to the next one."
+            try english("時間の核は、粒の数ではなく積み上げた時間で進みます。次へ急ぐ必要はありません。"),
+            "The time core grows with the time you have built up, not the number of gems. There is no need to hurry."
         )
     }
 

@@ -340,7 +340,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The plan converts sessions per week using an average year of 365.25 days. Each completed focus adds one gem, and each minute of focus adds %1$@. The jar filling every 2.50 kg, long-term mass stages, and jar glow use the same calculations as the app. Groups of ten keep moving objects to %2$lld or fewer even over long periods."
+            "value" : "The plan converts sessions per week using an average year of 365.25 days. Each completed focus adds one gem, and each minute of focus adds %1$@. The jar filling every 2.50 kg, long-term mass stages, and jar glow use the same calculations as the app. Groups of ten keep moving objects to %2$lld or fewer even over long periods."
           }
         },
         "ja" : {
@@ -910,7 +910,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The jar fills every 2.50 kg (250 minutes of focus). After you see its full-jar glow, it moves to the next jar. Your total remains as separate long-term stages: 2.50 kg → 25 kg → 250 kg and beyond. Both advance by %@ per minute of focus, not by session count."
+            "value" : "The jar fills every 2.50 kg (250 minutes of focus). After you see its full-jar glow, it moves to the next jar. Your total remains as separate long-term stages: 2.50 kg → 25 kg → 250 kg and beyond. Both advance by %@ per minute of focus, not by session count."
           }
         },
         "ja" : {

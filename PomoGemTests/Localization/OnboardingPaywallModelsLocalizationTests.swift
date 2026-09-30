@@ -83,6 +83,13 @@ final class OnboardingPaywallModelsLocalizationTests: XCTestCase {
         XCTAssertEqual(SubjectNamePolicy.localizedDisplayName("数学", subjectID: builtIn.id, bundle: bundle), "数学")
         // The same name on the user's own theme (another ID) is theirs.
         XCTAssertEqual(SubjectNamePolicy.localizedDisplayName("英語", subjectID: UUID(), bundle: bundle), "英語")
+        for ownName in ["テーマ", "過去の集中", "アーカイブ済みのテーマ"] {
+            XCTAssertEqual(
+                SubjectNamePolicy.localizedDisplayName(ownName, subjectID: UUID(), bundle: bundle),
+                ownName,
+                "A custom theme that happens to spell a fallback must keep its chosen name"
+            )
+        }
         // Snapshots and aggregates carry no ID: the canonical name is enough.
         XCTAssertEqual(SubjectNamePolicy.localizedDisplayName("社会", bundle: bundle), "Social Studies")
         XCTAssertEqual(SubjectNamePolicy.localizedDisplayName("Physics", bundle: bundle), "Physics")
@@ -255,13 +262,19 @@ final class OnboardingPaywallModelsLocalizationTests: XCTestCase {
     /// a 375 pt screen): the visible English values join them with U+00A0.
     /// VoiceOver-only values ("0 grams") keep an ordinary space.
     func testVisibleUnitsDoNotBreakFromTheirNumberInEnglish() throws {
+        let bundle = try LocalizationTestSupport.englishBundle()
+        XCTAssertEqual(MassText.grams(value: 250, bundle: bundle, locale: en), "250 g")
         XCTAssertEqual(
-            try english("Onboarding", "本番では、25分の集中でこの大きさの一粒（250g）が瓶に残ります。"),
-            "In a real focus, 25 minutes leaves a gem this size (250\u{00A0}g) in your jar."
+            TrialDropPresentation.meaning(bundle: bundle, locale: en),
+            "25\u{00A0}min of focus = this gem (+250\u{00A0}g)"
         )
         XCTAssertEqual(
-            try english("Onboarding", "任意の体験です。0g・記録には入りません。「次へ」で省略できます。"),
-            "This is optional. It adds 0\u{00A0}g and no record. Tap “Next” to skip it."
+            try english("Onboarding", "%@の集中が、この一粒（%@）になります", "25 min", "250\u{00A0}g"),
+            "25 min of focus becomes this gem (250\u{00A0}g)"
+        )
+        XCTAssertEqual(
+            try english("Onboarding", "実測タイマーで250g積むごとに1抽選。端数は次回へ繰り越します。%@", ""),
+            "One draw for every 250\u{00A0}g of timed focus. Any remainder carries over to next time. "
         )
         XCTAssertEqual(try english("Onboarding", "25・45・60・90分のタイマーは無料"), "25, 45, 60 and 90\u{00A0}min timers are free")
         XCTAssertEqual(

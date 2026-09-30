@@ -303,6 +303,8 @@ enum JarScalePolicy {
 struct PebbleDescriptor: Identifiable {
     let id: UUID
     let subjectName: String
+    /// Used only when speaking the stored name; aggregation keeps `subjectName`.
+    let subjectID: UUID?
     let colorHex: String
     let source: SessionSource
     let kind: PebbleKind
@@ -321,6 +323,7 @@ struct PebbleDescriptor: Identifiable {
     init(
         id: UUID = UUID(),
         subjectName: String,
+        subjectID: UUID? = nil,
         colorHex: String,
         source: SessionSource,
         kind: PebbleKind,
@@ -335,6 +338,7 @@ struct PebbleDescriptor: Identifiable {
     ) {
         self.id = id
         self.subjectName = subjectName
+        self.subjectID = subjectID
         self.colorHex = colorHex
         self.source = source
         self.kind = kind
@@ -364,6 +368,7 @@ struct PebbleDescriptor: Identifiable {
         self.init(
             id: session.id,
             subjectName: session.displaySubjectName,
+            subjectID: session.subject?.id ?? session.subjectIDSnapshot,
             colorHex: session.displaySubjectColorHex,
             source: session.effectiveSource,
             kind: RareRewardPresentationPolicy.kind(session.pebbleKind),
@@ -377,6 +382,7 @@ struct PebbleDescriptor: Identifiable {
         self.init(
             id: achievement.id,
             subjectName: achievement.displaySubjectName,
+            subjectID: achievement.subject?.id,
             colorHex: achievement.displaySubjectColorHex,
             source: .manual,
             kind: .normal,
@@ -422,6 +428,7 @@ struct PebbleDescriptor: Identifiable {
     func hasSamePresentation(as other: PebbleDescriptor) -> Bool {
         id == other.id
             && subjectName == other.subjectName
+            && subjectID == other.subjectID
             && colorHex == other.colorHex
             && source.rawValue == other.source.rawValue
             && kind.rawValue == other.kind.rawValue
@@ -468,15 +475,16 @@ struct PebbleDescriptor: Identifiable {
                     + [MassText.spoken(grams: grams)]
             )
         }
+        let displayedSubjectName = SubjectNamePolicy.localizedDisplayName(subjectName, subjectID: subjectID)
         if let achievementKind {
             return String(
-                localized: "\(subjectName)、\(achievementKind.title)の記念石、質量には含まれません",
+                localized: "\(displayedSubjectName)、\(achievementKind.title)の記念石、質量には含まれません",
                 table: "Jar",
                 comment: "VoiceOver, a milestone stone in the jar: the theme's name, then the milestone's title; the stone adds no mass"
             )
         }
         return ListText.inSentence(
-            [subjectName, gemAccessibilityName, MassText.spoken(grams: grams)]
+            [displayedSubjectName, gemAccessibilityName, MassText.spoken(grams: grams)]
                 + [presentationRewardBatchSummary].compactMap { $0 }
         )
     }

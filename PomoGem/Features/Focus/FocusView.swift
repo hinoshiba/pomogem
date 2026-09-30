@@ -410,6 +410,9 @@ enum FocusCompletionSessionFactory {
 struct FocusView: View {
     private let subject: Subject?
     private let subjectSnapshot: FocusSubjectSnapshot
+    private var displayedSubjectName: String {
+        SubjectNamePolicy.localizedDisplayName(subjectSnapshot.name, subjectID: subjectSnapshot.id)
+    }
     private let recoveryOrigin: FocusRecoveryOrigin
     private let allowsLocalNotifications: Bool
     private let deviceID: String
@@ -1250,7 +1253,7 @@ struct FocusView: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 7) {
                     Circle().fill(accent).frame(width: 8, height: 8)
-                    Text(subjectSnapshot.name)
+                    Text(displayedSubjectName)
                         .font(.system(.subheadline, design: .rounded, weight: .bold))
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("focus.subject")
@@ -2990,7 +2993,7 @@ struct FocusView: View {
         guard completionAlert.isActive(sessionID: result.sessionID) else {
             UIAccessibility.post(
                 notification: .announcement,
-                argument: FocusCompletionText.announcement(themeName: subjectSnapshot.name, grams: result.grams)
+                argument: FocusCompletionText.announcement(themeName: displayedSubjectName, grams: result.grams)
             )
             return
         }
@@ -3005,7 +3008,7 @@ struct FocusView: View {
                 notification: .announcement,
                 argument: NSAttributedString(
                     string: FocusCompletionText.announcementWhileAlerting(
-                        themeName: subjectSnapshot.name,
+                        themeName: displayedSubjectName,
                         grams: result.grams
                     ),
                     attributes: [.accessibilitySpeechQueueAnnouncement: true]
@@ -3362,7 +3365,7 @@ struct FocusView: View {
                     .multilineTextAlignment(.center)
                     .accessibilityAddTraits(.isHeader)
                 // Grouped digits (「+1,200g」), as the card always showed.
-                Text(verbatim: FocusCompletionText.cardLine(themeName: subjectSnapshot.name, grams: result.grams))
+                Text(verbatim: FocusCompletionText.cardLine(themeName: displayedSubjectName, grams: result.grams))
                     .font(.system(.headline, design: .rounded, weight: .bold))
                     // Same ceiling as the title, so the facts never outgrow
                     // the heading at the largest sizes.

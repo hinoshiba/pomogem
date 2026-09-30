@@ -326,7 +326,7 @@ final class ShareJarLocalizationTests: XCTestCase {
             goldPebbleCount: 0,
             prismPebbleCount: 0
         )
-        XCTAssertEqual(metadata.accessibilityDescription, "英語など、10粒を含むまとまり粒、実測7粒、自己申告3粒")
+        XCTAssertEqual(metadata.accessibilityDescription, "英語など、10粒を含む結晶、実測7粒、自己申告3粒")
 
         let legacy = AggregateMetadata(
             level: 2,
@@ -343,18 +343,18 @@ final class ShareJarLocalizationTests: XCTestCase {
             prismPebbleCount: 0
         )
         XCTAssertEqual(legacy.primarySubjectName, "過去の集中", "the stored sentinel stays Japanese data")
-        XCTAssertEqual(legacy.accessibilityDescription, "過去の集中、100粒、10個のまとまりを含むまとまり粒、実測100粒")
+        XCTAssertEqual(legacy.accessibilityDescription, "過去の集中、100粒、10個の結晶を含む結晶、実測100粒")
     }
 
     func testCrystalAndGemVoiceOverInEnglish() throws {
-        XCTAssertEqual(try english("%lld粒を含むまとまり粒", table: "Jar", 10), "crystal holding 10 gems")
-        XCTAssertEqual(try english("%lld粒、%lld個のまとまりを含むまとまり粒", table: "Jar", 100, 10),
-                       "crystal holding 100 gems (smaller crystals inside: 10)")
+        XCTAssertEqual(try english("%lld粒を含む結晶", table: "Jar", 10), "Crystal containing 10 gems")
+        XCTAssertEqual(try english("%lld粒、%lld個の結晶を含む結晶", table: "Jar", 100, 10),
+                       "Crystal containing 100 gems and 10 smaller crystals")
         XCTAssertEqual(try english("%@など", table: "Jar", "English"), "English and others")
         XCTAssertEqual(try english("実測%lld粒", table: "Jar", 1), "1 timed gem")
         XCTAssertEqual(try english("自己申告%lld粒", table: "Jar", 3), "3 self-reported gems")
-        XCTAssertEqual(try english("実測のつぶ", table: "Jar"), "timed gem")
-        XCTAssertEqual(try english("スクリーンタイムのつぶ", table: "Jar"), "Screen Time gem")
+        XCTAssertEqual(try english("実測の粒", table: "Jar"), "Timed gem")
+        XCTAssertEqual(try english("勉強アプリの粒", table: "Jar"), "Study-app gem")
         XCTAssertEqual(try english("%@、%@の記念石、質量には含まれません", table: "Jar", "English", "Perfect score"),
                        "English, milestone stone: Perfect score, adds no mass")
     }

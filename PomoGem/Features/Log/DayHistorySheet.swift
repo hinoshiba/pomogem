@@ -304,7 +304,7 @@ struct HistoryThemeBreakdown: View {
                     }
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(String(
-                        localized: "\(theme.name)、\(DayHistorySheet.spokenFocusTime(grams: theme.grams))、\(percentage(theme))パーセント",
+                        localized: "\(displayName(theme))、\(DayHistorySheet.spokenFocusTime(grams: theme.grams))、\(percentage(theme))パーセント",
                         table: "Log",
                         comment: "VoiceOver theme row: theme name, time, share in percent"
                     ))
@@ -316,10 +316,14 @@ struct HistoryThemeBreakdown: View {
     private func themeName(_ theme: AccumulationTimelineThemeSummary) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             HistoryThemeDot(colorHex: theme.colorHex)
-            Text(theme.name)
+            Text(displayName(theme))
                 .font(.subheadline.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private func displayName(_ theme: AccumulationTimelineThemeSummary) -> String {
+        SubjectNamePolicy.localizedDisplayName(theme.name, subjectID: UUID(uuidString: theme.id))
     }
 
     private func percentage(_ theme: AccumulationTimelineThemeSummary) -> Int {
@@ -393,6 +397,10 @@ struct HistorySessionRow: View {
     let item: HistorySessionSummary
     var timeStyle: TimeStyle = .dateAndTime
 
+    private var displayedSubjectName: String {
+        SubjectNamePolicy.localizedDisplayName(item.subjectName, subjectID: item.subjectID)
+    }
+
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -416,7 +424,7 @@ struct HistorySessionRow: View {
             pebble
                 .padding(.top, 6)
             VStack(alignment: .leading, spacing: 4) {
-                Text(item.subjectName)
+                Text(displayedSubjectName)
                     .font(.subheadline.weight(.semibold))
                     .fixedSize(horizontal: false, vertical: true)
                 Text(timeText)
@@ -460,7 +468,7 @@ struct HistorySessionRow: View {
         HStack(spacing: 12) {
             pebble
             VStack(alignment: .leading, spacing: 2) {
-                Text(item.subjectName)
+                Text(displayedSubjectName)
                     .font(.subheadline.weight(.semibold))
                 Text(timeText)
                     .font(.caption2)
@@ -518,13 +526,13 @@ struct HistorySessionRow: View {
         // and the date only when there is one.
         if let batch = RareRewardPresentationPolicy.counts(item.rareRewardCounts).multiDrawSummary {
             return String(
-                localized: "\(item.subjectName)、\(pebbleKindLabel)、\(source)、プラス\(grams)、\(batch)、\(date)",
+                localized: "\(displayedSubjectName)、\(pebbleKindLabel)、\(source)、プラス\(grams)、\(batch)、\(date)",
                 table: "Log",
                 comment: "VoiceOver history row: theme, gem kind, how it was recorded, the mass added (spoken, e.g. 250 grams), the rare-gem summary, date"
             )
         }
         return String(
-            localized: "\(item.subjectName)、\(pebbleKindLabel)、\(source)、プラス\(grams)、\(date)",
+            localized: "\(displayedSubjectName)、\(pebbleKindLabel)、\(source)、プラス\(grams)、\(date)",
             table: "Log",
             comment: "VoiceOver history row: theme, gem kind, how it was recorded, the mass added (spoken, e.g. 250 grams), date"
         )

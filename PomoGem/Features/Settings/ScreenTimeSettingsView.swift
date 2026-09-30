@@ -497,7 +497,7 @@ struct ScreenTimeSettingsView: View {
                         .tag(Optional(themeID))
                 }
                 ForEach(subjects, id: \.id) { subject in
-                    Text(subject.safeDisplayName).tag(Optional(subject.id))
+                    Text(subject.localizedDisplayName).tag(Optional(subject.id))
                 }
             }
             .disabled(editsLocked || controller.isSaving || controller.isResetting)

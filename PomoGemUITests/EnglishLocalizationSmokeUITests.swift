@@ -14,6 +14,10 @@ final class EnglishLocalizationSmokeUITests: XCTestCase {
         let menu = app.buttons["home.menu.open"]
         XCTAssertTrue(menu.waitForExistence(timeout: 15))
         XCTAssertEqual(menu.label, "Menu")
+        let themePicker = app.buttons["home.subject-picker"]
+        XCTAssertTrue(themePicker.waitForExistence(timeout: 8))
+        XCTAssertTrue(themePicker.label.contains("English"), themePicker.label)
+        XCTAssertFalse(themePicker.label.contains("英語"), themePicker.label)
         retainScreenshot(of: app, named: "English Home")
         menu.tap()
 

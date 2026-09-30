@@ -26,9 +26,9 @@ struct ThemeSelectionMenu: View {
                         selectedID = subject.id
                     } label: {
                         if selectedID == subject.id {
-                            Label(subject.safeDisplayName, systemImage: "checkmark")
+                            Label(subject.localizedDisplayName, systemImage: "checkmark")
                         } else {
-                            Text(subject.safeDisplayName)
+                            Text(subject.localizedDisplayName)
                         }
                     }
                 }
@@ -38,7 +38,7 @@ struct ThemeSelectionMenu: View {
                         .fill(Color(hex: selectedSubject?.colorHex ?? Constants.Color.textMute))
                         .frame(width: 12, height: 12)
                         .accessibilityHidden(true)
-                    Text(selectedSubject?.safeDisplayName ?? String(
+                    Text(selectedSubject?.localizedDisplayName ?? String(
                         localized: "選択してください",
                         table: "Home",
                         comment: "Theme menu of the manual-entry and achievement sheets while no theme is chosen"
@@ -69,7 +69,7 @@ extension ThemeSelectionMenu {
     /// VoiceOver: 「テーマ、英語」, or 「テーマ、未選択」. Home's own theme
     /// picker reads the same way.
     static func accessibilityLabel(for subject: Subject?) -> String {
-        let name = subject?.safeDisplayName ?? String(
+        let name = subject?.localizedDisplayName ?? String(
             localized: "未選択",
             table: "Home",
             comment: "No theme chosen yet: read after テーマ、 by VoiceOver and shown in the manual-entry confirmation row"

@@ -93,19 +93,7 @@ final class LogProgressLocalizationTests: XCTestCase {
         XCTAssertEqual(try english("質量の推移", table: "Log"), "Mass Over Time")
         XCTAssertEqual(try english("記念石アーカイブ", table: "Log"), "Milestone Stone Archive")
         XCTAssertEqual(try english("結晶アーカイブ", table: "Log"), "Crystal Archive")
-        XCTAssertEqual(try english("SUBJECTS", table: "Log"), "Themes", "the eyebrow says themes, never subjects")
         XCTAssertEqual(try english("MONTHLY WRAPPED", table: "Log"), "Month in Review", "Month in Review's eyebrow names the feature, never Wrapped")
-        XCTAssertEqual(
-            try english("log.month-review.eyebrow", table: "Log"),
-            "Months",
-            "on the Log card the title below already says Month in Review"
-        )
-        let japanese = try LocalizationTestSupport.bundle(for: "ja")
-        XCTAssertEqual(
-            japanese.localizedString(forKey: "log.month-review.eyebrow", value: "<missing>", table: "Log"),
-            "MONTHLY WRAPPED",
-            "the Log card's eyebrow is unchanged in Japanese"
-        )
         XCTAssertEqual(try english("%@〜%@", table: "Log", "Sun, Sep 20", "Sat, Sep 26"), "Sun, Sep 20 – Sat, Sep 26")
         XCTAssertEqual(
             try english("この期間は記録が多いため、最新%lld件の表示分です。", table: "Log", 2_048),
@@ -184,7 +172,7 @@ final class LogProgressLocalizationTests: XCTestCase {
         XCTAssertEqual(HistoryMassText.text(250), "250g")
         XCTAssertEqual(HistoryMassText.text(2_500), "2.5kg")
         XCTAssertEqual(HistoryMassText.text(1_300_000), "1.3t")
-        XCTAssertEqual(try english("%@t", table: "Log", "1.2"), "1.2\u{00A0}t", "a no-break space keeps the unit with its number")
+        XCTAssertEqual(MassText.tonnes(fromGrams: 1_200_000, fractionDigits: 1, bundle: bundle, locale: en), "1.2 t")
     }
 
     func testMonthTitlesComeFromTheDateNotTheStoredLabel() throws {
@@ -255,7 +243,10 @@ final class LogProgressLocalizationTests: XCTestCase {
         )
         XCTAssertEqual(try english("最初の時間の核", table: "Progress"), "the first time core")
         XCTAssertEqual(try english("%@標準単位", table: "Progress", "1.0"), "1.0 standard units")
-        XCTAssertEqual(try english("%lldg相当", table: "Progress", 1_005), "1,005\u{00A0}g equivalent")
+        XCTAssertEqual(
+            try english("%@相当", table: "Progress", MassText.grams(value: 1_005, bundle: bundle, locale: en)),
+            "Equivalent to 1,005 g"
+        )
     }
 
     /// The composed labels keep their Japanese exactly (the presentation tests
@@ -275,7 +266,7 @@ final class LogProgressLocalizationTests: XCTestCase {
 
     func testPlanInEnglish() throws {
         XCTAssertEqual(try english("積み上がり計画", table: "Planning"), "Plan Ahead")
-        XCTAssertEqual(try english("BOTTLE CYCLE", table: "Planning"), "Jar Cycle", "English says jar, never bottle")
+        XCTAssertEqual(try english("瓶の杯数", table: "Planning"), "Jars Filled")
         XCTAssertEqual(try english("%lld年", table: "Planning", 1), "1 year")
         XCTAssertEqual(try english("%lld年", table: "Planning", 10), "10 years")
         XCTAssertEqual(try english("%lldか月後", table: "Planning", 1), "In 1 month")
@@ -289,7 +280,7 @@ final class LogProgressLocalizationTests: XCTestCase {
         )
         XCTAssertEqual(try english("%lld段階到達 · 次 %@", table: "Planning", 1, "25 kg"), "1 stage reached · next 25 kg")
         XCTAssertEqual(try english("%lld回", table: "Planning", 1_300), "1,300 sessions")
-        XCTAssertEqual(try english("%@t", table: "Planning", "3.68"), "3.68\u{00A0}t")
+        XCTAssertEqual(MassText.tonnes(fromGrams: 3_680_000, fractionDigits: 2, bundle: try LocalizationTestSupport.englishBundle(), locale: en), "3.68 t")
         XCTAssertEqual(try english("最初の2.50kgへ", table: "Planning"), "Toward Your First 2.50\u{00A0}kg")
         XCTAssertEqual(try english("瓶1杯 2.50kg · 集中250分相当", table: "Planning"), "A full jar: 2.50\u{00A0}kg · 250\u{00A0}min of focus")
         XCTAssertEqual(

@@ -35,6 +35,35 @@ final class FocusPersistenceTests: XCTestCase {
         XCTAssertEqual(legacy, makeRewardReceipt(id: receipt.id, phase: nil))
     }
 
+    func testRewardReceiptSubjectIDRoundTripsAndLegacyReceiptWithoutIDDecodes() throws {
+        let subjectID = UUID()
+        let receipt = PendingRewardReceipt(
+            id: UUID(),
+            createdAt: Date(timeIntervalSince1970: 1_800_500_000),
+            breakMinutes: 5,
+            grams: 250,
+            subjectName: "英語",
+            subjectID: subjectID,
+            colorHex: Constants.Color.english,
+            weeklyCompletionCount: 1,
+            kind: .normal,
+            totalPebbleCount: 1,
+            projectionIsLowerBound: false
+        )
+        let data = try JSONEncoder().encode(receipt)
+        XCTAssertEqual(try JSONDecoder().decode(PendingRewardReceipt.self, from: data), receipt)
+
+        var legacyObject = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        legacyObject.removeValue(forKey: "subjectID")
+        let legacy = try JSONDecoder().decode(
+            PendingRewardReceipt.self,
+            from: JSONSerialization.data(withJSONObject: legacyObject)
+        )
+        XCTAssertNil(legacy.subjectID)
+        XCTAssertEqual(legacy.subjectName, receipt.subjectName)
+        XCTAssertEqual(legacy.id, receipt.id)
+    }
+
     func testRewardDropAcknowledgementPreservesFrozenReceiptAndFIFOWithoutDuplication() throws {
         let suiteName = "PomoGemTests.reward-drop-ack.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

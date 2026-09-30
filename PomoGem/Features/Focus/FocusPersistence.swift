@@ -456,6 +456,10 @@ struct PendingRewardReceipt: Identifiable, Codable, Equatable, Sendable {
     let breakMinutes: Int
     let grams: Int
     let subjectName: String
+    /// Optional for receipts saved before the theme ID was carried here.
+    /// Display code uses this with the stored name to identify an untouched
+    /// built-in theme; the stored snapshot itself remains unchanged.
+    let subjectID: UUID?
     let colorHex: String
     let weeklyCompletionCount: Int
     /// Added after the original return-count card. Optional keeps receipts
@@ -497,6 +501,7 @@ struct PendingRewardReceipt: Identifiable, Codable, Equatable, Sendable {
         breakMinutes: Int,
         grams: Int,
         subjectName: String,
+        subjectID: UUID? = nil,
         colorHex: String,
         weeklyCompletionCount: Int,
         weeklyStudyGrams: Int? = nil,
@@ -516,6 +521,7 @@ struct PendingRewardReceipt: Identifiable, Codable, Equatable, Sendable {
         self.breakMinutes = max(1, breakMinutes)
         self.grams = max(0, grams)
         self.subjectName = SubjectNamePolicy.displayName(subjectName)
+        self.subjectID = subjectID
         self.colorHex = colorHex
         self.weeklyCompletionCount = max(1, weeklyCompletionCount)
         self.weeklyStudyGrams = weeklyStudyGrams.map { max(0, $0) }

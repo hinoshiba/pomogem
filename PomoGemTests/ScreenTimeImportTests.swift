@@ -383,6 +383,20 @@ final class ScreenTimeArrivalSummaryTests: XCTestCase {
         }
     }
 
+    func testLocalizedNameIsOnlyUsedInToastNotThemeGrouping() {
+        var tally = ScreenTimeArrivalTally()
+        tally.addLearning(subjectName: "英語", displayName: "English")
+        tally.addLearning(subjectName: "英語", displayName: "English")
+        XCTAssertEqual(tally.learningBySubject.map(\.name), ["英語"])
+        XCTAssertEqual(tally.message, "スクリーンタイム：English +20分（2粒）")
+
+        // Two distinct stored themes can have the same visible name. Their
+        // landings must remain separate before the summary chooses its copy.
+        tally.addLearning(subjectName: "別の英語", displayName: "English")
+        XCTAssertEqual(tally.learningBySubject.map(\.name), ["英語", "別の英語"])
+        XCTAssertEqual(tally.message, "スクリーンタイム：勉強アプリの時間 +30分（3粒）")
+    }
+
     func testOnlyARiseSinceTheLastAcknowledgedCountIsAnnounced() {
         typealias Tally = ScreenTimeArrivalTally
         XCTAssertEqual(Tally.blackStoneStep(acknowledged: nil, current: 12).newStones, 0,

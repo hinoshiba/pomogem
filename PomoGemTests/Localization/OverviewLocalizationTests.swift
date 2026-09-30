@@ -203,7 +203,10 @@ final class OverviewLocalizationTests: XCTestCase {
     }
 
     func testTimeCoreVoiceOverInEnglish() throws {
-        XCTAssertEqual(try english("%@t", "87.66"), "87.66 t")
+        XCTAssertEqual(
+            MassText.tonnes(fromGrams: 87_660_000, fractionDigits: 2, bundle: try LocalizationTestSupport.englishBundle(), locale: en),
+            "87.66 t"
+        )
         XCTAssertEqual(try english("、"), ", ")
         XCTAssertEqual(try english("集中%@", "2.75 kg"), "2.75 kg of focus")
         XCTAssertEqual(try english("%lld粒以上", 99), "at least 99 gems")

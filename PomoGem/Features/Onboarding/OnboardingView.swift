@@ -1475,10 +1475,18 @@ extension Color {
 /// so the visible and spoken forms are pinned by unit tests.
 enum TrialDropPresentation {
     /// 「25分の集中 = この一粒（+250g）」, one sentence.
-    static var meaning: String {
-        String(
-            localized: "\(DurationText.short(minutes: DurationPresentation.focusMinutes(grams: Constants.Mass.measuredPebbleGrams)))の集中 = この一粒（+\(MassText.grams(String(Constants.Mass.measuredPebbleGrams)))）",
+    static var meaning: String { meaning(bundle: .main, locale: PomoGemLocale.current) }
+
+    static func meaning(bundle: Bundle, locale: Locale) -> String {
+        let duration = DurationText.short(minutes: DurationPresentation.focusMinutes(grams: Constants.Mass.measuredPebbleGrams), locale: locale)
+            .replacingOccurrences(of: " ", with: "\u{00A0}")
+        let mass = MassText.grams(String(Constants.Mass.measuredPebbleGrams), bundle: bundle, locale: locale)
+            .replacingOccurrences(of: " ", with: "\u{00A0}")
+        return String(
+            localized: "\(duration)の集中 = この一粒（+\(mass)）",
             table: "Onboarding",
+            bundle: bundle,
+            locale: locale,
             comment: "Onboarding trial drop, shown after the trial gem lands: what one gem stands for. %1$@ is a focus time (25分), %2$@ its mass (250g). en: '%1$@ of focus = this gem (+%2$@)'"
         )
     }

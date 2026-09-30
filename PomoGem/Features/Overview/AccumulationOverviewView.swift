@@ -434,6 +434,7 @@ struct AccumulationMilestoneSummary: Identifiable, Equatable, Sendable {
     let date: Date
     let title: String
     let subjectName: String
+    let subjectID: UUID?
     let colorHex: String
     let mark: String
 }
@@ -2205,6 +2206,10 @@ enum OverviewInitialLensPolicy {
 private struct MilestoneSummaryCard: View {
     let milestone: AccumulationMilestoneSummary
 
+    private var displayedSubjectName: String {
+        SubjectNamePolicy.localizedDisplayName(milestone.subjectName, subjectID: milestone.subjectID)
+    }
+
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
@@ -2236,7 +2241,7 @@ private struct MilestoneSummaryCard: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
             String(
-                localized: "\(milestone.subjectName)、\(milestone.title)の記念石、\(milestone.date.formatted(.dateTime.year().month().day()))",
+                localized: "\(displayedSubjectName)、\(milestone.title)の記念石、\(milestone.date.formatted(.dateTime.year().month().day()))",
                 table: "Overview",
                 comment: "VoiceOver, one achievement stone card: theme, kind, date"
             )
@@ -2273,7 +2278,7 @@ private struct MilestoneSummaryCard: View {
                     .font(.subheadline.weight(.bold))
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(milestone.subjectName)
+                Text(displayedSubjectName)
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
@@ -2520,16 +2525,17 @@ struct ClusterDetailSheet: View {
                                 .foregroundStyle(PomoGemTheme.muted)
                             ForEach(Array(visibleSubjectMix.enumerated()), id: \.offset) { _, item in
                                 let percentage = subjectPercentage(item.pebbleCount)
+                                let subjectName = SubjectNamePolicy.localizedDisplayName(item.name)
                                 CompositionBreakdownRow(
                                     colorHex: item.colorHex,
-                                    title: item.name,
+                                    title: subjectName,
                                     value: String(
                                         localized: "\(item.pebbleCount)粒・\(percentageText(percentage))",
                                         table: "Overview",
                                         comment: "Crystal detail, one theme: gem count, then its share such as 40%"
                                     ),
                                     accessibilityDescription: String(
-                                        localized: "\(item.name)、\(item.pebbleCount)粒、\(spokenPercentage(percentage))",
+                                        localized: "\(subjectName)、\(item.pebbleCount)粒、\(spokenPercentage(percentage))",
                                         table: "Overview",
                                         comment: "VoiceOver, one theme of a crystal: theme name, gem count, spoken percentage"
                                     )
@@ -2641,6 +2647,7 @@ struct ClusterDetailSheet: View {
             .filter { $0.colorHex.caseInsensitiveCompare(hex) == .orderedSame }
             .map(\.name)
             .filter { seen.insert($0).inserted }
+            .map { SubjectNamePolicy.localizedDisplayName($0) }
         if !subjectNames.isEmpty {
             // Theme names are the person's own text; only the separator
             // is localized (「英語・数学」, en "English · Math").

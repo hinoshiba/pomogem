@@ -288,6 +288,7 @@ struct AccumulationOverviewLoader: View {
                         date: $0.achievedAt,
                         title: $0.displayTitle,
                         subjectName: $0.displaySubjectName,
+                        subjectID: $0.subject?.id,
                         colorHex: $0.kind.gemBaseHex,
                         mark: $0.kind.shortMark
                     )

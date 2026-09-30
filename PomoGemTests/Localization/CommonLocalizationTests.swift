@@ -166,7 +166,7 @@ final class CommonLocalizationTests: XCTestCase {
         let app = try XCTUnwrap(LocalizationTestSupport.infoPlistStrings(in: .main, language: "en"))
         XCTAssertEqual(
             Set(app.keys),
-            ["CFBundleDisplayName", "NSMotionUsageDescription", "NSPhotoLibraryAddUsageDescription", "NSAppleMusicUsageDescription"]
+            ["CFBundleDisplayName", "NSMotionUsageDescription", "NSPhotoLibraryAddUsageDescription", "NSAppleMusicUsageDescription", "NSAlarmKitUsageDescription"]
         )
     }
 

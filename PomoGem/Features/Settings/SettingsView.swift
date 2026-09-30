@@ -286,7 +286,7 @@ struct SettingsView: View {
             presenting: subjectPendingDeletion
         ) { subject in
             Button(String(
-                localized: "「\(subject.safeDisplayName)」を削除",
+                localized: "「\(subject.localizedDisplayName)」を削除",
                 table: "Settings",
                 comment: "Theme deletion alert button; the argument is the theme name"
             ), role: .destructive) {
@@ -491,7 +491,7 @@ struct SettingsView: View {
                                 Circle().stroke(.white.opacity(0.7), style: StrokeStyle(lineWidth: 1, dash: [2, 2])).frame(width: 21, height: 21)
                             }
                         }
-                        Text(subject.safeDisplayName)
+                        Text(subject.localizedDisplayName)
                             .foregroundStyle(subject.isArchived ? PomoGemTheme.muted : PomoGemTheme.text)
                         Spacer()
                         if subject.isArchived {
@@ -2128,7 +2128,7 @@ struct SettingsView: View {
         }
         guard let duplicate else { return nil }
         return String(
-            localized: "同じ名前のテーマ「\(duplicate.safeDisplayName)」がすでにあります。",
+            localized: "同じ名前のテーマ「\(duplicate.localizedDisplayName)」がすでにあります。",
             table: "Settings",
             comment: "Theme editor error; the argument is the existing theme's name"
         )
@@ -2169,7 +2169,7 @@ struct SettingsView: View {
         let message: String
         if recordCount == 0 {
             message = String(
-                localized: "「\(subject.safeDisplayName)」を削除します。関連する過去の記録はありません。この操作は取り消せません。",
+                localized: "「\(subject.localizedDisplayName)」を削除します。関連する過去の記録はありません。この操作は取り消せません。",
                 table: "Settings",
                 comment: "Theme deletion alert message; the argument is the theme name"
             )
@@ -2182,7 +2182,7 @@ struct SettingsView: View {
                 comment: "How many past records use the theme being deleted, inside the deletion message. English: '%lld past record' / '%lld past records'."
             )
             message = String(
-                localized: "「\(subject.safeDisplayName)」だけを削除します。\(records)と質量は消えず、現在の名前と色も残ります。この操作は取り消せません。",
+                localized: "「\(subject.localizedDisplayName)」だけを削除します。\(records)と質量は消えず、現在の名前と色も残ります。この操作は取り消せません。",
                 table: "Settings",
                 comment: "Theme deletion alert message. The first argument is the theme name, the second how many past records use it (過去の記録3件)"
             )
@@ -3876,7 +3876,7 @@ private struct SubjectEditorView: View {
                         ))
                     } footer: {
                         Text(
-                            "非表示にしても、\(subject.safeDisplayName)の過去の粒は瓶に残ります。",
+                            "非表示にしても、\(subject.localizedDisplayName)の過去の粒は瓶に残ります。",
                             tableName: "Settings",
                             comment: "Theme editor footer; the argument is the theme name"
                         )

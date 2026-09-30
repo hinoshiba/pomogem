@@ -217,7 +217,7 @@ struct ManualEntrySheet: View {
                 VStack(spacing: 10) {
                     confirmationRow(
                         title: String(localized: "テーマ", table: "Home", comment: "The word theme, alone: the caption above the sheets' theme menu, the manual-entry confirmation row, and the stand-in for a missing theme name"),
-                        value: selectedSubject?.safeDisplayName ?? String(
+                        value: selectedSubject?.localizedDisplayName ?? String(
                             localized: "未選択",
                             table: "Home",
                             comment: "No theme chosen yet: read after テーマ、 by VoiceOver and shown in the manual-entry confirmation row"
@@ -330,7 +330,7 @@ struct ManualEntrySheet: View {
     }
 
     private func confirmAccessibilityHint(_ duration: ManualDuration) -> String {
-        let theme = selectedSubject?.safeDisplayName ?? String(
+        let theme = selectedSubject?.localizedDisplayName ?? String(
             localized: "テーマ",
             table: "Home",
             comment: "The word theme, alone: the caption above the sheets' theme menu, the manual-entry confirmation row, and the stand-in for a missing theme name"

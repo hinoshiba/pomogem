@@ -80,9 +80,9 @@ enum SubjectNamePolicy {
     ///   given, only for that preset's fixed ID with its canonical name, so a
     ///   renamed built-in keeps the user's name. Snapshots and aggregates that
     ///   carry no ID (nil) are mapped by the canonical name alone.
-    /// - the legacy aggregate names 「過去の集中」 and 「過去の集中 N」.
-    /// - 「アーカイブ済みのテーマ」 and 「テーマ」, the fallbacks written when a
-    ///   theme had no name.
+    /// - the legacy aggregate names 「過去の集中」 and 「過去の集中 N」,
+    ///   or 「アーカイブ済みのテーマ」 and 「テーマ」 fallbacks, only when no
+    ///   theme ID is available. A custom theme with an ID keeps its own name.
     /// Everything else is the user's own name and is returned unchanged
     /// (bounded like `displayName(_:fallback:)`).
     static func localizedDisplayName(
@@ -94,13 +94,16 @@ enum SubjectNamePolicy {
         if name.isEmpty {
             return LegacyStoredName.untitledTheme.localized(bundle: bundle)
         }
-        let preset: SeedData.Preset?
         if let subjectID {
-            preset = SeedData.subjects.first { $0.id == subjectID }
-        } else {
-            preset = SeedData.subjects.first { $0.name == name }
+            if let preset = SeedData.subjects.first(where: { $0.id == subjectID }),
+               preset.name == name {
+                return preset.displayName(bundle: bundle)
+            }
+            // A live theme with any other ID belongs to the user. Even if its
+            // name spells a legacy sentinel, show exactly what they named it.
+            return name
         }
-        if let preset, preset.name == name {
+        if let preset = SeedData.subjects.first(where: { $0.name == name }) {
             return preset.displayName(bundle: bundle)
         }
         return LegacyStoredName(name)?.localized(bundle: bundle) ?? name

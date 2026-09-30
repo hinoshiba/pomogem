@@ -75,7 +75,7 @@ struct WrappedView: View {
         return groups.max { lhs, rhs in
             NonnegativeIntPolicy.sum(lhs.value.map(\.grams))
                 < NonnegativeIntPolicy.sum(rhs.value.map(\.grams))
-        }?.key ?? "—"
+        }?.value.first?.localizedDisplaySubjectName ?? "—"
     }
 
     var body: some View {
@@ -486,7 +486,7 @@ private struct WrappedThemeTimes: View {
                 }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(String(
-                    localized: "\(theme.name)、\(DayHistorySheet.spokenFocusTime(grams: theme.grams))",
+                    localized: "\(displayName(theme))、\(DayHistorySheet.spokenFocusTime(grams: theme.grams))",
                     table: "Log",
                     comment: "VoiceOver: two parts read together, e.g. a period and its date range, or a day and its spoken mass"
                 ))
@@ -508,10 +508,14 @@ private struct WrappedThemeTimes: View {
     private func themeName(_ theme: AccumulationTimelineThemeSummary) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 9) {
             HistoryThemeDot(colorHex: theme.colorHex)
-            Text(theme.name)
+            Text(displayName(theme))
                 .font(.subheadline.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private func displayName(_ theme: AccumulationTimelineThemeSummary) -> String {
+        SubjectNamePolicy.localizedDisplayName(theme.name, subjectID: UUID(uuidString: theme.id))
     }
 
     private func themeTime(_ theme: AccumulationTimelineThemeSummary) -> some View {

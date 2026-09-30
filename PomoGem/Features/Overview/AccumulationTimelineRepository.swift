@@ -240,6 +240,7 @@ struct HistorySessionSummary: Identifiable, Equatable, Sendable {
     let seconds: Int
     let grams: Int
     let subjectName: String
+    let subjectID: UUID?
     let colorHex: String
     let source: SessionSource
     let pebbleKind: PebbleKind
@@ -252,6 +253,7 @@ struct HistorySessionSummary: Identifiable, Equatable, Sendable {
         seconds = NonnegativeIntPolicy.clamped(session.seconds)
         grams = NonnegativeIntPolicy.clamped(session.grams)
         subjectName = session.displaySubjectName
+        subjectID = session.subject?.id ?? session.subjectIDSnapshot
         colorHex = session.displaySubjectColorHex
         source = session.effectiveSource
         pebbleKind = session.pebbleKind

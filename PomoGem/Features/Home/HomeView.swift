@@ -2846,7 +2846,7 @@ struct HomeView: View {
                     .fill(Color(hex: selectedSubject?.colorHex ?? Constants.Color.amberLamp))
                     .frame(width: 10, height: 10)
                     .accessibilityHidden(true)
-                Text(selectedSubject?.safeDisplayName ?? String(
+                Text(selectedSubject?.localizedDisplayName ?? String(
                     localized: "テーマを選ぶ",
                     table: "Home",
                     comment: "Home theme menu while no theme exists yet"
@@ -3045,7 +3045,7 @@ struct HomeView: View {
     }
 
     private var selectedThemeName: String {
-        selectedSubject?.safeDisplayName ?? String(
+        selectedSubject?.localizedDisplayName ?? String(
             localized: "選択中のテーマ",
             table: "Home",
             comment: "Stands in for the theme name on Home's start button if it is momentarily missing"
@@ -3370,9 +3370,9 @@ struct HomeView: View {
                 selectSubject(subject)
             } label: {
                 if selectedSubject?.id == subject.id {
-                    Label(subject.safeDisplayName, systemImage: "checkmark")
+                    Label(subject.localizedDisplayName, systemImage: "checkmark")
                 } else {
-                    Text(subject.safeDisplayName)
+                    Text(subject.localizedDisplayName)
                 }
             }
         }
@@ -3871,7 +3871,7 @@ struct HomeView: View {
                 .font(.system(.subheadline, design: .rounded, weight: .bold))
                 .foregroundStyle(PomoGemTheme.amber)
                 .fixedSize(horizontal: false, vertical: true)
-            Text(CompletionCardPresentation.mainLine(subjectName: offer.subjectName, grams: offer.grams))
+            Text(CompletionCardPresentation.mainLine(subjectName: offer.localizedSubjectName, grams: offer.grams))
                 .font(.system(.title3, design: .rounded, weight: .black))
                 .foregroundStyle(PomoGemTheme.text)
                 .fixedSize(horizontal: false, vertical: true)
@@ -3883,7 +3883,7 @@ struct HomeView: View {
         .accessibilityLabel(Text("集中を記録しました", tableName: "Home",
                                  comment: "Completion card headline, shown after every finished focus. en: 'Focus recorded'"))
         .accessibilityValue(SentenceText.join([
-            CompletionCardPresentation.spokenMainLine(subjectName: offer.subjectName, grams: offer.grams),
+            CompletionCardPresentation.spokenMainLine(subjectName: offer.localizedSubjectName, grams: offer.grams),
             offer.weeklySpokenTitle,
             CompletionCardPresentation.spokenRareLine(kind: offer.kind, counts: offer.rareRewardCounts),
             CompletionCardPresentation.spokenBreakAvailability(minutes: offer.minutes)
@@ -4265,7 +4265,7 @@ struct HomeView: View {
     /// completion card's title.
     private func postDropSummary(_ offer: BreakOffer, historyTitle: String) -> String {
         let contribution = String(
-            localized: "\(offer.subjectName) +\(MassText.grams(offer.grams.formatted()))（\(EffortProgressPresentation.formattedStandardUnits(grams: offer.grams))）",
+            localized: "\(offer.localizedSubjectName) +\(MassText.grams(offer.grams.formatted()))（\(EffortProgressPresentation.formattedStandardUnits(grams: offer.grams))）",
             table: "Home",
             comment: "Completion card: the theme, the mass this focus added (+250g) and the same in standard units"
         )
@@ -4276,7 +4276,7 @@ struct HomeView: View {
     /// VoiceOver value of the completion card's heading.
     private func postDropSpokenSummary(_ offer: BreakOffer, historySpokenTitle: String) -> String {
         var sentences = [
-            String(localized: "テーマは\(offer.subjectName)です。", table: "Home", comment: "VoiceOver, completion card: the theme"),
+            String(localized: "テーマは\(offer.localizedSubjectName)です。", table: "Home", comment: "VoiceOver, completion card: the theme"),
             String(
                 localized: "今回は\(MassText.spoken(grams: offer.grams))、標準換算は\(EffortProgressPresentation.formattedStandardUnits(grams: offer.grams))です。",
                 table: "Home",
@@ -5640,13 +5640,17 @@ struct HomeView: View {
     /// VoiceOver only. The banner is an overlay read after the jar, the
     /// pickers and the start button, so focus moves to its 「元に戻す」 once
     /// the sheet has dismissed, and a queued announcement says what waits.
+    private func displayedSubjectName(for pending: PendingManualEntry) -> String {
+        SubjectNamePolicy.localizedDisplayName(pending.subjectName, subjectID: pending.subjectID)
+    }
+
     private func announcePendingManualEntry(_ pending: PendingManualEntry) async {
         guard UIAccessibility.isVoiceOverRunning else { return }
         try? await Task.sleep(for: .milliseconds(700))
         guard !Task.isCancelled, pendingManualEntry?.id == pending.id else { return }
         manualUndoHasFocus = true
         let message = String(
-            localized: "\(pending.subjectName)に\(DurationText.spoken(minutes: pending.duration.minutes))、\(MassText.spoken(grams: pending.duration.grams))を積みます。「元に戻す」で取り消せます",
+            localized: "\(displayedSubjectName(for: pending))に\(DurationText.spoken(minutes: pending.duration.minutes))、\(MassText.spoken(grams: pending.duration.grams))を積みます。「元に戻す」で取り消せます",
             table: "Home",
             comment: "VoiceOver, once the Undo banner of a manual entry has focus: theme, duration, grams"
         )
@@ -5702,7 +5706,7 @@ struct HomeView: View {
         pendingManualEntry = nil
 
         let failure = String(
-            localized: "\(pending.subjectName)の自己申告を保存できませんでした。もう一度積んでください",
+            localized: "\(displayedSubjectName(for: pending))の自己申告を保存できませんでした。もう一度積んでください",
             table: "Home",
             comment: "Toast when a confirmed manual entry could not be saved; the argument is the theme"
         )
@@ -5851,7 +5855,7 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 2) {
             // Time first, like every other record; the grams follow.
             Text(
-                "\(pending.subjectName)に\(DurationText.short(minutes: pending.duration.minutes))を積みます",
+                "\(displayedSubjectName(for: pending))に\(DurationText.short(minutes: pending.duration.minutes))を積みます",
                 tableName: "Home",
                 comment: "Undo banner after a manual entry: theme, then the self-reported time about to be added"
             )
@@ -6071,6 +6075,10 @@ struct HomeView: View {
 
     private func handleLanding(_ event: JarLandingEvent) {
         let descriptor = event.pebble
+        let displayedSubjectName = SubjectNamePolicy.localizedDisplayName(
+            descriptor.subjectName,
+            subjectID: descriptor.subjectID
+        )
         if jarStageState.fallingManualSessionIDs.contains(descriptor.id) {
             // Now in the jar: the readout counts it (dev-D7).
             jarStageState.fallingManualSessionIDs.remove(descriptor.id)
@@ -6078,12 +6086,12 @@ struct HomeView: View {
         if let achievementKind = descriptor.achievementKind {
             let message = uniqueAchievementCount > Constants.Jar.maximumVisibleAchievementStones
                 ? String(
-                    localized: "\(descriptor.subjectName)の\(achievementKind.title)を記念石にした。前の記念石も成果の記録に残っています",
+                    localized: "\(displayedSubjectName)の\(achievementKind.title)を記念石にした。前の記念石も成果の記録に残っています",
                     table: "Home",
                     comment: "Toast after a milestone stone lands while older stones have left the jar: theme, kind of achievement; the older stones stay in the records"
                 )
                 : String(
-                    localized: "\(descriptor.subjectName)の\(achievementKind.title)を記念石にした",
+                    localized: "\(displayedSubjectName)の\(achievementKind.title)を記念石にした",
                     table: "Home",
                     comment: "Toast after a milestone stone lands: theme, kind of achievement"
                 )
@@ -6097,7 +6105,10 @@ struct HomeView: View {
         if descriptor.source == .screenTime {
             // One attributed summary per import (「スクリーンタイム：英語 +30分
             // （3粒）」) instead of a generic toast per 10-minute pebble.
-            screenTimeArrivals.noteLearningLanding(subjectName: descriptor.subjectName) { text, symbol in
+            screenTimeArrivals.noteLearningLanding(
+                subjectName: descriptor.subjectName,
+                displayName: displayedSubjectName
+            ) { text, symbol in
                 router.showToast(text, symbol: symbol)
             }
             ScreenTimeGemDropStore.remove(descriptor.id)
@@ -6112,7 +6123,7 @@ struct HomeView: View {
             message = rareRewardMode.usesEnhancedPresentation
                 ? Constants.UIStrings.goldToast(grams: descriptor.grams)
                 : String(
-                    localized: "\(descriptor.subjectName) 金の粒 +\(MassText.grams(descriptor.grams.formatted()))",
+                    localized: "\(displayedSubjectName) 金の粒 +\(MassText.grams(descriptor.grams.formatted()))",
                     table: "Home",
                     comment: "Toast after a gold gem lands (plain presentation): theme, mass (+600g)"
                 )
@@ -6120,15 +6131,15 @@ struct HomeView: View {
             message = rareRewardMode.usesEnhancedPresentation
                 ? Constants.UIStrings.prismToast(grams: descriptor.grams)
                 : String(
-                    localized: "\(descriptor.subjectName) 虹の粒 +\(MassText.grams(descriptor.grams.formatted()))",
+                    localized: "\(displayedSubjectName) 虹の粒 +\(MassText.grams(descriptor.grams.formatted()))",
                     table: "Home",
                     comment: "Toast after a rainbow gem lands (plain presentation): theme, mass (+600g)"
                 )
         case .normal:
             message = descriptor.grams == Constants.Mass.measuredPebbleGrams
-                ? Constants.UIStrings.dropToast(subject: descriptor.subjectName)
+                ? Constants.UIStrings.dropToast(subject: displayedSubjectName)
                 : String(
-                    localized: "\(descriptor.subjectName) +\(MassText.grams(descriptor.grams.formatted())) 積んだ",
+                    localized: "\(displayedSubjectName) +\(MassText.grams(descriptor.grams.formatted())) 積んだ",
                     table: "Home",
                     comment: "Toast after a gem of another mass lands: theme, mass (+1125g); like Common's 「%@ +250g 積んだ」"
                 )
@@ -6252,6 +6263,7 @@ struct HomeView: View {
             breakMinutes: minutes,
             grams: descriptor.grams,
             subjectName: descriptor.subjectName,
+            subjectID: descriptor.subjectID,
             colorHex: descriptor.colorHex,
             weeklyCompletionCount: max(1, weeklyCompletionCount),
             weeklyStudyGrams: weeklyStudyGrams,
@@ -6947,7 +6959,7 @@ struct HomeView: View {
         var sentences: [String?] = [
             String(localized: "集中を記録しました。", table: "Home",
                    comment: "VoiceOver announcement: the completion card's headline, as a sentence"),
-            CompletionCardPresentation.spokenMainLine(subjectName: offer.subjectName, grams: offer.grams),
+            CompletionCardPresentation.spokenMainLine(subjectName: offer.localizedSubjectName, grams: offer.grams),
             shown.weeklySpokenTitle,
             CompletionCardPresentation.spokenRareLine(kind: offer.kind, counts: offer.rareRewardCounts),
             progressMessage,
@@ -8048,6 +8060,10 @@ private struct BreakOffer: Identifiable {
     let minutes: Int
     let grams: Int
     let subjectName: String
+    let subjectID: UUID?
+    var localizedSubjectName: String {
+        SubjectNamePolicy.localizedDisplayName(subjectName, subjectID: subjectID)
+    }
     let colorHex: String
     private(set) var weeklyCompletionCount: Int
     private(set) var weeklyStudyGrams: Int?
@@ -8096,6 +8112,7 @@ private struct BreakOffer: Identifiable {
         minutes = receipt.breakMinutes
         grams = receipt.grams
         subjectName = receipt.subjectName
+        subjectID = receipt.subjectID
         colorHex = receipt.colorHex
         weeklyCompletionCount = receipt.weeklyCompletionCount
         weeklyStudyGrams = receipt.weeklyStudyGrams
