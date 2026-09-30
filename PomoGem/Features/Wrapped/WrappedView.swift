@@ -13,7 +13,10 @@ struct WrappedMonth: Identifiable, Hashable {
         start = calendar.dateInterval(of: .month, for: date)?.start ?? date
     }
 
-    var title: String { StrataMath.monthLabel(for: start) }
+    /// 「2026年9月」, "September 2026". Built from the date on the pinned
+    /// Gregorian calendar (DateText), never from the stored `monthLabel`,
+    /// which stays Japanese data (Docs/Localization.md).
+    var title: String { DateText.yearMonth(start) }
 }
 
 /// Where 「この月の瓶をカードにする」 opens the card.
@@ -93,12 +96,17 @@ struct WrappedView: View {
                 .padding(.horizontal, 22)
 
                 Spacer(minLength: 4)
-                SectionEyebrow(text: "MONTHLY WRAPPED")
-                Text("\(month.title)の瓶")
+                SectionEyebrow(text: String(localized: "MONTHLY WRAPPED", table: "Log", comment: "Eyebrow above the Month in Review title (shown uppercased). en: 'Month in Review', the feature's name; never 'Wrapped'."))
+                // The 36 pt display title stops growing at AX3. Past that, a
+                // long English month is wider than an iPhone SE line and
+                // breaks inside the word ("Septembe" / "r 2026"); at AX3 it
+                // still wraps between words.
+                Text("\(month.title)の瓶", tableName: "Log", comment: "Month in Review title; the argument is a month such as 2026年9月")
                     .pomogemSectionTitle(size: 36)
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility3)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 20)
-                Text("ひと粒ずつの手応えを、ひと月のまとまりでも眺める。")
+                Text("ひと粒ずつの手応えを、ひと月のまとまりでも眺める。", tableName: "Log")
                     .font(.subheadline)
                     .foregroundStyle(PomoGemTheme.muted)
                     .multilineTextAlignment(.center)
@@ -106,7 +114,7 @@ struct WrappedView: View {
 
                 if aggregateProjectionPresentation.isCloudVerificationPending {
                     Label(
-                        "iCloudを再集計中です。この端末で確認できた記録だけを表示しています。",
+                        String(localized: "iCloudを再集計中です。この端末で確認できた記録だけを表示しています。", table: "Log"),
                         systemImage: "arrow.triangle.2.circlepath.icloud"
                     )
                     .font(.caption)
@@ -116,7 +124,11 @@ struct WrappedView: View {
                     .accessibilityIdentifier("wrapped.cloud-verification-notice")
                 } else if pageIsPartial {
                     Label(
-                        "この月は記録が多いため、最新\(BoundedHistoryPolicy.periodSessionLimit)件の表示分です。",
+                        String(
+                            localized: "この月は記録が多いため、最新\(BoundedHistoryPolicy.periodSessionLimit)件の表示分です。",
+                            table: "Log",
+                            comment: "Month in Review: the month has more records than are read; the argument is how many of the newest are shown"
+                        ),
                         systemImage: "rectangle.stack.badge.exclamationmark"
                     )
                     .font(.caption)
@@ -128,13 +140,13 @@ struct WrappedView: View {
 
                 if let loadError {
                     ContentUnavailableView(
-                        "月の瓶を読み込めませんでした",
+                        String(localized: "月の瓶を読み込めませんでした", table: "Log", comment: "Month in Review: the month's records could not be read"),
                         systemImage: "exclamationmark.triangle",
                         description: Text(loadError)
                     )
                     .frame(minHeight: 300)
                 } else if isLoading {
-                    ProgressView("月の瓶を読み込み中")
+                    ProgressView(String(localized: "月の瓶を読み込み中", table: "Log", comment: "Month in Review: loading the month's records"))
                         .frame(width: 230, height: 300)
                 } else {
                     WrappedJar(
@@ -247,7 +259,7 @@ struct WrappedView: View {
             monthSessions = []
             pageIsPartial = false
             isLoading = false
-            loadError = "月の範囲を確認できませんでした。"
+            loadError = String(localized: "月の範囲を確認できませんでした。", table: "Log")
             return
         }
         do {
@@ -267,7 +279,7 @@ struct WrappedView: View {
             monthSessions = []
             pageIsPartial = false
             isLoading = false
-            loadError = "もう一度この画面を開いてください。"
+            loadError = String(localized: "もう一度この画面を開いてください。", table: "Log")
         }
     }
 
@@ -286,7 +298,7 @@ struct WrappedView: View {
     private var dismissButtonTitle: String {
         switch shareRoute {
         case .router:
-            "瓶へ戻る"
+            String(localized: "瓶へ戻る", table: "Log", comment: "Month in Review button: close and go back to the jar")
         case .inline:
             String(localized: "月の記録へ戻る", table: "Log", comment: "Wrapped opened from a month in 年月: returns to that month's sheet")
         }
@@ -295,16 +307,33 @@ struct WrappedView: View {
     @ViewBuilder
     private var wrappedStats: some View {
         let scoped = statsAreScoped
-        WrappedStat(title: scoped ? "確認済み時間" : "時間", value: formatMinutes(totalMinutes))
-        WrappedStat(title: scoped ? "確認済み粒" : "元の粒", value: "\(monthSessions.count)")
-        WrappedStat(title: scoped ? "確認済みトップ" : "いちばん積んだ", value: topSubject)
+        WrappedStat(
+            title: scoped
+                ? String(localized: "確認済み時間", table: "Log", comment: "Month in Review stat: focus time of the records confirmed so far")
+                : String(localized: "時間", table: "Log", comment: "Month in Review stat: the month's focus time"),
+            value: formatMinutes(totalMinutes)
+        )
+        WrappedStat(
+            title: scoped
+                ? String(localized: "確認済み粒", table: "Log", comment: "Month in Review stat: gems among the records confirmed so far")
+                : String(localized: "元の粒", table: "Log", comment: "Month in Review stat: how many gems the month's jar was made from"),
+            value: "\(monthSessions.count)"
+        )
+        WrappedStat(
+            title: scoped
+                ? String(localized: "確認済みトップ", table: "Log", comment: "Month in Review stat: the top theme among the records confirmed so far")
+                : String(localized: "いちばん積んだ", table: "Log", comment: "Month in Review stat: the theme with the most mass this month"),
+            value: topSubject
+        )
     }
 
     private var wrappedShareButtonTitle: String {
         if aggregateProjectionPresentation.isCloudVerificationPending {
-            return "確認済み分をカードにする"
+            return String(localized: "確認済み分をカードにする", table: "Log", comment: "Month in Review button while iCloud re-counts: make a share card of the records confirmed so far")
         }
-        return pageIsPartial ? "表示分をカードにする" : "この月の瓶をカードにする"
+        return pageIsPartial
+            ? String(localized: "表示分をカードにする", table: "Log", comment: "Month in Review button when the month is capped: make a share card of the records shown")
+            : String(localized: "この月の瓶をカードにする", table: "Log", comment: "Month in Review button: make a share card of this month's jar")
     }
 }
 
@@ -322,12 +351,17 @@ private struct WrappedJar: View {
                 .overlay { RoundedRectangle(cornerRadius: 36, style: .continuous).stroke(PomoGemTheme.glassEdge, lineWidth: 2) }
             if revealed {
                 VStack(spacing: 10) {
-                    Text("ひと月のまとまり")
+                    Text("ひと月のまとまり", tableName: "Log", comment: "Month in Review jar: caption above the month's one combined gem")
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(PomoGemTheme.muted)
+                        // Wraps inside the jar at large text sizes instead
+                        // of ending in 「…」.
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 12)
                     MonthlyAggregatePebble(sessions: sessions)
                         .frame(width: 112, height: 112)
-                    Text("×\(sessions.count)")
+                    Text("×\(sessions.count)", tableName: "Log", comment: "How many gems a crystal holds, e.g. ×10")
                         .font(.system(.caption, design: .rounded, weight: .heavy))
                         .foregroundStyle(PomoGemTheme.muted)
                 }
@@ -350,7 +384,17 @@ private struct WrappedJar: View {
         }
         .shadow(color: Color(hex: Constants.Color.mathematics).opacity(0.14), radius: 35)
         .accessibilityLabel(
-            "\(monthTitle)の瓶。\(isPartial ? "表示分の" : "")\(sessions.count)粒をひとつのまとまりで俯瞰する演出"
+            isPartial
+                ? String(
+                    localized: "\(monthTitle)の瓶。表示分の\(CountText.gems(sessions.count))をひとつのまとまりで俯瞰する演出",
+                    table: "Log",
+                    comment: "VoiceOver: the Month in Review animation when only part of the month is shown; the arguments are the month and the gems shown (e.g. 12粒)"
+                )
+                : String(
+                    localized: "\(monthTitle)の瓶。\(CountText.gems(sessions.count))をひとつのまとまりで俯瞰する演出",
+                    table: "Log",
+                    comment: "VoiceOver: the Month in Review animation; the arguments are the month and its gems (e.g. 12粒)"
+                )
         )
     }
 }
@@ -391,7 +435,7 @@ private struct MonthlyAggregatePebble: View {
                 Circle()
                     .stroke(PomoGemTheme.amber.opacity(0.28), lineWidth: 1)
                     .padding(8)
-                Text("×\(sessions.count)")
+                Text("×\(sessions.count)", tableName: "Log", comment: "How many gems a crystal holds, e.g. ×10")
                     .font(.system(size: sessions.count >= 100 ? 15 : 18, weight: .heavy, design: .rounded))
                     .foregroundStyle(.white)
                     .shadow(color: .black.opacity(0.55), radius: 4, y: 2)
@@ -441,9 +485,11 @@ private struct WrappedThemeTimes: View {
                     }
                 }
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel(
-                    "\(theme.name)、\(DurationPresentation.focusLabel(grams: theme.grams))"
-                )
+                .accessibilityLabel(String(
+                    localized: "\(theme.name)、\(DayHistorySheet.spokenFocusTime(grams: theme.grams))",
+                    table: "Log",
+                    comment: "VoiceOver: two parts read together, e.g. a period and its date range, or a day and its spoken mass"
+                ))
             }
             if themes.count > shown.count {
                 Text("ほか\(themes.count - shown.count)テーマ", tableName: "Log", comment: "Wrapped: how many more themes are not listed")

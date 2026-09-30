@@ -47,11 +47,11 @@ enum BoundedHistoryPolicy {
         var errorDescription: String? {
             switch self {
             case .candidateScanLimitExceeded:
-                "同期中の記録が多いため、安全な表示範囲を確定できませんでした。"
+                String(localized: "同期中の記録が多いため、安全な表示範囲を確定できませんでした。", table: "Log")
             case .logicalReplicaLimitExceeded:
-                "同じ記録の同期コピーが多いため、安全な内容を確定できませんでした。"
+                String(localized: "同じ記録の同期コピーが多いため、安全な内容を確定できませんでした。", table: "Log")
             case .unsupportedInterval:
-                "一度に確認できる記録期間を超えています。"
+                String(localized: "一度に確認できる記録期間を超えています。", table: "Log")
             }
         }
     }
@@ -939,7 +939,11 @@ enum LogPeriodPolicy {
         style.locale = calendar.locale ?? .autoupdatingCurrent
         style.calendar = calendar
         style.timeZone = calendar.timeZone
-        return "\(interval.start.formatted(style))〜\(lastDay.formatted(style))"
+        return String(
+            localized: "\(interval.start.formatted(style))〜\(lastDay.formatted(style))",
+            table: "Log",
+            comment: "A range: its first and last day (e.g. 9月20日(日)〜9月26日(土)) or a record's start and end time (13:24〜13:49)"
+        )
     }
 }
 
@@ -1260,7 +1264,10 @@ struct LogView: View {
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 16) {
-                Picker("表示期間", selection: periodSelection) {
+                Picker(
+                    String(localized: "表示期間", table: "Log", comment: "Label of the 今週／今月 picker (read by VoiceOver)"),
+                    selection: periodSelection
+                ) {
                     ForEach(Period.allCases) { item in Text(item.title).tag(item) }
                 }
                 .pickerStyle(.segmented)
@@ -1277,7 +1284,7 @@ struct LogView: View {
                         .accessibilityLabel(String(
                             localized: "\(shownPeriod.title)、\(LogPeriodPolicy.rangeLabel(for: interval))",
                             table: "Log",
-                            comment: "VoiceOver: the period (今週 or 今月), then its date range"
+                            comment: "VoiceOver: two parts read together, e.g. a period and its date range, or a day and its spoken mass"
                         ))
                         .accessibilityIdentifier("log.period-range")
                 }
@@ -1286,7 +1293,11 @@ struct LogView: View {
 
                 if periodPageIsPartial {
                     Label(
-                        "この期間は記録が多いため、最新\(BoundedHistoryPolicy.periodSessionLimit)件の表示分です。",
+                        String(
+                            localized: "この期間は記録が多いため、最新\(BoundedHistoryPolicy.periodSessionLimit)件の表示分です。",
+                            table: "Log",
+                            comment: "Log: the period has more records than are read; the argument is how many of the newest are shown"
+                        ),
                         systemImage: "rectangle.stack.badge.exclamationmark"
                     )
                     .font(.caption)
@@ -1323,10 +1334,14 @@ struct LogView: View {
             .padding(.bottom, 30)
         }
         .background(NightBackground())
-        .pomogemNavigationTitle("記録")
+        .pomogemNavigationTitle(String(localized: "記録", table: "Log", comment: "Navigation title of the Log screen"))
         .toolbarTitleDisplayMode(.large)
         .fullScreenCover(item: $selectedWrappedMonth) { month in
             WrappedView(month: month)
+                // Like the sheets below: a presentation does not inherit a
+                // Dynamic Type size set above it, so without this the UI-test
+                // AX5 launch showed Month in Review at the default size.
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
         }
         .sheet(item: $selectedDay) { day in
             DayHistorySheet(
@@ -1358,15 +1373,15 @@ struct LogView: View {
             .environment(\.dynamicTypeSize, dynamicTypeSize)
         }
         .alert(
-            "記念石を変更できません",
+            String(localized: "記念石を変更できません", table: "Log", comment: "Alert title: a milestone stone could not be changed"),
             isPresented: Binding(
                 get: { mutationError != nil },
                 set: { if !$0 { mutationError = nil } }
             )
         ) {
-            Button("OK", role: .cancel) { mutationError = nil }
+            Button(String(localized: "OK", table: "Log", comment: "Dismisses the milestone error alert"), role: .cancel) { mutationError = nil }
         } message: {
-            Text(mutationError ?? "もう一度お試しください。")
+            Text(mutationError ?? String(localized: "もう一度お試しください。", table: "Log"))
         }
         .task(id: loadKey) {
             await loadPeriodPage(for: loadKey)
@@ -1419,9 +1434,13 @@ struct LogView: View {
                         summaryTiles(summary)
                     }
                 } else {
+                    // One height for the three tiles: an English label such
+                    // as "Completed sessions" wraps to two lines, and the
+                    // tiles should still line up as one row.
                     HStack(spacing: 10) {
                         summaryTiles(summary)
                     }
+                    .fixedSize(horizontal: false, vertical: true)
                 }
             }
             summaryComposition(summary)
@@ -1430,12 +1449,26 @@ struct LogView: View {
 
     @ViewBuilder
     private func summaryTiles(_ summary: LogPeriodSummary) -> some View {
-        SummaryTile(label: periodPageIsPartial ? "表示分の時間" : "積んだ時間", value: formatMinutes(summary.focusMinutes), symbol: "hourglass", identifier: "log.summary.time")
-        // Timers that ran to their end; Screen Time chunks are not completions.
-        SummaryTile(label: periodPageIsPartial ? "表示分の完走" : String(localized: "完走した回数", table: "Log", comment: "Log tile: timers that ran to their end"), value: "\(summary.timerCompletionCount)", symbol: "checkmark.circle", identifier: "log.summary.completions")
         SummaryTile(
             label: periodPageIsPartial
-                ? "表示分の質量"
+                ? String(localized: "表示分の時間", table: "Log", comment: "Log tile: focus time of the records shown when the period is capped")
+                : String(localized: "積んだ時間", table: "Log", comment: "Log tile: focus time added in the period"),
+            value: formatMinutes(summary.focusMinutes),
+            symbol: "hourglass",
+            identifier: "log.summary.time"
+        )
+        // Timers that ran to their end; Screen Time chunks are not completions.
+        SummaryTile(
+            label: periodPageIsPartial
+                ? String(localized: "表示分の完走", table: "Log", comment: "Log tile: completed timers among the records shown when the period is capped")
+                : String(localized: "完走した回数", table: "Log", comment: "Log tile: timers that ran to their end"),
+            value: "\(summary.timerCompletionCount)",
+            symbol: "checkmark.circle",
+            identifier: "log.summary.completions"
+        )
+        SummaryTile(
+            label: periodPageIsPartial
+                ? String(localized: "表示分の質量", table: "Log", comment: "Log tile: mass of the records shown when the period is capped")
                 : (shownPeriod == .week
                     ? String(localized: "今週の質量", table: "Log", comment: "Log tile: mass added this calendar week")
                     : String(localized: "今月の質量", table: "Log", comment: "Log tile: mass added this calendar month")),
@@ -1484,26 +1517,26 @@ struct LogView: View {
         let values = shownPeriodContent?.presentation.dailyMass ?? []
         let descriptor = DailyMassChartDescriptor(
             values: values,
-            periodTitle: shownPeriod.title,
+            period: shownPeriod,
             isPartial: periodPageIsPartial
         )
         return PomoGemCard {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 4) {
                     SectionEyebrow(text: "MASS")
-                    Text("質量の推移")
+                    Text("質量の推移", tableName: "Log", comment: "Log section title: the chart of mass per day")
                         .pomogemSectionTitle()
                 }
                 if shownPeriodContent == nil {
                     HistoryLoadingPlaceholder()
                 } else if values.allSatisfy({ $0.grams == 0 }) {
-                    EmptyChartMessage(text: "この期間の粒は、まだありません。")
+                    EmptyChartMessage(text: String(localized: "この期間の粒は、まだありません。", table: "Log"))
                         .accessibilityChartDescriptor(descriptor)
                 } else {
                     Chart(values) { item in
                         BarMark(
-                            x: .value("日", item.date, unit: .day),
-                            y: .value("グラム", item.grams)
+                            x: .value(String(localized: "日", table: "Log", comment: "Mass chart: name of the day axis"), item.date, unit: .day),
+                            y: .value(String(localized: "グラム", table: "Log", comment: "Mass chart: name of the grams axis"), item.grams)
                         )
                         .foregroundStyle(
                             LinearGradient(
@@ -1529,6 +1562,10 @@ struct LogView: View {
                         }
                     }
                     .frame(height: 180)
+                    // The plot keeps a fixed height, so axis labels past
+                    // AX1 overlapped one another ("4.0 kg" on "3.0 kg",
+                    // "S MT WT F S"). VoiceOver reads the chart descriptor.
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                     .chartOverlay { proxy in
                         GeometryReader { geometry in
                             Rectangle()
@@ -1544,7 +1581,7 @@ struct LogView: View {
                     .accessibilityActions {
                         ForEach(values.filter { $0.grams > 0 }) { item in
                             Button(String(
-                                localized: "\(item.date.formatted(.dateTime.month().day()))の記録を見る",
+                                localized: "\(DateText.monthDay(item.date))の記録を見る",
                                 table: "Log",
                                 comment: "VoiceOver action on the mass chart; the argument is a date such as 9月24日"
                             )) {
@@ -1582,14 +1619,16 @@ struct LogView: View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 17) {
                 VStack(alignment: .leading, spacing: 4) {
-                    SectionEyebrow(text: "SUBJECTS")
-                    Text("テーマの構成")
+                    // The eyebrow is English in Japanese too; English says
+                    // "themes" (never "subjects").
+                    SectionEyebrow(text: String(localized: "SUBJECTS", table: "Log", comment: "Eyebrow above テーマの構成 (shown uppercased). en: 'Themes', never 'Subjects'."))
+                    Text("テーマの構成", tableName: "Log", comment: "Log section title: how the period's mass splits by theme")
                         .pomogemSectionTitle()
                 }
                 if shownPeriodContent == nil {
                     HistoryLoadingPlaceholder()
                 } else if subjectMass.isEmpty {
-                    EmptyChartMessage(text: "積んだテーマがここに並びます。")
+                    EmptyChartMessage(text: String(localized: "積んだテーマがここに並びます。", table: "Log"))
                 } else {
                     GeometryReader { proxy in
                         HStack(spacing: 3) {
@@ -1597,9 +1636,11 @@ struct LogView: View {
                                 RoundedRectangle(cornerRadius: 4)
                                     .fill(Color(hex: item.colorHex))
                                     .frame(width: max(4, proxy.size.width * item.fraction))
-                                    .accessibilityLabel(
-                                        "\(item.name)、\(NonnegativeIntPolicy.clamped(item.fraction * 100, maximum: 100))パーセント"
-                                    )
+                                    .accessibilityLabel(String(
+                                        localized: "\(item.name)、\(NonnegativeIntPolicy.clamped(item.fraction * 100, maximum: 100))パーセント",
+                                        table: "Log",
+                                        comment: "VoiceOver: one theme's segment of the bar; theme name, then its share in percent"
+                                    ))
                             }
                         }
                     }
@@ -1633,7 +1674,7 @@ struct LogView: View {
                         RareStat(kind: .prism, count: totals.prismCount)
                         if let latest = rareSessions.max(by: { $0.endAt < $1.endAt }) {
                             LabeledContent(
-                                "最後に出た日",
+                                String(localized: "最後に出た日", table: "Log", comment: "Log: the date a rare gem last appeared in the period"),
                                 value: latest.endAt.formatted(date: .abbreviated, time: .omitted)
                             )
                             .font(.caption)
@@ -1648,7 +1689,7 @@ struct LogView: View {
                         Spacer()
                         if let latest = rareSessions.max(by: { $0.endAt < $1.endAt }) {
                             VStack(alignment: .trailing, spacing: 3) {
-                                Text("最後に出た日").font(.caption2).foregroundStyle(PomoGemTheme.muted)
+                                Text("最後に出た日", tableName: "Log", comment: "Log: the date a rare gem last appeared in the period").font(.caption2).foregroundStyle(PomoGemTheme.muted)
                                 Text(latest.endAt.formatted(date: .abbreviated, time: .omitted))
                                     .font(.caption.weight(.bold))
                             }
@@ -1667,7 +1708,7 @@ struct LogView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
                         SectionEyebrow(text: "MILESTONES")
-                        Text("記念石アーカイブ")
+                        Text("記念石アーカイブ", tableName: "Log", comment: "Log section title: the milestone stones")
                             .pomogemSectionTitle()
                         Text(achievementArchiveDescription(count: stones.count))
                             .font(.caption)
@@ -1683,7 +1724,7 @@ struct LogView: View {
                         }
                         .buttonStyle(PomoGemBareButtonStyle())
                         .accessibilityIdentifier("achievement.history.row")
-                        .accessibilityHint("詳細を開いて、種類・テーマ・日付・メモを編集できます")
+                        .accessibilityHint(Text("詳細を開いて、種類・テーマ・日付・メモを編集できます", tableName: "Log", comment: "VoiceOver hint on a milestone stone row"))
                         if stone.id != stones.last?.id {
                             Divider().overlay(PomoGemTheme.glassEdge.opacity(0.08))
                         }
@@ -1712,15 +1753,15 @@ struct LogView: View {
                         .foregroundStyle(PomoGemTheme.amber)
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("記念石を削除しました")
+                        Text("記念石を削除しました", tableName: "Log")
                             .font(.subheadline.weight(.bold))
-                        Text("質量は変わりません。記録・瓶・共有から非表示になりました。")
+                        Text("質量は変わりません。記録・瓶・共有から非表示になりました。", tableName: "Log")
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 4)
-                    Button("元に戻す") {
+                    Button(String(localized: "元に戻す", table: "Log", comment: "Button: undo deleting a milestone stone")) {
                         undoAchievementDeletion(pendingAchievementUndo)
                     }
                     .font(.subheadline.weight(.bold))
@@ -1740,7 +1781,10 @@ struct LogView: View {
             PomoGemCard {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
-                        SectionEyebrow(text: "MONTHLY WRAPPED")
+                        // Its own key: the same Japanese eyebrow sits over
+                        // Month in Review itself, where English names the
+                        // feature. Here the title below already does.
+                        SectionEyebrow(text: String(localized: "log.month-review.eyebrow", defaultValue: "MONTHLY WRAPPED", table: "Log", comment: "Eyebrow above the 月の振り返り (Month in Review) title on the Log card (shown uppercased). en: a category word like the other Log eyebrows (Mass, Themes, Milestones) that does not repeat the title; never 'Wrapped'."))
                         // Not 「月ごとの瓶」: that is 積み上がり's 年月 shelf, a
                         // different view (history-11).
                         Text("月の振り返り", tableName: "Log", comment: "Log section title: the monthly Wrapped recaps")
@@ -1755,21 +1799,15 @@ struct LogView: View {
                         Button {
                             selectedWrappedMonth = month
                         } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "sparkles.rectangle.stack.fill")
-                                    .foregroundStyle(PomoGemTheme.amber)
-                                    .frame(width: 28)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(month.title)
-                                        .font(.subheadline.weight(.bold))
-                                    Text(summary.rowLabel(formatMinutes: formatMinutes))
-                                        .font(.caption)
-                                        .foregroundStyle(PomoGemTheme.muted)
-                                }
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
-                                    .foregroundStyle(PomoGemTheme.muted)
+                            // The decorative icon steps aside when the row
+                            // is too narrow, and at the largest sizes on an
+                            // iPhone SE the chevron too, so a long month name
+                            // such as "September 2026" wraps between words
+                            // instead of breaking "Sep-".
+                            ViewThatFits(in: .horizontal) {
+                                monthRow(month: month, summary: summary, showsIcon: true)
+                                monthRow(month: month, summary: summary, showsIcon: false)
+                                monthRow(month: month, summary: summary, showsIcon: false, showsChevron: false)
                             }
                             .frame(minHeight: 44)
                             .contentShape(Rectangle())
@@ -1804,6 +1842,36 @@ struct LogView: View {
                     .accessibilityHint(Text("年と月を選んで、日ごとの記録までたどれます", tableName: "Log"))
                     .accessibilityIdentifier(HistoryDrillDownAccessibilityID.pastHistoryFromMonths)
                 }
+            }
+        }
+    }
+
+    private func monthRow(
+        month: WrappedMonth,
+        summary: LogMonthSummary,
+        showsIcon: Bool,
+        showsChevron: Bool = true
+    ) -> some View {
+        HStack(spacing: 12) {
+            if showsIcon {
+                Image(systemName: "sparkles.rectangle.stack.fill")
+                    .foregroundStyle(PomoGemTheme.amber)
+                    .frame(width: 28)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(month.title)
+                    .font(.subheadline.weight(.bold))
+                Text(summary.rowLabel(formatMinutes: formatMinutes))
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+            }
+            if showsChevron {
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+            } else {
+                Spacer(minLength: 0)
             }
         }
     }
@@ -1894,9 +1962,9 @@ struct LogView: View {
             HStack {
                 // The trait sits on the title alone, so 「最新30件」 stays its
                 // own element.
-                Text("最近の記録").pomogemSectionTitle()
+                Text("最近の記録", tableName: "Log", comment: "Log section title: the newest records").pomogemSectionTitle()
                 Spacer()
-                Text("最新30件").font(.caption).foregroundStyle(PomoGemTheme.muted)
+                Text("最新30件", tableName: "Log", comment: "Beside 最近の記録: the list holds the newest thirty records").font(.caption).foregroundStyle(PomoGemTheme.muted)
             }
             if let recent = shownRecentContent {
                 if recent.isUnavailable {
@@ -1910,7 +1978,7 @@ struct LogView: View {
                         .accessibilityIdentifier("log.recent.unavailable")
                     }
                 } else if recent.records.isEmpty {
-                    PomoGemCard { EmptyChartMessage(text: "一粒積むと、ここに記録が残ります。") }
+                    PomoGemCard { EmptyChartMessage(text: String(localized: "一粒積むと、ここに記録が残ります。", table: "Log")) }
                 } else {
                     recentRows(Array(recent.records.prefix(BoundedHistoryPolicy.recentSessionLimit)))
                 }
@@ -1971,7 +2039,7 @@ struct LogView: View {
 
     private var loadError: String? {
         guard periodLoadFailed || recentHistoryLoadFailed || achievementLoadFailed else { return nil }
-        return "記録の一部を読み込めませんでした。もう一度この画面を開いてください。"
+        return String(localized: "記録の一部を読み込めませんでした。もう一度この画面を開いてください。", table: "Log")
     }
 
     private var monthSummaryKey: String {
@@ -2196,12 +2264,12 @@ struct LogView: View {
             guard let canonical = AchievementStonePolicy.canonicalStone(from: values),
                   canonical.deletedAt == nil else {
                 loadAchievements()
-                return "この記念石は別の端末ですでに削除されています。"
+                return String(localized: "この記念石は別の端末ですでに削除されています。", table: "Log")
             }
             let result: AchievementStoneRevisionPolicy.MutationResult
             if let subjectID = draft.subjectID {
                 guard let subject = subjects.first(where: { $0.id == subjectID }) else {
-                    return "選んだテーマが見つかりません。テーマを選び直してください。"
+                    return String(localized: "選んだテーマが見つかりません。テーマを選び直してください。", table: "Log")
                 }
                 result = AchievementStoneRevisionPolicy.edit(
                     values,
@@ -2221,7 +2289,7 @@ struct LogView: View {
                 )
             }
             guard result == .applied else {
-                return "この記念石の編集履歴が上限に達したため、編集できませんでした。"
+                return String(localized: "この記念石の編集履歴が上限に達したため、編集できませんでした。", table: "Log")
             }
             try modelContext.save()
             loadAchievements()
@@ -2229,7 +2297,7 @@ struct LogView: View {
         } catch {
             modelContext.rollback()
             loadAchievements()
-            return "編集内容を保存できませんでした。通信状態を確認して、もう一度お試しください。"
+            return String(localized: "編集内容を保存できませんでした。通信状態を確認して、もう一度お試しください。", table: "Log")
         }
     }
 
@@ -2240,15 +2308,15 @@ struct LogView: View {
         do {
             let values = try achievementRevisionRows(for: selection.id, epochID: selection.dataEpochID)
             guard let canonical = AchievementStonePolicy.canonicalStone(from: values) else {
-                return "この記念石は見つかりませんでした。"
+                return String(localized: "この記念石は見つかりませんでした。", table: "Log")
             }
             guard canonical.deletedAt == nil else {
                 loadAchievements()
-                return "この記念石は別の端末ですでに削除されています。"
+                return String(localized: "この記念石は別の端末ですでに削除されています。", table: "Log")
             }
             let snapshot = AchievementStoneRevisionSnapshot(canonical)
             guard AchievementStoneRevisionPolicy.delete(values) == .applied else {
-                return "この記念石の編集履歴が上限に達したため、削除できませんでした。"
+                return String(localized: "この記念石の編集履歴が上限に達したため、削除できませんでした。", table: "Log")
             }
             try modelContext.save()
             pendingAchievementUndo = snapshot
@@ -2257,7 +2325,7 @@ struct LogView: View {
         } catch {
             modelContext.rollback()
             loadAchievements()
-            return "記念石を削除できませんでした。通信状態を確認して、もう一度お試しください。"
+            return String(localized: "記念石を削除できませんでした。通信状態を確認して、もう一度お試しください。", table: "Log")
         }
     }
 
@@ -2271,7 +2339,7 @@ struct LogView: View {
                 epochID: snapshot.dataEpochID
             )
             guard let canonical = AchievementStonePolicy.canonicalStone(from: values) else {
-                mutationError = "削除した記念石が見つからないため、元に戻せませんでした。"
+                mutationError = String(localized: "削除した記念石が見つからないため、元に戻せませんでした。", table: "Log")
                 return
             }
             if canonical.deletedAt == nil {
@@ -2287,7 +2355,7 @@ struct LogView: View {
                 snapshot: snapshot,
                 subject: subject
             ) == .applied else {
-                mutationError = "この記念石の編集履歴が上限に達したため、元に戻せませんでした。"
+                mutationError = String(localized: "この記念石の編集履歴が上限に達したため、元に戻せませんでした。", table: "Log")
                 return
             }
             try modelContext.save()
@@ -2296,7 +2364,7 @@ struct LogView: View {
         } catch {
             modelContext.rollback()
             loadAchievements()
-            mutationError = "削除した記念石を元に戻せませんでした。通信状態を確認して、もう一度お試しください。"
+            mutationError = String(localized: "削除した記念石を元に戻せませんでした。通信状態を確認して、もう一度お試しください。", table: "Log")
         }
     }
 
@@ -2317,13 +2385,23 @@ struct LogView: View {
 
     private func achievementArchiveDescription(count: Int) -> String {
         if achievementPageIsPartial {
-            return "瓶では新しい12個が動き、ここでは最新\(count)個を表示しています。行をタップすると編集・削除できます。"
+            return String(
+                localized: "瓶では新しい12個が動き、ここでは最新\(count)個を表示しています。行をタップすると編集・削除できます。",
+                table: "Log",
+                comment: "Milestone archive caption when the list is capped; the argument is how many stones are listed"
+            )
         }
-        return "瓶では新しい12個が動き、これまでの\(count)個を振り返れます。行をタップすると編集・削除できます。"
+        return String(
+            localized: "瓶では新しい12個が動き、これまでの\(count)個を振り返れます。行をタップすると編集・削除できます。",
+            table: "Log",
+            comment: "Milestone archive caption; the argument is how many stones there are"
+        )
     }
 
     private func formatMass(_ grams: Int) -> String {
-        grams >= 1_000 ? String(format: "%.1fkg", Double(grams) / 1_000) : "\(grams)g"
+        grams >= 1_000
+            ? MassText.kilograms(String(format: "%.1f", Double(grams) / 1_000))
+            : MassText.grams("\(grams)")
     }
 
     private func formatMinutes(_ minutes: Int) -> String {
@@ -2343,32 +2421,70 @@ private struct LogMonthSummary: Identifiable {
     var id: Date { month.id }
 
     func rowLabel(formatMinutes: (Int) -> String) -> String {
-        "\(formatMinutes(minutes))・\(pebbleCount)粒"
+        ListText.compact([formatMinutes(minutes), CountText.gems(pebbleCount)])
     }
 }
 
 private struct DailyMassChartDescriptor: AXChartDescriptorRepresentable {
     let values: [LogDailyMass]
-    let periodTitle: String
+    let period: LogView.Period
     let isPartial: Bool
 
+    /// Whole sentences, each its own format string, joined the way the
+    /// language joins sentences (SentenceText). Grams are read as words
+    /// (MassText.spoken): 「250グラム」, "250 grams".
     var accessibilitySummary: String {
         let safeValues = values.map { max(0, $0.grams) }
         let total = NonnegativeIntPolicy.sum(safeValues)
         guard !values.isEmpty else {
-            return "\(periodTitle)の質量の推移。日ごとのデータはありません。\(totalLabel)0グラム。"
+            return SentenceText.join([
+                titleSentence,
+                String(localized: "日ごとのデータはありません。", table: "Log", comment: "VoiceOver chart summary: the period has no days"),
+                totalSentence(grams: 0)
+            ])
         }
         guard let maximum = safeValues.max(), maximum > 0,
               let maximumIndex = safeValues.firstIndex(of: maximum)
         else {
-            return "\(periodTitle)の質量の推移。\(values.count)日分、\(totalLabel)0グラム。記録された質量はありません。"
+            return SentenceText.join([
+                titleSentence,
+                daysAndTotalSentence(days: values.count, grams: 0),
+                String(localized: "記録された質量はありません。", table: "Log", comment: "VoiceOver chart summary: no mass in the period")
+            ])
         }
         let maximumDate = spokenDate(values[maximumIndex].date)
-        return "\(periodTitle)の質量の推移。\(values.count)日分、\(totalLabel)\(total)グラム。最大は\(maximumDate)の\(maximum)グラム。"
+        return SentenceText.join([
+            titleSentence,
+            daysAndTotalSentence(days: values.count, grams: total),
+            String(
+                localized: "最大は\(maximumDate)の\(MassText.spoken(grams: maximum))。",
+                table: "Log",
+                comment: "VoiceOver chart summary: the day with the most mass; the arguments are a spoken date and a spoken mass"
+            )
+        ])
     }
 
-    private var totalLabel: String {
-        isPartial ? "最新記録の表示分合計" : "期間合計"
+    private var titleSentence: String {
+        switch period {
+        case .week:
+            String(localized: "今週の質量の推移。", table: "Log", comment: "VoiceOver chart summary, first sentence: this week's mass chart")
+        case .month:
+            String(localized: "今月の質量の推移。", table: "Log", comment: "VoiceOver chart summary, first sentence: this month's mass chart")
+        }
+    }
+
+    private func totalSentence(grams: Int) -> String {
+        let mass = MassText.spoken(grams: grams)
+        return isPartial
+            ? String(localized: "最新記録の表示分合計\(mass)。", table: "Log", comment: "VoiceOver chart summary: total of the records shown when the period is capped; the argument is a spoken mass")
+            : String(localized: "期間合計\(mass)。", table: "Log", comment: "VoiceOver chart summary: the period's total; the argument is a spoken mass")
+    }
+
+    private func daysAndTotalSentence(days: Int, grams: Int) -> String {
+        let mass = MassText.spoken(grams: grams)
+        return isPartial
+            ? String(localized: "\(days)日分、最新記録の表示分合計\(mass)。", table: "Log", comment: "VoiceOver chart summary: number of days, then the total of the records shown when the period is capped (a spoken mass)")
+            : String(localized: "\(days)日分、期間合計\(mass)。", table: "Log", comment: "VoiceOver chart summary: number of days, then the period's total (a spoken mass)")
     }
 
     func makeChartDescriptor() -> AXChartDescriptor {
@@ -2376,15 +2492,15 @@ private struct DailyMassChartDescriptor: AXChartDescriptorRepresentable {
         let maximum = values.map { max(0, $0.grams) }.max() ?? 0
         let upperBound = Double(max(1, maximum))
         let xAxis = AXCategoricalDataAxisDescriptor(
-            title: "日付",
+            title: String(localized: "日付", table: "Log", comment: "VoiceOver: name of the mass chart's date axis"),
             categoryOrder: categories
         )
         let yAxis = AXNumericDataAxisDescriptor(
-            title: "質量",
+            title: String(localized: "質量", table: "Log", comment: "Day summary tile: total mass"),
             range: 0 ... upperBound,
             gridlinePositions: maximum > 0 ? [0, upperBound] : [0]
         ) { value in
-            "\(NonnegativeIntPolicy.clamped(value.rounded()))グラム"
+            MassText.spoken(grams: NonnegativeIntPolicy.clamped(value.rounded()))
         }
         let points = values.map { item in
             let date = spokenDate(item.date)
@@ -2392,16 +2508,20 @@ private struct DailyMassChartDescriptor: AXChartDescriptorRepresentable {
             return AXDataPoint(
                 x: date,
                 y: Double(grams),
-                label: "\(date)、\(grams)グラム"
+                label: String(
+                    localized: "\(date)、\(MassText.spoken(grams: grams))",
+                    table: "Log",
+                    comment: "VoiceOver: two parts read together, e.g. a period and its date range, or a day and its spoken mass"
+                )
             )
         }
         let series = AXDataSeriesDescriptor(
-            name: "日ごとの質量",
+            name: String(localized: "日ごとの質量", table: "Log", comment: "VoiceOver: name of the mass chart's data series"),
             isContinuous: false,
             dataPoints: points
         )
         return AXChartDescriptor(
-            title: "質量の推移",
+            title: String(localized: "質量の推移", table: "Log", comment: "Log section title: the chart of mass per day"),
             summary: accessibilitySummary,
             xAxis: xAxis,
             yAxis: yAxis,
@@ -2410,7 +2530,7 @@ private struct DailyMassChartDescriptor: AXChartDescriptorRepresentable {
     }
 
     private func spokenDate(_ date: Date) -> String {
-        date.formatted(.dateTime.month(.wide).day().weekday(.wide))
+        date.formatted(.dateTime.month(.wide).day().weekday(.wide).locale(PomoGemLocale.current))
     }
 }
 
@@ -2476,40 +2596,60 @@ struct LogAggregateArchiveItem: Identifiable, Equatable, Sendable {
 
     var periodLabel: String {
         let calendar = Calendar.autoupdatingCurrent
-        let start = periodStart.formatted(.dateTime.year().month().day())
+        let start = Self.unbreakable(periodStart.formatted(.dateTime.year().month().day()))
         guard !calendar.isDate(periodStart, inSameDayAs: periodEnd) else { return start }
-        return "\(start) – \(periodEnd.formatted(.dateTime.year().month().day()))"
+        return "\(start) – \(Self.unbreakable(periodEnd.formatted(.dateTime.year().month().day())))"
+    }
+
+    /// Keeps one date on one line: English dates have spaces ("Sep 27,
+    /// 2026"), and a narrow row broke them as 「Sep 27, 2026 – Sep」 over
+    /// 「28, 2026」. Now the row can only break between the two dates.
+    /// Japanese dates (2026/9/27) have no spaces, so nothing changes there.
+    private static func unbreakable(_ date: String) -> String {
+        date.replacingOccurrences(of: " ", with: "\u{00A0}")
     }
 
     var formattedMass: String {
-        grams >= 1_000 ? String(format: "%.1fkg", Double(grams) / 1_000) : "\(grams)g"
+        grams >= 1_000
+            ? MassText.kilograms(String(format: "%.1f", Double(grams) / 1_000))
+            : MassText.grams("\(grams)")
     }
 }
 
 private struct AggregateArchiveRow: View {
     let item: LogAggregateArchiveItem
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         VStack(alignment: .leading, spacing: 13) {
-            HStack(alignment: .center, spacing: 13) {
-                AggregateArchiveSwatch(item: item)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("×\(item.pebbleCount) の結晶", tableName: "Log", comment: "Crystal archive row title; the argument is how many gems it holds")
-                        .font(.system(.headline, design: .rounded, weight: .heavy))
-                    Text(item.periodLabel)
-                        .font(.caption2)
-                        .foregroundStyle(PomoGemTheme.muted)
+            if dynamicTypeSize.isAccessibilitySize {
+                // One piece per line: beside the swatch and the mass, the
+                // title and the dates were squeezed a word per line.
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .center, spacing: 13) {
+                        AggregateArchiveSwatch(item: item)
+                        title
+                    }
+                    period
+                    mass
+                    origin
                 }
+            } else {
+                HStack(alignment: .center, spacing: 13) {
+                    AggregateArchiveSwatch(item: item)
 
-                Spacer(minLength: 6)
+                    VStack(alignment: .leading, spacing: 3) {
+                        title
+                        period
+                    }
 
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(item.formattedMass)
-                        .font(.system(.subheadline, design: .rounded, weight: .heavy))
-                    Text("元 \(item.pebbleCount)粒")
-                        .font(.caption2)
-                        .foregroundStyle(PomoGemTheme.muted)
+                    Spacer(minLength: 6)
+
+                    VStack(alignment: .trailing, spacing: 2) {
+                        mass
+                        origin
+                    }
                 }
             }
 
@@ -2526,13 +2666,13 @@ private struct AggregateArchiveRow: View {
                                 .font(.caption2.weight(.semibold))
                                 .lineLimit(1)
                             Spacer()
-                            Text("\(subject.pebbleCount)粒")
+                            Text(CountText.gems(subject.pebbleCount))
                                 .font(.caption2.monospacedDigit())
                                 .foregroundStyle(PomoGemTheme.muted)
                         }
                     }
                     if item.subjectMix.count > 3 {
-                        Text("ほか \(item.subjectMix.count - 3)テーマ")
+                        Text("ほか \(item.subjectMix.count - 3)テーマ", tableName: "Log", comment: "Crystal archive row: how many more themes the crystal holds beyond the three listed")
                             .font(.caption2)
                             .foregroundStyle(PomoGemTheme.muted)
                             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -2549,19 +2689,62 @@ private struct AggregateArchiveRow: View {
         .accessibilityLabel(accessibilityDescription)
     }
 
+    private var title: some View {
+        Text("×\(item.pebbleCount) の結晶", tableName: "Log", comment: "Crystal archive row title; the argument is how many gems it holds")
+            .font(.system(.headline, design: .rounded, weight: .heavy))
+    }
+
+    private var period: some View {
+        Text(item.periodLabel)
+            .font(.caption2)
+            .foregroundStyle(PomoGemTheme.muted)
+    }
+
+    private var mass: some View {
+        Text(item.formattedMass)
+            .font(.system(.subheadline, design: .rounded, weight: .heavy))
+    }
+
+    private var origin: some View {
+        Text("元 \(item.pebbleCount)粒", tableName: "Log", comment: "Crystal archive row: how many gems the crystal was made from")
+            .font(.caption2)
+            .foregroundStyle(PomoGemTheme.muted)
+    }
+
     private var accessibilityDescription: String {
-        let base = "\(item.pebbleCount)粒の結晶、\(item.formattedMass)、\(item.periodLabel)、実測\(item.measuredPebbleCount)粒、手動\(item.manualPebbleCount)粒"
-        guard RareRewardReleasePolicy.isEnabled else { return base }
-        return "\(base)、金\(item.goldPebbleCount)粒、虹\(item.prismPebbleCount)粒"
+        guard RareRewardReleasePolicy.isEnabled else {
+            return String(
+                localized: "\(CountText.gems(item.pebbleCount))の結晶、\(item.formattedMass)、\(item.periodLabel)、実測\(item.measuredPebbleCount)粒、手動\(item.manualPebbleCount)粒",
+                table: "Log",
+                comment: "VoiceOver crystal row: the gems in the crystal (e.g. 10粒), its mass, its dates, then how many were timed and how many added manually"
+            )
+        }
+        return String(
+            localized: "\(CountText.gems(item.pebbleCount))の結晶、\(item.formattedMass)、\(item.periodLabel)、実測\(item.measuredPebbleCount)粒、手動\(item.manualPebbleCount)粒、金\(item.goldPebbleCount)粒、虹\(item.prismPebbleCount)粒",
+            table: "Log",
+            comment: "VoiceOver crystal row: the gems in the crystal (e.g. 10粒), its mass, its dates, then how many were timed, added manually, gold and rainbow"
+        )
     }
 
     @ViewBuilder
     private var compositionBadges: some View {
-        AggregateStatBadge(symbol: "timer", text: "実測 \(item.measuredPebbleCount)")
-        AggregateStatBadge(symbol: "hand.tap", text: "手動 \(item.manualPebbleCount)")
+        AggregateStatBadge(
+            symbol: "timer",
+            text: String(localized: "実測 \(item.measuredPebbleCount)", table: "Log", comment: "Crystal badge: how many of its gems were timed")
+        )
+        AggregateStatBadge(
+            symbol: "hand.tap",
+            text: String(localized: "手動 \(item.manualPebbleCount)", table: "Log", comment: "Crystal badge: how many of its gems were added manually")
+        )
         if RareRewardReleasePolicy.isEnabled {
-            AggregateStatBadge(symbol: "sparkles", text: "金 \(item.goldPebbleCount)")
-            AggregateStatBadge(symbol: "rainbow", text: "虹 \(item.prismPebbleCount)")
+            AggregateStatBadge(
+                symbol: "sparkles",
+                text: String(localized: "金 \(item.goldPebbleCount)", table: "Log", comment: "Crystal badge: how many gold gems it holds")
+            )
+            AggregateStatBadge(
+                symbol: "rainbow",
+                text: String(localized: "虹 \(item.prismPebbleCount)", table: "Log", comment: "Crystal badge: how many rainbow gems it holds")
+            )
         }
     }
 }
@@ -2585,7 +2768,7 @@ private struct AggregateArchiveSwatch: View {
                     .stroke(.white.opacity(0.18 + Double(ring) * 0.08), lineWidth: 1)
                     .padding(CGFloat(ring) * 4 + 3)
             }
-            Text("×\(item.pebbleCount)")
+            Text("×\(item.pebbleCount)", tableName: "Log", comment: "How many gems a crystal holds, e.g. ×10")
                 .font(.system(size: item.pebbleCount >= 1_000 ? 8 : 10, weight: .heavy, design: .rounded))
                 .foregroundStyle(.white)
                 .minimumScaleFactor(0.65)
@@ -2652,7 +2835,7 @@ private struct SummaryTile: View {
             Text(value).font(.system(.headline, design: .rounded, weight: .heavy)).lineLimit(1).minimumScaleFactor(0.72)
             Text(label).font(.caption2).foregroundStyle(PomoGemTheme.muted)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(13)
         .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 14))
         .accessibilityElement(children: .combine)
@@ -2715,8 +2898,14 @@ private struct RareStat: View {
                 .frame(width: 28, height: 28)
                 .shadow(color: PomoGemTheme.amber.opacity(kind == .gold ? 0.32 : 0.16), radius: 8)
             VStack(alignment: .leading, spacing: 1) {
-                Text(kind == .gold ? "金" : "虹").font(.caption2).foregroundStyle(PomoGemTheme.muted)
-                Text("×\(count)").font(.system(.headline, design: .rounded, weight: .heavy))
+                Text(
+                    kind == .gold
+                        ? String(localized: "金", table: "Log", comment: "Rare gem stat: gold gems")
+                        : String(localized: "虹", table: "Log", comment: "Rare gem stat: rainbow gems")
+                )
+                .font(.caption2)
+                .foregroundStyle(PomoGemTheme.muted)
+                Text("×\(count)", tableName: "Log", comment: "How many gems a crystal holds, e.g. ×10").font(.system(.headline, design: .rounded, weight: .heavy))
             }
         }
         .accessibilityElement(children: .combine)
@@ -2774,6 +2963,9 @@ private struct AchievementEditorSheet: View {
     private let keptSubjectChoiceID: UUID?
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// The menu symbols grow with the text, so their column does too.
+    @ScaledMetric(relativeTo: .body) private var menuSymbolWidth: CGFloat = 22
     @State private var selectedSubjectID: UUID?
     @State private var kind: AchievementKind
     @State private var note: String
@@ -2856,7 +3048,7 @@ private struct AchievementEditorSheet: View {
                     dateEditor
 
                     Label(
-                        "記念石は0gです。編集・削除しても、集中時間・質量・通常の粒数は変わりません。",
+                        String(localized: "記念石は0gです。編集・削除しても、集中時間・質量・通常の粒数は変わりません。", table: "Log"),
                         systemImage: "checkmark.shield.fill"
                     )
                     .font(.caption)
@@ -2868,7 +3060,7 @@ private struct AchievementEditorSheet: View {
                     Button(role: .destructive) {
                         confirmsDeletion = true
                     } label: {
-                        Label("この記念石を削除", systemImage: "trash")
+                        Label(String(localized: "この記念石を削除", table: "Log", comment: "Button in the milestone editor"), systemImage: "trash")
                     }
                     .buttonStyle(PomoGemDestructiveButtonStyle())
                     .disabled(isCommitting)
@@ -2895,7 +3087,7 @@ private struct AchievementEditorSheet: View {
             }
             }
             .background(NightBackground())
-            .navigationTitle("成果を編集")
+            .navigationTitle(Text("成果を編集", tableName: "Log", comment: "Title of the milestone stone editor"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -2907,12 +3099,15 @@ private struct AchievementEditorSheet: View {
                     .disabled(isCommitting)
                 }
             }
-            .alert("この記念石を削除しますか？", isPresented: $confirmsDeletion) {
-                Button("削除", role: .destructive) { delete() }
+            .alert(
+                String(localized: "この記念石を削除しますか？", table: "Log", comment: "Alert title before deleting a milestone stone"),
+                isPresented: $confirmsDeletion
+            ) {
+                Button(String(localized: "削除", table: "Log", comment: "Alert button: delete the milestone stone"), role: .destructive) { delete() }
                     .accessibilityIdentifier("achievement.editor.confirm-delete")
-                Button("キャンセル", role: .cancel) {}
+                Button(String(localized: "キャンセル", table: "Log", comment: "Alert button: keep the milestone stone"), role: .cancel) {}
             } message: {
-                Text("記録・瓶・共有から非表示になります。質量は変わりません。削除直後は記録画面で元に戻せます。")
+                Text("記録・瓶・共有から非表示になります。質量は変わりません。削除直後は記録画面で元に戻せます。", tableName: "Log")
             }
         }
     }
@@ -2947,7 +3142,7 @@ private struct AchievementEditorSheet: View {
 
     private var typeEditor: some View {
         VStack(alignment: .leading, spacing: 8) {
-            editorLabel("種類")
+            editorLabel(String(localized: "種類", table: "Log", comment: "Milestone editor: label of the kind menu (100点, 試験合格, …)"))
             Menu {
                 ForEach(AchievementKind.allCases) { candidate in
                     Button {
@@ -2967,15 +3162,15 @@ private struct AchievementEditorSheet: View {
                     symbol: kind.systemImage
                 )
             }
-            .accessibilityLabel("種類、\(kind.title)")
-            .accessibilityHint("記念石の種類を変更できます")
+            .accessibilityLabel(String(localized: "種類、\(kind.title)", table: "Log", comment: "VoiceOver: the milestone's kind menu; the argument is the chosen kind"))
+            .accessibilityHint(Text("記念石の種類を変更できます", tableName: "Log", comment: "VoiceOver hint on the milestone's kind menu"))
             .accessibilityIdentifier("achievement.editor.kind")
         }
     }
 
     private var subjectEditor: some View {
         VStack(alignment: .leading, spacing: 8) {
-            editorLabel("テーマ")
+            editorLabel(String(localized: "テーマ", table: "Log", comment: "Milestone editor: label of the theme menu"))
             Menu {
                 if let keptSubjectChoiceID {
                     Button {
@@ -3001,7 +3196,7 @@ private struct AchievementEditorSheet: View {
                 }
             } label: {
                 editorMenuLabel(
-                    title: selectedSubjectTitle ?? "テーマを選択",
+                    title: selectedSubjectTitle ?? String(localized: "テーマを選択", table: "Log", comment: "Milestone editor theme menu when no theme is chosen"),
                     colorHex: keepsOriginalSubject
                         ? selection.subjectColorHex
                         : (selectedSubject?.colorHex ?? Constants.Color.textMute),
@@ -3009,13 +3204,17 @@ private struct AchievementEditorSheet: View {
                 )
             }
             .disabled(subjects.isEmpty && keptSubjectChoiceID == nil)
-            .accessibilityLabel("テーマ、\(selectedSubjectTitle ?? "未選択")")
+            .accessibilityLabel(
+                selectedSubjectTitle.map {
+                    String(localized: "テーマ、\($0)", table: "Log", comment: "VoiceOver: the milestone's theme menu; the argument is the chosen theme")
+                } ?? String(localized: "テーマ、未選択", table: "Log", comment: "VoiceOver: the milestone's theme menu with no theme chosen")
+            )
             .accessibilityHint(
                 subjects.isEmpty
                     ? (keptSubjectChoiceID == nil
-                        ? "テーマがないため変更できません"
+                        ? String(localized: "テーマがないため変更できません", table: "Log", comment: "VoiceOver hint: there are no themes, so the menu is disabled")
                         : String(localized: "ほかに選べるテーマはありません", table: "Log", comment: "VoiceOver hint: no other theme to choose"))
-                    : "成果を結びつけるテーマを変更できます"
+                    : String(localized: "成果を結びつけるテーマを変更できます", table: "Log", comment: "VoiceOver hint on the milestone's theme menu")
             )
             .accessibilityIdentifier("achievement.editor.subject")
 
@@ -3033,7 +3232,7 @@ private struct AchievementEditorSheet: View {
         // Kept as typed (spaces and IME composition included); bounded when
         // saved. See AchievementNotePolicy.
         AchievementNoteField(
-            title: "成果メモ（任意）",
+            title: String(localized: "成果メモ（任意）", table: "Log", comment: "Milestone editor: title of the optional note field"),
             placeholder: kind.notePlaceholder,
             text: $note,
             accessibilityIdentifier: "achievement.editor.note",
@@ -3060,7 +3259,7 @@ private struct AchievementEditorSheet: View {
                 if isCommitting {
                     ProgressView().tint(PomoGemTheme.background)
                 } else {
-                    Label("変更を保存", systemImage: "checkmark.circle.fill")
+                    Label(String(localized: "変更を保存", table: "Log", comment: "Button: save the milestone edits"), systemImage: "checkmark.circle.fill")
                 }
             }
             .buttonStyle(PomoGemPrimaryButtonStyle())
@@ -3089,15 +3288,39 @@ private struct AchievementEditorSheet: View {
     }
 
     private var dateEditor: some View {
+        let title = String(localized: "達成した日", table: "Log", comment: "Milestone editor: the date the achievement happened")
+        return Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                // The compact picker keeps its full width, so beside it the
+                // label broke into 「Dat」「e」「Ach…」, and on an iPhone SE at
+                // the largest size the row pushed the whole form past the
+                // screen edges. At these sizes the label sits above the date,
+                // and the date stops growing at a size that still fits.
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(title)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityHidden(true)
+                    dateField(title)
+                        .labelsHidden()
+                        .dynamicTypeSize(...DynamicTypeSize.accessibility3)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                dateField(title)
+            }
+        }
+        .padding(14)
+        .background(PomoGemTheme.raised, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func dateField(_ title: String) -> some View {
         DatePicker(
-            "達成した日",
+            title,
             selection: $achievedAt,
             in: ...Date.now,
             displayedComponents: .date
         )
         .datePickerStyle(.compact)
-        .padding(14)
-        .background(PomoGemTheme.raised, in: RoundedRectangle(cornerRadius: 12))
         .accessibilityIdentifier("achievement.editor.date")
     }
 
@@ -3115,7 +3338,7 @@ private struct AchievementEditorSheet: View {
         HStack(spacing: 10) {
             Image(systemName: symbol)
                 .foregroundStyle(Color(hex: colorHex))
-                .frame(width: 22)
+                .frame(width: menuSymbolWidth)
                 .accessibilityHidden(true)
             Text(title)
                 .font(.system(.body, design: .rounded, weight: .bold))
@@ -3156,48 +3379,79 @@ private struct AchievementEditorSheet: View {
 private struct AchievementHistoryRow: View {
     let stone: AchievementStone
 
-    var body: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                Color(hex: stone.kind.gemEdgeHex),
-                                Color(hex: stone.kind.gemBaseHex)
-                            ],
-                            center: .topLeading,
-                            startRadius: 0,
-                            endRadius: 30
-                        )
-                    )
-                Circle()
-                    .stroke(Color(hex: stone.kind.gemEdgeHex), lineWidth: 2)
-                Text(stone.kind.shortMark)
-                    .font(.system(size: stone.kind == .perfectScore ? 8 : 15, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: 34, height: 34)
-            .shadow(color: Color(hex: stone.kind.gemGlowHex).opacity(0.42), radius: 8)
-            .accessibilityHidden(true)
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(stone.displayTitle)
-                    .font(.subheadline.weight(.semibold))
-                Text("\(stone.displaySubjectName)・\(stone.kind.title)")
-                    .font(.caption)
-                    .foregroundStyle(PomoGemTheme.muted)
+    var body: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                // The date goes under the names: beside them, large text
+                // squeezed an English date into 「Sep」「28,」「2026」 and the
+                // title into a word per line.
+                HStack(alignment: .top, spacing: 12) {
+                    gem
+                    VStack(alignment: .leading, spacing: 3) {
+                        names
+                        date
+                    }
+                    Spacer(minLength: 0)
+                }
+            } else {
+                HStack(spacing: 12) {
+                    gem
+                    names
+                    Spacer()
+                    date
+                }
             }
-            Spacer()
-            Text(stone.achievedAt.formatted(date: .abbreviated, time: .omitted))
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(PomoGemTheme.muted)
         }
         .frame(minHeight: 52)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            "\(stone.displaySubjectName)、\(stone.kind.title)、\(stone.displayTitle)、\(stone.achievedAt.formatted(date: .long, time: .omitted))"
-        )
+        .accessibilityLabel(String(
+            localized: "\(stone.displaySubjectName)、\(stone.kind.title)、\(stone.displayTitle)、\(stone.achievedAt.formatted(date: .long, time: .omitted))",
+            table: "Log",
+            comment: "VoiceOver milestone row: theme, kind, title, date"
+        ))
+    }
+
+    private var gem: some View {
+        ZStack {
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(hex: stone.kind.gemEdgeHex),
+                            Color(hex: stone.kind.gemBaseHex)
+                        ],
+                        center: .topLeading,
+                        startRadius: 0,
+                        endRadius: 30
+                    )
+                )
+            Circle()
+                .stroke(Color(hex: stone.kind.gemEdgeHex), lineWidth: 2)
+            Text(stone.kind.shortMark)
+                .font(.system(size: stone.kind == .perfectScore ? 8 : 15, weight: .heavy, design: .rounded))
+                .foregroundStyle(.white)
+        }
+        .frame(width: 34, height: 34)
+        .shadow(color: Color(hex: stone.kind.gemGlowHex).opacity(0.42), radius: 8)
+        .accessibilityHidden(true)
+    }
+
+    private var names: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(stone.displayTitle)
+                .font(.subheadline.weight(.semibold))
+            Text(ListText.compact([stone.displaySubjectName, stone.kind.title]))
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+        }
+    }
+
+    private var date: some View {
+        Text(stone.achievedAt.formatted(date: .abbreviated, time: .omitted))
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(PomoGemTheme.muted)
     }
 }

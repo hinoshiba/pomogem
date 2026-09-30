@@ -1,9 +1,648 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "%@へ %lld/%lld" : {
+      "comment" : "Progress toward a crystal: its size (e.g. ×10), then gems in / gems needed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%2$lld/%3$lld toward %1$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@へ %lld/%lld"
+          }
+        }
+      }
+    },
+    "%@以上" : {
+      "comment" : "A lower bound while the jar is re-counted; the argument is a mass such as 600g",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "at least %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@以上"
+          }
+        }
+      }
+    },
+    "%@完成 %lld/%lld" : {
+      "comment" : "A crystal just completed: its size (e.g. ×10), then gems in / gems needed (10/10)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ complete · %2$lld/%3$lld"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@完成 %lld/%lld"
+          }
+        }
+      }
+    },
+    "%@標準単位" : {
+      "comment" : "A mass in standard units (250 g each); the argument is a decimal such as 1.0 or 2.4",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ standard units"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@標準単位"
+          }
+        }
+      }
+    },
+    "%@粒" : {
+      "comment" : "Gems as a compact count such as 35.1万 (en 351K); always 1,000 or more",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ gems"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@粒"
+          }
+        }
+      }
+    },
+    "%@粒以上" : {
+      "comment" : "A lower bound of gems while the jar is re-counted; the argument is a compact count such as 35.1万 (en 351K)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "at least %@ gems"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@粒以上"
+          }
+        }
+      }
+    },
+    "%lldg相当" : {
+      "comment" : "Focus progress that is not whole minutes, as the grams it equals",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld g equivalent"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lldg相当"
+          }
+        }
+      }
+    },
+    "%lld段融合が完成。小さな一粒も消えていません" : {
+      "comment" : "Several crystal levels completed at once; the argument is how many levels",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld levels fused at once. Every small gem is still there"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld段融合が完成。小さな一粒も消えていません"
+          }
+        }
+      }
+    },
+    "%lld粒以上" : {
+      "comment" : "A lower bound of gems while the jar is re-counted",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "at least %lld gem"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "at least %lld gems"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld粒以上"
+          }
+        }
+      }
+    },
+    "10粒がひとつの結晶に。中の一粒と質量はそのまま" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "10 gems became one crystal. Each gem inside and its mass stay as they were"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "10粒がひとつの結晶に。中の一粒と質量はそのまま"
+          }
+        }
+      }
+    },
+    "あと%@" : {
+      "comment" : "Time left to the next time core",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ to go"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "あと%@"
+          }
+        }
+      }
+    },
+    "あと%@で%lld段融合" : {
+      "comment" : "Gems left (e.g. 1粒) until several crystal levels complete at once; the second argument is the number of levels (2 or more)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ to go until %2$lld levels fuse"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "あと%@で%lld段融合"
+          }
+        }
+      }
+    },
+    "今回 +%@" : {
+      "comment" : "After a focus while the time core is re-counted: the time this session added",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This session: +%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今回 +%@"
+          }
+        }
+      }
+    },
+    "今回 +1粒" : {
+      "comment" : "After a focus while crystals are re-counted: this session added one gem",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This session: +1 gem"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今回 +1粒"
+          }
+        }
+      }
+    },
+    "今回の完走で%@を追加。時間の核を整理中。%@" : {
+      "comment" : "VoiceOver after a focus while the time core is re-counted: the time added, then the one-gem-per-focus explanation",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This session added %1$@. Updating the time core. %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今回の完走で%@を追加。時間の核を整理中。%@"
+          }
+        }
+      }
+    },
+    "今回の完走で1粒追加。結晶進捗を整理中です" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This session added 1 gem. Updating crystal progress."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今回の完走で1粒追加。結晶進捗を整理中です"
+          }
+        }
+      }
+    },
+    "保存データの読み込み後に正確な位置を表示します" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The exact position appears once your saved data has loaded"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存データの読み込み後に正確な位置を表示します"
+          }
+        }
+      }
+    },
+    "光脈核" : {
+      "comment" : "Name of a level-7 crystal (ten million gems)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lightvein Core"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "光脈核"
+          }
+        }
+      }
+    },
+    "到達分は次の段の進みとして保持" : {
+      "comment" : "Time core reached exactly: the time carries over to the next stage",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your progress carries over to the next stage"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "到達分は次の段の進みとして保持"
+          }
+        }
+      }
+    },
+    "星冠" : {
+      "comment" : "Name of a level-6 crystal (a million gems)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Star Crown"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "星冠"
+          }
+        }
+      }
+    },
+    "星晶" : {
+      "comment" : "Name of a level-3 crystal (1,000 gems)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Star Crystal"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "星晶"
+          }
+        }
+      }
+    },
+    "星核" : {
+      "comment" : "Name of a level-4 crystal (10,000 gems)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Star Core"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "星核"
+          }
+        }
+      }
+    },
+    "星片" : {
+      "comment" : "Name of a level-2 crystal (100 gems)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Star Shard"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "星片"
+          }
+        }
+      }
+    },
+    "時間 %@ / %@" : {
+      "comment" : "Time core card: focus time so far / time the core needs",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Time %1$@ / %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間 %@ / %@"
+          }
+        }
+      }
+    },
+    "時間の核" : {
+      "comment" : "Name plate of the jar's lifetime time core",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Time Core"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間の核"
+          }
+        }
+      }
+    },
+    "時間の核、%@、%@" : {
+      "comment" : "VoiceOver: time core progress and the next step",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Time core, %1$@, %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間の核、%@、%@"
+          }
+        }
+      }
+    },
+    "時間の核、%@、%@、%@" : {
+      "comment" : "VoiceOver: time core progress, the next step and a note",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Time core, %1$@, %2$@, %3$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間の核、%@、%@、%@"
+          }
+        }
+      }
+    },
+    "時間の核を整理中" : {
+      "comment" : "The time core is being re-counted",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Updating the time core"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間の核を整理中"
+          }
+        }
+      }
+    },
+    "時間の核・%lld段目" : {
+      "comment" : "A later time core, as a noun inside a sentence; the argument is its stage",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "time core stage %lld"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間の核・%lld段目"
+          }
+        }
+      }
+    },
+    "時間の核・%lld段目 到達" : {
+      "comment" : "A later time core was reached; the argument is its stage",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Time core stage %lld reached"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間の核・%lld段目 到達"
+          }
+        }
+      }
+    },
+    "時間の核・%lld段目へ %@ / %@" : {
+      "comment" : "Toward a later time core: its stage, then focus time so far / time it needs",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Time core stage %1$lld: %2$@ / %3$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間の核・%lld段目へ %@ / %@"
+          }
+        }
+      }
+    },
+    "最初の時間の核" : {
+      "comment" : "The first time core, as a noun inside a sentence (e.g. before まで)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "the first time core"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最初の時間の核"
+          }
+        }
+      }
+    },
+    "最初の時間の核 到達" : {
+      "comment" : "The first time core was reached",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "First time core reached"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最初の時間の核 到達"
+          }
+        }
+      }
+    },
+    "最初の時間の核へ %@ / %@" : {
+      "comment" : "Toward the first time core: focus time so far / time it needs",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "First time core: %1$@ / %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最初の時間の核へ %@ / %@"
+          }
+        }
+      }
+    },
+    "核まであと%@" : {
+      "comment" : "Time left until the next time core",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ to the core"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "核まであと%@"
+          }
+        }
+      }
+    },
+    "次の核：%@" : {
+      "comment" : "Time core just reached: the time the next core needs",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next core: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "次の核：%@"
+          }
+        }
+      }
+    },
     "次の結晶まで、あと%lld粒" : {
       "comment" : "Next step toward the next crystal; the argument is a gem count",
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld more gem to the next crystal"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld more gems to the next crystal"
+                }
+              }
+            }
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -12,13 +651,298 @@
         }
       }
     },
-    "瓶%@杯" : {
-      "comment" : "Jar chip: how many times the jar has filled (2.5 kg each); the argument is a compact count such as 3 or 1.2万",
+    "次の結晶まであと%lld粒" : {
+      "comment" : "Time core card: gems left until the next crystal",
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld more gem to the next crystal"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld more gems to the next crystal"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "次の結晶まであと%lld粒"
+          }
+        }
+      }
+    },
+    "次は%@へ %lld/%lld" : {
+      "comment" : "After a crystal completes, the next larger one: its size (e.g. ×100), then crystals in / needed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next: %2$lld/%3$lld toward %1$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "次は%@へ %lld/%lld"
+          }
+        }
+      }
+    },
+    "次：%@ / %@" : {
+      "comment" : "Toward the next time core: focus time so far / time it needs",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next: %1$@ / %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "次：%@ / %@"
+          }
+        }
+      }
+    },
+    "永続核" : {
+      "comment" : "Name of the highest crystal level",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eternal Core"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "永続核"
+          }
+        }
+      }
+    },
+    "瓶%@杯" : {
+      "comment" : "Jar chip: how many times the jar has filled (2.5 kg each); the argument is a compact count of 1,000 or more such as 1.2万 (en 1.2K)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ full jars"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "瓶%@杯"
+          }
+        }
+      }
+    },
+    "瓶%lld杯" : {
+      "comment" : "Jar chip: how many times the jar has filled (2.5 kg each)",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld full jar"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld full jars"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶%lld杯"
+          }
+        }
+      }
+    },
+    "粒は1完走につき1つ。核の進みは集中時間で計算します" : {
+      "comment" : "Why gems and the time core differ: one gem per completed focus, the core grows with focus time",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "One gem per completed session. The core grows with focus time."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粒は1完走につき1つ。核の進みは集中時間で計算します"
+          }
+        }
+      }
+    },
+    "結晶" : {
+      "comment" : "Name of a level-1 crystal (10 gems); also a noun inside sentences",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crystal"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結晶"
+          }
+        }
+      }
+    },
+    "結晶の芽" : {
+      "comment" : "Name plate of the jar's core before the first crystal (fewer than 10 gems)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crystal Seed"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結晶の芽"
+          }
+        }
+      }
+    },
+    "結晶の進み、%@、%@" : {
+      "comment" : "VoiceOver: crystal progress and the next step",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crystal progress, %1$@, %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結晶の進み、%@、%@"
+          }
+        }
+      }
+    },
+    "結晶の進み、%@、%@、%@" : {
+      "comment" : "VoiceOver: crystal progress, the next step and the long-term crystal",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crystal progress, %1$@, %2$@, %3$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結晶の進み、%@、%@、%@"
+          }
+        }
+      }
+    },
+    "結晶を整理中" : {
+      "comment" : "The crystals are being re-counted",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Updating crystals"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結晶を整理中"
+          }
+        }
+      }
+    },
+    "結晶進捗を整理中" : {
+      "comment" : "Crystal progress is being re-counted",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Updating crystal progress"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結晶進捗を整理中"
+          }
+        }
+      }
+    },
+    "超過した%@も次の段へ保持" : {
+      "comment" : "Time core reached: the time beyond it carries over to the next stage",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The extra %@ carries over to the next stage"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "超過した%@も次の段へ保持"
+          }
+        }
+      }
+    },
+    "軌道核" : {
+      "comment" : "Name of a level-5 crystal (100,000 gems)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orbit Core"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "軌道核"
+          }
+        }
+      }
+    },
+    "長期：%@へ %lld/%lld" : {
+      "comment" : "The long-term crystal: its size (e.g. ×100), then crystals in / needed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Long-term: %2$lld/%3$lld toward %1$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "長期：%@へ %lld/%lld"
           }
         }
       }

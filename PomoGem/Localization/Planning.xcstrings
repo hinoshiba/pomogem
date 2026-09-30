@@ -1,9 +1,66 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "%@%@後" : {
+      "comment" : "A time from today: a number of years (1年), then of months (6か月)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In %1$@, %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@%@後"
+          }
+        }
+      }
+    },
+    "%@t" : {
+      "comment" : "Mass in metric tonnes; the argument is the number, already formatted (e.g. 3.68). en: '%@ t'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ t"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@t"
+          }
+        }
+      }
+    },
+    "%@の予測" : {
+      "comment" : "Plan results title; the argument is 今日 or a time from now such as 3年後",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Projection · %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@の予測"
+          }
+        }
+      }
+    },
     "%@以上" : {
       "comment" : "Jar total when today's jar is a lower bound; the argument is a mass such as 3.68t",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@+"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -12,9 +69,297 @@
         }
       }
     },
+    "%lldか月" : {
+      "comment" : "A number of months",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld month"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld months"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lldか月"
+          }
+        }
+      }
+    },
+    "%lldか月後" : {
+      "comment" : "A time from today in months",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "In %lld month"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "In %lld months"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lldか月後"
+          }
+        }
+      }
+    },
+    "%lldパーセント" : {
+      "comment" : "VoiceOver: a progress bar's value in percent",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld percent"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lldパーセント"
+          }
+        }
+      }
+    },
+    "%lld回" : {
+      "comment" : "Plan results: number of completed focus sessions",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld session"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld sessions"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld回"
+          }
+        }
+      }
+    },
+    "%lld年" : {
+      "comment" : "Plan length in years (a count, not a calendar year)",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld year"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld years"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld年"
+          }
+        }
+      }
+    },
+    "%lld年後" : {
+      "comment" : "A time from today in years",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "In %lld year"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "In %lld years"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld年後"
+          }
+        }
+      }
+    },
+    "%lld段階 · 次 %@" : {
+      "comment" : "Long-term milestones: how many stages are reached, then the next milestone's mass",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld stage · next %2$@"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld stages · next %2$@"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld段階 · 次 %@"
+          }
+        }
+      }
+    },
+    "%lld段階到達" : {
+      "comment" : "Long-term milestones: how many stages are reached (no next one)",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld stage reached"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld stages reached"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld段階到達"
+          }
+        }
+      }
+    },
+    "%lld段階到達 · 次 %@" : {
+      "comment" : "Long-term milestones: the stage just reached, then the next milestone's mass",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld stage reached · next %2$@"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld stages reached · next %2$@"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld段階到達 · 次 %@"
+          }
+        }
+      }
+    },
+    "1回の集中を完走する想定で、週あたりの回数から試算します。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estimates assume you complete each focus session, based on how many you do a week."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1回の集中を完走する想定で、週あたりの回数から試算します。"
+          }
+        }
+      }
+    },
+    "1回の集中時間" : {
+      "comment" : "Plan control: the length of one focus session",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus Session Length"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1回の集中時間"
+          }
+        }
+      }
+    },
     "1年を平均365.25日として週回数を換算し、1回の完走を1粒、集中1分を%lldgとして計算します。2.50kgごとの瓶の満杯、長期の質量段階、瓶の光は実画面と同じ計算です。10個ずつまとめるため、長期間でも描画する可動体は%lld体以内です。" : {
       "comment" : "Plan: calculation assumptions; the arguments are grams per minute and the physics body limit",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weekly sessions are converted with an average year of 365.25 days. Each completed session is 1 gem, and each minute of focus is %1$lld g. A full jar every 2.50 kg, the long-term mass stages and the jar's light are calculated just as on the real screens. Gems are grouped in tens, so even a long plan draws no more than %2$lld moving pieces."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -23,9 +368,49 @@
         }
       }
     },
+    "60分 = 600g = 25分×2 + 10分 = 10分×6" : {
+      "comment" : "Formula: 60 minutes are 600 g however they are split",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "60 min = 600 g = 25 min × 2 + 10 min = 10 min × 6"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "60分 = 600g = 25分×2 + 10分 = 10分×6"
+          }
+        }
+      }
+    },
+    "BOTTLE CYCLE" : {
+      "comment" : "Eyebrow above the jar-cycle title (shown uppercased). en: 'Jar Cycle', never 'bottle'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jar Cycle"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "BOTTLE CYCLE"
+          }
+        }
+      }
+    },
     "あと%@ · 瓶1杯は集中250分相当" : {
       "comment" : "Plan preview: mass left until the jar fills; the argument is a mass",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ to go · a full jar is 250 min of focus"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -34,9 +419,31 @@
         }
       }
     },
+    "ここで動かす瓶や数値は、実際の学習記録・保存領域・ウィジェットには保存されません。画面を閉じると入力も消えます。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The jar and numbers you move here are never saved to your real records, your storage or your widgets. What you enter is cleared when you close this screen."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ここで動かす瓶や数値は、実際の学習記録・保存領域・ウィジェットには保存されません。画面を閉じると入力も消えます。"
+          }
+        }
+      }
+    },
     "この計画で積む分" : {
       "comment" : "Title of the card that previews only what the plan adds",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What This Plan Adds"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -45,9 +452,31 @@
         }
       }
     },
+    "これは予測です" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This Is a Projection"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "これは予測です"
+          }
+        }
+      }
+    },
     "その時点の瓶が満ちるまで" : {
       "comment" : "VoiceOver: progress of the bottle cycle at the previewed month",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Until the jar fills at that point"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -56,8 +485,30 @@
         }
       }
     },
+    "スライダーを動かすと、その時点までに積み上がる想定の瓶・時間・質量へ巻き戻せます。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move the slider to see the jar, time and mass you'd have built up by that point."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スライダーを動かすと、その時点までに積み上がる想定の瓶・時間・質量へ巻き戻せます。"
+          }
+        }
+      }
+    },
     "スライダーを右へ動かすと、この計画で積む分が現れます" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move the slider to the right to see what this plan adds"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -66,9 +517,66 @@
         }
       }
     },
+    "予定リズム" : {
+      "comment" : "Plan results: how many sessions the plan completes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Planned sessions"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "予定リズム"
+          }
+        }
+      }
+    },
+    "予測" : {
+      "comment" : "Small badge beside the previewed month: this is a projection",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Projection"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "予測"
+          }
+        }
+      }
+    },
+    "予測・保存なし" : {
+      "comment" : "Badge under the plan screen's title: a projection that is never saved",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Projection · not saved"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "予測・保存なし"
+          }
+        }
+      }
+    },
     "今日" : {
       "comment" : "The start of the plan's timeline: today",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Today"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -80,6 +588,12 @@
     "今日の瓶 %@ ＋ この計画 %@" : {
       "comment" : "Breakdown of the jar total: today's jar mass, then the mass the plan adds",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Today's jar %1$@ + this plan %2$@"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -91,6 +605,12 @@
     "今日の瓶 %@以上 ＋ この計画 %@" : {
       "comment" : "Breakdown when today's jar is a lower bound: today's jar mass, then the mass the plan adds",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Today's jar, at least %1$@ + this plan %2$@"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -102,6 +622,12 @@
     "今日の瓶 %@以上（集計を確認中）＋ この計画 %@" : {
       "comment" : "Breakdown when today's jar is a lower bound still being checked (iCloud or this iPhone): today's jar mass, then the mass the plan adds",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Today's jar, at least %1$@ (still being checked) + this plan %2$@"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -113,6 +639,12 @@
     "今日の瓶 %@（集計を確認中）＋ この計画 %@" : {
       "comment" : "Breakdown while Home still checks today's jar (iCloud or this iPhone): today's jar mass, then the mass the plan adds",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Today's jar %1$@ (still being checked) + this plan %2$@"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -124,6 +656,12 @@
     "今日の瓶の合計を確認しているあいだは、この計画で積む分だけを表示します。" : {
       "comment" : "Shown while Home re-counts today's jar (iCloud or this iPhone)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "While today's jar total is being checked, only what this plan adds is shown."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -135,6 +673,12 @@
     "今日の瓶を確認中" : {
       "comment" : "Bottle-cycle title while Home re-counts today's jar, so the jar's position is not shown",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking Today's Jar"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -143,9 +687,65 @@
         }
       }
     },
+    "保存領域・実績への反映はありません" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing is saved to your storage or records"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存領域・実績への反映はありません"
+          }
+        }
+      }
+    },
+    "到達した長期の質量段階" : {
+      "comment" : "VoiceOver: the long-term milestone bar when a stage was just reached",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Long-term mass stage reached"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "到達した長期の質量段階"
+          }
+        }
+      }
+    },
+    "同じ60分なら、分け方にかかわらず600グラムです" : {
+      "comment" : "VoiceOver reading of the 60分 = 600g formula",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sixty minutes is 600 grams, however you split it"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同じ60分なら、分け方にかかわらず600グラムです"
+          }
+        }
+      }
+    },
     "増える質量" : {
       "comment" : "Mass the plan adds, in the results grid",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mass added"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -156,6 +756,12 @@
     },
     "星図と瓶は、今日からこの計画で積む分の見え方の予測です。今日までの瓶は含めません。粒と結晶は予定した完走リズムを、上の時間・質量は集中時間の累計を表します。記念石・実際の休止日は含めません。" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The constellation and jar preview only what this plan adds from today; your jar so far isn't included. Gems and crystals follow your planned sessions, and the time and mass above are your total focus time. Milestone stones and real days off aren't included."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -164,8 +770,48 @@
         }
       }
     },
+    "最初の2.50kgへ" : {
+      "comment" : "Jar-cycle title before anything is added: heading to the first full jar (2.50 kg)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toward Your First 2.50 kg"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最初の2.50kgへ"
+          }
+        }
+      }
+    },
+    "次の長期の質量段階まで" : {
+      "comment" : "VoiceOver: the long-term milestone bar, progress to the next stage",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To the next long-term mass stage"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "次の長期の質量段階まで"
+          }
+        }
+      }
+    },
     "満杯を確認 · 累計はそのまま次の1杯へ" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jar full · your total carries on into the next jar"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -177,6 +823,12 @@
     "瓶%lld杯目が満ちた" : {
       "comment" : "Plan preview: the jar filled for the Nth time",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jar %lld Is Full"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -187,6 +839,12 @@
     },
     "瓶1杯 2.50kg · 集中250分相当" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A full jar: 2.50 kg · 250 min of focus"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -195,9 +853,32 @@
         }
       }
     },
+    "瓶の%lld%%まで積んだ" : {
+      "comment" : "Jar-cycle title: how full the jar is, in percent",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jar %lld%% Full"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶の%lld%%まで積んだ"
+          }
+        }
+      }
+    },
     "瓶の合計" : {
       "comment" : "Label: today's jar mass plus the mass the plan adds",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jar total"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -209,6 +890,12 @@
     "瓶は2.50kg（集中250分相当）ごとに必ず満ち、満杯の光を見届けてから次の1杯へ進みます。累計は消えず、2.50kg → 25kg → 250kg…の長期段階として別に残ります。回数ではなく、集中1分＝%lldgで両方が進みます。" : {
       "comment" : "Plan: how the jar fills; the argument is grams per minute",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your jar always fills every 2.50 kg (250 min of focus), and after its full-jar glow it moves on to the next jar. Your total never disappears: it stays separately as long-term stages of 2.50 kg → 25 kg → 250 kg and beyond. Both grow with focus time, not with the number of sessions: 1 minute of focus = %lld g."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -220,6 +907,12 @@
     "確認が済むと、今日の瓶の続きから表示します" : {
       "comment" : "Bottle-cycle caption while Home re-counts today's jar",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Once it's checked, the preview continues from today's jar"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -231,10 +924,232 @@
     "確認中" : {
       "comment" : "Shown instead of the jar total and its long-term milestone while Home re-counts today's jar",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking…"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "確認中"
+          }
+        }
+      }
+    },
+    "積み上がり計画" : {
+      "comment" : "Title of the plan screen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plan Ahead"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "積み上がり計画"
+          }
+        }
+      }
+    },
+    "続け方を選ぶ" : {
+      "comment" : "Plan section title: pick the routine to project",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose Your Routine"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "続け方を選ぶ"
+          }
+        }
+      }
+    },
+    "計画の経過期間" : {
+      "comment" : "VoiceOver: the slider that picks how far into the plan to preview",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Time into the plan"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "計画の経過期間"
+          }
+        }
+      }
+    },
+    "計画上の集中" : {
+      "comment" : "Theme name of the gems in the plan's preview jar (never saved)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Planned focus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "計画上の集中"
+          }
+        }
+      }
+    },
+    "計画期間" : {
+      "comment" : "Plan control: how many years the plan runs",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plan Length"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "計画期間"
+          }
+        }
+      }
+    },
+    "計画期間 %lld年" : {
+      "comment" : "VoiceOver: the plan-length stepper; the argument is a number of years",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Plan length, %lld year"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Plan length, %lld years"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "計画期間 %lld年"
+          }
+        }
+      }
+    },
+    "試算の前提" : {
+      "comment" : "Plan card title: the assumptions behind the numbers",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "How This Is Calculated"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "試算の前提"
+          }
+        }
+      }
+    },
+    "週%lld回" : {
+      "comment" : "Plan value: focus sessions per week",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld per week"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "週%lld回"
+          }
+        }
+      }
+    },
+    "週の集中回数" : {
+      "comment" : "Plan control: focus sessions per week",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus Sessions per Week"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "週の集中回数"
+          }
+        }
+      }
+    },
+    "週の集中回数 %lld回" : {
+      "comment" : "VoiceOver: the sessions-per-week stepper; the argument is the count",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus sessions per week, %lld"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "週の集中回数 %lld回"
+          }
+        }
+      }
+    },
+    "長期の時間の核" : {
+      "comment" : "Plan: the long-term time core milestones (2.5 kg, 25 kg, 250 kg…)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Long-Term Time Core"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "長期の時間の核"
+          }
+        }
+      }
+    },
+    "集中時間" : {
+      "comment" : "Plan results: focus time the plan adds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus time"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中時間"
           }
         }
       }
