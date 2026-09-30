@@ -297,6 +297,21 @@ final class SettingsPaywallUITests: XCTestCase {
         XCTAssertTrue(reveal(text(containing: "Proは1回だけの買い切りです")))
         attach("\(prefix) — Pro beside the timer")
 
+        // F5. The rows that open the timer end sound and strength lists keep
+        // their 44 pt target, name the chosen value, and stay inside the
+        // window. At AX5 the value moves under the label instead of
+        // squeezing it.
+        let window = app.windows.firstMatch.frame
+        for identifier in ["settings.completion-sound", "settings.alarm-strength"] {
+            let row = element(identifier)
+            XCTAssertTrue(reveal(row), identifier)
+            XCTAssertGreaterThanOrEqual(row.frame.height, 43.5, identifier)
+            XCTAssertLessThanOrEqual(row.frame.maxX, window.maxX + 1, identifier)
+            XCTAssertGreaterThanOrEqual(row.frame.minX, window.minX - 1, identifier)
+            XCTAssertFalse((row.value as? String ?? "").isEmpty, "\(identifier) names its choice")
+            attach("\(prefix) — \(identifier)")
+        }
+
         // Only this card's switches are off by default: the leave-pause
         // series in the Focus card is on by default.
         let notificationsFooter = element("settings.notifications-footer")

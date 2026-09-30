@@ -39,6 +39,36 @@ def read_release_version(project_source: str) -> tuple[str, str]:
     return values[0], values[1]
 
 
+def read_app_usage_descriptions(configuration_source: str) -> tuple[str, ...]:
+    """Read the reviewed permission prompts from AppStore/configuration.yml.
+
+    The top-level `app_usage_descriptions:` list is the single reviewed list:
+    validate-store-metadata.py compares it with PomoGem/Info.plist and the
+    archive verifier with the archived app. A branch that adds a permission
+    prompt adds one line here (and its purpose string elsewhere); nothing else
+    hard-codes the set.
+    """
+    import re
+
+    lines = configuration_source.splitlines()
+    starts = [index for index, line in enumerate(lines) if line.rstrip() == "app_usage_descriptions:"]
+    if len(starts) != 1:
+        raise ValueError("configuration.yml must declare app_usage_descriptions exactly once")
+    values = []
+    for line in lines[starts[0] + 1:]:
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if not line.startswith(" "):
+            break
+        match = re.fullmatch(r"  - (NS[A-Za-z]+UsageDescription)\s*", line)
+        if match is None:
+            raise ValueError("configuration.yml app_usage_descriptions must list only NS*UsageDescription keys")
+        values.append(match.group(1))
+    if not values or len(values) != len(set(values)):
+        raise ValueError("configuration.yml app_usage_descriptions must be a non-empty list without duplicates")
+    return tuple(values)
+
+
 def validate_bundle_capability_allowlist(
     entitlements: dict,
     *,
@@ -53,6 +83,7 @@ def validate_bundle_capability_allowlist(
     Time Sensitive notifications are exclusive to, and required by, the app:
     only its timer-end alerts use that interruption level, and without the
     entitlement iOS silently downgrades them under Focus/Do Not Disturb.
+    AlarmKit needs no entitlement in any bundle (only a usage description).
     CloudKit/APNs values are additionally checked by the archive verifier;
     profile authorizations may be broader than signed CloudKit claims.
     """
@@ -83,6 +114,12 @@ def validate_bundle_capability_allowlist(
         if is_profile:
             allowed |= {"com.apple.developer.ubiquity-container-identifiers",
                         "com.apple.developer.ubiquity-kvstore-identifier"}
+    # AlarmKit (the optional iOS 26 end-of-timer alarm) is authorized by the
+    # NSAlarmKitUsageDescription Info.plist key alone. There is no AlarmKit
+    # entitlement; a made-up one such as com.apple.developer.alarmkit breaks
+    # provisioning, so name it explicitly instead of a generic mismatch.
+    if any("alarmkit" in str(key).lower() for key in entitlements):
+        raise ValueError("AlarmKit has no entitlement; remove the AlarmKit key and keep only NSAlarmKitUsageDescription")
     if set(entitlements) - allowed:
         raise ValueError("entitlement keys differ from the reviewed bundle capability allowlist")
     if "keychain-access-groups" in entitlements:

@@ -421,6 +421,9 @@ final class SystemCompleteDataDeletionDeviceState: CompleteDataDeletionDeviceSta
         // Invalidate in-flight adds before clearing OS state so a suspended
         // timer/return-reminder request cannot reappear after deletion.
         await NotificationManager.shared.cancelAllTimerNotifications()
+        // F5: every system alarm of this app, orphans included, and the
+        // alarm sounds rendered into Library/Sounds.
+        await FocusEndAlarmMaintenance.eraseForCompleteDataDeletion()
         notificationCenter.removeAllPendingNotificationRequests()
         notificationCenter.removeAllDeliveredNotifications()
         try await notificationCenter.setBadgeCount(0)

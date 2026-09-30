@@ -270,7 +270,8 @@ final class FocusLeaveNudgeFixture {
     private var heldAdd: CheckedContinuation<Void, Never>?
     private var holdStarted: XCTestExpectation?
 
-    init() throws {
+    /// `systemAlarms`: the F5 scheduler the manager cancels with an end.
+    init(systemAlarms: FocusEndAlarmScheduler? = nil) throws {
         defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defaults.set(true, forKey: FocusLeavePolicy.enabledDefaultsKey)
         defaults.set(true, forKey: FocusLeavePolicy.nudgesEnabledDefaultsKey)
@@ -299,7 +300,8 @@ final class FocusLeaveNudgeFixture {
                 removePending: removePending,
                 removeDelivered: { [self] in removedDelivered.append(contentsOf: $0) }
             ),
-            focusReturnReminderDefaults: defaults
+            focusReturnReminderDefaults: defaults,
+            systemAlarms: systemAlarms
         )
     }
 

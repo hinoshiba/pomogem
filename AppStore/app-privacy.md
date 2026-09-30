@@ -51,6 +51,9 @@ Apple teamの実際のaccess、mail運用を照合して最終回答します。
   Core Motion managerの追加はない。端末から届く向きとタイマー中の一時的な手動選択は実行中のメモリだけに
   保持する。設定で選ぶ既定の向き（自動／上／右／下／左）だけをこのiPhoneのUserDefaultsに保存し、
   同期・送信・JSON書き出しはしない。通常の記録リセットでは保持し、アプリ削除時には消去される
+- 終了アラーム（1.1.0候補）: 音と強さの選択と、AlarmKitで予約したアラームのID・セッションID・終了時刻は
+  端末内UserDefaultsだけに保存し、同期・送信しない。アラーム音は端末上で合成して`Library/Sounds`へ
+  書き出し、backup対象外。AlarmKitのアラームはAppleが端末内で鳴らし、developer serverへ送らない
 - shareは利用者の明示操作でsystem share sheetへ渡すだけ
 - 全11種類の出荷対象SwiftData保存データのversioned JSON exportも、利用者の明示操作だけで生成し、
   選択した保存・共有先へ渡す。JSON再importはなく、このファイルによる復元・移行には対応しない。

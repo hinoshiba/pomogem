@@ -31,6 +31,9 @@
     "iOS：%@" : {
       "comment" : "Support mail line; the argument is the iOS version, e.g. 26.5"
     },
+    "「やわらかいベル」は音が小さく、iPhoneのスピーカーでは聞こえにくいことがあります。終わりに気付かないときは、「アラーム」の音から選んでください。" : {
+      "comment" : "Footer under the chimes in the timer end sound list; names the Soft Bell chime. Suggested English: Soft Bell is quiet and can be hard to hear on the iPhone speaker. If you miss the end, choose one of the Alarms."
+    },
     "「抽選しない」を選択として保存" : {
 
     },
@@ -39,6 +42,9 @@
     },
     "「視差効果を減らす」がオンのため、いまは控えめで表示しています。" : {
       "comment" : "Settings note under Effect intensity while the system Reduce Motion setting is on"
+    },
+    "「設定」アプリを開く" : {
+      "comment" : "Button under the Maximum alarm strength when alarms are denied: opens PomoGem in the Settings app. Suggested English: Open Settings"
     },
     "「集中が切れたらお知らせ」は、タイマーが止まっていることを知らせる通知で、アプリに戻ると残りは届きません。このiPhoneで通知を許可していない場合は届きません。「アプリを離れたら一時停止」がオンのあいだは、「集中に戻るお知らせ」の代わりにこちらを使います。" : {
       "comment" : "Settings footer under the leave-pause notification switch; it replaces the older Return-to-Focus Reminder while the leave pause is on. The switch is on by default, so the permission sentence is a plain fact with no call to action. Suggested English: These notifications say the timer is paused, and the rest are withdrawn when you come back. They do not arrive unless notifications are allowed on this iPhone. While Pause When You Leave the App is on, they replace the Return-to-Focus Reminder."
@@ -61,11 +67,29 @@
     "アプリのバージョンなどを自動で記入します" : {
       "comment" : "Settings row subtitle: the mail draft is pre-filled with versions and settings"
     },
+    "アプリを開いていないときにアラームで知らせるには、アラームの許可が必要です。" : {
+      "comment" : "Settings, Maximum alarm strength before the Alarms permission was asked. Suggested English: To ring an alarm while the app is not open, allow alarms."
+    },
+    "アプリを開いていないときのアラームには、iOS 26以降が必要です。このiPhoneでは、アプリを開いているときだけサイレントスイッチがオンでも鳴り、ロック中は通知で知らせます。" : {
+      "comment" : "Settings, Maximum alarm strength before iOS 26. Suggested English: An alarm while the app is not open needs iOS 26 or later. On this iPhone, only the in-app alarm plays with the silent switch on, and a locked iPhone gets a notification."
+    },
+    "アプリを開いていないときは、アラームで知らせます。" : {
+      "comment" : "Settings, Maximum alarm strength with alarms allowed. Suggested English: While the app is not open, an alarm rings."
+    },
     "アプリを離れたら一時停止" : {
       "comment" : "Settings switch title: pause a running focus when the person goes to the Home Screen or another app. Suggested English: Pause When You Leave the App"
     },
     "アプリ：ポモジェム %@" : {
       "comment" : "Support mail line; the argument is the app version, e.g. 1.1.0 (10)"
+    },
+    "アラーム" : {
+      "comment" : "Header of the five alarm-grade timer end sounds. Suggested English: Alarms"
+    },
+    "アラームが許可されていないため、アプリを開いていないときは通知で知らせます（音はサイレントスイッチに従います）。「設定」アプリでポモジェムのアラームを許可すると、アラームで知らせます。" : {
+      "comment" : "Settings, Maximum alarm strength with the Alarms permission denied. Suggested English: Alarms are not allowed, so while the app is not open a notification is used (its sound follows the silent switch). Allow alarms for PomoGem in the Settings app to ring an alarm."
+    },
+    "アラームを許可" : {
+      "comment" : "Button under the Maximum alarm strength: asks for the Alarms permission. Suggested English: Allow Alarms"
     },
     "オンにしている通知は、このiPhoneではまだ許可されていないため届きません。" : {
       "comment" : "Settings notice under an enabled notification switch: iOS has not asked for notification permission on this device yet"
@@ -82,6 +106,12 @@
     "クレジット" : {
       "comment" : "About page section header: credits"
     },
+    "サイレントスイッチに従います" : {
+      "comment" : "Subtitle of the Sound switch. Suggested English: Follows the silent switch"
+    },
+    "サイレントスイッチに従います。終了アラームだけは、アプリを開いているときはオンでも鳴ります" : {
+      "comment" : "Subtitle of the Sound switch at the Maximum alarm strength: every sound follows the silent switch except the timer end alarm while the app is open. Suggested English: Follows the silent switch, except the timer end alarm while the app is open"
+    },
     "サポートページ" : {
       "comment" : "Settings row: the support web page"
     },
@@ -93,6 +123,12 @@
     },
     "ソースコードとライセンス" : {
       "comment" : "About page link title"
+    },
+    "タイマー終了音" : {
+      "comment" : "Settings row: the sound that ends a focus or break. Suggested English: Timer End Sound"
+    },
+    "チャイム" : {
+      "comment" : "Header of the three original, softer timer end chimes. Suggested English: Chimes"
     },
     "バージョン" : {
       "comment" : "About page row: app version"
@@ -120,6 +156,9 @@
     },
     "以下はアプリが自動で記入しました。記録の内容やテーマ名は含まれていません。不要な行は消してから送れます。" : {
       "comment" : "Support mail body: explains the filled-in lines below it"
+    },
+    "休憩の終わりも同じ強さで知らせます。止めるボタン、VoiceOverの2本指のダブルタップ、アプリを離れることは、どの強さでも止める操作になります。" : {
+      "comment" : "Footer of the alarm strength list. Suggested English: Break ends use the same strength. The Stop button, a VoiceOver two-finger double-tap, or leaving the app stops the alarm at every strength."
     },
     "保存先：%@" : {
       "comment" : "Support mail line; the argument is where records are kept"
@@ -155,7 +194,7 @@
       "comment" : "Support mail: Pro is not owned"
     },
     "未選択" : {
-      "comment" : "Settings focus music row value when no music is chosen yet (English: Not selected)"
+      "comment" : "Settings focus music row value when no music is chosen yet (English: Not selected)\nVoiceOver value of an option that is not chosen. Suggested English: Not selected"
     },
     "朱色" : {
       "comment" : "Theme colour swatch (vermilion)"
@@ -204,6 +243,9 @@
     },
     "紅藤" : {
       "comment" : "Theme colour swatch (orchid)"
+    },
+    "終了アラームの強さ" : {
+      "comment" : "Settings row: how insistently the end rings (Gentle, Standard, Maximum). Suggested English: Alarm Strength"
     },
     "結晶" : {
       "comment" : "Export progress: the collection being written (crystals)"
@@ -265,11 +307,29 @@
     "通知する時刻" : {
       "comment" : "Settings time picker label for reminders"
     },
+    "選ぶと1回鳴らして確かめられます。" : {
+      "comment" : "Footer under the alarm sounds: choosing a sound plays it once. Suggested English: Choosing a sound plays it once."
+    },
+    "選ぶと1回鳴らします" : {
+      "comment" : "VoiceOver hint of a timer end sound option: choosing it plays it once. Suggested English: Plays it once when chosen"
+    },
+    "選択中" : {
+      "comment" : "VoiceOver value of the chosen option in a list. Suggested English: Selected"
+    },
     "集中" : {
       "comment" : "Timer display preview: the phase shown in the ring (集中 · 35% 残り)"
     },
     "集中が切れたらお知らせ" : {
       "comment" : "Settings switch title: the notifications sent while a focus is paused because the person left the app. Suggested English: Notify Me When I Drift Away"
+    },
+    "集中と休憩の終わりを、選んだ音と強さで知らせます。アプリを開いている間にタイマーが終わったときは、止めるまで終了音と強い振動を鳴らし続け、その間は画面をつけたままにします。%@たつと自動的に止まります。通知で知らせたあとや、あとからアプリに戻ったときは鳴らさず、そのまま記録を表示します。音はサイレントスイッチに従います。通知を許可している場合、ロック中は長めの終了音の通知で知らせます。" : {
+      "comment" : "Footer of the Sound & Haptics section at the Standard alarm strength; %@ is a duration such as 3分 (3 min). Suggested English: Focus and break ends use the sound and strength you choose. If the timer ends while the app is open, the sound and a strong vibration continue until you stop them, and the screen stays on meanwhile. They stop by themselves after %@. After a notification, or when you come back later, nothing rings and your record appears. Sound follows the silent switch. With notifications allowed, a locked iPhone gets a notification with a longer sound."
+    },
+    "集中と休憩の終わりを、選んだ音と強さで知らせます。アプリを開いている間にタイマーが終わったときは、短い終了音と触覚を停止操作まで繰り返します。通知で知らせたあとや、あとからアプリに戻ったときは繰り返さず、そのまま記録を表示します。音はサイレントスイッチに従います。通知を許可している場合、ロック中は短い音の通知で1回知らせます。" : {
+      "comment" : "Footer of the Sound & Haptics section at the Gentle alarm strength. Suggested English: Focus and break ends use the sound and strength you choose. If the timer ends while the app is open, a short sound and haptic repeat until you stop them. After a notification, or when you come back later, nothing repeats and your record appears. Sound follows the silent switch. With notifications allowed, a locked iPhone gets one notification with a short sound."
+    },
+    "集中と休憩の終わりを、選んだ音と強さで知らせます。標準と同じように鳴らし続け、アプリを開いているときはサイレントスイッチがオンでも鳴らします。ほかのアプリの音楽は止めずに小さくし、止めると元に戻します。iOS 26以降でアラームを許可すると、アプリを開いていないときの終わりもアラームで知らせます。音をオフにしているときや、アラームを許可していないときは、通知で知らせます（音はサイレントスイッチに従います）。" : {
+      "comment" : "Footer of the Sound & Haptics section at the Maximum alarm strength. Suggested English: Focus and break ends use the sound and strength you choose. Like Standard, it keeps ringing, and while the app is open it plays even with the silent switch on. Music from other apps is lowered, not stopped, and comes back when you stop the alarm. On iOS 26 or later, once you allow alarms, an end while the app is not open rings as an alarm too. With sound off, or without the alarm permission, a notification is used instead (its sound follows the silent switch)."
     },
     "集中の粒・結晶・記念石を表示と集計から外し、0から始めます。テーマと設定は残ります。リセット前の記録はこのiPhoneの中に残り、データの書き出しに含まれることがあります。このiPhoneから完全に消すには、アプリを削除してください。この操作は取り消せません。" : {
       "comment" : "Reset confirmation on a local-only iPhone"
@@ -293,6 +353,9 @@
     },
     "青緑" : {
       "comment" : "Theme colour swatch (teal)"
+    },
+    "音がオフのため、アラームは使わず通知で知らせます。" : {
+      "comment" : "Settings, Maximum alarm strength with the app's sound off. Suggested English: Sound is off, so a notification is used instead of an alarm."
     },
     "（お問い合わせの内容をお書きください。不具合の場合は、操作の手順と起きたことを教えてください。）" : {
       "comment" : "Support mail body: where the person writes their message"

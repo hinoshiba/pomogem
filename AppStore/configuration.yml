@@ -83,6 +83,15 @@ target_capabilities:
   screen_time_monitor:
     - family_controls
     - app_groups
+# Permission prompts in the app's Info.plist. AlarmKit (iOS 26+, the optional
+# system alarm at the end of a focus or break) is authorized by its usage
+# description alone: it has no entitlement or portal capability, so it is
+# pinned here rather than under target_capabilities.
+app_usage_descriptions:
+  - NSMotionUsageDescription
+  - NSPhotoLibraryAddUsageDescription
+  - NSAlarmKitUsageDescription
+  - NSAppleMusicUsageDescription
 screen_time:
   enabled_by_default: false
   authorization: family_controls_individual
@@ -355,6 +364,7 @@ release_blockers:
   - owner must accept the focus partition trade-off that materialized completions survive delayed cancellation
   - owner must accept the fail-closed interactive recovery ceiling when more than 256 corrupt active logical timer sessions precede a valid session, or ship a versioned reversible quarantine design
   - Japan paid-IAP operator disclosure and pre-purchase legal presentation require owner or qualified legal determination
+  - verify the F5 end-of-timer alarm on a signed iOS 26 device before shipping NSAlarmKitUsageDescription (the timer screens now book it; simulator unit and UI tests are not a pass): the permission prompt, a 最大 focus and break that end locked ring the system alarm with the Library/Sounds ringtone through .named, Stop and Open App, the hand-off when the app is open at the end, the silent switch in and out of the app, a Focus, and that Apple Music ducks and returns; at 標準 the screen stays on while the alarm rings and auto-stops after 3 minutes (AppStore/submission-checklist.md)
   - complete StoreKit Sandbox, signed-device, TestFlight, App Store metadata, and distribution-signing verification
   - enable the MusicKit App Service on App ID com.hinoshiba.pomogem and verify focus music on a signed device with and without an Apple Music subscription (Docs/FocusMusic.md)
 

@@ -488,4 +488,51 @@ private struct FixtureLedgerRow: View {
             }
     }
 }
+
+/// F2 on the focus screen. With `POMOGEM_UI_TEST_FOCUS_SHIELD=1` (in-memory
+/// UI-test launch only), the focus screen's notice line
+/// (`FocusShieldController.focusScreen`) follows a shield this fixture runs
+/// through the real `FocusShieldController` and `FocusShieldEngine` over the
+/// same in-memory ManagedSettings and DeviceActivity doubles as the settings
+/// fixture, with the seeded distraction app and the shield switched on. It
+/// reconciles on every saved-timer change, like
+/// `ScreenTimeIntegrationModifier`. The app launches normally; nothing here
+/// touches `ScreenTimeController.shared`, which a Simulator can never bind.
+@MainActor
+enum FocusScreenShieldUITestFixture {
+    static let environmentKey = "POMOGEM_UI_TEST_FOCUS_SHIELD"
+
+    static let controller: FocusShieldController? = {
+        guard LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess,
+              LocalPreviewLaunchPolicy.persistenceModeForCurrentProcess == .inMemoryPreview,
+              ProcessInfo.processInfo.environment[environmentKey] == "1" else { return nil }
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("FocusScreenShieldUITestFixture-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let controller = FocusShieldController(engine: FocusShieldEngine(
+            records: FocusShieldRecordStore(directory: directory),
+            settings: ScreenTimeSettingsUITestFixtureShieldSettings(),
+            center: ScreenTimeSettingsUITestFixtureCenter()
+        ))
+        var configuration = ScreenTimeSettingsUITestFixture.seededConfiguration(themeID: UUID())
+        configuration.shieldsDistractionDuringFocusEnabled = true
+        @MainActor func reconcile() {
+            let envelope = FocusPersistence.load()
+            controller.reconcile(
+                configuration: configuration,
+                authorization: .approved,
+                focus: FocusShieldFocusState(envelope: envelope, dataEpochID: envelope?.dataEpochID)
+            )
+        }
+        FocusScreenShieldUITestFixture.observer = NotificationCenter.default.addObserver(
+            forName: FocusPersistence.didChange, object: nil, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated { reconcile() }
+        }
+        reconcile()
+        return controller
+    }()
+
+    private static var observer: NSObjectProtocol?
+}
 #endif

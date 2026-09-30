@@ -23,6 +23,7 @@ StoreKitの`displayPrice`を正本とします。
 | Apple SDK frameworks | Xcode 26 SDK | platform-linked | Apple agreements | Apple platform app内だけで利用 |
 | SF Symbols／system fonts | OS／SDK | system描画 | Apple terms | UIだけ。logo／iconへ未使用 |
 | 瓶・タイマーの効果音／触覚 | app sourceによる実行時生成 | binaryにsource logicのみ | Swift sourceはMIT、Apple framework | AVFoundationで数学的にPCM生成。ロック中の通知音も同じPCMを端末内`Library/Sounds`へCAF化し、Core Hapticsはsource内patternを使用。第三者sample、録音、AHAP、生成AI音源なし |
+| 終了アラーム音（既存3種＋ベル、デジタル、マリンバ、学校のチャイム、目覚まし時計） | `PomoGem/Core/Alarm/AlarmSoundSynthesis.swift`による実行時生成 | binaryにsource logicのみ | Swift sourceはMIT。「学校のチャイム」の旋律Westminster Quarters（1793年）はpublic domain | FM・modal・加算合成でPCMを計算し、端末上で`Library/Sounds`へ28秒以下の16-bit CAFを書き出して通知とAlarmKitに使う。旋律は音名から独自に実装し、録音・楽譜の版・編曲物は参照していない。商用利用可。第三者sample、録音、AHAP、生成AI音源なし |
 | App icon、Aurora背景、Web／Store画像 | `ASSET_LICENSES.md` | yes／Web配信 | hinoshiba rights reserved、MIT対象外 | hinoshiba公式版は配布可。第三者forkは置換または許可が必要 |
 | StoreKit Non-Consumable | `com.hinoshiba.pomogem.pro.lifetime` | service連携 | Apple StoreKit | digital機能unlockとしてIAPを使用 |
 | GitHub Pages | 製品Web配信 | no | service terms | app binary外。privacy policyへ処理を開示 |

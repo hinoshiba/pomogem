@@ -35,6 +35,8 @@
 	<false/>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.education</string>
+	<key>NSAlarmKitUsageDescription</key>
+	<string>集中や休憩の終わりを、マナーモードや集中モード中でもアラームでお知らせするために使います。</string>
 	<key>NSAppleMusicUsageDescription</key>
 	<string>タイマー画面から『ミュージック』アプリで集中用の音楽を再生するために使います。</string>
 	<key>NSHumanReadableCopyright</key>

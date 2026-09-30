@@ -369,6 +369,7 @@ struct PomoGemApp: App {
         NotificationManager.shared.cancelFocusReturnReminder()
 #if DEBUG
         FocusLeavePreferences.startUITestProcessFromItsDefault()
+        AlarmPreferences.startUITestProcessFromItsDefault()
 #endif
 
         if !ReleaseExternalSurfacePolicy.supportsLiveActivities
@@ -925,6 +926,12 @@ private struct PomoGemPersistenceLaunchHost: View {
             .environment(\.cloudKitMirroringActivity,
                          current.mode == .cloudKit && !current.isCloudOffline ? mirroringActivity : nil)
             .task(id: scenePhase) {
+                if scenePhase == .active {
+                    // F5: the saved timer now names this account's timer.
+                    // Orphan and stale system alarms go; a ringing one stays.
+                    FocusEndAlarmMaintenance.reconcileOnActivation()
+                    FocusEndAlarmMaintenance.maintainSoundFilesOncePerProcess()
+                }
                 if let cleanupID, let cleanupNamespace {
                     // The first settled cloud mount after a commit is also the
                     // one chance the late-arrival receipt gets. Evaluated after

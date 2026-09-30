@@ -473,6 +473,11 @@ struct FocusView: View {
     @State private var leavePause: FocusLeavePauseMarker?
     /// F1. What the running row may promise about leaving and locking.
     @State private var runningNotice: FocusLeavePolicy.RunningNotice = .keepsRunning
+    /// F5. The end this screen took over from its system alarm just before
+    /// it; leaving before that end books the notification instead.
+    @State private var endHandoff = TimerEndHandoff()
+    /// F2. The notice line says so while this iPhone's shield is up.
+    @ObservedObject private var focusShield = FocusShieldController.focusScreen
     @AccessibilityFocusState private var completionSaveRetryFocused: Bool
     @AccessibilityFocusState private var completionAlertStopFocused: Bool
 
@@ -895,6 +900,15 @@ struct FocusView: View {
             + materializedValues + claimValues)
             .sorted()
     }
+    /// F5. Announces the end while the app is away (alarm or notification).
+    private var endBooker: TimerEndAnnouncementBooker { .shared }
+    /// F5. The ringing completion alarm holds the display (auto-lock would
+    /// otherwise end it, since leaving counts as Stop).
+    private var alarmKeepsScreenAwake: Bool {
+        pendingCompletion.map {
+            completionAlert.keepsScreenAwake(sessionID: $0.sessionID)
+        } ?? false
+    }
     private var ownsCurrentTimer: Bool {
         guard allowsLocalNotifications, let currentSessionID else { return false }
         let claims = currentFocusDeviceClaims.map(\.policySnapshot)
@@ -967,11 +981,18 @@ struct FocusView: View {
         // VoiceOver's two-finger double-tap performs the screen's main action:
         // stop a repeating completion alarm, otherwise pause or resume.
         .accessibilityAction(.magicTap) { performMagicTap() }
+#if DEBUG && targetEnvironment(simulator)
+        .overlay(alignment: .topLeading) { TimerScreenAwakeUITestProbe() }
+        .onReceive(NotificationCenter.default.publisher(
+            for: TimerScreenAwakeUITestLedger.magicTapNotification
+        )) { _ in performMagicTap() }
+#endif
         .onAppear { router.beginFocusPresentation() }
         .task { await beginActivation() }
         .onReceive(ticker) { date in
             displayNow = date
             updateIdleTimer(at: date)
+            handOffEndToThisScreenIfDue(at: date)
             // Absolute end dates keep advancing while locked/backgrounded. Do
             // not consume completion in the brief inactive run-loop window:
             // doing so can cancel the already-scheduled OS notification before
@@ -1037,6 +1058,9 @@ struct FocusView: View {
             if !retired, ownsCurrentTimer {
                 Task { await refreshExternalTimerPresentation() }
             }
+        }
+        .onChange(of: alarmKeepsScreenAwake) { _, _ in
+            updateIdleTimer()
         }
         .onChange(of: preferencesFingerprint) { _, _ in
             configureSensoryPreferences()
@@ -1346,13 +1370,29 @@ struct FocusView: View {
         }
     }
 
+    /// One line in one 44 pt row; which one wins is `FocusTimerNoticeLine`.
     @ViewBuilder
     private var completionNotificationStatus: some View {
-        if snapshot.phase == .paused {
+        if noticeLine == .shield {
+            Label(FocusShieldCopy.focusNotice, systemImage: "hand.raised.fill")
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+                .accessibilityIdentifier("focus.shield-notice")
+        } else if snapshot.phase == .paused {
             pausedNotificationStatus
         } else if snapshot.phase == .focusing {
             focusingNotificationStatus
         }
+    }
+
+    private var noticeLine: FocusTimerNoticeLine {
+        FocusTimerNoticeLine.resolve(
+            timerIsRunningOrPaused: snapshot.phase == .focusing || snapshot.phase == .paused,
+            showsLeavePause: snapshot.phase == .paused
+                && leavePause.map { $0.sessionID == engine.currentSessionID } == true,
+            endAlertFailed: snapshot.phase == .focusing && notificationScheduleState.isFailed,
+            isShielding: focusShield.isShielding
+        )
     }
 
     /// A paused timer does not run, so 「画面を閉じても進みます」 would be false
@@ -1412,7 +1452,11 @@ struct FocusView: View {
     private var focusingNotificationStatus: some View {
         switch notificationScheduleState {
         case .scheduled where notifications.isAuthorized:
-            scheduledRunningNotice
+            scheduledRunningNotice(announcesWithAlarm: false)
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+        case .systemAlarm:
+            scheduledRunningNotice(announcesWithAlarm: true)
                 .font(.caption)
                 .foregroundStyle(PomoGemTheme.muted)
         case .scheduling:
@@ -1447,10 +1491,20 @@ struct FocusView: View {
 
     /// The running row's promise must stay true (F1): with the leave pause on,
     /// the timer runs while locked only when a passcode lets the app tell a
-    /// lock from leaving.
+    /// lock from leaving. With a system alarm booked (F5) it says so.
     @ViewBuilder
-    private var scheduledRunningNotice: some View {
+    private func scheduledRunningNotice(announcesWithAlarm: Bool) -> some View {
         switch runningNotice {
+        case .keepsRunning where announcesWithAlarm:
+            Label {
+                Text(
+                    "画面を閉じてもタイマーは進み、終了時にアラームで知らせます",
+                    tableName: "Focus",
+                    comment: "Running focus whose end is announced by a system alarm (iOS 26 AlarmKit, strength 最大). Suggested English: Keeps running with the screen off, and an alarm rings at the end"
+                )
+            } icon: {
+                Image(systemName: "alarm.fill")
+            }
         case .keepsRunning:
             Label("画面を閉じてもタイマーは進み、終了時に通知します", systemImage: "bell.badge.fill")
         case .pausesWhenLeavingButNotWhenLocked:
@@ -1793,6 +1847,11 @@ struct FocusView: View {
             } else {
                 notificationScheduleState = .idle
             }
+            // F5: alarms the person allowed announce the end without
+            // notifications.
+            if endBooker.channel(playsSound: sensoryPreferences.soundOn) == .systemAlarm {
+                await scheduleCurrentCompletionNotification()
+            }
             return
         }
         await scheduleCurrentCompletionNotification()
@@ -1884,13 +1943,17 @@ struct FocusView: View {
         }
     }
 
+    /// Books this focus's end through `TimerEndAnnouncementBooker` (F5): the
+    /// system alarm at 最大 when alarms are allowed, otherwise the Time
+    /// Sensitive notification. The booker decides every permission, so this
+    /// runs whether or not notifications are allowed.
     @MainActor
     private func scheduleCurrentCompletionNotification() async {
         guard isViewActive else { return }
         notificationScheduleGeneration &+= 1
         let generation = notificationScheduleGeneration
+        let playsSound = sensoryPreferences.soundOn
         guard ownsCurrentTimer,
-              notifications.isAuthorized,
               engine.snapshot(at: .now).phase == .focusing,
               let sessionID = engine.currentSessionID,
               let endDate = engine.endDate
@@ -1910,17 +1973,16 @@ struct FocusView: View {
         // the old, earlier delivery Date while this add is in flight could
         // suppress the in-app cue before the replacement has actually fired.
         invalidateScheduledCompletionNotificationWitness()
-        notificationScheduleState = .scheduling
+        notificationScheduleState = TimerEndAnnouncementWiring.showsScheduling(
+            for: endBooker.channel(playsSound: playsSound)
+        ) ? .scheduling : .idle
         do {
-            let scheduleResult = try await notifications
-                .scheduleFocusCompletion(
+            let outcome = try await endBooker.bookFocusEnd(
                 sessionID: sessionID,
                 endDate: endDate,
-                playsSound: sensoryPreferences.soundOn,
+                playsSound: playsSound,
                 completionSound: sensoryPreferences.timerCompletionSound
             )
-            guard case let .accepted(notificationDeliveryDate) = scheduleResult
-            else { return }
             guard !Task.isCancelled,
                   isViewActive,
                   notificationScheduleGeneration == generation else { return }
@@ -1930,17 +1992,32 @@ struct FocusView: View {
             // the actual pending request; keep the visible status equally
             // honest by accepting success only for the same active intent.
             let currentSnapshot = engine.snapshot(at: .now)
-            if ownsCurrentTimer,
-               engine.currentSessionID == sessionID,
-               currentSnapshot.phase == .focusing,
-               engine.endDate == endDate {
-                scheduledCompletionNotificationDeliveryDate =
-                    notificationDeliveryDate
-                notificationScheduleState = .scheduled
-                saveRecoveryState()
-            } else {
+            guard ownsCurrentTimer,
+                  engine.currentSessionID == sessionID,
+                  currentSnapshot.phase == .focusing,
+                  engine.endDate == endDate
+            else {
                 scheduledCompletionNotificationDeliveryDate = nil
                 notificationScheduleState = .idle
+                return
+            }
+            switch TimerEndAnnouncementWiring.settlement(for: outcome) {
+            case let .notification(deliveryDate):
+                scheduledCompletionNotificationDeliveryDate = deliveryDate
+                notificationScheduleState = .scheduled
+                saveRecoveryState()
+            case .systemAlarm:
+                notificationScheduleState = .systemAlarm
+                saveRecoveryState()
+            case .noChannel:
+                notificationScheduleState = .idle
+            case .superseded:
+                if TimerEndAnnouncementWiring.settlesSupersededAsIdle(
+                    generationIsCurrent: true,
+                    isScheduling: notificationScheduleState.isScheduling
+                ) {
+                    notificationScheduleState = .idle
+                }
             }
         } catch {
             guard !Task.isCancelled,
@@ -1953,6 +2030,66 @@ struct FocusView: View {
                 notificationScheduleState = .failed(message: error.localizedDescription)
             } else {
                 scheduledCompletionNotificationDeliveryDate = nil
+                notificationScheduleState = .idle
+            }
+        }
+    }
+
+    /// F5: just before the end with the app on screen, the in-app alarm
+    /// takes over from the system alarm, so only one of them rings.
+    private func handOffEndToThisScreenIfDue(at date: Date) {
+        guard pendingCompletion == nil,
+              engine.snapshot(at: date).phase == .focusing,
+              let sessionID = engine.currentSessionID,
+              let endDate = engine.endDate,
+              let handedOff = endBooker.handOffToForegroundIfDue(
+                  sessionID: sessionID,
+                  endDate: endDate,
+                  applicationIsActive: scenePhase == .active,
+                  now: date
+              )
+        else { return }
+        endHandoff.record(sessionID: sessionID, endDate: handedOff)
+        // A booking still in flight was superseded; the end is this screen's
+        // now, so #49 must not wait for that booking's answer.
+        notificationScheduleGeneration &+= 1
+        if notificationScheduleState.isScheduling {
+            notificationScheduleState = .systemAlarm
+        }
+    }
+
+    /// F5: the scene stopped being active after the hand-off and before the
+    /// end. Nothing else would announce it, so the notification is booked at
+    /// once (never AlarmKit again: the end is too close).
+    private func rebookEndAfterLeavingDuringHandoff() {
+        let now = Date.now
+        let rebooked = endHandoff.endToRebookOnLeaving(
+            sessionID: engine.currentSessionID,
+            endDate: engine.endDate,
+            isRunning: pendingCompletion == nil
+                && engine.snapshot(at: now).phase == .focusing,
+            now: now
+        )
+        guard let endDate = rebooked, let sessionID = engine.currentSessionID
+        else { return }
+        notificationScheduleGeneration &+= 1
+        let generation = notificationScheduleGeneration
+        notificationScheduleState = .scheduling
+        Task { @MainActor in
+            let result = try? await endBooker.bookFocusEndAfterLeavingDuringHandoff(
+                sessionID: sessionID,
+                endDate: endDate,
+                playsSound: sensoryPreferences.soundOn,
+                completionSound: sensoryPreferences.timerCompletionSound
+            )
+            guard notificationScheduleGeneration == generation else { return }
+            if case let .accepted(deliveryDate)? = result,
+               engine.currentSessionID == sessionID,
+               engine.endDate == endDate {
+                scheduledCompletionNotificationDeliveryDate = deliveryDate
+                notificationScheduleState = .scheduled
+                saveRecoveryState()
+            } else {
                 notificationScheduleState = .idle
             }
         }
@@ -2011,14 +2148,20 @@ struct FocusView: View {
     @MainActor
     private func updateIdleTimer(at date: Date = .now) {
         let currentSnapshot = engine.snapshot(at: date)
+        let sceneIsActive = scenePhase == .active
         let shouldKeepScreenAwake =
-            TimerScreenAwakePolicy.shouldKeepScreenAwake(
-                preferenceEnabled:
-                    resolvedPreferences?.keepScreenAwake ?? false,
-                sceneIsActive: scenePhase == .active,
-                timerIsRunning:
-                    isViewActive && currentSnapshot.phase.isRunning,
-                remainingSeconds: currentSnapshot.remainingSeconds
+            TimerCompletionAlarmScreenAwakePolicy.shouldKeepScreenAwake(
+                runningTimerKeepsScreenAwake:
+                    TimerScreenAwakePolicy.shouldKeepScreenAwake(
+                        preferenceEnabled:
+                            resolvedPreferences?.keepScreenAwake ?? false,
+                        sceneIsActive: sceneIsActive,
+                        timerIsRunning:
+                            isViewActive && currentSnapshot.phase.isRunning,
+                        remainingSeconds: currentSnapshot.remainingSeconds
+                    ),
+                sceneIsActive: sceneIsActive,
+                alarmKeepsScreenAwake: isViewActive && alarmKeepsScreenAwake
             )
         guard UIApplication.shared.isIdleTimerDisabled != shouldKeepScreenAwake
         else { return }
@@ -2206,6 +2349,7 @@ struct FocusView: View {
     private func acknowledgeCompletionAlert(_ result: PomodoroCompletion) {
         markCompletionAlertAcknowledged(result)
         completionAlert.stop(sessionID: result.sessionID)
+        updateIdleTimer()
         guard completionPersistenceSucceeded else { return }
         Task { await finishCommittedCompletion(result) }
     }
@@ -2751,6 +2895,9 @@ struct FocusView: View {
         guard !didSignalCompletion else { return }
         didSignalCompletion = true
         NotificationManager.shared.cancelFocusCompletion(sessionID: result.sessionID)
+        // The person is looking at the end: a system alarm that rings stops
+        // (Stop), and one that rang stays the delivery witness.
+        endBooker.acknowledgeEnd(sessionID: result.sessionID)
         scheduledCompletionNotificationDeliveryDate = nil
         notificationScheduleState = .idle
         let soundOn = sensoryPreferences.soundOn
@@ -2779,7 +2926,9 @@ struct FocusView: View {
                 markCompletionAlertAcknowledged(result)
             }
         }
-        UIApplication.shared.isIdleTimerDisabled = false
+        // The running timer no longer holds the display; the ringing alarm
+        // does (F5), so auto-lock cannot end it.
+        updateIdleTimer()
         guard UIAccessibility.isVoiceOverRunning else { return }
         guard completionAlert.isActive(sessionID: result.sessionID) else {
             UIAccessibility.post(
@@ -2816,6 +2965,9 @@ struct FocusView: View {
     private func resumeCompletionAlertIfNeeded(
         _ result: PomodoroCompletion
     ) {
+        // Resolved earlier; a system alarm of it must not ring now (F5).
+        endBooker.acknowledgeEnd(sessionID: result.sessionID)
+        defer { updateIdleTimer() }
         completionAlertWasAcknowledged =
             TimerCompletionAlertAcknowledgementStore.contains(
                 sessionID: result.sessionID
@@ -3261,9 +3413,8 @@ struct FocusView: View {
                 leavePause = nil
                 if let sessionID = engine.currentSessionID, let endDate = engine.endDate {
                     Task {
-                        if notifications.isAuthorized {
-                            await scheduleCurrentCompletionNotification()
-                        }
+                        // The booker decides the permission (F5).
+                        await scheduleCurrentCompletionNotification()
                         await FocusActivityManager.shared.resume(sessionID: sessionID, endDate: endDate)
                     }
                 }
@@ -3475,6 +3626,7 @@ struct FocusView: View {
         if newPhase == .inactive || newPhase == .background {
             saveRecoveryState()
             UIApplication.shared.isIdleTimerDisabled = false
+            rebookEndAfterLeavingDuringHandoff()
             return
         }
 
@@ -3538,19 +3690,26 @@ struct FocusView: View {
                     now: now,
                     uptime: uptime
                 )
+        let notificationDeliveryDate = notificationTimingIsTrustworthy
+            ? currentNotificationDeliveryWitness
+            : nil
+        // F5: a system alarm whose time came announced the end as well.
+        let externalAlertMayHaveFired = engine.currentSessionID.map {
+            endBooker.externalAlertMayHaveFired(
+                sessionID: $0,
+                notificationAuthorized: notifications.isAuthorized,
+                notificationDeliveryDate: notificationDeliveryDate,
+                now: now
+            )
+        } ?? TimerCompletionForegroundFeedbackPolicy.notificationMayHaveDelivered(
+            isAuthorized: notifications.isAuthorized,
+            expectedDeliveryDate: notificationDeliveryDate,
+            now: now
+        )
         return TimerCompletionForegroundFeedbackPolicy.cue(
             recoveredAfterExpiration: recoveredAfterExpiration,
             returnedFromBackground: returnedFromBackground,
-            notificationMayHaveDelivered:
-                TimerCompletionForegroundFeedbackPolicy
-                    .notificationMayHaveDelivered(
-                        isAuthorized: notifications.isAuthorized,
-                        expectedDeliveryDate:
-                            notificationTimingIsTrustworthy
-                            ? currentNotificationDeliveryWitness
-                            : nil,
-                        now: now
-                    ),
+            notificationMayHaveDelivered: externalAlertMayHaveFired,
             endedAt: engine.endDate ?? now,
             now: now
         )
@@ -3934,10 +4093,18 @@ private enum FocusNotificationScheduleState: Equatable {
     case idle
     case scheduling
     case scheduled
+    /// F5: a system alarm announces the end (no notification witness), or
+    /// this screen took the end over from it just before.
+    case systemAlarm
     case failed(message: String)
 
     var isScheduling: Bool {
         if case .scheduling = self { return true }
+        return false
+    }
+
+    var isFailed: Bool {
+        if case .failed = self { return true }
         return false
     }
 }

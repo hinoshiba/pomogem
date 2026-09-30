@@ -99,6 +99,12 @@
       "note": "F1 leave pause policy and host monitor; its notification copy lives in NotificationManager.swift (Notifications)"
     },
     {
+      "glob": "PomoGem/Core/Alarm/**",
+      "table": "Focus",
+      "package": "l10n-02-focus-system",
+      "note": "F5 end-of-timer alarm: sound names, strength presets and the AlarmKit alert text"
+    },
+    {
       "glob": "PomoGem/Core/WidgetSnapshotStore.swift",
       "table": "Focus",
       "package": "l10n-02-focus-system"

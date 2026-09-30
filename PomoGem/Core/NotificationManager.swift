@@ -77,6 +77,73 @@ enum TimerCompletionNotificationTiming {
 enum TimerCompletionNotificationScheduleResult: Equatable, Sendable {
     case accepted(deliveryDate: Date)
     case superseded
+    /// F5: the caller booked the end as a system alarm
+    /// (`AlarmBackgroundChannel.systemAlarm`), so no notification was booked
+    /// and an earlier one for the same end was withdrawn. Not a delivery
+    /// witness: the alarm's own is `FocusEndAlarmScheduler
+    /// .deliveryWitnessFireDate`.
+    case deferredToSystemAlarm
+}
+
+/// Which sound the focus- or break-end Time Sensitive request plays (F5).
+enum TimerEndNotificationSound: Equatable, Sendable {
+    case silent
+    /// The original synced chime (`TimerCompletionSoundLibrary`), as today.
+    case legacyChime(TimerCompletionSound)
+    /// One cycle of a new sound (the gentle preset).
+    case alarmCue(AlarmSoundChoice)
+    /// The ≤ 28 s ringtone (the standard and maximum presets).
+    case ringtone(AlarmSoundChoice)
+
+    /// Pure: the notification channel from `AlarmChannelPolicy` and this
+    /// iPhone's sound choice. `.systemAlarm` and `.none` book no sound here.
+    static func selection(
+        channel: AlarmBackgroundChannel,
+        choice: AlarmSoundChoice
+    ) -> TimerEndNotificationSound {
+        switch channel {
+        case .timeSensitiveNotification(.silent), .systemAlarm, .none:
+            return .silent
+        case .timeSensitiveNotification(.shortChime):
+            return choice.legacySound.map(Self.legacyChime) ?? .alarmCue(choice)
+        case .timeSensitiveNotification(.ringtone):
+            return .ringtone(choice)
+        }
+    }
+
+    /// The Library/Sounds file this selection plays (`AlarmSoundLibrary`),
+    /// or nil for silence and for the synced short chime.
+    var alarmSoundFile: (kind: AlarmSoundFileKind, choice: AlarmSoundChoice)? {
+        switch self {
+        case let .ringtone(choice): (.ringtone, choice)
+        case let .alarmCue(choice): (.cue, choice)
+        case .silent, .legacyChime: nil
+        }
+    }
+}
+
+/// The device-local inputs of `TimerEndNotificationSound` and the files it
+/// plays. Injected so tests never render or write Library/Sounds.
+struct TimerEndNotificationSounds {
+    var strength: @MainActor () -> AlarmStrength
+    var choice: @MainActor (TimerCompletionSound) -> AlarmSoundChoice
+    /// A playable file for `.alarmCue` or `.ringtone`, written off the main
+    /// thread when missing. Nil falls back to the synced short chime.
+    var file: @MainActor (TimerEndNotificationSound, UInt64) async -> UNNotificationSound?
+
+    @MainActor
+    static func live(preferences: AlarmPreferences = AlarmPreferences()) -> Self {
+        Self(
+            strength: { preferences.strength },
+            choice: { preferences.sound(legacy: $0) },
+            file: { selection, generation in
+                guard let file = selection.alarmSoundFile else { return nil }
+                return await AlarmSoundLibrary.notificationSound(
+                    file.kind, for: file.choice, generation: generation
+                )
+            }
+        )
+    }
 }
 
 enum FocusReturnReminderPolicy {
@@ -472,6 +539,12 @@ final class NotificationManager {
     private let focusReturnReminderClient: FocusReturnReminderNotificationClient
     private let focusReturnReminderDefaults: UserDefaults
     private let authorizationRequest: () async throws -> Bool
+    /// F5. Nil keeps today's end sound (the synced short chime), which is
+    /// what a manager built by a test without it gets.
+    private let timerEndSounds: TimerEndNotificationSounds?
+    /// F5. Cancelling a focus or break end also cancels its system alarm:
+    /// both announce the same end, and exactly one of them is booked.
+    private let systemAlarms: FocusEndAlarmScheduler?
     private var authorizationRefreshGeneration: UInt64 = 0
     private var latestAuthorizationRefresh: AuthorizationRefreshIntent?
     private var focusNotificationGeneration: UInt64 = 0
@@ -544,7 +617,9 @@ final class NotificationManager {
         requestClient: NotificationRequestClient? = nil,
         focusReturnReminderClient: FocusReturnReminderNotificationClient? = nil,
         focusReturnReminderDefaults: UserDefaults = .standard,
-        authorizationRequest: (() async throws -> Bool)? = nil
+        authorizationRequest: (() async throws -> Bool)? = nil,
+        timerEndSounds: TimerEndNotificationSounds? = nil,
+        systemAlarms: FocusEndAlarmScheduler? = nil
     ) {
         self.center = center
         self.requestClient = requestClient ?? .system(center: center)
@@ -553,6 +628,8 @@ final class NotificationManager {
         self.authorizationRequest = authorizationRequest ?? {
             try await center.requestAuthorization(options: [.alert, .sound])
         }
+        self.timerEndSounds = timerEndSounds
+        self.systemAlarms = systemAlarms
     }
 
     private static func makeShared() -> NotificationManager {
@@ -567,7 +644,10 @@ final class NotificationManager {
             )
         }
 #endif
-        return NotificationManager()
+        return NotificationManager(
+            timerEndSounds: .live(),
+            systemAlarms: .shared
+        )
     }
 
 #if DEBUG
@@ -607,7 +687,9 @@ final class NotificationManager {
                 prompt.hasAsked = true
                 if let answer { return answer == .granted }
                 return try await center.requestAuthorization(options: [.alert, .sound])
-            }
+            },
+            timerEndSounds: .live(),
+            systemAlarms: .shared
         )
     }
 #endif
@@ -687,12 +769,25 @@ final class NotificationManager {
 
     /// Schedules the background completion alert. Reusing a session ID is
     /// idempotent because Notification Center replaces the existing request.
+    ///
+    /// `channel` (F5, from `AlarmChannelPolicy`) decides the sound; nil
+    /// derives the notification channel from this iPhone's alarm strength.
+    /// `.systemAlarm` books no notification: it withdraws an earlier one for
+    /// this session and returns `.deferredToSystemAlarm`.
     func scheduleFocusCompletion(
         sessionID: UUID,
         endDate: Date,
         playsSound: Bool = true,
-        completionSound: TimerCompletionSound = .standard
+        completionSound: TimerCompletionSound = .standard,
+        channel: AlarmBackgroundChannel? = nil
     ) async throws -> TimerCompletionNotificationScheduleResult {
+        if channel == .systemAlarm {
+            // Before the cancellation guard: withdrawing is always safe, and
+            // an alarm that is already booked must never ring next to an
+            // earlier notification for the same end.
+            cancelFocusCompletionRequest(sessionID: sessionID)
+            return .deferredToSystemAlarm
+        }
         guard !Task.isCancelled, !timerSchedulingIsSuspendedForAccountBoundary else {
             return .superseded
         }
@@ -709,6 +804,7 @@ final class NotificationManager {
         )
         focusNotificationGeneration &+= 1
         let generation = focusNotificationGeneration
+        let soundGeneration = AlarmSoundLibrary.preparationGeneration
         focusNotificationIntents[sessionID] = generation
         let previousTask = focusNotificationOperations[sessionID]?.task
         let operationTask = Task<TimerCompletionNotificationScheduleResult, Error> {
@@ -721,6 +817,16 @@ final class NotificationManager {
             if let previousTask {
                 _ = try? await previousTask.value
             }
+            guard focusNotificationIntents[sessionID] == generation else {
+                return .superseded
+            }
+            await applyTimerEndSound(
+                to: content,
+                playsSound: playsSound,
+                completionSound: completionSound,
+                channel: channel,
+                soundGeneration: soundGeneration
+            )
             guard focusNotificationIntents[sessionID] == generation else {
                 return .superseded
             }
@@ -746,11 +852,16 @@ final class NotificationManager {
     /// the registered return reminder and, unless the caller is the leave
     /// pause itself, the 「集中が切れています」 series (critic D7: pausing
     /// because the person left must keep the series that tells them so).
+    ///
+    /// F5: the end's system alarm goes with it (pause, auto-pause, abandon,
+    /// ownership loss, a resolved completion). One that already rang is
+    /// stopped but kept as that session's delivery witness.
     func cancelFocusCompletion(
         sessionID: UUID,
         withdrawingLeaveNudges: Bool = true
     ) {
         cancelFocusCompletionRequest(sessionID: sessionID)
+        systemAlarms?.cancel(sessionID: sessionID)
         if registeredFocusReturnReminder?.sessionID == sessionID {
             registeredFocusReturnReminder = nil
         }
@@ -1065,12 +1176,20 @@ final class NotificationManager {
         focusReturnReminderClient.removeDelivered(identifiers)
     }
 
+    /// The break end rings with the same strength and sound as the focus
+    /// end (owner decision). `channel` works as in `scheduleFocusCompletion`.
     func scheduleBreakCompletion(
         id: UUID,
         endDate: Date,
         playsSound: Bool = true,
-        completionSound: TimerCompletionSound = .standard
+        completionSound: TimerCompletionSound = .standard,
+        channel: AlarmBackgroundChannel? = nil
     ) async throws -> TimerCompletionNotificationScheduleResult {
+        if channel == .systemAlarm {
+            // Before the guard, as in `scheduleFocusCompletion`.
+            cancelBreakCompletionRequest(id: id)
+            return .deferredToSystemAlarm
+        }
         guard !Task.isCancelled, !timerSchedulingIsSuspendedForAccountBoundary else {
             return .superseded
         }
@@ -1082,6 +1201,7 @@ final class NotificationManager {
         )
         breakNotificationGeneration &+= 1
         let generation = breakNotificationGeneration
+        let soundGeneration = AlarmSoundLibrary.preparationGeneration
         breakNotificationIntents[id] = generation
         let previousTask = breakNotificationOperations[id]?.task
         let operationTask = Task<TimerCompletionNotificationScheduleResult, Error> {
@@ -1094,6 +1214,16 @@ final class NotificationManager {
             if let previousTask {
                 _ = try? await previousTask.value
             }
+            guard breakNotificationIntents[id] == generation else {
+                return .superseded
+            }
+            await applyTimerEndSound(
+                to: content,
+                playsSound: playsSound,
+                completionSound: completionSound,
+                channel: channel,
+                soundGeneration: soundGeneration
+            )
             guard breakNotificationIntents[id] == generation else {
                 return .superseded
             }
@@ -1115,11 +1245,27 @@ final class NotificationManager {
         }
     }
 
+    /// Also cancels the break end's system alarm (F5), like
+    /// `cancelFocusCompletion`.
     func cancelBreakCompletion(id: UUID) {
+        cancelBreakCompletionRequest(id: id)
+        systemAlarms?.cancel(sessionID: id)
+    }
+
+    /// Removes only the break's end alert and invalidates an add still in
+    /// flight for it.
+    func cancelBreakCompletionRequest(id: UUID) {
         breakNotificationIntents.removeValue(forKey: id)
         requestClient.removePending(
             [Identifier.breakCompletion(id: id)]
         )
+    }
+
+    /// False while an Apple Account boundary blocks timer requests
+    /// (`suspendTimerSchedulingForAccountBoundary`). A system alarm must not
+    /// be booked then either.
+    var acceptsTimerScheduling: Bool {
+        !timerSchedulingIsSuspendedForAccountBoundary
     }
 
     /// Blocks timer requests from views owned by an Apple Account that is
@@ -1127,6 +1273,9 @@ final class NotificationManager {
     /// its accepted lock-screen notifications must remain scheduled.
     func suspendTimerSchedulingForAccountBoundary() {
         timerSchedulingIsSuspendedForAccountBoundary = true
+        // F5: a system alarm still being booked (its ringtone may be
+        // rendering) books nothing either.
+        systemAlarms?.abandonBookingsInFlight()
         registeredFocusReturnReminder = nil
         cancelFocusReturnReminder()
         cancelFocusLeaveNudges()
@@ -1169,6 +1318,10 @@ final class NotificationManager {
         focusNotificationGeneration &+= 1
         breakNotificationIntents = breakNotificationIntents.filter { $0.key == breakID }
         breakNotificationGeneration &+= 1
+        // F5: accepted synchronously like the intents above. iCloud
+        // retirement, an account change and complete deletion keep nothing;
+        // reset recovery keeps the preserved timer's alarm.
+        systemAlarms?.cancelAll(preserving: Set([sessionID, breakID].compactMap { $0 }))
         let preservedIdentifier = sessionID.map(Identifier.completion(sessionID:))
         let preservedBreakIdentifier = breakID.map(Identifier.breakCompletion(id:))
         return { [self] in
@@ -1419,6 +1572,37 @@ final class NotificationManager {
         }
         content.badge = nil
         return content
+    }
+
+    /// F5: the focus- or break-end sound from this iPhone's alarm strength
+    /// and sound. Without `timerEndSounds` the content keeps today's short
+    /// chime. A file that cannot be prepared falls back to that chime.
+    private func applyTimerEndSound(
+        to content: UNMutableNotificationContent,
+        playsSound: Bool,
+        completionSound: TimerCompletionSound,
+        channel: AlarmBackgroundChannel?,
+        soundGeneration: UInt64
+    ) async {
+        guard playsSound, let timerEndSounds else { return }
+        let resolvedChannel = channel ?? AlarmChannelPolicy.notificationChannel(
+            strength: timerEndSounds.strength(),
+            soundEnabled: playsSound,
+            notificationsAuthorized: true
+        )
+        let selection = TimerEndNotificationSound.selection(
+            channel: resolvedChannel,
+            choice: timerEndSounds.choice(completionSound)
+        )
+        switch selection {
+        case .silent:
+            content.sound = nil
+        case let .legacyChime(sound):
+            content.sound = TimerCompletionSoundLibrary.notificationSound(for: sound)
+        case .alarmCue, .ringtone:
+            content.sound = await timerEndSounds.file(selection, soundGeneration)
+                ?? TimerCompletionSoundLibrary.notificationSound(for: completionSound)
+        }
     }
 
     /// Adds for one logical timer are chained by the caller before entering
