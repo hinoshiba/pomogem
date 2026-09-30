@@ -44,8 +44,8 @@ struct JarHomeWidget: Widget {
                     WidgetPalette.backgroundGradient
                 }
         }
-        .configurationDisplayName("ポモジェム")
-        .description("今日の集中を始める")
+        .configurationDisplayName(Text("ポモジェム", tableName: "Widgets", comment: "The app's name, in the widget gallery, on the widgets and on the Live Activity"))
+        .description(Text("今日の集中を始める", tableName: "Widgets", comment: "Widget gallery: what the Home Screen widget does"))
         .supportedFamilies([.systemSmall, .systemMedium])
         .contentMarginsDisabled()
     }
@@ -80,14 +80,15 @@ private struct JarHomeWidgetView: View {
             // The widget's own opaque navy is the plate here.
             NeutralJarArtwork(framed: false)
                 .frame(maxHeight: .infinity)
-            Text("集中を始める")
+            Text("集中を始める", tableName: "Widgets", comment: "Widget button text that starts a focus (the app's Start Focus)")
                 .font(.system(size: 16, weight: .heavy, design: .rounded))
                 .foregroundStyle(WidgetPalette.warmText)
                 .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
         .padding(12)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("ポモジェムで集中を始める")
+        .accessibilityLabel(Text("ポモジェムで集中を始める", tableName: "Widgets", comment: "VoiceOver: the small widget, which starts a focus in the app"))
     }
 
     /// The jar and the heading on top, then one row of equal buttons across
@@ -102,7 +103,7 @@ private struct JarHomeWidgetView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     wordmark
-                    Text("今日のひと粒を積もう")
+                    Text("今日のひと粒を積もう", tableName: "Widgets", comment: "Medium widget heading: an invitation to add today's gem, never pressure")
                         .font(.system(size: 21, weight: .heavy, design: .rounded))
                         .foregroundStyle(WidgetPalette.warmText)
                         .minimumScaleFactor(0.72)
@@ -131,7 +132,7 @@ private struct JarHomeWidgetView: View {
                 .fill(WidgetPalette.amber)
                 .frame(width: 7, height: 7)
                 .shadow(color: WidgetPalette.amber.opacity(0.7), radius: 4)
-            Text("ポモジェム")
+            Text("ポモジェム", tableName: "Widgets", comment: "The app's name, in the widget gallery, on the widgets and on the Live Activity")
                 .font(.system(size: 12, weight: .bold, design: .rounded))
                 .foregroundStyle(WidgetPalette.amber)
             Spacer(minLength: 0)
@@ -201,8 +202,8 @@ struct JarLockScreenWidget: Widget {
             JarLockScreenView(entry: entry)
                 .containerBackground(for: .widget) { Color.clear }
         }
-        .configurationDisplayName("ポモジェム")
-        .description("集中を始める")
+        .configurationDisplayName(Text("ポモジェム", tableName: "Widgets", comment: "The app's name, in the widget gallery, on the widgets and on the Live Activity"))
+        .description(Text("集中を始める", tableName: "Widgets", comment: "Widget button text that starts a focus (the app's Start Focus)"))
         .supportedFamilies([
             .accessoryInline,
             .accessoryCircular,
@@ -224,24 +225,29 @@ private struct JarLockScreenView: View {
     private var content: some View {
         switch family {
         case .accessoryInline:
-            Label(
-                "集中を始める",
-                systemImage: "circle.grid.3x3.fill"
-            )
+            Label {
+                Text("集中を始める", tableName: "Widgets", comment: "Widget button text that starts a focus (the app's Start Focus)")
+            } icon: {
+                Image(systemName: "circle.grid.3x3.fill")
+            }
         case .accessoryCircular:
             VStack(spacing: -2) {
                 Image(systemName: "circle.grid.3x3.fill")
                     .font(.system(size: 12, weight: .semibold))
-                Text("集中")
+                Text("集中", tableName: "Widgets", comment: "Lock Screen circular widget: starts a focus (en: Focus)")
                     .font(.system(size: 11, weight: .heavy, design: .rounded))
                     .minimumScaleFactor(0.55)
                     .lineLimit(1)
             }
         default:
             VStack(alignment: .leading, spacing: 2) {
-                Label("ポモジェム", systemImage: "circle.grid.3x3.fill")
+                Label {
+                    Text("ポモジェム", tableName: "Widgets", comment: "The app's name, in the widget gallery, on the widgets and on the Live Activity")
+                } icon: {
+                    Image(systemName: "circle.grid.3x3.fill")
+                }
                     .font(.system(size: 11, weight: .semibold))
-                Text("集中を始める")
+                Text("集中を始める", tableName: "Widgets", comment: "Widget button text that starts a focus (the app's Start Focus)")
                     .font(.system(size: 16, weight: .heavy, design: .rounded))
                     .minimumScaleFactor(0.6)
                     .lineLimit(1)

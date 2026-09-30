@@ -8,13 +8,15 @@ enum FocusActivityConstants {
     static let secondsPerMinute = 60
     static let dismissalDelay: TimeInterval = 2 * 60
 
-    static func durationLabel(seconds: Int) -> String {
+    /// The timer's length as the app labels it (「25分」「1分30秒」; en
+    /// "25 min", "1 min 30 sec"). Formatted by `DurationText`, which the widget
+    /// extension compiles too, so this file needs no String Catalog key: the
+    /// widget bundle has no table for Shared code. An empty length reads
+    /// 「0分」 as it always has, not DurationText's 「0秒」.
+    static func durationLabel(seconds: Int, locale: Locale = PomoGemLocale.current) -> String {
         let value = max(0, seconds)
-        let minutes = value / secondsPerMinute
-        let remainder = value % secondsPerMinute
-        if remainder == 0 { return "\(minutes)分" }
-        if minutes == 0 { return "\(remainder)秒" }
-        return "\(minutes)分\(remainder)秒"
+        guard value > 0 else { return DurationText.short(minutes: 0, locale: locale) }
+        return DurationText.short(seconds: value, units: .minutesSeconds, locale: locale)
     }
 }
 

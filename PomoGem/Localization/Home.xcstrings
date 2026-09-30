@@ -1,9 +1,49 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "%@ +%@ 積んだ" : {
+      "comment" : "Toast after a gem of another mass lands: theme, mass (+1125g); like Common's 「%@ +250g 積んだ」",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Added %2$@ to %1$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ +%@ 積んだ"
+          }
+        }
+      }
+    },
+    "%@ +%@（%@）" : {
+      "comment" : "Completion card: the theme, the mass this focus added (+250g) and the same in standard units",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ +%2$@ (%3$@)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ +%@（%@）"
+          }
+        }
+      }
+    },
     "%@ / %@" : {
       "comment" : "Jar rail: focus time so far / time the next time core needs",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ / %2$@"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -12,24 +52,257 @@
         }
       }
     },
-    "%@。累計%@、集中%lld粒、記念石%@個" : {
-      "comment" : "VoiceOver, menu metrics while iCloud is checked: status, lifetime mass, focus count, achievement stone count",
+    "%@ ・ %@" : {
+      "comment" : "Two compact stats side by side, as in 12粒 ・ 記念石 3. en: '%1$@ · %2$@'",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · %2$@"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@。累計%@、集中%lld粒、記念石%@個"
+            "value" : "%@ ・ %@"
           }
         }
       }
     },
-    "%@。累計は確認が済むと表示します。この端末で確認済みの集中%lld粒、記念石%@個" : {
-      "comment" : "VoiceOver, menu metrics while iCloud is checked and no lifetime total can be shown: status, focus count, achievement stone count",
+    "%@ ・ 完走で+%@" : {
+      "comment" : "Home start button subtitle: the theme, then the mass a completed focus adds (+625g)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · +%2$@ when you finish"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@。累計は確認が済むと表示します。この端末で確認済みの集中%lld粒、記念石%@個"
+            "value" : "%@ ・ 完走で+%@"
+          }
+        }
+      }
+    },
+    "%@ 虹の粒 +%@" : {
+      "comment" : "Toast after a rainbow gem lands (plain presentation): theme, mass (+600g)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Added a rainbow gem to %1$@ (+%2$@)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 虹の粒 +%@"
+          }
+        }
+      }
+    },
+    "%@ 金の粒 +%@" : {
+      "comment" : "Toast after a gold gem lands (plain presentation): theme, mass (+600g)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Added a gold gem to %1$@ (+%2$@)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 金の粒 +%@"
+          }
+        }
+      }
+    },
+    "%@%@" : {
+      "comment" : "VoiceOver, crystal card: one theme in the crystal, then how many of its gems it holds (英語12粒). en: '%1$@ %2$@'",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@%@"
+          }
+        }
+      }
+    },
+    "%@、%@、%@。" : {
+      "comment" : "VoiceOver announcement after a focus: the theme, the spoken mass it added, the same in standard units",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, %2$@, %3$@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@、%@、%@。"
+          }
+        }
+      }
+    },
+    "%@、%@加算" : {
+      "comment" : "VoiceOver label of a manual-entry length button: spoken duration, spoken mass it adds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, adds %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@、%@加算"
+          }
+        }
+      }
+    },
+    "%@、集中する" : {
+      "comment" : "Home start button; the argument is the focus length (25分)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus for %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@、集中する"
+          }
+        }
+      }
+    },
+    "%@。" : {
+      "comment" : "Ends a VoiceOver sentence; the argument is a phrase without final punctuation. en: '%@.'",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@。"
+          }
+        }
+      }
+    },
+    "%@。この端末で確認できた記録だけを表示しています" : {
+      "comment" : "VoiceOver, empty jar while iCloud is checked: the status, then that only this device's confirmed records are shown",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@. Showing only the records confirmed on this device"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@。この端末で確認できた記録だけを表示しています"
+          }
+        }
+      }
+    },
+    "%@。今回の%@は保存済みです。これまでの合計は確認が済むと表示します" : {
+      "comment" : "VoiceOver, completion card while iCloud is checked: the status, this focus's spoken mass is saved, the total shows once the check is done",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@. This session's %2$@ is saved. Your total will show once the check is done"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@。今回の%@は保存済みです。これまでの合計は確認が済むと表示します"
+          }
+        }
+      }
+    },
+    "%@。今回の記録は保存済みです。これまでの合計は確認が済むと表示します" : {
+      "comment" : "VoiceOver announcement after a focus while iCloud is checked: the status; this focus is saved; the total shows once the check is done",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@. This session is saved. Your total will show once the check is done"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@。今回の記録は保存済みです。これまでの合計は確認が済むと表示します"
+          }
+        }
+      }
+    },
+    "%@。瓶の整理：%@" : {
+      "comment" : "VoiceOver announcement after a focus: time-core progress, then the count toward the next crystal",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@. Tidying the jar: %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@。瓶の整理：%@"
+          }
+        }
+      }
+    },
+    "%@。瓶の物理整理：%@" : {
+      "comment" : "VoiceOver, completion card progress: time-core progress, then the count toward the next crystal",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@. Tidying the jar: %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@。瓶の物理整理：%@"
+          }
+        }
+      }
+    },
+    "%@に%@、%@を積みます" : {
+      "comment" : "VoiceOver hint of the manual-entry confirm button: theme, spoken duration, spoken mass",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adds %2$@ (%3$@) to %1$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@に%@、%@を積みます"
           }
         }
       }
@@ -37,6 +310,12 @@
     "%@に%@、%@を積みます。「元に戻す」で取り消せます" : {
       "comment" : "VoiceOver, once the Undo banner of a manual entry has focus: theme, duration, grams",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adding %2$@ (%3$@) to %1$@. You can cancel it with “Undo.”"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -48,6 +327,12 @@
     "%@に%@を積みます" : {
       "comment" : "Undo banner after a manual entry: theme, then the self-reported time about to be added",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adding %2$@ to %1$@"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -56,9 +341,66 @@
         }
       }
     },
+    "%@の%@を記念石にした" : {
+      "comment" : "Toast after a milestone stone lands: theme, kind of achievement",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Added a milestone stone for %1$@: %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@の%@を記念石にした"
+          }
+        }
+      }
+    },
+    "%@の%@を記念石にした。前の記念石も成果の記録に残っています" : {
+      "comment" : "Toast after a milestone stone lands while older stones have left the jar: theme, kind of achievement; the older stones stay in the records",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Added a milestone stone for %1$@: %2$@. Your earlier milestone stones are still in your achievement records"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@の%@を記念石にした。前の記念石も成果の記録に残っています"
+          }
+        }
+      }
+    },
+    "%@の結晶、%@" : {
+      "comment" : "VoiceOver, crystal inspection card: the gems inside (100粒), then what its detail shows",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A crystal of %1$@, %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@の結晶、%@"
+          }
+        }
+      }
+    },
     "%@の自己申告を保存できませんでした。もう一度積んでください" : {
       "comment" : "Toast when a confirmed manual entry could not be saved; the argument is the theme",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save the self-reported time for %@. Please add it again"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -67,9 +409,32 @@
         }
       }
     },
+    "%@の集中で、ここにひと粒落ちる。" : {
+      "comment" : "Empty jar: the argument is the chosen focus length (25分)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus for %@ and a gem drops in here."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@の集中で、ここにひと粒落ちる。"
+          }
+        }
+      }
+    },
     "%@まで" : {
       "comment" : "Jar rail caption; the argument is 最初の時間の核 or 時間の核・N段目",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toward %@"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -78,9 +443,289 @@
         }
       }
     },
+    "%@を%@集中する、完走で%@" : {
+      "comment" : "VoiceOver label of Home's start button: theme, spoken length, spoken mass a completed focus adds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus on %1$@ for %2$@, adding %3$@ when you finish"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@を%@集中する、完走で%@"
+          }
+        }
+      }
+    },
+    "%@以上" : {
+      "comment" : "Home menu and VoiceOver: at least this lifetime mass (the argument is 12 kg)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ or more"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@以上"
+          }
+        }
+      }
+    },
+    "%@個" : {
+      "comment" : "Home menu metric: the milestone stone count (3 or 3+) above its caption; en shows the number alone",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@個"
+          }
+        }
+      }
+    },
+    "%lld+粒" : {
+      "comment" : "Jar readout pill: at least this many gems (the count is still being tallied)",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld+ gems"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld+ gems"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld+粒"
+          }
+        }
+      }
+    },
+    "%lld分" : {
+      "comment" : "Custom focus length: one row of the minutes wheel",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld min"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld分"
+          }
+        }
+      }
+    },
+    "%lld分 %lld秒" : {
+      "comment" : "Custom focus length summary: minutes, then seconds (25分 0秒)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld min %2$lld sec"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld分 %lld秒"
+          }
+        }
+      }
+    },
+    "%lld分休憩" : {
+      "comment" : "Completion card button: start the offered break; the argument is its length in minutes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld-Min Break"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld分休憩"
+          }
+        }
+      }
+    },
+    "%lld分休憩する" : {
+      "comment" : "VoiceOver label of the completion card's break button; the argument is the break length in minutes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Take a %lld-minute break"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld分休憩する"
+          }
+        }
+      }
+    },
+    "%lld分休憩できます" : {
+      "comment" : "VoiceOver announcement after a focus, as its last sentence: the break length in minutes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can take a %lld-minute break"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld分休憩できます"
+          }
+        }
+      }
+    },
+    "%lld分休憩できます。" : {
+      "comment" : "VoiceOver announcement after a focus, followed by the share sentence: the break length in minutes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can take a %lld-minute break."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld分休憩できます。"
+          }
+        }
+      }
+    },
+    "%lld分休憩を利用できます" : {
+      "comment" : "VoiceOver, completion card: the break it offers; the argument is its length in minutes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can take a %lld-minute break"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld分休憩を利用できます"
+          }
+        }
+      }
+    },
+    "%lld文字以内で入力してください（%lld文字超過）。" : {
+      "comment" : "Milestone-stone name over the limit, above the disabled save button: the limit, then the characters over it",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Please keep it to %1$lld characters or fewer (%2$lld over)."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld文字以内で入力してください（%lld文字超過）。"
+          }
+        }
+      }
+    },
+    "%lld文字超過" : {
+      "comment" : "Milestone-stone name counter beside the field title: characters over the limit",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld character over"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld characters over"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld文字超過"
+          }
+        }
+      }
+    },
+    "%lld秒" : {
+      "comment" : "Custom focus length: one row of the seconds wheel",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld sec"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld秒"
+          }
+        }
+      }
+    },
     "%lld粒が、ひとつの結晶になった" : {
       "comment" : "Toast after ten gems fuse; the argument is the gem count",
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld gem became one crystal"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld gems became one crystal"
+                }
+              }
+            }
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -89,13 +734,31 @@
         }
       }
     },
-    "%lld粒の結晶、%@" : {
-      "comment" : "VoiceOver, crystal inspection card: gems inside, then what its detail shows",
+    "%lld粒を、ひとつに整理した" : {
+      "comment" : "Fusion sheet title; the argument is how many gems the crystal holds",
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Tidied %lld gem into one"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Tidied %lld gems into one"
+                }
+              }
+            }
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld粒の結晶、%@"
+            "value" : "%lld粒を、ひとつに整理した"
           }
         }
       }
@@ -103,6 +766,12 @@
     "+%@ ・ まもなく瓶に入ります" : {
       "comment" : "Undo banner subtitle: the mass, and that the entry is saved shortly",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+%@ · Going into your jar shortly"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -111,9 +780,100 @@
         }
       }
     },
+    "10 → 1 ・記録と質量は保持" : {
+      "comment" : "Completion card footnote for an old receipt: ten gems become one, records and mass are kept",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "10 → 1 · records and mass kept"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "10 → 1 ・記録と質量は保持"
+          }
+        }
+      }
+    },
+    "1分0秒〜360分0秒" : {
+      "comment" : "Custom focus length sheet: the shortest and longest lengths",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 min 0 sec – 360 min 0 sec"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1分0秒〜360分0秒"
+          }
+        }
+      }
+    },
+    "25分 = 1.0標準単位 ・ 粒の10→1は瓶の整理" : {
+      "comment" : "Completion card footnote: 25 minutes is one standard unit; ten gems becoming one only tidies the jar",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "25 min = 1.0 standard unit · 10 gems → 1 only tidies the jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "25分 = 1.0標準単位 ・ 粒の10→1は瓶の整理"
+          }
+        }
+      }
+    },
+    "360分にする場合は、秒を0にしてください。" : {
+      "comment" : "Custom focus length: 360 minutes is the longest, so its seconds must be 0",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "For 360 minutes, set the seconds to 0."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "360分にする場合は、秒を0にしてください。"
+          }
+        }
+      }
+    },
+    "GIF・質量・#ポモジェム をSNSへ" : {
+      "comment" : "Home menu row detail: a GIF of the jar with the mass and the app's hashtag (en: #PomoGem) for social media",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A GIF with your mass and #PomoGem, for social media"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GIF・質量・#ポモジェム をSNSへ"
+          }
+        }
+      }
+    },
     "Proなら、この%@に「%@」と刻めます" : {
       "comment" : "Fusion sheet link for free users; arguments: the crystal's name (結晶…), the month it was made (2026年9月)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "With Pro, you can stamp this %1$@ with “%2$@”"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -122,9 +882,49 @@
         }
       }
     },
+    "Proの購入状態を確認してください" : {
+      "comment" : "Toast: a custom length needs Pro, and this device does not show Pro as purchased",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Please check your Pro purchase"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proの購入状態を確認してください"
+          }
+        }
+      }
+    },
+    "iCloudを確認中" : {
+      "comment" : "Home while iCloud records are being checked; the same words as the jar's caption",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking iCloud"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudを確認中"
+          }
+        }
+      }
+    },
     "あと%lld%%で、下の粒がひとつの結晶に" : {
       "comment" : "Jar capsule before a fusion; the argument is the remaining capacity percent",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld%% to go until the gems below become a crystal"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -133,9 +933,381 @@
         }
       }
     },
+    "あと%lld文字" : {
+      "comment" : "Milestone-stone name counter beside the field title: characters still available",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld character left"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld characters left"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "あと%lld文字"
+          }
+        }
+      }
+    },
+    "あと%lld文字入力できます。" : {
+      "comment" : "VoiceOver hint of the milestone-stone name field: characters still available",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "You can enter %lld more character."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "You can enter %lld more characters."
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "あと%lld文字入力できます。"
+          }
+        }
+      }
+    },
+    "ここで休む" : {
+      "comment" : "Fusion sheet button: close it and rest",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rest Here"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ここで休む"
+          }
+        }
+      }
+    },
+    "このiPhoneの集計を確認中" : {
+      "comment" : "Home while this iPhone's records are being checked (offline session); the same words as the jar's caption",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking this iPhone's totals"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneの集計を確認中"
+          }
+        }
+      }
+    },
+    "この内容で積みますか？" : {
+      "comment" : "Manual entry: heading of the confirmation card",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add this to your jar?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この内容で積みますか？"
+          }
+        }
+      }
+    },
+    "この成果を積む" : {
+      "comment" : "Achievement sheet save button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add This Achievement"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この成果を積む"
+          }
+        }
+      }
+    },
+    "この時間にする" : {
+      "comment" : "Custom focus length: confirm button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use This Length"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この時間にする"
+          }
+        }
+      }
+    },
+    "この端末で1日3回まで・朝%@に回数が切り替わります" : {
+      "comment" : "Manual entry footnote: three entries a day on this device; the argument is the time of day the count resets (4:00; en 4:00 AM)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Up to 3 a day on this device · The count resets at %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末で1日3回まで・朝%@に回数が切り替わります"
+          }
+        }
+      }
+    },
+    "この端末での本日の上限です。朝%@に3回へ切り替わります。" : {
+      "comment" : "Manual entry: today's allowance is used up; the argument is the time of day it resets (4:00; en 4:00 AM)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You've reached today's limit on this device. It goes back to 3 at %@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末での本日の上限です。朝%@に3回へ切り替わります。"
+          }
+        }
+      }
+    },
+    "この端末で本日あと%lld回" : {
+      "comment" : "Manual entry: how many self-reported entries this device can still add today",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld more entry today on this device"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld more entries today on this device"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末で本日あと%lld回"
+          }
+        }
+      }
+    },
+    "この端末で確認できた記録だけを表示しています。" : {
+      "comment" : "Empty jar while iCloud is checked: only records confirmed on this device are shown",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Showing only the records confirmed on this device."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末で確認できた記録だけを表示しています。"
+          }
+        }
+      }
+    },
+    "この端末で確認済み %lld粒" : {
+      "comment" : "Jar readout pill while iCloud is checked: gems this device has confirmed",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld gem confirmed on this device"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld gems confirmed on this device"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末で確認済み %lld粒"
+          }
+        }
+      }
+    },
+    "この端末で確認済みの集中%lld粒" : {
+      "comment" : "VoiceOver, menu metrics while iCloud is checked: focus gems this device has confirmed",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld focus gem confirmed on this device"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld focus gems confirmed on this device"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末で確認済みの集中%lld粒"
+          }
+        }
+      }
+    },
+    "この結晶の内訳を見る" : {
+      "comment" : "Fusion sheet button: open the crystal in the Progress overview",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "See This Crystal's Details"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この結晶の内訳を見る"
+          }
+        }
+      }
+    },
+    "この結晶をカードにする" : {
+      "comment" : "Fusion sheet button: make a share card of the crystal",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Make a Card of This Crystal"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この結晶をカードにする"
+          }
+        }
+      }
+    },
+    "これは瓶を軽く保つための二次的な整理です。保存表示だけを圧縮し、一粒ずつの時間も、%@の質量も100%%保持します。時間の核は回数でなく質量から進みます。次へ急ぐ必要はありません。" : {
+      "comment" : "Fusion sheet explanation; the argument is the crystal's mass (2.5kg)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This is a secondary tidy-up that keeps your jar light. Only how the gems are stored and shown is compressed: the time of every gem and all %@ of mass are kept 100%%. Time cores grow from mass, not from counts. There's no need to rush to the next one."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "これは瓶を軽く保つための二次的な整理です。保存表示だけを圧縮し、一粒ずつの時間も、%@の質量も100%%保持します。時間の核は回数でなく質量から進みます。次へ急ぐ必要はありません。"
+          }
+        }
+      }
+    },
+    "どんな成果だった？" : {
+      "comment" : "Achievement sheet heading above the kinds of achievement",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What was your achievement?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "どんな成果だった？"
+          }
+        }
+      }
+    },
+    "ほか%lld件" : {
+      "comment" : "VoiceOver, crystal card: how many more themes the crystal holds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld more"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ほか%lld件"
+          }
+        }
+      }
+    },
     "まだ空っぽ" : {
       "comment" : "Empty jar at accessibility text sizes: title",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Still empty"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -144,9 +1316,49 @@
         }
       }
     },
+    "まとまり" : {
+      "comment" : "Fusion sheet stat title: the gems in the crystal, or for Pro the month it was made",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bundle"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "まとまり"
+          }
+        }
+      }
+    },
+    "もう一度「閉じる」を押してください" : {
+      "comment" : "Toast: the completion card could not close; tap 閉じる again",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Please tap “Close” again"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "もう一度「閉じる」を押してください"
+          }
+        }
+      }
+    },
     "アプリの時間を積む" : {
       "comment" : "Home menu row: open the Screen Time settings",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add App Time"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -155,9 +1367,202 @@
         }
       }
     },
+    "スクロール" : {
+      "comment" : "Custom focus length segment: pick the minutes and seconds on wheels",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scroll"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクロール"
+          }
+        }
+      }
+    },
+    "タイマーを使わずに集中した時間を、あとから瓶に積めます。" : {
+      "comment" : "Manual-entry sheet introduction",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add focus time you spent without the timer to your jar afterward."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマーを使わずに集中した時間を、あとから瓶に積めます。"
+          }
+        }
+      }
+    },
+    "タイマーを開始します。上のテーマと時間のボタンで内容を変更できます" : {
+      "comment" : "VoiceOver hint of Home's start button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Starts the timer. Use the theme and length buttons above to change it"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマーを開始します。上のテーマと時間のボタンで内容を変更できます"
+          }
+        }
+      }
+    },
+    "テーマ" : {
+      "comment" : "The word theme, alone: the caption above the sheets' theme menu, the manual-entry confirmation row, and the stand-in for a missing theme name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Theme"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマ"
+          }
+        }
+      }
+    },
+    "テーマ、%@" : {
+      "comment" : "VoiceOver label of a theme menu; the argument is the chosen theme or 未選択",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Theme, %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマ、%@"
+          }
+        }
+      }
+    },
+    "テーマの色はそのままに、\n背景の空気だけを変えます。" : {
+      "comment" : "Atmosphere picker note at accessibility text sizes, broken into two lines at a natural point",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your theme colors stay the same;\nonly the background's mood changes."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマの色はそのままに、\n背景の空気だけを変えます。"
+          }
+        }
+      }
+    },
+    "テーマの色はそのままに、背景の空気だけを変えます。" : {
+      "comment" : "Atmosphere picker note: the theme colors stay, only the background changes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your theme colors stay the same; only the background's mood changes."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマの色はそのままに、背景の空気だけを変えます。"
+          }
+        }
+      }
+    },
+    "テーマは%@です。" : {
+      "comment" : "VoiceOver, completion card: the theme",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Theme: %@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマは%@です。"
+          }
+        }
+      }
+    },
+    "テーマを変更できます。タイマーは開始しません" : {
+      "comment" : "VoiceOver hint of Home's theme menu",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Changes the theme. The timer doesn't start"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマを変更できます。タイマーは開始しません"
+          }
+        }
+      }
+    },
+    "テーマを管理" : {
+      "comment" : "Home theme menu: open the theme settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manage Themes"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマを管理"
+          }
+        }
+      }
+    },
+    "テーマを選ぶ" : {
+      "comment" : "Home theme menu while no theme exists yet",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a Theme"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマを選ぶ"
+          }
+        }
+      }
+    },
     "テーマを選ぶと、集中を始められます" : {
       "comment" : "Toast: a widget, link or Siri asked to start a focus before any theme exists",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a theme to start a focus"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -166,9 +1571,66 @@
         }
       }
     },
+    "テーマを選んでください" : {
+      "comment" : "Achievement details: shown under the kind while no theme is chosen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a theme"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマを選んでください"
+          }
+        }
+      }
+    },
+    "テーマを選んではじめる" : {
+      "comment" : "Home start button before any theme exists; it opens Settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a Theme to Start"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマを選んではじめる"
+          }
+        }
+      }
+    },
+    "テーマ・通知・サウンド・Pro" : {
+      "comment" : "Home menu row detail: what Settings holds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Themes · Notifications · Sound · Pro"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマ・通知・サウンド・Pro"
+          }
+        }
+      }
+    },
     "ポモジェムProの説明を開きます" : {
       "comment" : "VoiceOver hint on the fusion sheet's Pro month-label link",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opens the PomoGem Pro details"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -177,9 +1639,100 @@
         }
       }
     },
+    "メニュー" : {
+      "comment" : "Home's menu button and the menu sheet's title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menu"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メニュー"
+          }
+        }
+      }
+    },
+    "メニューを閉じる" : {
+      "comment" : "VoiceOver label of the menu sheet's close button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close menu"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メニューを閉じる"
+          }
+        }
+      }
+    },
+    "・ 記録 100% 保持" : {
+      "comment" : "Fusion sheet pill after 10 → 1: every record is kept",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "· records 100% kept"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "・ 記録 100% 保持"
+          }
+        }
+      }
+    },
+    "一粒、着地。" : {
+      "comment" : "Completion card title once the gem has landed in the jar",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A gem landed."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一粒、着地。"
+          }
+        }
+      }
+    },
+    "下のボタンから、最初のテーマを追加しよう。" : {
+      "comment" : "Empty jar before any theme exists",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add your first theme with the button below."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下のボタンから、最初のテーマを追加しよう。"
+          }
+        }
+      }
+    },
     "下のボタンへ" : {
       "comment" : "Empty jar at accessibility text sizes: points to the start button below",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use the button below"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -188,9 +1741,100 @@
         }
       }
     },
+    "今の瓶をGIFでシェアする" : {
+      "comment" : "VoiceOver label of the completion card's GIF share button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Share the current jar as a GIF"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今の瓶をGIFでシェアする"
+          }
+        }
+      }
+    },
+    "今の瓶をカードにして共有できます" : {
+      "comment" : "VoiceOver announcement after a focus: the jar can be shared as a card",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can share the current jar as a card"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今の瓶をカードにして共有できます"
+          }
+        }
+      }
+    },
+    "今の瓶をカードにする共有ボタンが利用できます" : {
+      "comment" : "VoiceOver announcement: the completion card now offers sharing the jar as a card",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A button to share the current jar as a card is now available"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今の瓶をカードにする共有ボタンが利用できます"
+          }
+        }
+      }
+    },
+    "今回の +%@ は保存済みです。これまでの合計は確認が済むと表示します。" : {
+      "comment" : "Completion card while iCloud is checked: this focus's mass (+250g) is saved; the total shows once the check is done",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This session's +%@ is saved. Your total will show once the check is done."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今回の +%@ は保存済みです。これまでの合計は確認が済むと表示します。"
+          }
+        }
+      }
+    },
+    "今回は%@、標準換算は%@です。" : {
+      "comment" : "VoiceOver, completion card: the mass this focus added, then the same in standard units",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This session added %1$@, or %2$@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今回は%@、標準換算は%@です。"
+          }
+        }
+      }
+    },
     "今週 %@ ・ 完走%lld回" : {
       "comment" : "Completion card heading line: this week's measured mass, timers completed this week",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This week: %1$@ · %2$lld completed"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -202,6 +1846,12 @@
     "今週の完走%lld回（時間の価値とは別）" : {
       "comment" : "Completion card heading line for an old receipt without mass: timers completed this week",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld completed this week (separate from the value of your time)"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -213,6 +1863,24 @@
     "今週の完走した回数%lld回。回数は時間の価値とは別です" : {
       "comment" : "VoiceOver, completion card for an old receipt: timers completed this week",
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld completed session this week. The count is separate from the value of your time"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld completed sessions this week. The count is separate from the value of your time"
+                }
+              }
+            }
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -224,6 +1892,12 @@
     "今週・時間の核・結晶・年月の瓶" : {
       "comment" : "Home menu row detail: what 積み上がり holds",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This week · Time cores · Crystals · Jars by year and month"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -232,13 +1906,36 @@
         }
       }
     },
-    "今週記録した集中時間の質量%@。完走した回数%lld回。回数は時間の価値とは別です" : {
-      "comment" : "VoiceOver, completion card: this week's measured mass, timers completed this week",
+    "今週記録した集中時間の質量%@。" : {
+      "comment" : "VoiceOver, completion card: this week's measured mass",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mass of the focus time recorded this week: %@."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "今週記録した集中時間の質量%@。完走した回数%lld回。回数は時間の価値とは別です"
+            "value" : "今週記録した集中時間の質量%@。"
+          }
+        }
+      }
+    },
+    "休憩の提案を閉じる" : {
+      "comment" : "VoiceOver label of the completion card's close button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close the break suggestion"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩の提案を閉じる"
           }
         }
       }
@@ -246,6 +1943,12 @@
     "休憩の選択を終えると、集中を始められます" : {
       "comment" : "Toast: a widget, link or Siri asked to start a focus while the reward card waits for the rest choice",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose whether to take a break, then you can start a focus"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -254,9 +1957,134 @@
         }
       }
     },
+    "休憩の選択を終えると使えます" : {
+      "comment" : "VoiceOver hint of the disabled start button while the break choice is open",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Available after you choose whether to take a break"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩の選択を終えると使えます"
+          }
+        }
+      }
+    },
+    "休憩を開始できませんでした。もう一度お試しください" : {
+      "comment" : "Toast: the offered break could not start",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't start the break. Please try again"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩を開始できませんでした。もう一度お試しください"
+          }
+        }
+      }
+    },
+    "保存されている粒数、質量などを表示します" : {
+      "comment" : "VoiceOver hint of the crystal card of an older crystal without colors",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows the saved gem count, mass and more"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存されている粒数、質量などを表示します"
+          }
+        }
+      }
+    },
+    "保存されている粒数・質量などの内訳" : {
+      "comment" : "Crystal card subtitle: its saved details (gem count, mass…)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved details: gem count, mass and more"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存されている粒数・質量などの内訳"
+          }
+        }
+      }
+    },
+    "保存されている色、粒数、質量などを表示します" : {
+      "comment" : "VoiceOver hint of the crystal card of an older crystal",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows the saved colors, gem count, mass and more"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存されている色、粒数、質量などを表示します"
+          }
+        }
+      }
+    },
+    "保存を再試行" : {
+      "comment" : "Jar capsule button: try saving an unsaved crystal again",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try Again"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存を再試行"
+          }
+        }
+      }
+    },
+    "保存後" : {
+      "comment" : "Manual entry confirmation row: the allowance left once saved",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "After Saving"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存後"
+          }
+        }
+      }
+    },
     "元に戻す" : {
       "comment" : "Undo button for a manual entry that is not saved yet",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Undo"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -265,9 +2093,270 @@
         }
       }
     },
+    "先にテーマを追加してください" : {
+      "comment" : "Toast: add a theme before adding time",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Please add a theme first"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先にテーマを追加してください"
+          }
+        }
+      }
+    },
+    "先にテーマを追加してください。" : {
+      "comment" : "Manual entry error: add a theme before adding time",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Please add a theme first."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先にテーマを追加してください。"
+          }
+        }
+      }
+    },
+    "入力" : {
+      "comment" : "Custom focus length segment: type the minutes and seconds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Type"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "入力"
+          }
+        }
+      }
+    },
+    "入力完了" : {
+      "comment" : "Keyboard toolbar button that closes the number pad",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "入力完了"
+          }
+        }
+      }
+    },
+    "内容の確認へ進みます" : {
+      "comment" : "VoiceOver hint of a manual-entry length button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows a summary to confirm"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内容の確認へ進みます"
+          }
+        }
+      }
+    },
+    "内訳を見る" : {
+      "comment" : "Crystal card: open its details",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "See Details"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内訳を見る"
+          }
+        }
+      }
+    },
+    "再試行" : {
+      "comment" : "Home card button: retry saving a completed focus",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try Again"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再試行"
+          }
+        }
+      }
+    },
+    "再試行の準備ができませんでした" : {
+      "comment" : "Toast: saving an unsaved crystal could not be retried",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't get ready to try again"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再試行の準備ができませんでした"
+          }
+        }
+      }
+    },
+    "分" : {
+      "comment" : "Custom focus length: title and VoiceOver label of the minutes field and wheel",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Minutes"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分"
+          }
+        }
+      }
+    },
+    "分と秒を入力" : {
+      "comment" : "Custom focus length summary while the input is incomplete",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter minutes and seconds"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分と秒を入力"
+          }
+        }
+      }
+    },
+    "分は1〜360で入力してください。" : {
+      "comment" : "Custom focus length: minutes out of range",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter minutes from 1 to 360."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分は1〜360で入力してください。"
+          }
+        }
+      }
+    },
+    "分を入力してください。" : {
+      "comment" : "Custom focus length: the minutes field is empty",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter the minutes."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分を入力してください。"
+          }
+        }
+      }
+    },
+    "前回使った時間として保存できませんでした" : {
+      "comment" : "Toast: the length of the focus just started could not be saved as the last-used length",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save this as your last-used length"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "前回使った時間として保存できませんでした"
+          }
+        }
+      }
+    },
+    "加算" : {
+      "comment" : "Manual entry confirmation row: the mass it adds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adds"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加算"
+          }
+        }
+      }
+    },
+    "勉強も仕事も、同じ一覧で" : {
+      "comment" : "Home start button subtitle before any theme exists: study and work themes share one list",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Study and work, in one list"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "勉強も仕事も、同じ一覧で"
+          }
+        }
+      }
+    },
     "勉強アプリ10分ごとに1粒" : {
       "comment" : "Home menu row detail: every 10 minutes in the chosen study apps adds one pebble",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 gem for every 10 minutes in study apps"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -276,9 +2365,32 @@
         }
       }
     },
+    "動く瓶をシェア" : {
+      "comment" : "Home menu row: open the share composer with the animated jar",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Share Your Moving Jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "動く瓶をシェア"
+          }
+        }
+      }
+    },
     "取り消しました。瓶には積んでいません" : {
       "comment" : "Toast after undoing a manual entry",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Undone. Nothing was added to your jar"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -287,9 +2399,90 @@
         }
       }
     },
+    "完走した回数%lld回。回数は時間の価値とは別です" : {
+      "comment" : "VoiceOver, completion card: timers completed this week, which says nothing about the value of the time",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld completed session. The count is separate from the value of your time"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld completed sessions. The count is separate from the value of your time"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完走した回数%lld回。回数は時間の価値とは別です"
+          }
+        }
+      }
+    },
+    "完走は保護されています" : {
+      "comment" : "Home card after a completed focus could not be saved yet: it is kept safe",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your completed focus is safe"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完走は保護されています"
+          }
+        }
+      }
+    },
+    "定番の時間" : {
+      "comment" : "Home length menu section for Pro: the preset lengths",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standard Lengths"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "定番の時間"
+          }
+        }
+      }
+    },
     "小さな粒が%lld段階で結晶になり、瓶に余白ができた" : {
       "comment" : "Toast after a cascade of fusions; the argument is how many levels formed",
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Small gems became crystals in %lld step, making room in your jar"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Small gems became crystals in %lld steps, making room in your jar"
+                }
+              }
+            }
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -298,9 +2491,66 @@
         }
       }
     },
+    "成果を積む" : {
+      "comment" : "Home menu row: add a milestone stone for an achievement",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add an Achievement"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "成果を積む"
+          }
+        }
+      }
+    },
+    "成果を結びつけるテーマを変更できます" : {
+      "comment" : "VoiceOver hint of the achievement sheet's theme menu",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Changes the theme this achievement belongs to"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "成果を結びつけるテーマを変更できます"
+          }
+        }
+      }
+    },
+    "成果を選ぶ" : {
+      "comment" : "Achievement sheet title, first step: pick the kind of achievement",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose an Achievement"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "成果を選ぶ"
+          }
+        }
+      }
+    },
     "成果メモ（任意）" : {
       "comment" : "Achievement note field title; the same label as the edit sheet in 記録",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Achievement note (optional)"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -309,9 +2559,49 @@
         }
       }
     },
+    "戻る" : {
+      "comment" : "Achievement sheet: back to the kind of achievement",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "戻る"
+          }
+        }
+      }
+    },
+    "手動で積む" : {
+      "comment" : "Manual-entry sheet title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add Manually"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "手動で積む"
+          }
+        }
+      }
+    },
     "推移・履歴・記念石・月の振り返り" : {
       "comment" : "Home menu row detail: what 記録 holds",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trends · History · Milestone stones · Month in Review"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -320,9 +2610,214 @@
         }
       }
     },
+    "時間" : {
+      "comment" : "Manual entry confirmation row: the self-reported time",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Time"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間"
+          }
+        }
+      }
+    },
+    "時間の核の進み" : {
+      "comment" : "Large-text card under the jar: title of the progress toward the next time core",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Time Core Progress"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間の核の進み"
+          }
+        }
+      }
+    },
+    "時間の選び方" : {
+      "comment" : "Custom focus length: label of the type/scroll segmented control",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "How to Set the Length"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間の選び方"
+          }
+        }
+      }
+    },
+    "時間を変更できます。25分、45分、60分、90分は無料です" : {
+      "comment" : "VoiceOver hint of Home's length menu: the four free lengths",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Changes the length. 25, 45, 60 and 90 minutes are free"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間を変更できます。25分、45分、60分、90分は無料です"
+          }
+        }
+      }
+    },
+    "時間を手動で積む" : {
+      "comment" : "Home menu row: add self-reported focus time",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add Time Manually"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間を手動で積む"
+          }
+        }
+      }
+    },
+    "時間を選ぶと、下に内容の確認が出ます。「確認して積む」を押すまで保存されません。" : {
+      "comment" : "Manual entry: choosing a length only previews it; nothing is saved before 確認して積む",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a length to see a summary below. Nothing is saved until you tap “Confirm and Add.”"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間を選ぶと、下に内容の確認が出ます。「確認して積む」を押すまで保存されません。"
+          }
+        }
+      }
+    },
+    "最近のカスタム時間" : {
+      "comment" : "Home length menu section: recently used custom lengths (Pro)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recent Custom Lengths"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近のカスタム時間"
+          }
+        }
+      }
+    },
+    "未選択" : {
+      "comment" : "No theme chosen yet: read after テーマ、 by VoiceOver and shown in the manual-entry confirmation row",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not chosen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未選択"
+          }
+        }
+      }
+    },
+    "本日の手動追加上限です" : {
+      "comment" : "VoiceOver hint of a manual-entry length button once today's allowance is used up",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You've reached today's limit for manual entries"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本日の手動追加上限です"
+          }
+        }
+      }
+    },
+    "満点・試験合格・納品・公開などの節目を、集中時間とは別のひとまわり大きな記念石として残せます。" : {
+      "comment" : "Achievement sheet introduction: what a milestone stone is for",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep a milestone like a perfect score, a passed exam, a delivery or a launch as a larger milestone stone, separate from your focus time."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "満点・試験合格・納品・公開などの節目を、集中時間とは別のひとまわり大きな記念石として残せます。"
+          }
+        }
+      }
+    },
+    "無料の集中タイマー" : {
+      "comment" : "Home length menu section: the free preset lengths",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Free Focus Lengths"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無料の集中タイマー"
+          }
+        }
+      }
+    },
     "瓶%lld杯ぶん満ちました" : {
       "comment" : "VoiceOver, jar value: how many times the jar has filled (2.5 kg each)",
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Filled %lld jar"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Filled %lld jars"
+                }
+              }
+            }
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -331,9 +2826,66 @@
         }
       }
     },
+    "瓶の整理" : {
+      "comment" : "Fusion sheet pill before 10 → 1: ten gems tidied into one",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jar tidy-up"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶の整理"
+          }
+        }
+      }
+    },
+    "瓶の整理として、10個の記録を1個の%@へ圧縮。記録と質量は100パーセント保持。時間の価値は変わりません" : {
+      "comment" : "VoiceOver, fusion sheet artwork: ten records became one; the argument is the crystal's name (結晶, 星片…)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jar tidy-up: 10 records became 1 %@. Records and mass are 100 percent kept. The value of your time doesn't change"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶の整理として、10個の記録を1個の%@へ圧縮。記録と質量は100パーセント保持。時間の価値は変わりません"
+          }
+        }
+      }
+    },
+    "瓶の粒をまとめています" : {
+      "comment" : "Toast: the jar is full, so its gems are being combined into crystals",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Combining the gems in your jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶の粒をまとめています"
+          }
+        }
+      }
+    },
     "瓶はまだ空です。下のボタンからテーマを追加できます" : {
       "comment" : "VoiceOver, empty jar at accessibility text sizes, no theme yet",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The jar is still empty. You can add a theme with the button below"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -345,6 +2897,12 @@
     "瓶はまだ空です。下のボタンから最初の集中を始められます" : {
       "comment" : "VoiceOver, empty jar at accessibility text sizes",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The jar is still empty. You can start your first focus with the button below"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -353,9 +2911,32 @@
         }
       }
     },
+    "瓶をタップすると粒が跳ね、iPhoneを傾けると転がります" : {
+      "comment" : "One-time jar tip on iPhone",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap the jar to make the gems bounce, or tilt your iPhone to roll them"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶をタップすると粒が跳ね、iPhoneを傾けると転がります"
+          }
+        }
+      }
+    },
     "瓶をタップすると粒が跳ねます" : {
       "comment" : "One-line jar tip in a short jar at accessibility text sizes",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap the jar to make the gems bounce"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -367,6 +2948,12 @@
     "瓶をダブルタップすると粒が跳ねます" : {
       "comment" : "One-line jar tip in a short jar at accessibility text sizes, with VoiceOver on",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Double-tap the jar to make the gems bounce"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -375,9 +2962,231 @@
         }
       }
     },
+    "瓶をダブルタップすると粒が跳ねます。VoiceOverのカスタムアクションで左右にも動かせます" : {
+      "comment" : "One-time jar tip with VoiceOver on",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Double-tap the jar to make the gems bounce. You can also move them left and right with VoiceOver's custom actions"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶をダブルタップすると粒が跳ねます。VoiceOverのカスタムアクションで左右にも動かせます"
+          }
+        }
+      }
+    },
+    "確認して積む" : {
+      "comment" : "Manual entry: the button that saves the entry",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Confirm and Add"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "確認して積む"
+          }
+        }
+      }
+    },
+    "確認済み %lld粒" : {
+      "comment" : "Home menu metric while iCloud is checked and no lifetime total can be shown: gems this device has confirmed",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld gem confirmed"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld gems confirmed"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "確認済み %lld粒"
+          }
+        }
+      }
+    },
+    "秒" : {
+      "comment" : "Custom focus length: title and VoiceOver label of the seconds field and wheel",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seconds"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "秒"
+          }
+        }
+      }
+    },
+    "秒は0〜59で入力してください。" : {
+      "comment" : "Custom focus length: seconds out of range",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter seconds from 0 to 59."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "秒は0〜59で入力してください。"
+          }
+        }
+      }
+    },
+    "秒を入力してください。" : {
+      "comment" : "Custom focus length: the seconds field is empty",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter the seconds."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "秒を入力してください。"
+          }
+        }
+      }
+    },
+    "秒単位のタイマーを別の端末で引き継ぐには、両方の端末で最新バージョンを利用してください。" : {
+      "comment" : "Custom focus length: a timer with seconds continues on another device only when both run the latest version",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To continue a timer with seconds on another device, use the latest version of the app on both devices."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "秒単位のタイマーを別の端末で引き継ぐには、両方の端末で最新バージョンを利用してください。"
+          }
+        }
+      }
+    },
+    "積み上がりを見る" : {
+      "comment" : "Home menu row: open the Progress overview",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "See Progress"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "積み上がりを見る"
+          }
+        }
+      }
+    },
+    "積み上がり計画" : {
+      "comment" : "Home menu row: open the planning sheet",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plan Ahead"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "積み上がり計画"
+          }
+        }
+      }
+    },
+    "積み上げた集中" : {
+      "comment" : "Jar readout caption above the lifetime mass; shown in capitals",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus built up"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "積み上げた集中"
+          }
+        }
+      }
+    },
+    "積み上げ結果を閉じると使えます" : {
+      "comment" : "VoiceOver hint of the disabled start button while the completion card is open",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Available after you close the completion card"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "積み上げ結果を閉じると使えます"
+          }
+        }
+      }
+    },
+    "積むテーマを変更できます。ホームで選んでいるテーマは変わりません" : {
+      "comment" : "VoiceOver hint of the manual-entry sheet's theme menu",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Changes the theme to add to. The theme chosen on Home stays the same"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "積むテーマを変更できます。ホームで選んでいるテーマは変わりません"
+          }
+        }
+      }
+    },
     "積んだ直後は、ホームで数秒のあいだ取り消せます。" : {
       "comment" : "Manual entry: under the confirm button; the entry can be undone briefly on Home",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Right after adding, you can undo it on Home for a few seconds."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -386,19 +3195,116 @@
         }
       }
     },
-    "累計%@、集中%lld粒、記念石%@個" : {
-      "comment" : "VoiceOver, menu metrics: lifetime mass, focus count, achievement stone count",
+    "積んだ質量" : {
+      "comment" : "Fusion sheet stat title: the mass the crystal holds",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mass Added"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "累計%@、集中%lld粒、記念石%@個"
+            "value" : "積んだ質量"
+          }
+        }
+      }
+    },
+    "粒数・質量など、保存済みの内訳" : {
+      "comment" : "VoiceOver, crystal card of an older crystal without colors: what its details hold",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved details such as gem count and mass"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粒数・質量など、保存済みの内訳"
+          }
+        }
+      }
+    },
+    "累計" : {
+      "comment" : "Home menu metric caption: lifetime mass",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Total"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "累計"
+          }
+        }
+      }
+    },
+    "累計%@" : {
+      "comment" : "VoiceOver, menu metrics: the lifetime mass (12 kg)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Total %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "累計%@"
+          }
+        }
+      }
+    },
+    "累計は確認が済むと表示します。" : {
+      "comment" : "VoiceOver, menu metrics while iCloud is checked: the lifetime total shows once the check is done",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your total will show once the check is done."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "累計は確認が済むと表示します。"
+          }
+        }
+      }
+    },
+    "結晶" : {
+      "comment" : "Fusion sheet stat title above the crystal's size (×10)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crystal"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結晶"
           }
         }
       }
     },
     "結晶の保存を再試行します" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trying to save the crystal again"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -407,8 +3313,48 @@
         }
       }
     },
+    "結晶の進みを確認し、休憩、共有、または閉じるを選べます" : {
+      "comment" : "VoiceOver hint of the completion card heading when sharing is offered",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check your crystal progress, then take a break, share or close"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結晶の進みを確認し、休憩、共有、または閉じるを選べます"
+          }
+        }
+      }
+    },
+    "結晶の進みを確認し、休憩または閉じるを選べます" : {
+      "comment" : "VoiceOver hint of the completion card heading",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check your crystal progress, then take a break or close"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結晶の進みを確認し、休憩または閉じるを選べます"
+          }
+        }
+      }
+    },
     "結晶は未保存です" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crystal not saved"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -419,6 +3365,12 @@
     },
     "結晶は未保存です。再試行してください" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The crystal wasn't saved. Please try again"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -430,6 +3382,12 @@
     "結晶をつくっています" : {
       "comment" : "Jar capsule while ten gems fuse",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Making a crystal"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -441,6 +3399,12 @@
     "結晶をタップすると、内訳を見られます" : {
       "comment" : "Hint under the jar until a crystal's detail has been opened once",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap a crystal to see its details"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -451,6 +3415,12 @@
     },
     "結晶を見つけました" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Found a crystal"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -459,9 +3429,151 @@
         }
       }
     },
+    "続けた先の瓶と質量を予測" : {
+      "comment" : "Home menu row detail: the planning sheet projects the jar and mass ahead",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "See where your jar and mass could be if you keep going"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "続けた先の瓶と質量を予測"
+          }
+        }
+      }
+    },
+    "自己申告はこの端末で1日3回までです。" : {
+      "comment" : "Manual entry error: self-reported time can be added at most three times a day on this device",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can add up to 3 self-reported entries a day on this device."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自己申告はこの端末で1日3回までです。"
+          }
+        }
+      }
+    },
+    "自由な時間を設定" : {
+      "comment" : "Home length menu: open the custom length editor",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Set a Custom Length"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自由な時間を設定"
+          }
+        }
+      }
+    },
+    "自由な時間を設定（Pro）" : {
+      "comment" : "Home length menu for free users: the custom length editor needs Pro",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Set a Custom Length (Pro)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自由な時間を設定（Pro）"
+          }
+        }
+      }
+    },
+    "色、テーマ、期間などの内訳を表示します" : {
+      "comment" : "VoiceOver hint of the crystal card: opens its details",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows details such as colors, themes and dates"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "色、テーマ、期間などの内訳を表示します"
+          }
+        }
+      }
+    },
+    "色・粒数・質量など、保存済みの内訳" : {
+      "comment" : "VoiceOver, crystal card: what its details hold",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved details such as colors, gem count and mass"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "色・粒数・質量など、保存済みの内訳"
+          }
+        }
+      }
+    },
+    "虹の粒、着地。" : {
+      "comment" : "Completion card title once a rainbow gem has landed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A rainbow gem landed."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "虹の粒、着地。"
+          }
+        }
+      }
+    },
+    "虹の粒を積みました。" : {
+      "comment" : "Completion card title for a rainbow gem (plain presentation)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Added a rainbow gem."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "虹の粒を積みました。"
+          }
+        }
+      }
+    },
     "記念石" : {
       "comment" : "Home menu metric caption: achievement stone count",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Milestone stones"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -470,8 +3582,123 @@
         }
       }
     },
+    "記念石 %lld" : {
+      "comment" : "Jar readout pill: the number of milestone stones",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld milestone stone"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld milestone stones"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記念石 %lld"
+          }
+        }
+      }
+    },
+    "記念石 %lld+" : {
+      "comment" : "Jar readout pill: at least this many milestone stones",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld+ milestone stones"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記念石 %lld+"
+          }
+        }
+      }
+    },
+    "記念石%lld+個" : {
+      "comment" : "VoiceOver, menu metrics: at least this many milestone stones",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld+ milestone stones"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記念石%lld+個"
+          }
+        }
+      }
+    },
+    "記念石%lld個" : {
+      "comment" : "VoiceOver, menu metrics: the number of milestone stones",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld milestone stone"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld milestone stones"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記念石%lld個"
+          }
+        }
+      }
+    },
+    "記念石にする" : {
+      "comment" : "Achievement sheet title, second step: the details of the milestone stone",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Make a Milestone Stone"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記念石にする"
+          }
+        }
+      }
+    },
     "記念石は0gで、集中時間・質量・通常の粒数には加わりません。瓶では新しい12個が動き、前の石も記録棚にずっと残ります。" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Milestone stones weigh 0 g and don't add to your focus time, mass or gem count. The newest 12 move in the jar, and earlier stones stay on your records shelf for good."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -480,13 +3707,405 @@
         }
       }
     },
+    "記念石を保存できませんでした。もう一度お試しください。" : {
+      "comment" : "Achievement sheet error: the milestone stone could not be saved",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save the milestone stone. Please try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記念石を保存できませんでした。もう一度お試しください。"
+          }
+        }
+      }
+    },
+    "記録、設定、手動での追加、背景などを開きます" : {
+      "comment" : "VoiceOver hint of Home's menu button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opens the Log, Settings, manual entries, backgrounds and more"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録、設定、手動での追加、背景などを開きます"
+          }
+        }
+      }
+    },
+    "記録の保存を安全に再試行できます" : {
+      "comment" : "Home card after a completed focus could not be saved yet: saving can be retried safely",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can safely try saving it again"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録の保存を安全に再試行できます"
+          }
+        }
+      }
+    },
+    "記録を見る" : {
+      "comment" : "Home menu row: open the Log tab",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View Log"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録を見る"
+          }
+        }
+      }
+    },
+    "設定" : {
+      "comment" : "Home menu row: open Settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Settings"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定"
+          }
+        }
+      }
+    },
+    "設定できませんでした。もう一度お試しください。" : {
+      "comment" : "Custom focus length: the chosen length could not be saved",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't set this length. Please try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定できませんでした。もう一度お試しください。"
+          }
+        }
+      }
+    },
+    "設定情報を読み込めませんでした。もう一度お試しください。" : {
+      "comment" : "Manual entry error: the app's settings could not be read",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't load your settings. Please try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定情報を読み込めませんでした。もう一度お試しください。"
+          }
+        }
+      }
+    },
+    "設定画面を開きます" : {
+      "comment" : "VoiceOver hint of the start button before any theme exists",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opens Settings"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定画面を開きます"
+          }
+        }
+      }
+    },
     "進行中の集中があるため、新しい集中は始めませんでした" : {
       "comment" : "Toast: a widget, link or Siri asked to start a focus while another one still needs attention",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A focus is still in progress, so a new one wasn't started"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "進行中の集中があるため、新しい集中は始めませんでした"
+          }
+        }
+      }
+    },
+    "達成した日" : {
+      "comment" : "Achievement details: date picker label",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Date Achieved"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "達成した日"
+          }
+        }
+      }
+    },
+    "選んだテーマが見つかりません。テーマを選び直してください。" : {
+      "comment" : "Manual entry error: the chosen theme was archived or removed while the sheet was open",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The theme you chose can't be found. Please choose a theme again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選んだテーマが見つかりません。テーマを選び直してください。"
+          }
+        }
+      }
+    },
+    "選択してください" : {
+      "comment" : "Theme menu of the manual-entry and achievement sheets while no theme is chosen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a theme"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択してください"
+          }
+        }
+      }
+    },
+    "選択中のテーマ" : {
+      "comment" : "Stands in for the theme name on Home's start button if it is momentarily missing",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selected theme"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択中のテーマ"
+          }
+        }
+      }
+    },
+    "金の粒、着地。" : {
+      "comment" : "Completion card title once a gold gem has landed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A gold gem landed."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "金の粒、着地。"
+          }
+        }
+      }
+    },
+    "金の粒を積みました。" : {
+      "comment" : "Completion card title for a gold gem (plain presentation)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Added a gold gem."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "金の粒を積みました。"
+          }
+        }
+      }
+    },
+    "閉じると、一粒が瓶に落ちます。" : {
+      "comment" : "Completion card before the gem has dropped: closing the card drops it into the jar",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close this and a gem drops into your jar."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "閉じると、一粒が瓶に落ちます。"
+          }
+        }
+      }
+    },
+    "集中" : {
+      "comment" : "Home menu metric caption: gems from focus sessions",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中"
+          }
+        }
+      }
+    },
+    "集中%lld粒" : {
+      "comment" : "VoiceOver, menu metrics: gems from focus sessions",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld focus gem"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld focus gems"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中%lld粒"
+          }
+        }
+      }
+    },
+    "集中する空間" : {
+      "comment" : "Home menu section title: the background atmosphere picker",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your Focus Space"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中する空間"
+          }
+        }
+      }
+    },
+    "集中を記録しました。" : {
+      "comment" : "Completion card title before the gem has dropped into the jar",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus recorded."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中を記録しました。"
+          }
+        }
+      }
+    },
+    "集中時間、%@" : {
+      "comment" : "VoiceOver label of Home's length menu; the argument is the chosen length",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus length, %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中時間、%@"
+          }
+        }
+      }
+    },
+    "集中時間を保存できませんでした" : {
+      "comment" : "Toast: the chosen focus length could not be saved",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save the focus length"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中時間を保存できませんでした"
+          }
+        }
+      }
+    },
+    "集中時間を選ぶ" : {
+      "comment" : "Custom focus length sheet: title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a Focus Length"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中時間を選ぶ"
           }
         }
       }
