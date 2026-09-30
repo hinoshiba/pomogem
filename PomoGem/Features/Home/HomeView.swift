@@ -2118,7 +2118,7 @@ struct HomeView: View {
                 scene: scene,
                 stageFrame: measuredJarStageFrame,
                 coordinateSpace: Self.jarCardCoordinateSpace,
-                followsPile: !Self.previewsHUDAboveJar
+                followsPile: !isAboveMouth
             )
         }
         .accessibilityHidden(true)
