@@ -190,6 +190,7 @@ catalogの同期は必ず全テーブルまとめて行います（一部だけ�
 
 - `Scripts/check-oss-readiness.sh`: `Scripts/l10n/test-l10n.py`（ツール自身のテスト）と`l10n.py check`（静的検査）。
 - unit testの後: `l10n.py check --derived-data DerivedData-CI-Tests`（コンパイラが抽出したキーとcatalogの照合）。
+- 英語の画面スモークテスト: `EnglishLocalizationSmokeUITests`を同じSimulatorで実行し、ホームと設定が英語で表示されることを確認します。
 - Release build: `l10n.py verify-bundle`。3つのbundleすべてに`ja.lproj`と`en.lproj`（`shipping_languages`と同じ）があり、
   開発地域が`table-map.json`の`development_region`（`en`）と同じで、日本語の端末が全キーを日本語で読めることを確認します。
   `Scripts/verify-release-archive.sh`も同じ検査をarchiveに行います。
