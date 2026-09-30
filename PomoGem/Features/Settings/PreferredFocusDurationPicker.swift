@@ -20,11 +20,11 @@ struct PreferredFocusDurationPicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("既定の集中時間")
+                Text("既定の集中時間", tableName: "Settings", comment: "Heading of the default focus length picker in Settings")
                     .font(.headline)
                     .foregroundStyle(PomoGemTheme.text)
                     .accessibilityAddTraits(.isHeader)
-                Text("次の集中に使う時間を選びます。")
+                Text("次の集中に使う時間を選びます。", tableName: "Settings")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
             }
@@ -72,8 +72,10 @@ struct PreferredFocusDurationPicker: View {
         .accessibilityElement(children: .ignore)
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(duration.displayLabel)
-        .accessibilityValue(isSelected ? "選択中" : "未選択")
-        .accessibilityHint("既定の集中時間に設定します")
+        .accessibilityValue(isSelected
+            ? String(localized: "選択中", table: "Settings", comment: "VoiceOver value: this option is selected")
+            : String(localized: "未選択", table: "Settings", comment: "VoiceOver value: this option is not selected"))
+        .accessibilityHint(Text("既定の集中時間に設定します", tableName: "Settings", comment: "VoiceOver hint of a focus length tile"))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("settings.focus-preset.\(duration.seconds / Constants.Timer.secondsPerMinute)")
         .accessibilityAction { onSelectPreset(duration) }
@@ -118,23 +120,26 @@ struct PreferredFocusDurationPicker: View {
         }
         .buttonStyle(PomoGemBareButtonStyle())
         .accessibilityElement(children: .combine)
-        .accessibilityValue(isCustomSelected ? "選択中" : "未選択")
+        .accessibilityValue(isCustomSelected
+            ? String(localized: "選択中", table: "Settings", comment: "VoiceOver value: this option is selected")
+            : String(localized: "未選択", table: "Settings", comment: "VoiceOver value: this option is not selected"))
         .accessibilityAddTraits(isCustomSelected ? .isSelected : [])
         .accessibilityHint(isPro
-            ? "分と秒を入力、またはスクロールして設定します"
-            : "ポモジェムProのプランを表示します")
+            ? String(localized: "分と秒を入力、またはスクロールして設定します", table: "Settings", comment: "VoiceOver hint of the custom length tile for Pro users")
+            : String(localized: "ポモジェムProのプランを表示します", table: "Settings", comment: "VoiceOver hint of the custom length tile without Pro: it opens the paywall"))
         .accessibilityIdentifier(isPro ? "settings.preferred-focus-duration" : "settings.custom-timer")
     }
 
     private var customDurationTitle: some View {
-        Text("カスタム時間")
+        Text("カスタム時間", tableName: "Settings", comment: "Tile title: a focus length the person sets (Pro)")
             .font(.headline)
             .foregroundStyle(PomoGemTheme.text)
             .fixedSize(horizontal: false, vertical: true)
     }
 
     private var proBadge: some View {
-        Text("Pro")
+        // The plan's name, the same in every language.
+        Text(verbatim: "Pro")
             .font(.caption.weight(.bold))
             .foregroundStyle(PomoGemTheme.amber)
             .padding(.horizontal, 8)

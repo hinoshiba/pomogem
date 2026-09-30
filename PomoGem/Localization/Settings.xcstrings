@@ -1,9 +1,243 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "%@\n変更前の状態に戻しました。\n%@" : {
+      "comment" : "Settings error. The first argument is what failed (a full sentence), the second the system error description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@\nYour change was undone.\n%2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@\n変更前の状態に戻しました。\n%@"
+          }
+        }
+      }
+    },
+    "%@。%@" : {
+      "comment" : "VoiceOver label of a picker option: its name, then its description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@。%@"
+          }
+        }
+      }
+    },
+    "%@を書き出し中" : {
+      "comment" : "Export progress; the argument is the kind of record being written, e.g. focus sessions",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exporting %@…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@を書き出し中"
+          }
+        }
+      }
+    },
+    "%@を書き出し中、%lld件中%lld件" : {
+      "comment" : "Export progress. The first argument is the kind of record being written, the second the estimated total, the third how many are done",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exporting %1$@: %3$lld of %2$lld"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@を書き出し中、%lld件中%lld件"
+          }
+        }
+      }
+    },
+    "%lld件のデータを書き出しました。保存先を選んでください" : {
+      "comment" : "VoiceOver announcement after an export; the argument is the number of records written",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Exported %lld record. Choose where to save the file."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Exported %lld records. Choose where to save the file."
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld件のデータを書き出しました。保存先を選んでください"
+          }
+        }
+      }
+    },
+    "1. このApple Accountでポモジェムを使っているすべての端末で、アプリを削除します。" : {
+      "comment" : "Step 1 of deleting the iCloud data",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1. Delete the app on every device that uses PomoGem with this Apple Account."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1. このApple Accountでポモジェムを使っているすべての端末で、アプリを削除します。"
+          }
+        }
+      }
+    },
+    "1〜%lld文字で入力してください。" : {
+      "comment" : "Theme name field status when empty; the argument is the longest allowed name (20)",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Enter up to %lld character."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Enter 1–%lld characters."
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1〜%lld文字で入力してください。"
+          }
+        }
+      }
+    },
+    "2. iPhoneの「設定」を開き、いちばん上の自分の名前から「iCloud」に進みます。" : {
+      "comment" : "Step 2 of deleting the iCloud data; quote iOS Settings as it reads in the language",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "2. Open Settings on your iPhone, tap your name at the top, then tap “iCloud.”"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "2. iPhoneの「設定」を開き、いちばん上の自分の名前から「iCloud」に進みます。"
+          }
+        }
+      }
+    },
+    "3. 「アカウントのストレージを管理」（または「ストレージを管理」）で「ポモジェム」を選び、データを削除します。" : {
+      "comment" : "Step 3 of deleting the iCloud data; アカウントのストレージを管理 / ストレージを管理 are iOS Settings labels (Manage Account Storage / Manage Storage)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "3. In “Manage Account Storage” (or “Manage Storage”), choose “PomoGem” and delete its data."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "3. 「アカウントのストレージを管理」（または「ストレージを管理」）で「ポモジェム」を選び、データを削除します。"
+          }
+        }
+      }
+    },
+    "3秒後にプレビューします。もう一度押すとキャンセルできます" : {
+      "comment" : "VoiceOver announcement when the preview starts",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preview in 3 seconds. Tap again to cancel."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "3秒後にプレビューします。もう一度押すとキャンセルできます"
+          }
+        }
+      }
+    },
+    "3秒後に試す" : {
+      "comment" : "Button: play the timer end sound and haptics in 3 seconds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try in 3 Seconds"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "3秒後に試す"
+          }
+        }
+      }
+    },
+    "4つの見本から、タイマーの見た目を選べます" : {
+      "comment" : "VoiceOver hint of the timer display row",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose how the timer looks from 4 samples."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "4つの見本から、タイマーの見た目を選べます"
+          }
+        }
+      }
+    },
     "App Storeで評価・レビューする" : {
       "comment" : "Settings row: rate or review the app",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rate or Review on the App Store"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -15,6 +249,12 @@
     "App Storeを開きます" : {
       "comment" : "Settings row subtitle: opens the App Store",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opens the App Store"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -23,9 +263,32 @@
         }
       }
     },
+    "JSONファイルを作成中" : {
+      "comment" : "Export row subtitle while the file is being written",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Creating the JSON file…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "JSONファイルを作成中"
+          }
+        }
+      }
+    },
     "MIT License・GitHub（Webで開く）" : {
       "comment" : "About page link subtitle",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MIT License · GitHub (opens on the web)"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -34,9 +297,32 @@
         }
       }
     },
+    "Proの購入状態を確認してください" : {
+      "comment" : "Toast: a custom duration needs Pro, and Pro is not confirmed on this device",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Please check your Pro purchase"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proの購入状態を確認してください"
+          }
+        }
+      }
+    },
     "Proは1回だけの買い切りです。記録・テーマ・iCloud同期・シェアなど、ほかの機能は無料で使えます。" : {
       "comment" : "Settings footer under the Pro row for free users",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pro is a one-time purchase. Everything else, including records, themes, iCloud sync and sharing, is free."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -48,6 +334,12 @@
     "Pro：%@" : {
       "comment" : "Support mail line; the argument is whether Pro is owned",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pro: %@"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -59,6 +351,12 @@
     "SIL Open Font License 1.1を読む" : {
       "comment" : "About page button: show the typeface's licence",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Read the SIL Open Font License 1.1"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -67,9 +365,32 @@
         }
       }
     },
-    "iCloud" : {
-      "comment" : "Support mail: records are kept in iCloud",
+    "Webで開く" : {
+      "comment" : "Settings row subtitle: opens a web page",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opens on the web"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Webで開く"
+          }
+        }
+      }
+    },
+    "iCloud" : {
+      "comment" : "Support mail: records are kept in iCloud\nWhere records or settings are saved: iCloud",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -78,9 +399,66 @@
         }
       }
     },
+    "iCloudに保存したポモジェムのデータは、iPhoneの「設定」アプリから削除できます。同じApple Accountのすべての端末から消え、元に戻せません。" : {
+      "comment" : "設定 is the iOS Settings app",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can delete the PomoGem data saved in iCloud from the Settings app on your iPhone. It disappears from every device using the same Apple Account and can't be restored."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudに保存したポモジェムのデータは、iPhoneの「設定」アプリから削除できます。同じApple Accountのすべての端末から消え、元に戻せません。"
+          }
+        }
+      }
+    },
+    "iCloudのデータを削除する" : {
+      "comment" : "Section header: delete the app's data from iCloud in iOS Settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete Your iCloud Data"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudのデータを削除する"
+          }
+        }
+      }
+    },
+    "iCloudへ接続できる状態で実行してください。通信が切れた場合は完了と表示せず、安全な位置から再試行します。" : {
+      "comment" : "Complete data deletion precondition",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Do this while you can connect to iCloud. If the connection drops, the app doesn't report the deletion as complete, and it tries again from a safe point."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudへ接続できる状態で実行してください。通信が切れた場合は完了と表示せず、安全な位置から再試行します。"
+          }
+        }
+      }
+    },
     "iCloud（オフラインで利用中）" : {
       "comment" : "Support mail: iCloud mode, used offline from this iPhone's copy",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud (used offline)"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -92,6 +470,12 @@
     "iOS：%@" : {
       "comment" : "Support mail line; the argument is the iOS version, e.g. 26.5",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS: %@"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -100,12 +484,259 @@
         }
       }
     },
-    "「抽選しない」を選択として保存" : {
+    "settings.complete-deletion.confirmation-word" : {
+      "comment" : "The word the person types to confirm complete data deletion. It is shown in the prompt and compared exactly with the input. English: DELETE (capital letters).",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DELETE"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "「抽選しない」を選択として保存"
+            "value" : "削除"
+          }
+        }
+      }
+    },
+    "settings.export.collection.preferences" : {
+      "comment" : "Export progress: the collection being written (settings, lower case in English)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "settings"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定"
+          }
+        }
+      }
+    },
+    "settings.export.collection.themes" : {
+      "comment" : "Export progress: the collection being written (themes, lower case in English)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "themes"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマ"
+          }
+        }
+      }
+    },
+    "settings.focus-leave.nudge-count" : {
+      "comment" : "How many leave-pause notifications at most (5), inside the switch subtitle. English: '%lld notification' / '%lld notifications'.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld notification"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld notifications"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld回"
+          }
+        }
+      }
+    },
+    "settings.rare.pity-misses" : {
+      "comment" : "How many draws in a row without gold guarantee the next one (20), inside the gold gem detail. English: '%lld miss in a row' / '%lld misses in a row'.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld miss in a row"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld misses in a row"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld回続けて"
+          }
+        }
+      }
+    },
+    "settings.theme-deletion.record-count" : {
+      "comment" : "How many past records use the theme being deleted, inside the deletion message. English: '%lld past record' / '%lld past records'.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld past record"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld past records"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "過去の記録%lld件"
+          }
+        }
+      }
+    },
+    "settings.themes.swipe.hide" : {
+      "comment" : "Swipe action on a theme: hide it from Home (English: Hide). Same Japanese as the Hidden badge, different English.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hide"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "非表示"
+          }
+        }
+      }
+    },
+    "「%@」だけを削除します。%@と質量は消えず、現在の名前と色も残ります。この操作は取り消せません。" : {
+      "comment" : "Theme deletion alert message. The first argument is the theme name, the second how many past records use it (過去の記録3件)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Only the theme “%1$@” will be deleted. Its mass and its %2$@ are not deleted and still show its current name and color. This can't be undone."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」だけを削除します。%@と質量は消えず、現在の名前と色も残ります。この操作は取り消せません。"
+          }
+        }
+      }
+    },
+    "「%@」と入力" : {
+      "comment" : "Header above the confirmation field; the argument is the word to type (削除 / DELETE)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Type “%@”"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」と入力"
+          }
+        }
+      }
+    },
+    "「%@」は端末の向きに合わせます。上・右・下・左は、縦に持ったiPhoneの画面内でタイマーの上辺が向く方向です。" : {
+      "comment" : "Footer under the default timer orientation options. The argument is the automatic option's title (自動). 上・右・下・左 are the other four options: which way the top of the timer faces on an upright iPhone.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” follows how you hold your iPhone. Up, Right, Down and Left are the way the top of the timer faces on an iPhone held upright."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」は端末の向きに合わせます。上・右・下・左は、縦に持ったiPhoneの画面内でタイマーの上辺が向く方向です。"
+          }
+        }
+      }
+    },
+    "「%@」を削除" : {
+      "comment" : "Theme deletion alert button; the argument is the theme name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete “%@”"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」を削除"
+          }
+        }
+      }
+    },
+    "「%@」を削除します。関連する過去の記録はありません。この操作は取り消せません。" : {
+      "comment" : "Theme deletion alert message; the argument is the theme name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” will be deleted. It has no past records. This can't be undone."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」を削除します。関連する過去の記録はありません。この操作は取り消せません。"
+          }
+        }
+      }
+    },
+    "「%@」を選択として保存" : {
+      "comment" : "Button: save the rare gem picker's off option as an explicit choice; the argument is that option's name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save “%@” as Your Choice"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」を選択として保存"
           }
         }
       }
@@ -113,6 +744,12 @@
     "「毎日のリマインダー」と「先月の瓶のお知らせ」は既定でオフです。赤いバッジや連続記録の警告は使いません。タイマー終了の通知だけは「即時通知」として送るため、iPhoneの集中モード（おやすみモードなど）で即時通知を許可していれば、その間も届きます。" : {
       "comment" : "Settings footer under the Notifications card. The default-off sentence names only this card's two switches, because the leave-pause notifications in the Focus card are on by default. Suggested English: Daily Reminder and Last Month's Jar are off by default. The app never uses red badges or streak warnings. Only timer-end alerts are sent as Time Sensitive, so they still arrive during a Focus such as Do Not Disturb if Time Sensitive notifications are allowed there.",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“Daily Reminder” and “Last Month's Jar” are off by default. There are no red badges and no streaks. Only timer-end notifications are sent as Time Sensitive, so they still arrive during a Focus such as Do Not Disturb if that Focus allows Time Sensitive notifications."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -124,6 +761,12 @@
     "「視差効果を減らす」がオンのため、いまは控えめで表示しています。" : {
       "comment" : "Settings note under Effect intensity while the system Reduce Motion setting is on",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reduce Motion is on, so the jar uses Subtle for now."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -135,6 +778,12 @@
     "「集中が切れたらお知らせ」は、タイマーが止まっていることを知らせる通知で、アプリに戻ると残りは届きません。このiPhoneで通知を許可していない場合は届きません。「アプリを離れたら一時停止」がオンのあいだは、「集中に戻るお知らせ」の代わりにこちらを使います。" : {
       "comment" : "Settings footer under the leave-pause notification switch; it replaces the older Return-to-Focus Reminder while the leave pause is on. The switch is on by default, so the permission sentence is a plain fact with no call to action. Suggested English: These notifications say the timer is paused, and the rest are withdrawn when you come back. They do not arrive unless notifications are allowed on this iPhone. While Pause When You Leave the App is on, they replace the Return-to-Focus Reminder.",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“Notify Me When I Drift Away” sends notifications saying the timer is paused, and the rest are withdrawn once you're back in the app. They don't arrive unless notifications are allowed on this iPhone. While “Pause When You Leave the App” is on, they're used instead of the “Return-to-Focus Reminder.”"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -146,6 +795,12 @@
     "「集中に戻るお知らせ」は既定でオフです。オンにすると、集中タイマー中にホーム画面や別のアプリへ移ったとき、30秒後に一度通知し、戻ると取り消します。画面をロックしただけなら通知しません（パスコードを使っていないiPhoneなどでは届くことがあります）。一時停止中・休憩中・終了間際も通知しません。" : {
       "comment" : "Settings caption under the return-to-focus reminder switch",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“Return-to-Focus Reminder” is off by default. When it's on and you go to the Home Screen or another app during a focus timer, you get one notification after 30 seconds, and it's withdrawn when you come back. Just locking the screen sends nothing (though a notification may arrive on an iPhone without a passcode, for example). There's also no notification while paused, during a break, or near the end."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -154,9 +809,90 @@
         }
       }
     },
+    "あと%lld文字入力できます。" : {
+      "comment" : "Theme name field status; the argument is how many more characters fit",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "You can type %lld more character."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "You can type %lld more characters."
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "あと%lld文字入力できます。"
+          }
+        }
+      }
+    },
+    "あと%lld秒" : {
+      "comment" : "Seconds left before the preview plays; the argument is the count",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld second left"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld seconds left"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "あと%lld秒"
+          }
+        }
+      }
+    },
+    "いつもの粒" : {
+      "comment" : "Rare gem guide row: the regular gem",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Regular Gem"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "いつもの粒"
+          }
+        }
+      }
+    },
     "きらめきと傾けたときの星を止め、光を弱め、着地と融合を短くします" : {
       "comment" : "Effect intensity detail for Subtle",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turns off the sparkle and tilt stars, softens the glow, and shortens landings and fusions"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -165,9 +901,82 @@
         }
       }
     },
+    "このAppのプライベートiCloud上のユーザー内容" : {
+      "comment" : "Complete data deletion: what is deleted",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your content in this app's private iCloud storage"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このAppのプライベートiCloud上のユーザー内容"
+          }
+        }
+      }
+    },
+    "このiPhone" : {
+      "comment" : "Where settings are saved, inside a sentence (English: this iPhone)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "this iPhone"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhone"
+          }
+        }
+      }
+    },
+    "このiPhoneだけで0から始める" : {
+      "comment" : "Section header: switch this iPhone to local-only storage and reset",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start from 0 on This iPhone Only"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneだけで0から始める"
+          }
+        }
+      }
+    },
+    "このiPhoneに保存され、アプリを再起動しても引き継がれます。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved on this iPhone and kept when you restart the app."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneに保存され、アプリを再起動しても引き継がれます。"
+          }
+        }
+      }
+    },
     "このiPhoneのみ" : {
       "comment" : "Support mail: records are kept only on this iPhone",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This iPhone Only"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -176,9 +985,49 @@
         }
       }
     },
+    "このiPhone内の記録はリセット済みですが、端末上の補助表示を消去できませんでした。\n%@" : {
+      "comment" : "Reset cleanup error on a local-only iPhone; the argument is the system error description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The records on this iPhone were reset, but some displays on this iPhone couldn't be cleared.\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhone内の記録はリセット済みですが、端末上の補助表示を消去できませんでした。\n%@"
+          }
+        }
+      }
+    },
+    "このiPhone内の記録をリセットしました" : {
+      "comment" : "Toast after a reset on a local-only iPhone",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The records on this iPhone were reset"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhone内の記録をリセットしました"
+          }
+        }
+      }
+    },
     "このアプリについて" : {
       "comment" : "About page title\nSettings row: the About page",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "About This App"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -187,9 +1036,49 @@
         }
       }
     },
+    "この端末で利用可能な記録、テーマ、設定をJSONファイルにして、保存先を選びます" : {
+      "comment" : "VoiceOver hint of the export row",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Puts the records, themes and settings available on this device into a JSON file, then lets you choose where to save it."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末で利用可能な記録、テーマ、設定をJSONファイルにして、保存先を選びます"
+          }
+        }
+      }
+    },
+    "この端末の記録はリセット済みですが、ウィジェットの表示を消去できませんでした。iCloudへの反映には時間がかかる場合があります。\n%@" : {
+      "comment" : "Reset cleanup error in iCloud mode; the argument is the system error description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The records on this device were reset, but the widgets couldn't be cleared. It may take a while for iCloud to update.\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末の記録はリセット済みですが、ウィジェットの表示を消去できませんでした。iCloudへの反映には時間がかかる場合があります。\n%@"
+          }
+        }
+      }
+    },
     "その日に集中を始めたり、時間を手動で積んだりした日は、毎日のリマインダーは届きません。7日間アプリを開かなかったときは、次に開くまでお休みします。" : {
       "comment" : "Settings caption: when the daily reminder is skipped",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The Daily Reminder skips any day you've started a focus or added time manually. If you haven't opened the app for 7 days, it rests until you open it again."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -198,9 +1087,66 @@
         }
       }
     },
+    "どの表示でも、タイマーの時間や集中の記録は変わりません。" : {
+      "comment" : "Timer display page footer",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No display changes your timer's length or your focus records."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "どの表示でも、タイマーの時間や集中の記録は変わりません。"
+          }
+        }
+      }
+    },
+    "ほかの端末と古いバージョンに関する制約を確認しました" : {
+      "comment" : "Complete data deletion: acknowledgement switch on the last step",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "I Understand the Limits for Other Devices and Older Versions"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ほかの端末と古いバージョンに関する制約を確認しました"
+          }
+        }
+      }
+    },
+    "ほかの端末も最新版へ更新し、オンラインで一度起動してください。オフラインのままの端末や、この削除世代に対応していない古いバージョンは、端末内の古い記録を後からiCloudへ再送する可能性があります。" : {
+      "comment" : "Complete data deletion precondition",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update your other devices to the latest version too, and open the app on each of them once while online. A device that stays offline, or an older version that doesn't support this deletion, may later send its old records to iCloud again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ほかの端末も最新版へ更新し、オンラインで一度起動してください。オフラインのままの端末や、この削除世代に対応していない古いバージョンは、端末内の古い記録を後からiCloudへ再送する可能性があります。"
+          }
+        }
+      }
+    },
     "アプリのバージョンなどを自動で記入します" : {
       "comment" : "Settings row subtitle: the mail draft is pre-filled with versions and settings",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fills in the app version and other details for you"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -209,9 +1155,66 @@
         }
       }
     },
+    "アプリの中からiCloudのデータを消す機能は、ほかの端末の記録が消えてしまわないよう、いまは用意していません。" : {
+      "comment" : "Footer: why the app has no in-app iCloud deletion",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "For now, the app has no way to delete your iCloud data itself, so that records on your other devices aren't lost."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリの中からiCloudのデータを消す機能は、ほかの端末の記録が消えてしまわないよう、いまは用意していません。"
+          }
+        }
+      }
+    },
+    "アプリの利用時間" : {
+      "comment" : "Settings section header above the Screen Time row",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App Usage"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリの利用時間"
+          }
+        }
+      }
+    },
+    "アプリを開いている間にタイマーが終わったときは、終了音と触覚を停止操作まで繰り返します。通知で知らせたあとや、あとからアプリに戻ったときは繰り返さず、そのまま記録を表示します。音はサイレントモードに従います。通知を許可している場合、ロック中は1回の通知となり、音と触覚はiPhoneの通知設定に従います。" : {
+      "comment" : "Settings footer under Sound & Haptics",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "When a timer ends while the app is open, the end sound and haptics repeat until you stop them. After a notification, or when you come back to the app later, they don't repeat and your record is shown right away. Sound follows Silent mode. If notifications are allowed, a locked iPhone gets a single notification, and its sound and haptics follow your iPhone's notification settings."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリを開いている間にタイマーが終わったときは、終了音と触覚を停止操作まで繰り返します。通知で知らせたあとや、あとからアプリに戻ったときは繰り返さず、そのまま記録を表示します。音はサイレントモードに従います。通知を許可している場合、ロック中は1回の通知となり、音と触覚はiPhoneの通知設定に従います。"
+          }
+        }
+      }
+    },
     "アプリを離れたら一時停止" : {
       "comment" : "Settings switch title: pause a running focus when the person goes to the Home Screen or another app. Suggested English: Pause When You Leave the App",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pause When You Leave the App"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -220,9 +1223,66 @@
         }
       }
     },
+    "アプリを離れて30秒後に一度通知" : {
+      "comment" : "Settings switch subtitle",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "One notification 30 seconds after you leave the app"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリを離れて30秒後に一度通知"
+          }
+        }
+      }
+    },
+    "アプリ内の完了・着地・瓶操作。レア専用は標準モードのみ" : {
+      "comment" : "Haptics subtitle while rare gems exist",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Completions, landings and jar gestures in the app. Rare-gem haptics in Standard mode only"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリ内の完了・着地・瓶操作。レア専用は標準モードのみ"
+          }
+        }
+      }
+    },
+    "アプリ内の完了・着地・瓶操作に使います" : {
+      "comment" : "Haptics subtitle",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Used for completions, landings and jar gestures in the app"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリ内の完了・着地・瓶操作に使います"
+          }
+        }
+      }
+    },
     "アプリ：ポモジェム %@" : {
       "comment" : "Support mail line; the argument is the app version, e.g. 1.1.0 (10)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App: PomoGem %@"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -231,9 +1291,32 @@
         }
       }
     },
+    "オフ中は新しく抽選しません" : {
+      "comment" : "Rare gem guide row detail while draws are off",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No new draws while off"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オフ中は新しく抽選しません"
+          }
+        }
+      }
+    },
     "オンにしている通知は、このiPhoneではまだ許可されていないため届きません。" : {
       "comment" : "Settings notice under an enabled notification switch: iOS has not asked for notification permission on this device yet",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Notifications you've turned on won't arrive because they aren't allowed on this iPhone yet."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -245,6 +1328,12 @@
     "オンにしている通知は、このiPhoneの設定でオフになっているため届きません。" : {
       "comment" : "Settings notice under an enabled notification switch: notifications are turned off for this app in iOS",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Notifications you've turned on won't arrive because they're turned off in this iPhone's Settings."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -256,6 +1345,12 @@
     "オンのとき、集中タイマー中にホーム画面やほかのアプリへ移ると、離れた時点でタイマーを一時停止します。%@以内に戻れば止まりません。パスコードを設定しているiPhoneでは、画面をロックしても、通常はタイマーが進みます。ただし、ロックを解除した直後にまたロックすると一時停止したり、ほかのアプリへ移ってすぐにロックすると止まらなかったりすることがあります。パスコードがないiPhoneでは、ロックとアプリの切り替えを区別できないため、画面ロックでも一時停止します。" : {
       "comment" : "Settings footer under the leave-pause switch. The argument is the quick-glance grace (20秒). The lock is recognised from a notice iOS sends late right after an unlock, so both lock sentences are hedged; keep them hedged. Suggested English: When on, going Home or to another app during a focus pauses the timer from the moment you left. Coming back within %@ does not pause it. On an iPhone with a passcode, locking the screen usually keeps the timer running. However, locking again right after unlocking can pause it, and locking right after leaving the app can keep it running. Without a passcode, iPhone cannot tell locking from switching apps, so locking also pauses it.",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "When this is on, going to the Home Screen or another app during a focus timer pauses the timer from the moment you left. Coming back within %@ doesn't pause it. On an iPhone with a passcode, locking the screen usually keeps the timer running. However, locking again right after unlocking may pause it, and locking right after leaving the app may not. On an iPhone without a passcode, locking can't be told apart from switching apps, so locking the screen also pauses the timer."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -267,6 +1362,12 @@
     "オープンソース" : {
       "comment" : "About page section header: open source",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Source"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -275,9 +1376,49 @@
         }
       }
     },
+    "カスタム時間" : {
+      "comment" : "Tile title: a focus length the person sets (Pro)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Custom Length"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カスタム時間"
+          }
+        }
+      }
+    },
+    "キャンセル" : {
+      "comment" : "Alert button\nToolbar button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャンセル"
+          }
+        }
+      }
+    },
     "クレジット" : {
       "comment" : "About page section header: credits",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Credits"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -286,9 +1427,49 @@
         }
       }
     },
+    "サイレントスイッチに従います" : {
+      "comment" : "Settings switch subtitle: sound follows the Ring/Silent switch",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Follows Silent mode"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サイレントスイッチに従います"
+          }
+        }
+      }
+    },
+    "サポートとプライバシー" : {
+      "comment" : "Settings section header",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Support & Privacy"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サポートとプライバシー"
+          }
+        }
+      }
+    },
     "サポートページ" : {
       "comment" : "Settings row: the support web page",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Support Page"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -297,9 +1478,32 @@
         }
       }
     },
+    "シェア" : {
+      "comment" : "Settings section header: sharing",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sharing"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "シェア"
+          }
+        }
+      }
+    },
     "スクリーンタイム" : {
       "comment" : "Settings row title: Screen Time",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screen Time"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -311,6 +1515,12 @@
     "スクリーンタイムの黒い石、まだ取り込んでいない勉強アプリの記録、10分に満たない途中の利用時間も消えます。アプリの選択と自動記録の設定は残ります。" : {
       "comment" : "Reset confirmation: extra paragraph shown only when Screen Time is set up on this iPhone",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screen Time black stones, study-app records not added yet, and partial usage under 10 minutes are also removed. Your app selections and automatic tracking settings stay."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -322,6 +1532,12 @@
     "ソースコードとライセンス" : {
       "comment" : "About page link title",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Source Code and License"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -330,9 +1546,566 @@
         }
       }
     },
+    "タイマーの既定の向き" : {
+      "comment" : "Settings row and page title: the orientation new timers open in",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Default Timer Orientation"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマーの既定の向き"
+          }
+        }
+      }
+    },
+    "タイマーの表示" : {
+      "comment" : "Navigation title of the timer display page",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Timer Display"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマーの表示"
+          }
+        }
+      }
+    },
+    "タイマーの表示を保存できませんでした。\n変更前の状態に戻しました。\n%@" : {
+      "comment" : "Settings error; the argument is the system error description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save the timer display.\nYour change was undone.\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマーの表示を保存できませんでした。\n変更前の状態に戻しました。\n%@"
+          }
+        }
+      }
+    },
+    "タイマー中は画面をロックしない" : {
+      "comment" : "Settings switch: keep the screen from auto-locking while a timer is on screen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep Screen On During Timers"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマー中は画面をロックしない"
+          }
+        }
+      }
+    },
+    "タイマー端末引き継ぎ" : {
+      "comment" : "Export progress: the collection being written (timer handoffs between devices)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "timer handoffs between devices"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマー端末引き継ぎ"
+          }
+        }
+      }
+    },
+    "タイマー終了時の触覚" : {
+      "comment" : "Settings picker: the haptic played when a timer ends",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Timer End Haptics"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマー終了時の触覚"
+          }
+        }
+      }
+    },
+    "タイマー終了時の触覚を保存できませんでした。\n変更前の状態に戻しました。\n%@" : {
+      "comment" : "Settings error; the argument is the system error description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save the timer end haptics.\nYour change was undone.\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマー終了時の触覚を保存できませんでした。\n変更前の状態に戻しました。\n%@"
+          }
+        }
+      }
+    },
+    "タイマー終了音" : {
+      "comment" : "Settings picker: the sound played when a timer ends",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Timer End Sound"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマー終了音"
+          }
+        }
+      }
+    },
+    "タイマー終了音を保存できませんでした。\n変更前の状態に戻しました。\n%@" : {
+      "comment" : "Settings error; the argument is the system error description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save the timer end sound.\nYour change was undone.\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマー終了音を保存できませんでした。\n変更前の状態に戻しました。\n%@"
+          }
+        }
+      }
+    },
+    "ダブルタップで編集。アクションで順番を変更できます" : {
+      "comment" : "VoiceOver hint of a theme row when it can be reordered with the Move Up/Move Down actions",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Double-tap to edit. Use actions to change the order."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ダブルタップで編集。アクションで順番を変更できます"
+          }
+        }
+      }
+    },
+    "ダブルタップで編集できます" : {
+      "comment" : "VoiceOver hint of a theme row",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Double-tap to edit."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ダブルタップで編集できます"
+          }
+        }
+      }
+    },
+    "テーマ" : {
+      "comment" : "Settings section header: the person's themes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Themes"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマ"
+          }
+        }
+      }
+    },
+    "テーマと成果メモ" : {
+      "comment" : "Complete data deletion: what is deleted",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Themes and achievement notes"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマと成果メモ"
+          }
+        }
+      }
+    },
+    "テーマの並び順を保存できませんでした。\n変更前の状態に戻しました。\n%@" : {
+      "comment" : "Settings error; the argument is the system error description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save the theme order.\nYour change was undone.\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマの並び順を保存できませんでした。\n変更前の状態に戻しました。\n%@"
+          }
+        }
+      }
+    },
+    "テーマの変更を保存できませんでした。\n変更前の状態に戻しました。\n%@" : {
+      "comment" : "Theme editor error; the argument is the system error description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save the theme.\nYour changes were undone.\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマの変更を保存できませんでした。\n変更前の状態に戻しました。\n%@"
+          }
+        }
+      }
+    },
+    "テーマの表示設定を保存できませんでした。\n変更前の状態に戻しました。\n%@" : {
+      "comment" : "Settings error; the argument is the system error description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save whether the theme is shown.\nYour change was undone.\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマの表示設定を保存できませんでした。\n変更前の状態に戻しました。\n%@"
+          }
+        }
+      }
+    },
+    "テーマは最大%lld件までです。" : {
+      "comment" : "Theme editor error; the argument is the theme limit (12)",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "You can have up to %lld theme."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "You can have up to %lld themes."
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマは最大%lld件までです。"
+          }
+        }
+      }
+    },
+    "テーマを削除" : {
+      "comment" : "Alert title: delete a theme",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete Theme"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマを削除"
+          }
+        }
+      }
+    },
+    "テーマを削除できませんでした。\n変更前の状態に戻しました。\n%@" : {
+      "comment" : "Settings error; the argument is the system error description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't delete the theme.\nYour change was undone.\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマを削除できませんでした。\n変更前の状態に戻しました。\n%@"
+          }
+        }
+      }
+    },
+    "テーマを編集" : {
+      "comment" : "Theme editor title when editing",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit Theme"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマを編集"
+          }
+        }
+      }
+    },
+    "テーマを追加" : {
+      "comment" : "Button and editor title: add a theme",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add Theme"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマを追加"
+          }
+        }
+      }
+    },
+    "テーマを追加できませんでした。" : {
+      "comment" : "Theme editor error, followed by a line saying the change was undone",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't add the theme."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマを追加できませんでした。"
+          }
+        }
+      }
+    },
+    "テーマ・記録・設定などのユーザー内容を削除します。古い端末からの再流入を検知するため、内容を含まない削除世代記録1件（世代ID・処理ID・連番・状態・日時）はiCloudに残ります。Proの購入履歴はAppleが管理しているため削除されず、同じApple Accountでは復元できます。" : {
+      "comment" : "Complete data deletion: what stays (the content-free deletion record, the Pro purchase)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This deletes your content, including themes, records and settings. So that data coming back from an older device can be detected, one deletion record with no content (a generation ID, a process ID, a sequence number, a status and dates) stays in iCloud. Your Pro purchase history is managed by Apple, so it is not deleted, and you can restore it with the same Apple Account."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマ・記録・設定などのユーザー内容を削除します。古い端末からの再流入を検知するため、内容を含まない削除世代記録1件（世代ID・処理ID・連番・状態・日時）はiCloudに残ります。Proの購入履歴はAppleが管理しているため削除されず、同じApple Accountでは復元できます。"
+          }
+        }
+      }
+    },
+    "テーマ名は%lld文字までです" : {
+      "comment" : "VoiceOver hint of the theme name field; the argument is the longest allowed name (20)",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Theme names can be up to %lld character"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Theme names can be up to %lld characters"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマ名は%lld文字までです"
+          }
+        }
+      }
+    },
+    "テーマ名を入力してください。" : {
+      "comment" : "Theme editor error: the name is empty",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a theme name."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマ名を入力してください。"
+          }
+        }
+      }
+    },
+    "データの書き出しをキャンセルしました" : {
+      "comment" : "VoiceOver announcement: the data export was canceled",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Data export canceled"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "データの書き出しをキャンセルしました"
+          }
+        }
+      }
+    },
+    "データの書き出しを仕上げています" : {
+      "comment" : "Export progress: finishing the file",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finishing the data export"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "データの書き出しを仕上げています"
+          }
+        }
+      }
+    },
+    "データを書き出す" : {
+      "comment" : "Settings row and VoiceOver label: export all records as a file",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export Data"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "データを書き出す"
+          }
+        }
+      }
+    },
+    "データを書き出す準備中" : {
+      "comment" : "Export progress: preparing",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preparing to export data"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "データを書き出す準備中"
+          }
+        }
+      }
+    },
+    "データを書き出せませんでした" : {
+      "comment" : "Alert title and VoiceOver announcement: the data export failed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't Export Data"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "データを書き出せませんでした"
+          }
+        }
+      }
+    },
+    "データを書き出せませんでした。\n%@" : {
+      "comment" : "Export error; the argument is the system error description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't export your data.\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "データを書き出せませんでした。\n%@"
+          }
+        }
+      }
+    },
     "バージョン" : {
       "comment" : "About page row: app version",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Version"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -344,6 +2117,12 @@
     "バージョン %@・クレジット・ライセンス" : {
       "comment" : "Settings About row subtitle; the argument is the version, e.g. 1.1.0 (10)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Version %@ · Credits · License"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -352,9 +2131,49 @@
         }
       }
     },
+    "フォントライセンス" : {
+      "comment" : "Navigation title of the font licence page",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Font License"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フォントライセンス"
+          }
+        }
+      }
+    },
+    "プライバシーポリシー" : {
+      "comment" : "Settings row: the privacy policy web page",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Privacy Policy"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プライバシーポリシー"
+          }
+        }
+      }
+    },
     "プレビュー" : {
       "comment" : "Support mail: a Debug preview build that keeps nothing",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preview"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -363,9 +2182,112 @@
         }
       }
     },
+    "プレビューまであと%lld秒" : {
+      "comment" : "VoiceOver: seconds until the preview plays; the argument is the count",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Preview in %lld second"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Preview in %lld seconds"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プレビューまであと%lld秒"
+          }
+        }
+      }
+    },
+    "プレビューをキャンセル" : {
+      "comment" : "Button: cancel the timer end preview",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel Preview"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プレビューをキャンセル"
+          }
+        }
+      }
+    },
+    "プレビューをキャンセルしました" : {
+      "comment" : "VoiceOver announcement: the preview was canceled",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preview canceled"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プレビューをキャンセルしました"
+          }
+        }
+      }
+    },
+    "ホームの選択肢に表示" : {
+      "comment" : "Theme editor switch: offer this theme on Home",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show as a Choice on Home"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ホームの選択肢に表示"
+          }
+        }
+      }
+    },
+    "ホームボタンのないiPhoneでは、「下」はタイマーの内容だけが上下逆になり、ホームバーなどの向きは変わりません。" : {
+      "comment" : "下 is the upside-down option; the Home indicator (ホームバー) keeps its place",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On an iPhone without a Home button, “Down” turns only the timer's contents upside down; the Home indicator and other system parts stay where they are."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ホームボタンのないiPhoneでは、「下」はタイマーの内容だけが上下逆になり、ホームバーなどの向きは変わりません。"
+          }
+        }
+      }
+    },
     "ホーム画面やほかのアプリへ移ると止めます" : {
       "comment" : "Settings switch subtitle: what counts as leaving the app. Suggested English: Stops when you go Home or open another app",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stops when you go to the Home Screen or another app"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -374,9 +2296,32 @@
         }
       }
     },
+    "ポモジェムProのプランを表示します" : {
+      "comment" : "VoiceOver hint of the custom length tile without Pro: it opens the paywall",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows the PomoGem Pro plan."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェムProのプランを表示します"
+          }
+        }
+      }
+    },
     "ポモジェムについてのお問い合わせ" : {
       "comment" : "Support mail subject",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Question about PomoGem"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -388,6 +2333,12 @@
     "ミュージックアプリで再生する集中用の音楽を選べます" : {
       "comment" : "VoiceOver hint of the Settings focus music row: it opens the Apple Music list",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose focus music to play in the Music app."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -399,6 +2350,12 @@
     "メールで問い合わせる" : {
       "comment" : "Settings row: write to support by mail",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Contact Us by Email"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -407,9 +2364,151 @@
         }
       }
     },
+    "ユーザー内容を削除" : {
+      "comment" : "Complete data deletion: row, sheet title and final button (glossary: Delete Your Content)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete Your Content"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ユーザー内容を削除"
+          }
+        }
+      }
+    },
+    "ライセンス文書を読み込めませんでした。" : {
+      "comment" : "Font licence page: the licence file could not be read",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't load the license text."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ライセンス文書を読み込めませんでした。"
+          }
+        }
+      }
+    },
+    "ランダムなレア粒" : {
+      "comment" : "Settings picker: random rare gems",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Random Rare Gems"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ランダムなレア粒"
+          }
+        }
+      }
+    },
+    "ランダムなレア粒の設定を%@へ保存できませんでした。しばらく待ってから、もう一度お試しください。" : {
+      "comment" : "Settings error; the argument is where settings are saved (this iPhone or iCloud)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save the random rare gem setting to %@. Please wait a moment and try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ランダムなレア粒の設定を%@へ保存できませんでした。しばらく待ってから、もう一度お試しください。"
+          }
+        }
+      }
+    },
+    "ランダムなレア粒の設定を保存できませんでした。\n変更前の状態に戻しました。\n%@" : {
+      "comment" : "Settings error; the argument is the system error description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save the random rare gem setting.\nYour change was undone.\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ランダムなレア粒の設定を保存できませんでした。\n変更前の状態に戻しました。\n%@"
+          }
+        }
+      }
+    },
+    "リセット" : {
+      "comment" : "Reset confirmation button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "リセット"
+          }
+        }
+      }
+    },
+    "リセット履歴" : {
+      "comment" : "Export progress: the collection being written (reset history)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "reset history"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "リセット履歴"
+          }
+        }
+      }
+    },
+    "リセット情報を安全に保存できませんでした。\n%@" : {
+      "comment" : "Settings error; the argument is the system error description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't safely save the reset.\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "リセット情報を安全に保存できませんでした。\n%@"
+          }
+        }
+      }
+    },
     "ロック画面などに残り時間・進捗を表示" : {
       "comment" : "Settings row subtitle: where the Live Activity timer appears",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows time left and progress on the Lock Screen and more"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -418,9 +2517,100 @@
         }
       }
     },
+    "上へ移動" : {
+      "comment" : "VoiceOver action: move this theme up one row",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move Up"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上へ移動"
+          }
+        }
+      }
+    },
+    "下へ移動" : {
+      "comment" : "VoiceOver action: move this theme down one row",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move Down"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下へ移動"
+          }
+        }
+      }
+    },
+    "乱数、抽選用の端数、金の保証カウントを動かさない選択を%@へ保存します" : {
+      "comment" : "VoiceOver hint; the argument is where settings are saved (this iPhone or iCloud)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saves a choice to %@ that uses no random numbers and leaves the draw remainder and the gold guarantee count where they are."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "乱数、抽選用の端数、金の保証カウントを動かさない選択を%@へ保存します"
+          }
+        }
+      }
+    },
+    "二段階の確認画面を開きます。この操作は取り消せません" : {
+      "comment" : "VoiceOver hint of the complete data deletion row",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opens a two-step confirmation. This can't be undone."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "二段階の確認画面を開きます。この操作は取り消せません"
+          }
+        }
+      }
+    },
+    "互換台帳の同期位置" : {
+      "comment" : "Export progress: the collection being written (compatibility ledger sync positions)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "compatibility ledger positions"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "互換台帳の同期位置"
+          }
+        }
+      }
+    },
     "以下はアプリが自動で記入しました。記録の内容やテーマ名は含まれていません。不要な行は消してから送れます。" : {
       "comment" : "Support mail body: explains the filled-in lines below it",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The app filled in the lines below. They don't include your records or theme names. You can delete any line before sending."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -429,9 +2619,66 @@
         }
       }
     },
+    "保存" : {
+      "comment" : "Toolbar button: save the theme",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存"
+          }
+        }
+      }
+    },
+    "保存できませんでした" : {
+      "comment" : "Alert title: the theme could not be saved",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't Save"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存できませんでした"
+          }
+        }
+      }
+    },
+    "保存中の変更を確定できませんでした。\n%@" : {
+      "comment" : "Export error; the argument is the system error description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't finish saving your changes.\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存中の変更を確定できませんでした。\n%@"
+          }
+        }
+      }
+    },
     "保存先：%@" : {
       "comment" : "Support mail line; the argument is where records are kept",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Storage: %@"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -440,9 +2687,49 @@
         }
       }
     },
+    "保留中の互換データ" : {
+      "comment" : "Export progress: the collection being written (pending compatibility data)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "pending compatibility data"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保留中の互換データ"
+          }
+        }
+      }
+    },
+    "先に記録を書き出す" : {
+      "comment" : "Button: export the records before deleting them",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export Your Records First"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先に記録を書き出す"
+          }
+        }
+      }
+    },
     "先月の瓶のお知らせ" : {
       "comment" : "Settings switch title: the opt-in monthly look-back notification",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Last Month's Jar"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -454,6 +2741,12 @@
     "先月の瓶のお知らせは、毎月1日のこの時刻に届きます。前の月に記録がなければ届きません。" : {
       "comment" : "Settings caption: when the monthly look-back notification is sent",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Last Month's Jar arrives at this time on the 1st of each month. It isn't sent if there are no records for the previous month."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -462,9 +2755,66 @@
         }
       }
     },
-    "利用中" : {
-      "comment" : "Support mail: Pro is owned",
+    "全モードで同じ質量・結晶進捗" : {
+      "comment" : "Rare gem guide row detail",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Same mass and crystal progress in every mode"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全モードで同じ質量・結晶進捗"
+          }
+        }
+      }
+    },
+    "内容を確認して次へ" : {
+      "comment" : "Complete data deletion: go from the consequences to the last step",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "I've Read This — Next"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内容を確認して次へ"
+          }
+        }
+      }
+    },
+    "分と秒を入力、またはスクロールして設定します" : {
+      "comment" : "VoiceOver hint of the custom length tile for Pro users",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter minutes and seconds, or scroll to set them."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分と秒を入力、またはスクロールして設定します"
+          }
+        }
+      }
+    },
+    "利用中" : {
+      "comment" : "Pro row subtitle and support mail value: Pro is owned\nSupport mail: Pro is owned",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Active"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -473,9 +2823,185 @@
         }
       }
     },
+    "削除" : {
+      "comment" : "Swipe action on a theme: delete it",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "削除"
+          }
+        }
+      }
+    },
+    "削除は未完了です" : {
+      "comment" : "Complete data deletion status: it has not finished",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deletion Isn't Complete"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "削除は未完了です"
+          }
+        }
+      }
+    },
+    "削除を再試行" : {
+      "comment" : "Button: retry complete data deletion",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try Deleting Again"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "削除を再試行"
+          }
+        }
+      }
+    },
+    "削除を始める前に" : {
+      "comment" : "Complete data deletion: section header",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Before You Delete"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "削除を始める前に"
+          }
+        }
+      }
+    },
+    "勉強も仕事も同じ一覧です。最大12件。追加画面には名前のヒントがあります。削除しても過去の質量と記録は残ります。長押しで順番を変更できます。" : {
+      "comment" : "Settings footer under the theme list",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Study and work themes share one list, up to 12. The add screen suggests names. Deleting a theme keeps its past mass and records. Touch and hold to change the order."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "勉強も仕事も同じ一覧です。最大12件。追加画面には名前のヒントがあります。削除しても過去の質量と記録は残ります。長押しで順番を変更できます。"
+          }
+        }
+      }
+    },
+    "取り消せない削除対象" : {
+      "comment" : "Complete data deletion: section header above what is deleted for good",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deleted for Good"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り消せない削除対象"
+          }
+        }
+      }
+    },
+    "同じ名前のテーマ「%@」がすでにあります。" : {
+      "comment" : "Theme editor error; the argument is the existing theme's name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You already have a theme named “%@”."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同じ名前のテーマ「%@」がすでにあります。"
+          }
+        }
+      }
+    },
+    "同期タイマー" : {
+      "comment" : "Export progress: the collection being written (synced timers)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "synced timers"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同期タイマー"
+          }
+        }
+      }
+    },
+    "名前" : {
+      "comment" : "Theme editor section header: the theme name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名前"
+          }
+        }
+      }
+    },
+    "待機中" : {
+      "comment" : "VoiceOver value: the preview is not running",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ready"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "待機中"
+          }
+        }
+      }
+    },
     "承認待ち" : {
       "comment" : "Support mail: a Pro purchase awaits approval",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Awaiting approval"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -487,6 +3013,12 @@
     "承認待ち・承認されると自動で使えます" : {
       "comment" : "Settings Pro row subtitle while a purchase request awaits approval",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Awaiting approval · Pro turns on by itself once approved"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -498,6 +3030,12 @@
     "控えめ" : {
       "comment" : "Effect intensity option: calmer light and shorter effects (Subtle)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Subtle"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -509,6 +3047,12 @@
     "控えめにしても、粒の重さや数、融合、カットは変わりません。「視差効果を減らす」がオンのときは、常に控えめで表示します。この設定はこのiPhoneだけに保存され、iCloudでは同期しません。" : {
       "comment" : "Settings footer explaining Effect intensity",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Subtle never changes your gems' weight or count, fusions or cuts. When Reduce Motion is on, the jar always uses Subtle. Changes here save on this iPhone only and don't sync with iCloud."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -517,9 +3061,219 @@
         }
       }
     },
+    "新しいタイマーを開く向き" : {
+      "comment" : "Section header above the default timer orientation options",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orientation for New Timers"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新しいタイマーを開く向き"
+          }
+        }
+      }
+    },
+    "新しいテーマを追加します" : {
+      "comment" : "VoiceOver hint of the Add Theme button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adds a new theme."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新しいテーマを追加します"
+          }
+        }
+      }
+    },
+    "新しい集中・休憩タイマーを開く向きを選べます" : {
+      "comment" : "VoiceOver hint of the default timer orientation row",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose which way new focus and break timers open."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新しい集中・休憩タイマーを開く向きを選べます"
+          }
+        }
+      }
+    },
+    "既定の集中時間" : {
+      "comment" : "Heading of the default focus length picker in Settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Default Focus Length"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "既定の集中時間"
+          }
+        }
+      }
+    },
+    "既定の集中時間に設定します" : {
+      "comment" : "VoiceOver hint of a focus length tile",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sets this as your default focus length."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "既定の集中時間に設定します"
+          }
+        }
+      }
+    },
+    "既定の集中時間を保存できませんでした" : {
+      "comment" : "Toast: the default focus length could not be saved",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save the default focus length"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "既定の集中時間を保存できませんでした"
+          }
+        }
+      }
+    },
+    "既定は実測のみ" : {
+      "comment" : "Settings switch subtitle: shares include only timed gems by default",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Timed gems only by default"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "既定は実測のみ"
+          }
+        }
+      }
+    },
+    "旧形式の互換状態" : {
+      "comment" : "Export progress: the collection being written (compatibility state from an older version)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "legacy compatibility state"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "旧形式の互換状態"
+          }
+        }
+      }
+    },
+    "旧形式の地層" : {
+      "comment" : "Export progress: the collection being written (strata from an older version)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "legacy strata"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "旧形式の地層"
+          }
+        }
+      }
+    },
+    "旧形式の岩盤" : {
+      "comment" : "Export progress: the collection being written (bedrock from an older version)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "legacy bedrock"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "旧形式の岩盤"
+          }
+        }
+      }
+    },
+    "書き出したファイルを共有できませんでした。\n%@" : {
+      "comment" : "Settings export error; the argument is the system error description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't share the exported file.\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "書き出したファイルを共有できませんでした。\n%@"
+          }
+        }
+      }
+    },
+    "書き出しをキャンセル" : {
+      "comment" : "Button: cancel a running data export",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel Export"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "書き出しをキャンセル"
+          }
+        }
+      }
+    },
     "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにあるすべての記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このiPhoneのデータはアプリの削除で、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除できます。" : {
       "comment" : "Settings export footer in iCloud mode",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The exported file (JSON) contains your theme names, achievement notes and settings, every record on this iPhone (including records from before a reset), and a random device ID used to sync the timer. It is separate from the share images for social media. Be careful where you keep or send it. To delete the data on this iPhone, delete the app. To delete the data in iCloud, use iCloud storage management in the Settings app on your iPhone."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -531,6 +3285,12 @@
     "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにあるすべての記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このファイルを読み込んで記録を戻したり、iCloudへ移したりすることはできません。リセットしてもテーマと設定は残ります。このiPhoneのデータは、アプリを削除すると消えます。" : {
       "comment" : "Settings export footer on a local-only iPhone",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The exported file (JSON) contains your theme names, achievement notes and settings, every record on this iPhone (including records from before a reset), and a random device ID used to sync the timer. It is separate from the share images for social media. Be careful where you keep or send it. You can't import this file to restore your records or to move them to iCloud. Resetting keeps your themes and settings. The data on this iPhone is erased when you delete the app."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -539,9 +3299,66 @@
         }
       }
     },
+    "書き出せませんでした。%@" : {
+      "comment" : "Export failure under a storage-transfer export button; the argument is the system error description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't export. %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "書き出せませんでした。%@"
+          }
+        }
+      }
+    },
+    "最大12件です。不要な項目を削除すると追加できます" : {
+      "comment" : "VoiceOver hint of the disabled Add Theme button: the 12-theme limit is reached",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can have up to 12. Delete one you no longer need to add another."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最大12件です。不要な項目を削除すると追加できます"
+          }
+        }
+      }
+    },
+    "最終確認" : {
+      "comment" : "Complete data deletion: title of the last step",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Final Confirmation"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最終確認"
+          }
+        }
+      }
+    },
     "未購入" : {
       "comment" : "Support mail: Pro is not owned",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not purchased"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -551,8 +3368,14 @@
       }
     },
     "未選択" : {
-      "comment" : "Settings focus music row value when no music is chosen yet (English: Not selected)",
+      "comment" : "Settings focus music row value when no music is chosen yet (English: Not selected)\nVoiceOver value: this option is not selected",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not selected"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -561,9 +3384,49 @@
         }
       }
     },
+    "未選択のため抽選しません。最初の実測タイマー前にも選べます" : {
+      "comment" : "Rare gem picker subtitle before a choice is saved",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No draws until you choose. You can also choose before your first timed session"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未選択のため抽選しません。最初の実測タイマー前にも選べます"
+          }
+        }
+      }
+    },
+    "本Appは別端末のローカル保存を遠隔消去できません。削除後も、使わない古いインストールは削除してください。" : {
+      "comment" : "Complete data deletion precondition",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This app cannot remotely erase data stored on other devices. After deleting, also delete any old installations you no longer use."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本Appは別端末のローカル保存を遠隔消去できません。削除後も、使わない古いインストールは削除してください。"
+          }
+        }
+      }
+    },
     "朱色" : {
       "comment" : "Theme colour swatch (vermilion)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vermilion"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -575,6 +3438,12 @@
     "標準" : {
       "comment" : "Effect intensity option: every light and motion effect (Standard)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standard"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -586,6 +3455,12 @@
     "機種：%@" : {
       "comment" : "Support mail line; the argument is the model identifier, e.g. iPhone13,1",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Model: %@"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -594,9 +3469,65 @@
         }
       }
     },
+    "次の集中に使う時間を選びます。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose how long your next focus lasts."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "次の集中に使う時間を選びます。"
+          }
+        }
+      }
+    },
+    "残り16分15秒" : {
+      "comment" : "VoiceOver text of the hidden timer sample (16 minutes 15 seconds left)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "16 minutes 15 seconds left"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "残り16分15秒"
+          }
+        }
+      }
+    },
+    "残り時間の見え方を選ぶ" : {
+      "comment" : "Heading of the timer display page",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose How Time Left Is Shown"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "残り時間の見え方を選ぶ"
+          }
+        }
+      }
+    },
     "毎日のリマインダー" : {
       "comment" : "Settings switch title: the opt-in daily reminder",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Daily Reminder"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -608,6 +3539,12 @@
     "毎日のリマインダー設定を保存できませんでした。\n変更前の状態に戻しました。\n%@" : {
       "comment" : "Settings error; the argument is the system error description",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save the Daily Reminder setting.\nYour change was undone.\n%@"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -619,6 +3556,12 @@
     "毎月1日に一度だけ" : {
       "comment" : "Settings switch subtitle: the monthly notification is sent on the 1st",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Once on the 1st of each month"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -630,6 +3573,12 @@
     "演出の強さ" : {
       "comment" : "Settings row: how much light and motion the jar's rewards use (Effect intensity)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Effect Intensity"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -641,6 +3590,12 @@
     "珊瑚" : {
       "comment" : "Theme colour swatch (coral)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Coral"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -649,9 +3604,32 @@
         }
       }
     },
+    "現在のタイマー表示です" : {
+      "comment" : "VoiceOver hint of the selected timer display",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This is your current timer display."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "現在のタイマー表示です"
+          }
+        }
+      }
+    },
     "現在の色" : {
       "comment" : "A theme's saved colour that is not one of the palette swatches",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Current"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -663,6 +3641,12 @@
     "琥珀" : {
       "comment" : "Theme colour swatch (amber)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Amber"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -674,6 +3658,12 @@
     "瑠璃" : {
       "comment" : "Theme colour swatch (lapis blue)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lapis"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -685,6 +3675,12 @@
     "瓶の表示" : {
       "comment" : "Settings section header: how the jar is shown (Jar display)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jar Display"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -696,6 +3692,12 @@
     "画面を閉じたときの表示は、iPhoneの設定でライブアクティビティを許可している場合に出ます。アプリを離れたときにタイマーを止めるかどうかは、「アプリを離れたら一時停止」の設定に従います。" : {
       "comment" : "Settings footer: the Live Activity switch. Suggested English: The Lock Screen timer appears when Live Activities are allowed in iPhone Settings. Whether the timer stops when you leave the app follows Pause When You Leave the App.",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The timer outside the app appears when Live Activities are allowed in your iPhone's Settings. Whether the timer stops when you leave the app depends on “Pause When You Leave the App.”"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -704,9 +3706,49 @@
         }
       }
     },
+    "画面を閉じてもタイマーを表示" : {
+      "comment" : "Settings switch: show the timer as a Live Activity outside the app",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show Timer Outside the App"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面を閉じてもタイマーを表示"
+          }
+        }
+      }
+    },
+    "確認のため%@と入力" : {
+      "comment" : "VoiceOver label of the confirmation field; the argument is the word to type (削除 / DELETE)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Type %@ to confirm"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "確認のため%@と入力"
+          }
+        }
+      }
+    },
     "空色" : {
       "comment" : "Theme colour swatch (sky blue)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sky Blue"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -715,9 +3757,66 @@
         }
       }
     },
+    "端末とiCloudの内容（削除世代記録を除く）" : {
+      "comment" : "Complete data deletion row subtitle",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On this device and in iCloud (except the deletion record)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "端末とiCloudの内容（削除世代記録を除く）"
+          }
+        }
+      }
+    },
+    "粒のバリエーション" : {
+      "comment" : "Settings section header: rare gem kinds (feature disabled in shipping builds)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gem Varieties"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粒のバリエーション"
+          }
+        }
+      }
+    },
+    "粒の色" : {
+      "comment" : "Theme editor section header: the colour of this theme's gems",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gem Color"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粒の色"
+          }
+        }
+      }
+    },
     "紅藤" : {
       "comment" : "Theme colour swatch (orchid)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orchid"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -729,6 +3828,12 @@
     "結晶" : {
       "comment" : "Export progress: the collection being written (crystals)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "crystals"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -740,6 +3845,12 @@
     "緑青" : {
       "comment" : "Theme colour swatch (verdigris green)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verdigris"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -751,6 +3862,12 @@
     "自動では再開しません。アプリに戻って「再開する」をタップすると、離れた時点の続きから進みます。休憩中と、終了まで%@以内の集中は止めません。オフのときは、アプリを離れてもタイマーは止まりません。" : {
       "comment" : "Settings footer under the leave-pause switch: how the timer resumes, what is never paused, and the off state. The argument is the final stretch that is never paused (1分). Suggested English: The timer never resumes by itself. Go back to the app and tap Resume to continue from where you left. Breaks and the last %@ of a focus are never paused. When off, the timer keeps running after you leave the app.",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The timer never resumes on its own. Go back to the app and tap “Resume” to continue from where you left off. Breaks, and a focus with %@ or less to go, are never paused. When this is off, the timer keeps running when you leave the app."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -759,9 +3876,32 @@
         }
       }
     },
+    "自己申告を含める" : {
+      "comment" : "Settings switch: include self-reported gems in shares",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Include Self-Reported Gems"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自己申告を含める"
+          }
+        }
+      }
+    },
     "自然なきらめきと傾けたときの星、光の広がりをすべて表示します" : {
       "comment" : "Effect intensity detail for Standard",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows every sparkle, the stars when you tilt, and the full glow"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -770,9 +3910,66 @@
         }
       }
     },
+    "自然抽選 %@" : {
+      "comment" : "Rainbow gem guide row detail; the argument is the natural odds (1%)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Natural odds %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自然抽選 %@"
+          }
+        }
+      }
+    },
+    "自然抽選 %@。%@出なければ、次の抽選で保証" : {
+      "comment" : "Gold gem guide row detail. The first argument is the natural odds (5%), the second how many misses in a row guarantee gold (20回続けて)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Natural odds %1$@. Guaranteed on the next draw after %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自然抽選 %@。%@出なければ、次の抽選で保証"
+          }
+        }
+      }
+    },
+    "自然確率は、いつもの粒 %@、金 %@、虹 %@。標準と控えめでは、実測タイマーで250g積むごとに1回抽選し、250g未満の端数は次回へ繰り越します。10分を6回、25分を2回と10分を1回、60分を1回はいずれも600gなので、抽選2回と100gの端数で同じです。%@ 控えめは種類を履歴に残しますが、追加の発光・専用音・専用触覚を使いません。抽選しない間は乱数を使わず、その間の質量を抽選用に貯めません。既存の端数と金の保証は同じ位置で停止し、標準または控えめに戻すとそこから再開します。どのモードでも質量・融合・結晶・成果・機能は同じで、既に獲得した金・虹、記録、シェアも変わりません。端末の「視差効果を減らす」は抽選を止めず、動きだけを抑えます。" : {
+      "comment" : "Rare gem section footer. Arguments 1-3 are the natural odds of the regular, gold and rainbow gem; argument 4 is the gold guarantee sentence (Models table)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Natural odds: regular gem %1$@, gold %2$@, rainbow %3$@. In Standard and Quiet, timed sessions get one draw for every 250 g you add, and any remainder under 250 g carries over to the next one. Six 10-min sessions, two 25-min sessions plus one 10-min session, and one 60-min session all come to 600 g, so each gives 2 draws and a 100 g remainder. %4$@ Quiet keeps the gem kind in your history but adds no extra glow, special sound or special haptics. With No Draws, no random numbers are used and no mass is saved up for draws. The existing remainder and gold guarantee pause where they are, and resume from there when you switch back to Standard or Quiet. In every mode, mass, fusions, crystals, achievements and features are the same, and the gold and rainbow gems you already have, your records and your shares don't change. Reduce Motion on your iPhone doesn't stop draws; it only reduces movement."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自然確率は、いつもの粒 %@、金 %@、虹 %@。標準と控えめでは、実測タイマーで250g積むごとに1回抽選し、250g未満の端数は次回へ繰り越します。10分を6回、25分を2回と10分を1回、60分を1回はいずれも600gなので、抽選2回と100gの端数で同じです。%@ 控えめは種類を履歴に残しますが、追加の発光・専用音・専用触覚を使いません。抽選しない間は乱数を使わず、その間の質量を抽選用に貯めません。既存の端数と金の保証は同じ位置で停止し、標準または控えめに戻すとそこから再開します。どのモードでも質量・融合・結晶・成果・機能は同じで、既に獲得した金・虹、記録、シェアも変わりません。端末の「視差効果を減らす」は抽選を止めず、動きだけを抑えます。"
+          }
+        }
+      }
+    },
     "自由な集中時間・結晶の月刻印・勉強アプリ数の無制限" : {
       "comment" : "Settings Pro row subtitle for free users: what Pro adds",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Any focus length · month stamps on crystals · unlimited study apps"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -781,9 +3978,32 @@
         }
       }
     },
+    "色候補%lld、%@" : {
+      "comment" : "VoiceOver label of a colour swatch. The first argument is its number, the second its name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Color option %1$lld, %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "色候補%lld、%@"
+          }
+        }
+      }
+    },
     "若草" : {
       "comment" : "Theme colour swatch (fresh green)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leaf Green"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -795,6 +4015,12 @@
     "菫" : {
       "comment" : "Theme colour swatch (violet)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Violet"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -806,6 +4032,12 @@
     "著作権" : {
       "comment" : "About page row: copyright",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copyright"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -817,6 +4049,12 @@
     "藍" : {
       "comment" : "Theme colour swatch (indigo)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Indigo"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -825,9 +4063,66 @@
         }
       }
     },
+    "虹の粒" : {
+      "comment" : "Rare gem guide row: the rainbow gem",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rainbow Gem"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "虹の粒"
+          }
+        }
+      }
+    },
+    "表示" : {
+      "comment" : "Swipe action on a hidden theme: show it on Home again (English: Show)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表示"
+          }
+        }
+      }
+    },
+    "表示中の記録をリセット" : {
+      "comment" : "Alert title and Settings button: reset the records shown now (earlier records stay stored)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset Current Records"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表示中の記録をリセット"
+          }
+        }
+      }
+    },
     "見出し書体" : {
       "comment" : "About page row: the heading typeface",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Heading Typeface"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -836,9 +4131,49 @@
         }
       }
     },
+    "見本は25分タイマーの途中、残り16分15秒です。選んだ表示はすぐに反映されます。" : {
+      "comment" : "Timer display page: the samples show a 25-minute timer with 16:15 left",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Each sample shows a 25-minute timer with 16:15 left. Your choice applies right away."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "見本は25分タイマーの途中、残り16分15秒です。選んだ表示はすぐに反映されます。"
+          }
+        }
+      }
+    },
+    "触覚" : {
+      "comment" : "Settings switch: haptics",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Haptics"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "触覚"
+          }
+        }
+      }
+    },
     "記念石" : {
       "comment" : "Export progress: the collection being written (achievement stones)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "milestone stones"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -850,6 +4185,12 @@
     "記録の書き出しとリセット" : {
       "comment" : "Settings section header: export and reset",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export and Reset Records"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -861,6 +4202,12 @@
     "記録はあなたのiCloudに保存されます。開発者が記録を受け取ることはありません。" : {
       "comment" : "Settings privacy footer in iCloud mode",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your records are saved in your iCloud. The developer never receives them."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -872,6 +4219,12 @@
     "記録はこのiPhoneにだけ保存されます。開発者が記録を受け取ることはありません。" : {
       "comment" : "Settings privacy footer when records stay on this iPhone",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your records are saved only on this iPhone. The developer never receives them."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -883,6 +4236,12 @@
     "記録をJSONファイルに書き出す（読み込みには非対応）" : {
       "comment" : "Settings export row subtitle: the file cannot be imported back",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export records as a JSON file (it can't be imported back)"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -891,9 +4250,151 @@
         }
       }
     },
+    "記録をリセットしました。ほかの端末にはiCloud接続後に反映されます" : {
+      "comment" : "Toast after a reset in iCloud mode",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Records reset. Your other devices update once they connect to iCloud"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録をリセットしました。ほかの端末にはiCloud接続後に反映されます"
+          }
+        }
+      }
+    },
+    "記録をリセットできませんでした。" : {
+      "comment" : "Reset error, followed by a line saying the change was undone",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't reset your records."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録をリセットできませんでした。"
+          }
+        }
+      }
+    },
+    "記録をリセットできませんでした。\n%@" : {
+      "comment" : "Settings error; the argument is the system error description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't reset your records.\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録をリセットできませんでした。\n%@"
+          }
+        }
+      }
+    },
+    "記録を消す・やり直す方法" : {
+      "comment" : "Settings row and page title: how to delete the iCloud records or start over",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete Records or Start Over"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録を消す・やり直す方法"
+          }
+        }
+      }
+    },
+    "設定" : {
+      "comment" : "Navigation title of the Settings screen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Settings"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定"
+          }
+        }
+      }
+    },
+    "設定の「%@」で「このiPhoneへ引き継ぐ」を選ぶと、保存先がこのiPhoneだけになります。そのあと「表示中の記録をリセット」で0から始められます。iCloudの記録は削除されずに残り、以後は同期しません。" : {
+      "comment" : "The argument is the Settings button that opens the storage change sheet (iCloudと保存先の変更, Storage table). このiPhoneへ引き継ぐ is the button in that sheet, 表示中の記録をリセット the reset button in Settings: keep their English identical to those buttons.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In Settings, choose “%@” and then “Move to This iPhone,” and your records will be stored on this iPhone only. Then use “Reset Current Records” to start from 0. Your iCloud records are not deleted; they stay in iCloud and stop syncing."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定の「%@」で「このiPhoneへ引き継ぐ」を選ぶと、保存先がこのiPhoneだけになります。そのあと「表示中の記録をリセット」で0から始められます。iCloudの記録は削除されずに残り、以後は同期しません。"
+          }
+        }
+      }
+    },
+    "設定を保存できませんでした。\n変更前の状態に戻しました。\n%@" : {
+      "comment" : "Settings error; the argument is the system error description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save the setting.\nYour change was undone.\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定を保存できませんでした。\n変更前の状態に戻しました。\n%@"
+          }
+        }
+      }
+    },
+    "設定を完了できませんでした" : {
+      "comment" : "Alert title: a setting could not be saved",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't Update Settings"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定を完了できませんでした"
+          }
+        }
+      }
+    },
     "設定を開く" : {
       "comment" : "Alert button: open this app's notification settings in iOS\nButton: open this app's notification settings in iOS",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Settings"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -902,9 +4403,32 @@
         }
       }
     },
+    "設定・タイマー復元情報・ウィジェット" : {
+      "comment" : "Complete data deletion: what is deleted",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Settings, timer recovery data and widgets"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定・タイマー復元情報・ウィジェット"
+          }
+        }
+      }
+    },
     "許可する" : {
       "comment" : "Button: show the iOS notification permission prompt",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -913,9 +4437,32 @@
         }
       }
     },
+    "質量、融合、結晶、成果、機能は変わりません。オフでは抽選用の端数と金の保証カウントを停止します" : {
+      "comment" : "VoiceOver hint of the rare gem picker",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mass, fusions, crystals, achievements and features don't change. When off, the draw remainder and the gold guarantee count pause."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "質量、融合、結晶、成果、機能は変わりません。オフでは抽選用の端数と金の保証カウントを停止します"
+          }
+        }
+      }
+    },
     "購入・返金の案内など（Webで開く）" : {
       "comment" : "Settings row subtitle: what the support web page covers",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Purchases, refunds and more (opens on the web)"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -927,6 +4474,12 @@
     "赤銅" : {
       "comment" : "Theme colour swatch (copper)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copper"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -935,9 +4488,49 @@
         }
       }
     },
+    "通知" : {
+      "comment" : "Settings section header: notifications",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Notifications"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通知"
+          }
+        }
+      }
+    },
+    "通知が許可されていません。端末の「設定」から「ポモジェム」の通知を許可してください。" : {
+      "comment" : "Notification permission error; 設定 is the iOS Settings app",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Notifications aren't allowed. Allow notifications for PomoGem in the Settings app on your iPhone."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通知が許可されていません。端末の「設定」から「ポモジェム」の通知を許可してください。"
+          }
+        }
+      }
+    },
     "通知する時刻" : {
       "comment" : "Settings time picker label for reminders",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Notification Time"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -946,9 +4539,219 @@
         }
       }
     },
+    "通知の予定を更新できませんでした。\n%@" : {
+      "comment" : "Notification error; the argument is the system error description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't update scheduled notifications.\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通知の予定を更新できませんでした。\n%@"
+          }
+        }
+      }
+    },
+    "通知を設定できませんでした" : {
+      "comment" : "Alert title: a notification setting could not be applied",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't Set Up Notifications"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通知を設定できませんでした"
+          }
+        }
+      }
+    },
+    "通知時刻を保存できませんでした。\n変更前の状態に戻しました。\n%@" : {
+      "comment" : "Settings error; the argument is the system error description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save the notification time.\nYour change was undone.\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通知時刻を保存できませんでした。\n変更前の状態に戻しました。\n%@"
+          }
+        }
+      }
+    },
+    "選ぶとすぐに反映されます" : {
+      "comment" : "VoiceOver hint of a timer display option",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Applies as soon as you choose it."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選ぶとすぐに反映されます"
+          }
+        }
+      }
+    },
+    "選んだタイマー終了音と触覚を3秒後に再生します" : {
+      "comment" : "VoiceOver hint of the preview button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plays your timer end sound and haptics in 3 seconds."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選んだタイマー終了音と触覚を3秒後に再生します"
+          }
+        }
+      }
+    },
+    "選んだ終了音と触覚を一緒に確認します" : {
+      "comment" : "Preview button subtitle",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plays the end sound and haptics you chose, together"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選んだ終了音と触覚を一緒に確認します"
+          }
+        }
+      }
+    },
+    "選択中" : {
+      "comment" : "VoiceOver value: this option is selected",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selected"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択中"
+          }
+        }
+      }
+    },
+    "金の粒" : {
+      "comment" : "Rare gem guide row: the gold gem",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gold Gem"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "金の粒"
+          }
+        }
+      }
+    },
+    "閉じる" : {
+      "comment" : "Alert button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "閉じる"
+          }
+        }
+      }
+    },
+    "開始後は記録の追加を停止します。iCloudでユーザー内容の削除と、内容を含まない削除世代記録の確定を確認するまで、通常画面には戻りません。" : {
+      "comment" : "Complete data deletion: what happens once it starts",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Once it starts, no new records can be added. The app doesn't return to its usual screens until iCloud confirms that your content is deleted and that the content-free deletion record is saved."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開始後は記録の追加を停止します。iCloudでユーザー内容の削除と、内容を含まない削除世代記録の確定を確認するまで、通常画面には戻りません。"
+          }
+        }
+      }
+    },
+    "関連する記録を確認できないため、テーマを削除できません。\n%@" : {
+      "comment" : "Settings error; the argument is the system error description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The theme can't be deleted because its records couldn't be checked.\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "関連する記録を確認できないため、テーマを削除できません。\n%@"
+          }
+        }
+      }
+    },
+    "集中" : {
+      "comment" : "Settings section header: timer settings (English: Focus)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中"
+          }
+        }
+      }
+    },
     "集中が切れたらお知らせ" : {
       "comment" : "Settings switch title: the notifications sent while a focus is paused because the person left the app. Suggested English: Notify Me When I Drift Away",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Notify Me When I Drift Away"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -957,9 +4760,32 @@
         }
       }
     },
+    "集中に戻るお知らせ" : {
+      "comment" : "Settings switch: one notification after leaving the app during a focus (glossary: Return-to-Focus Reminder)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Return-to-Focus Reminder"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中に戻るお知らせ"
+          }
+        }
+      }
+    },
     "集中の粒・結晶・記念石を表示と集計から外し、0から始めます。テーマと設定は残ります。リセット前の記録はこのiPhoneの中に残り、データの書き出しに含まれることがあります。このiPhoneから完全に消すには、アプリを削除してください。この操作は取り消せません。" : {
       "comment" : "Reset confirmation on a local-only iPhone",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your focus gems, crystals and milestone stones are taken out of what's shown and counted, and you start again from 0. Your themes and settings stay. Records from before the reset remain on this iPhone and may be included in a data export. To erase them from this iPhone completely, delete the app. This can't be undone."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -971,6 +4797,12 @@
     "集中の粒・結晶・記念石を表示と集計から外し、0から始めます。同じiCloudを使うほかのiPhoneにも、接続したときに反映されます。オフラインのiPhoneから古い記録が戻らないよう、リセット前の記録は同期のために残り、データの書き出しにも含まれます。このiPhoneから完全に消すにはアプリを削除し、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除してください。この操作は取り消せません。" : {
       "comment" : "Reset confirmation in iCloud mode",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your focus gems, crystals and milestone stones are taken out of what's shown and counted, and you start again from 0. The reset also reaches other iPhones using the same iCloud when they connect. So that old records can't come back from an offline iPhone, records from before the reset remain for syncing and are included in data exports. To erase them from this iPhone completely, delete the app. To delete the iCloud data, use iCloud storage management in the Settings app on your iPhone. This can't be undone."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -979,9 +4811,65 @@
         }
       }
     },
+    "集中タイマーの表示" : {
+      "comment" : "Settings row: how the focus timer shows the time left",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus Timer Display"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中タイマーの表示"
+          }
+        }
+      }
+    },
+    "集中・休憩のタイマー画面を開いている間だけ有効" : {
+      "comment" : "Settings switch subtitle",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Only while a focus or break timer is on screen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中・休憩のタイマー画面を開いている間だけ有効"
+          }
+        }
+      }
+    },
+    "集中・休憩の両方に使います。タイマー画面で一時的に向きを変えても、この既定値は変わりません。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Used for both focus and break timers. Changing the orientation on a timer's screen is temporary and doesn't change this default."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中・休憩の両方に使います。タイマー画面で一時的に向きを変えても、この既定値は変わりません。"
+          }
+        }
+      }
+    },
     "集中用の音楽" : {
       "comment" : "Settings row: opens the focus music (Apple Music) list; same name as the timer's music sheet",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus Music"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -990,13 +4878,53 @@
         }
       }
     },
-    "離れてから%@までに最大%lld回" : {
-      "comment" : "Settings switch subtitle for the leave-pause notifications. The first argument is when the series stops after leaving (20分), the second how many notifications at most (5). Suggested English: Up to %2$lld times in your first %1$@ away",
+    "集中記録" : {
+      "comment" : "Export progress: the collection being written (focus sessions)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "focus sessions"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "離れてから%@までに最大%lld回"
+            "value" : "集中記録"
+          }
+        }
+      }
+    },
+    "集中記録・粒・集計" : {
+      "comment" : "Complete data deletion: what is deleted",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus sessions, gems and totals"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中記録・粒・集計"
+          }
+        }
+      }
+    },
+    "離れてから%@までに最大%@" : {
+      "comment" : "Settings switch subtitle for the leave-pause notifications. The first argument is when the series stops after leaving (20分), the second how many notifications at most (5回). Suggested English: Up to %2$@ within %1$@ of leaving",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Up to %2$@ within %1$@ of leaving"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "離れてから%@までに最大%@"
           }
         }
       }
@@ -1004,6 +4932,12 @@
     "青緑" : {
       "comment" : "Theme colour swatch (teal)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Teal"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1012,9 +4946,100 @@
         }
       }
     },
+    "非表示" : {
+      "comment" : "Badge on a theme row: the theme is hidden from Home (English: Hidden)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hidden"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "非表示"
+          }
+        }
+      }
+    },
+    "非表示にしても、%@の過去の粒は瓶に残ります。" : {
+      "comment" : "Theme editor footer; the argument is the theme name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Even when it's hidden, past gems from %@ stay in your jar."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "非表示にしても、%@の過去の粒は瓶に残ります。"
+          }
+        }
+      }
+    },
+    "音" : {
+      "comment" : "Settings switch: sound effects",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sound"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音"
+          }
+        }
+      }
+    },
+    "音か触覚をオンにすると試せます" : {
+      "comment" : "VoiceOver hint: the preview needs sound or haptics on",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn on Sound or Haptics to try it."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音か触覚をオンにすると試せます"
+          }
+        }
+      }
+    },
+    "音と触覚" : {
+      "comment" : "Settings section header",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sound & Haptics"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音と触覚"
+          }
+        }
+      }
+    },
     "（お問い合わせの内容をお書きください。不具合の場合は、操作の手順と起きたことを教えてください。）" : {
       "comment" : "Support mail body: where the person writes their message",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "(Please write your message here. If something isn't working, tell us the steps you took and what happened.)"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
