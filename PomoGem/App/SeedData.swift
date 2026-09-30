@@ -1036,6 +1036,7 @@ enum SeedData {
         let values = StudySessionSyncPolicy.canonicalSessions(from: sessions).map {
             [AggregateSubjectFraction(
                 name: $0.displaySubjectName,
+                subjectID: $0.subject?.id ?? $0.subjectIDSnapshot,
                 colorHex: $0.displaySubjectColorHex,
                 pebbleCount: 1
             )]

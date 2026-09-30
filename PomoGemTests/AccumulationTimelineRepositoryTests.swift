@@ -5,6 +5,33 @@ import XCTest
 
 @MainActor
 final class AccumulationTimelineRepositoryTests: XCTestCase {
+    func testThemeBreakdownUsesLiveRelationWhenLegacySnapshotIsMissing() {
+        let theme = Subject(name: "英語", colorHex: Constants.Color.english, sortOrder: 0)
+        let end = date(year: 2024, month: 3, day: 20)
+        let legacy = StudySession(
+            subject: theme,
+            startAt: end.addingTimeInterval(-1_500),
+            endAt: end,
+            seconds: 1_500,
+            source: .timer,
+            deviceDayKey: "legacy-theme"
+        )
+        legacy.subjectIDSnapshot = nil
+        let current = StudySession(
+            subject: theme,
+            startAt: end.addingTimeInterval(-3_600),
+            endAt: end.addingTimeInterval(-1_500),
+            seconds: 1_500,
+            source: .timer,
+            deviceDayKey: "current-theme"
+        )
+        let entries = [legacy, current].map(AccumulationTimelineBreakdownPolicy.Entry.init(session:))
+        let themes = AccumulationTimelineBreakdownPolicy.themes(entries)
+        XCTAssertEqual(themes.map(\.id), [theme.id.uuidString])
+        XCTAssertEqual(themes.first?.sessionCount, 2)
+        XCTAssertEqual(themes.first?.grams, 500)
+    }
+
     func testExtentUsesLimitOneEdgesAndOnlyCurrentEpoch() async throws {
         let container = try makeContainer()
         let context = container.mainContext

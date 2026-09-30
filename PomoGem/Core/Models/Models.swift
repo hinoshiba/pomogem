@@ -1795,11 +1795,14 @@ enum AchievementStoneRevisionPolicy {
 /// overview screens remain understandable after a subject is renamed or deleted.
 struct AggregateSubjectFraction: Codable, Equatable, Sendable {
     let name: String
+    /// Optional provenance for new aggregates. Older synced JSON has no ID.
+    let subjectID: UUID?
     let colorHex: String
     let pebbleCount: Int
 
-    init(name: String, colorHex: String, pebbleCount: Int) {
+    init(name: String, subjectID: UUID? = nil, colorHex: String, pebbleCount: Int) {
         self.name = name.isEmpty ? Self.legacySubjectName(at: 0) : name
+        self.subjectID = subjectID
         self.colorHex = colorHex
         self.pebbleCount = max(0, pebbleCount)
     }
@@ -1815,10 +1818,13 @@ struct AggregateSubjectFraction: Codable, Equatable, Sendable {
 
     /// Display only, in the app's language: the legacy names above and an
     /// untouched built-in preset's name are translated, a theme's own name is
-    /// not. Aggregates carry no theme ID, so a built-in is recognised by its
-    /// canonical name.
+    /// not. Older aggregates without an ID still recognise built-ins by name.
     var displayName: String {
-        SubjectNamePolicy.localizedDisplayName(name)
+        displayName(bundle: .main)
+    }
+
+    func displayName(bundle: Bundle) -> String {
+        SubjectNamePolicy.localizedDisplayName(name, subjectID: subjectID, bundle: bundle)
     }
 }
 

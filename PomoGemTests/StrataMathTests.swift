@@ -4,6 +4,51 @@ import XCTest
 @testable import PomoGem
 
 final class StrataMathTests: XCTestCase {
+    func testAggregateThemeIDsRoundTripAndKeepIdenticalNamesSeparate() throws {
+        let legacyJSON = ##"[{"name":"英語","colorHex":"#E85D4A","pebbleCount":2}]"##
+        let legacy = try XCTUnwrap(StrataMath.decodeSubjectMix(legacyJSON).first)
+        XCTAssertNil(legacy.subjectID, "Older synced aggregate JSON has no theme ID")
+        XCTAssertEqual(legacy.name, "英語")
+
+        let presetID = try XCTUnwrap(SeedData.subjects.first?.id)
+        let customID = UUID()
+        let merged = StrataMath.mergedSubjectMix([
+            [AggregateSubjectFraction(
+                name: "英語", subjectID: presetID,
+                colorHex: Constants.Color.english, pebbleCount: 6
+            )],
+            [AggregateSubjectFraction(
+                name: "英語", subjectID: customID,
+                colorHex: Constants.Color.english, pebbleCount: 4
+            )]
+        ])
+        XCTAssertEqual(merged.count, 2)
+        XCTAssertEqual(Set(merged.compactMap(\.subjectID)), Set([presetID, customID]))
+        XCTAssertEqual(merged.reduce(0) { $0 + $1.pebbleCount }, 10)
+        XCTAssertEqual(StrataMath.decodeSubjectMix(StrataMath.encodeSubjectMix(merged)), merged)
+    }
+
+    func testWrappedTopThemeUsesEachThemesOwnMass() throws {
+        let olderID = UUID()
+        let newerID = UUID()
+        let mathID = try XCTUnwrap(SeedData.subjects.first(where: { $0.name == "数学" })?.id)
+        let themes = [
+            AccumulationTimelineThemeSummary(
+                id: olderID.uuidString, name: "英語", colorHex: Constants.Color.english,
+                sessionCount: 4, seconds: 400, grams: 1_000
+            ),
+            AccumulationTimelineThemeSummary(
+                id: newerID.uuidString, name: "英語", colorHex: Constants.Color.english,
+                sessionCount: 2, seconds: 200, grams: 500
+            ),
+            AccumulationTimelineThemeSummary(
+                id: mathID.uuidString, name: "数学", colorHex: Constants.Color.mathematics,
+                sessionCount: 5, seconds: 500, grams: 1_200
+            )
+        ]
+        XCTAssertEqual(WrappedThemePolicy.topSubject(in: themes), "数学")
+    }
+
     func testHeightUsesTotalCrossSectionPackingAndRounding() {
         let radii = [11.5, 11.5, 14, 17]
         let width = 300.0

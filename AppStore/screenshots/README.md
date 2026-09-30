@@ -209,8 +209,8 @@ RGB PNG; its hash remains in `checksums.sha256` and `ASSET_LICENSES.md`.
 
 ## English product page
 
-The app UI and support are currently Japanese, which the `en-US` description
-states. The same five Japanese product-UI images can be reused for `en-US`;
-there is no added marketing text to translate. Upload the same ordered set or
-let App Store Connect inherit the Japanese set. An English-looking custom set
-would require corresponding English UI in the binary.
+The published 1.0.2 screenshots show Japanese UI. The 1.1.0 candidate supports
+English and Japanese UI; support remains in Japanese. Its `en-US` product page
+needs new English screenshots captured from the matching signed candidate and
+checked against that build before submission. Until then, inherited Japanese
+images are historical material, not evidence of the 1.1.0 English experience.

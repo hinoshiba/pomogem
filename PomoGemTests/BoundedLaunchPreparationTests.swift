@@ -1381,6 +1381,95 @@ final class BoundedLaunchPreparationTests: XCTestCase {
         ), from: verified, to: verified))
     }
 
+    func testExistingJarBodiesRefreshAfterThemeOrAchievementEditInSameGeneration() {
+        let generation = HomeSceneSessionSnapshotGeneration(.localVerified)
+        let study = gem(1)
+        let achievementID = UUID(uuidString: "E2000000-0000-4000-8000-000000000002")!
+        func achievement(name: String, color: String) -> PebbleDescriptor {
+            PebbleDescriptor(
+                id: achievementID,
+                subjectName: name,
+                colorHex: color,
+                source: .manual,
+                kind: .normal,
+                achievementKind: .examPass,
+                grams: 0,
+                createdAt: Date(timeIntervalSince1970: 2_000)
+            )
+        }
+        let original = HomeSceneContent(
+            epochID: nil,
+            roots: [],
+            pebbles: [study, achievement(name: "英語", color: Constants.Color.english)]
+        )
+        let installedIDs: Set<UUID> = [study.id, achievementID]
+        func refreshes(_ pebbles: [PebbleDescriptor], installed: Set<UUID> = installedIDs) -> Bool {
+            HomeSceneSessionSnapshotPolicy.shouldRefreshExistingBodies(
+                appliedGeneration: generation,
+                acceptedGeneration: generation,
+                appliedContent: original,
+                acceptedContent: HomeSceneContent(epochID: nil, roots: [], pebbles: pebbles),
+                installedIDs: installed
+            )
+        }
+
+        XCTAssertFalse(refreshes([study, achievement(name: "英語", color: Constants.Color.english)]))
+        XCTAssertTrue(refreshes([
+            gem(1, subjectName: "Renamed", colorHex: Constants.Color.science),
+            achievement(name: "英語", color: Constants.Color.english)
+        ]), "a renamed and recolored loose study gem must update")
+        XCTAssertTrue(refreshes([
+            study,
+            achievement(name: "合格", color: Constants.Color.science)
+        ]), "an edited achievement must update")
+        XCTAssertFalse(refreshes([
+            study,
+            achievement(name: "英語", color: Constants.Color.english),
+            gem(3)
+        ]), "a new gem keeps its incremental drop")
+        XCTAssertFalse(refreshes([
+            study,
+            achievement(name: "合格", color: Constants.Color.science)
+        ], installed: [study.id]), "only bodies already in the jar are refreshed")
+    }
+
+    func testExistingJarRefreshUsesLiveStudyAndAchievementPresentations() {
+        let subject = Subject(name: "英語", colorHex: Constants.Color.english, sortOrder: 0)
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let session = StudySession(
+            subject: subject,
+            startAt: start,
+            endAt: start.addingTimeInterval(1_500),
+            seconds: 1_500,
+            source: .timer,
+            deviceDayKey: "2023-11-14"
+        )
+        let achievement = AchievementStone(subject: subject, kind: .examPass, achievedAt: start)
+        let generation = HomeSceneSessionSnapshotGeneration(.localVerified)
+        let before = HomeSceneContent(
+            epochID: nil,
+            roots: [],
+            pebbles: [PebbleDescriptor(session: session), PebbleDescriptor(achievement: achievement)]
+        )
+
+        subject.name = "Renamed"
+        subject.colorHex = Constants.Color.science
+        achievement.kind = .workMilestone
+        let after = HomeSceneContent(
+            epochID: nil,
+            roots: [],
+            pebbles: [PebbleDescriptor(session: session), PebbleDescriptor(achievement: achievement)]
+        )
+        XCTAssertTrue(HomeSceneSessionSnapshotPolicy.shouldRefreshExistingBodies(
+            appliedGeneration: generation,
+            acceptedGeneration: generation,
+            appliedContent: before,
+            acceptedContent: after,
+            installedIDs: [session.id, achievement.id]
+        ))
+        XCTAssertNotEqual(before, after)
+    }
+
     private func gem(
         _ index: Int,
         grams: Int = Constants.Mass.measuredPebbleGrams,

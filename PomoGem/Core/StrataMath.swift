@@ -419,6 +419,7 @@ struct ShareAggregateVisual: Identifiable, Equatable {
         subjectMix = StrataMath.mergedSubjectMix(included.map {
             [AggregateSubjectFraction(
                 name: $0.displaySubjectName,
+                subjectID: $0.subject?.id ?? $0.subjectIDSnapshot,
                 colorHex: $0.displaySubjectColorHex,
                 pebbleCount: 1
             )]
@@ -810,11 +811,16 @@ enum StrataMath {
     ) -> [AggregateSubjectFraction] {
         struct Key: Hashable {
             let name: String
+            let subjectID: UUID?
             let colorHex: String
         }
         var counts: [Key: Int] = [:]
         for item in mixes.flatMap({ $0 }) where item.pebbleCount > 0 {
-            let key = Key(name: item.name, colorHex: item.colorHex.uppercased())
+            let key = Key(
+                name: item.name,
+                subjectID: item.subjectID,
+                colorHex: item.colorHex.uppercased()
+            )
             counts[key] = NonnegativeIntPolicy.adding(
                 counts[key, default: 0],
                 item.pebbleCount
@@ -823,13 +829,17 @@ enum StrataMath {
         return counts.map {
             AggregateSubjectFraction(
                 name: $0.key.name,
+                subjectID: $0.key.subjectID,
                 colorHex: $0.key.colorHex,
                 pebbleCount: $0.value
             )
         }
         .sorted { lhs, rhs in
             if lhs.pebbleCount == rhs.pebbleCount {
-                if lhs.name == rhs.name { return lhs.colorHex < rhs.colorHex }
+                if lhs.name == rhs.name {
+                    if lhs.colorHex != rhs.colorHex { return lhs.colorHex < rhs.colorHex }
+                    return (lhs.subjectID?.uuidString ?? "") < (rhs.subjectID?.uuidString ?? "")
+                }
                 return lhs.name < rhs.name
             }
             return lhs.pebbleCount > rhs.pebbleCount

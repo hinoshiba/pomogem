@@ -76,7 +76,8 @@ struct AggregateMetadata: Equatable, Sendable {
     func accessibilityFacts(
         presentsRareRewards requestedPresentation: Bool
     ) -> [String] {
-        let name = JarSubjectDisplayName.name(primarySubjectName)
+        let name = subjectMix.first?.displayName
+            ?? JarSubjectDisplayName.name(primarySubjectName)
         let subject = subjectMix.count > 1
             ? String(localized: "\(name)など", table: "Jar",
                      comment: "VoiceOver, a crystal of several themes: the name of the theme with the most gems, then 'and others'")
@@ -560,6 +561,7 @@ struct PebbleDescriptor: Identifiable {
             colorMix: [StratumColorFraction(hex: colorHex, fraction: 1)],
             subjectMix: [AggregateSubjectFraction(
                 name: subjectName,
+                subjectID: subjectID,
                 colorHex: colorHex,
                 pebbleCount: 1
             )],

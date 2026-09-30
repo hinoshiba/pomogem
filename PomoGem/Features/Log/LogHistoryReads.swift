@@ -106,13 +106,16 @@ extension AccumulationTimelineRepository {
 /// 「テーマの構成」 groups by. Copied on the repository's actor.
 struct LogSessionRecord: Identifiable, Equatable, Sendable {
     let row: HistorySessionSummary
-    let subjectIDSnapshot: UUID?
+    let subjectID: UUID?
     let subjectNameSnapshot: String
     let subjectColorHexSnapshot: String
 
     init(_ session: StudySession) {
         row = HistorySessionSummary(session)
-        subjectIDSnapshot = session.subjectIDSnapshot
+        // Older records can retain their live Subject relationship even when
+        // the ID snapshot was never written. Preserve that known identity for
+        // grouping and localized display.
+        subjectID = session.subject?.id ?? session.subjectIDSnapshot
         subjectNameSnapshot = session.subjectNameSnapshot
         subjectColorHexSnapshot = session.subjectColorHexSnapshot
     }
@@ -130,7 +133,7 @@ struct LogSessionRecord: Identifiable, Equatable, Sendable {
     /// Records keep their theme's ID; older ones without it group by the
     /// name and color they were saved with.
     var subjectCompositionKey: String {
-        subjectIDSnapshot?.uuidString
+        subjectID?.uuidString
             ?? "deleted:\(subjectNameSnapshot):\(subjectColorHexSnapshot)"
     }
 }
