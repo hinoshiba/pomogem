@@ -1744,7 +1744,7 @@ struct HomeView: View {
                         Text("結晶は未保存です", tableName: "Home")
                             .font(.caption.weight(.bold))
                         Spacer(minLength: 4)
-                        Button("保存を再試行") {
+                        Button(String(localized: "保存を再試行", table: "Home", comment: "Jar capsule button: try saving an unsaved crystal again")) {
                             retryFailedAggregatePersistence()
                         }
                         .buttonStyle(PomoGemCompactButtonStyle())
@@ -2052,7 +2052,7 @@ struct HomeView: View {
                 JarFilledJarPill(count: filledJars, colorHex: readout.coreColorHex)
                     .padding(.bottom, Self.aboveMouthPillGap)
             }
-            Text("積み上げた集中")
+            Text("積み上げた集中", tableName: "Home", comment: "Jar readout caption above the lifetime mass; shown in capitals")
                 // This HUD is excluded from VoiceOver; the jar's accessibility
                 // value carries the same information. Its captions follow
                 // Dynamic Type up to the readout's xxxLarge cap below, so they
@@ -2174,26 +2174,76 @@ struct HomeView: View {
         )
     }
 
+    /// The jar count and achievement stones share a compact localized pill.
     private func jarMetricSummary(
         _ readout: LifetimeReadoutContinuityPolicy.Readout,
         stage: JarStageSnapshot
     ) -> String {
-        let milestones = stage.uniqueAchievementCount > 0
-            ? " ・ 記念石 \(achievementCountLabel(stage.uniqueAchievementCount))"
-            : ""
-        return AggregateProjectionPresentationPolicy.homeCountSummary(
-            count: readout.jarPebbles,
-            milestoneSuffix: milestones,
-            hasLocalLowerBound: readout.isLowerBound,
-            context: presentationContext(for: readout)
+        let count = max(0, readout.jarPebbles)
+        let gems: String
+        if readout.isCloudVerificationPending {
+            gems = String(
+                localized: "この端末で確認済み \(count)粒",
+                table: "Home",
+                comment: "Jar readout pill while iCloud is checked: gems this device has confirmed"
+            )
+        } else if readout.isLowerBound {
+            gems = String(
+                localized: "\(count)+粒",
+                table: "Home",
+                comment: "Jar readout pill: at least this many gems (the count is still being tallied)"
+            )
+        } else {
+            gems = CountText.gems(count)
+        }
+        guard stage.uniqueAchievementCount > 0 else { return gems }
+        let stones = achievementCountIsLowerBound
+            ? String(
+                localized: "記念石 \(stage.uniqueAchievementCount)+",
+                table: "Home",
+                comment: "Jar readout pill: at least this many milestone stones"
+            )
+            : String(
+                localized: "記念石 \(stage.uniqueAchievementCount)",
+                table: "Home",
+                comment: "Jar readout pill: the number of milestone stones"
+            )
+        return Self.compactPair(gems, stones)
+    }
+
+    /// Two compact stats side by side, as in 「12粒 ・ 記念石 3」.
+    static func compactPair(_ first: String, _ second: String) -> String {
+        String(
+            localized: "\(first) ・ \(second)",
+            table: "Home",
+            comment: "Two compact stats side by side, as in 12粒 ・ 記念石 3. en: '%1$@ · %2$@'"
         )
     }
 
-    /// The lifetime mass the menu presents, qualified like the headline; nil
-    /// while pending with nothing this device can stand behind.
+    /// Phrases VoiceOver reads one after another: ja 「A、B、C」, en "A, B, C".
+    static func spokenPhrases(_ phrases: [String], locale: Locale = PomoGemLocale.current) -> String {
+        phrases.formatted(.list(type: .and, width: .narrow).locale(locale))
+    }
+
+    /// One spoken sentence from a phrase: ja 「…。」, en "….".
+    static func spokenSentence(_ phrase: String) -> String {
+        String(
+            localized: "\(phrase)。",
+            table: "Home",
+            comment: "Ends a VoiceOver sentence; the argument is a phrase without final punctuation. en: '%@.'"
+        )
+    }
+
+    /// The lifetime mass the menu presents, qualified like the headline.
     private func presentedLifetimeMassLabel(_ readout: LifetimeReadoutContinuityPolicy.Readout) -> String? {
         readout.menuGrams.map {
-            formattedMass($0) + (readout.isLowerBound ? "以上" : "")
+            readout.isLowerBound
+                ? String(
+                    localized: "\(formattedMass($0))以上",
+                    table: "Home",
+                    comment: "Home menu and VoiceOver: at least this lifetime mass (the argument is 12 kg)"
+                )
+                : formattedMass($0)
         }
     }
 
@@ -2221,12 +2271,16 @@ struct HomeView: View {
     private func homeMenuCountValue(_ readout: LifetimeReadoutContinuityPolicy.Readout) -> String {
         guard !readout.isLoading else { return "—" }
         guard readout.isCloudVerificationPending else {
-            return "\(readout.menuPebbles)粒"
+            return CountText.gems(readout.menuPebbles)
         }
-        // 「再集計中」 beside a bare device count would read as the total.
+        // A bare device count beside the pending status could read as the lifetime total.
         return readout.menuGrams == nil
-            ? "確認済み \(readout.menuPebbles)粒"
-            : "\(readout.menuPebbles)粒"
+            ? String(
+                localized: "確認済み \(readout.menuPebbles)粒",
+                table: "Home",
+                comment: "Home menu metric while iCloud is checked and no lifetime total can be shown: gems this device has confirmed"
+            )
+            : CountText.gems(readout.menuPebbles)
     }
 
     /// Says what the strip shows, held readouts included.
@@ -2238,24 +2292,68 @@ struct HomeView: View {
         }
         let mass = presentedLifetimeMassLabel(readout)
         if readout.isCloudVerificationPending {
+            let status = Self.spokenSentence(projectionVerificationTitle)
             guard let mass else {
-                return String(localized: "\(projectionVerificationTitle)。累計は確認が済むと表示します。この端末で確認済みの集中\(readout.menuPebbles)粒、記念石\(achievementCountLabel)個",
-                              table: "Home",
-                              comment: "VoiceOver, menu metrics while iCloud is checked and no lifetime total can be shown: status, focus count, achievement stone count")
+                return SentenceText.join([
+                    status,
+                    String(
+                        localized: "累計は確認が済むと表示します。",
+                        table: "Home",
+                        comment: "VoiceOver, menu metrics while iCloud is checked: the lifetime total shows once the check is done"
+                    ),
+                    Self.spokenPhrases([
+                        String(
+                            localized: "この端末で確認済みの集中\(readout.menuPebbles)粒",
+                            table: "Home",
+                            comment: "VoiceOver, menu metrics while iCloud is checked: focus gems this device has confirmed"
+                        ),
+                        spokenAchievementStoneCount
+                    ])
+                ])
             }
-            return String(localized: "\(projectionVerificationTitle)。累計\(mass)、集中\(readout.menuPebbles)粒、記念石\(achievementCountLabel)個",
-                          table: "Home",
-                          comment: "VoiceOver, menu metrics while iCloud is checked: status, lifetime mass, focus count, achievement stone count")
+            return SentenceText.join([
+                status,
+                Self.spokenPhrases([
+                    spokenLifetimeMass(mass),
+                    spokenFocusGemCount(readout.menuPebbles),
+                    spokenAchievementStoneCount
+                ])
+            ])
         }
-        return String(
-            localized: "累計\(mass ?? formattedMass(0))、集中\(readout.menuPebbles)粒、記念石\(achievementCountLabel)個",
-            table: "Home",
-            comment: "VoiceOver, menu metrics: lifetime mass, focus count, achievement stone count"
-        )
+        return Self.spokenPhrases([
+            spokenLifetimeMass(mass ?? formattedMass(0)),
+            spokenFocusGemCount(readout.menuPebbles),
+            spokenAchievementStoneCount
+        ])
+    }
+
+    private func spokenLifetimeMass(_ mass: String) -> String {
+        String(localized: "累計\(mass)", table: "Home", comment: "VoiceOver, menu metrics: the lifetime mass (12 kg)")
+    }
+
+    private func spokenFocusGemCount(_ count: Int) -> String {
+        String(localized: "集中\(count)粒", table: "Home", comment: "VoiceOver, menu metrics: gems from focus sessions")
+    }
+
+    private var spokenAchievementStoneCount: String {
+        achievementCountIsLowerBound
+            ? String(
+                localized: "記念石\(uniqueAchievementCount)+個",
+                table: "Home",
+                comment: "VoiceOver, menu metrics: at least this many milestone stones"
+            )
+            : String(
+                localized: "記念石\(uniqueAchievementCount)個",
+                table: "Home",
+                comment: "VoiceOver, menu metrics: the number of milestone stones"
+            )
     }
 
     private var projectionVerificationTitle: String {
-        isCloudOfflineSession ? "このiPhoneの集計を確認中" : "iCloudを確認中"
+        // The same words as the jar's caption (`AggregateProjectionPresentationPolicy.verificationCaption`).
+        isCloudOfflineSession
+            ? String(localized: "このiPhoneの集計を確認中", table: "Home", comment: "Home while this iPhone's records are being checked (offline session); the same words as the jar's caption")
+            : String(localized: "iCloudを確認中", table: "Home", comment: "Home while iCloud records are being checked; the same words as the jar's caption")
     }
 
     /// sync-03. While iCloud is checked the mass above is one this device
@@ -2345,7 +2443,7 @@ struct HomeView: View {
             ))
         }
         guard !components.isEmpty else { return nil }
-        return components.joined(separator: "、")
+        return Self.spokenPhrases(components)
     }
 
     /// The documented large-text companion of the jar's fixed HUD
@@ -2408,6 +2506,10 @@ struct HomeView: View {
         }
     }
 
+    private static var largeTextFusionProgressTitle: String {
+        String(localized: "時間の核の進み", table: "Home", comment: "Large-text card under the jar: title of the progress toward the next time core")
+    }
+
     private func jarMetricPill(_ text: String) -> some View {
         Text(text)
             // Scales with the readout's Dynamic Type cap instead of a fixed
@@ -2441,31 +2543,56 @@ struct HomeView: View {
                     .accessibilityHidden(true)
                 Text(projectionVerificationTitle)
                     .font(.headline.weight(.bold))
-                Text("この端末で確認できた記録だけを表示しています。")
+                // The block is centred in the jar, so a caption that wraps
+                // (English does, where the Japanese fits one line) pushed
+                // the spinner up into the readout's pill. One line is kept
+                // in the layout and further lines hang below it.
+                Text(Self.pendingEmptyJarCaption)
                     .font(.caption)
-                    .foregroundStyle(PomoGemTheme.muted)
+                    .lineLimit(1)
+                    .hidden()
+                    .overlay(alignment: .top) {
+                        Text(Self.pendingEmptyJarCaption)
+                            .font(.caption)
+                            .foregroundStyle(PomoGemTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
             }
             // sync-03. The bottle is a fixed canvas and its readout above now
             // stays visible while iCloud is checked; at accessibility sizes
             // this message grew over it. VoiceOver reads the label below.
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(
-                "\(projectionVerificationTitle)。この端末で確認できた記録だけを表示しています"
-            )
+            .accessibilityLabel(String(
+                localized: "\(projectionVerificationTitle)。この端末で確認できた記録だけを表示しています",
+                table: "Home",
+                comment: "VoiceOver, empty jar while iCloud is checked: the status, then that only this device's confirmed records are shown"
+            ))
         } else {
             VStack(spacing: 7) {
                 Text(Constants.UIStrings.jarEmptyTitle)
                     .font(PomoGemTheme.brand(21))
                 Text(
                     selectedSubject == nil
-                        ? "下のボタンから、最初のテーマを追加しよう。"
-                        : "\(focusDurationLabel)の集中で、ここにひと粒落ちる。"
+                        ? String(localized: "下のボタンから、最初のテーマを追加しよう。", table: "Home", comment: "Empty jar before any theme exists")
+                        : String(
+                            localized: "\(focusDurationLabel)の集中で、ここにひと粒落ちる。",
+                            table: "Home",
+                            comment: "Empty jar: the argument is the chosen focus length (25分)"
+                        )
                 )
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
             }
         }
+    }
+
+    private static var pendingEmptyJarCaption: String {
+        String(
+            localized: "この端末で確認できた記録だけを表示しています。",
+            table: "Home",
+            comment: "Empty jar while iCloud is checked: only records confirmed on this device are shown"
+        )
     }
 
     /// At accessibility sizes the empty jar's message hangs under the
@@ -2708,7 +2835,10 @@ struct HomeView: View {
             Button {
                 router.selectedTab = .settings
             } label: {
-                Label("テーマを管理", systemImage: "slider.horizontal.3")
+                Label(
+                    String(localized: "テーマを管理", table: "Home", comment: "Home theme menu: open the theme settings"),
+                    systemImage: "slider.horizontal.3"
+                )
             }
         } label: {
             HStack(spacing: 8) {
@@ -2716,7 +2846,11 @@ struct HomeView: View {
                     .fill(Color(hex: selectedSubject?.colorHex ?? Constants.Color.amberLamp))
                     .frame(width: 10, height: 10)
                     .accessibilityHidden(true)
-                Text(selectedSubject?.safeDisplayName ?? "テーマを選ぶ")
+                Text(selectedSubject?.localizedDisplayName ?? String(
+                    localized: "テーマを選ぶ",
+                    table: "Home",
+                    comment: "Home theme menu while no theme exists yet"
+                ))
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.down")
@@ -2730,14 +2864,22 @@ struct HomeView: View {
             .frame(maxWidth: .infinity, minHeight: 48)
             .background(PomoGemTheme.raised.opacity(0.9), in: RoundedRectangle(cornerRadius: 14))
         }
-        .accessibilityLabel("テーマ、\(selectedSubject?.safeDisplayName ?? "未選択")")
-        .accessibilityHint("テーマを変更できます。タイマーは開始しません")
+        .accessibilityLabel(ThemeSelectionMenu.accessibilityLabel(for: selectedSubject))
+        .accessibilityHint(String(
+            localized: "テーマを変更できます。タイマーは開始しません",
+            table: "Home",
+            comment: "VoiceOver hint of Home's theme menu"
+        ))
         .accessibilityIdentifier("home.subject-picker")
     }
 
     private var homeDurationPicker: some View {
         Menu {
-            Section(purchase.isPro ? "定番の時間" : "無料の集中タイマー") {
+            Section(
+                purchase.isPro
+                    ? String(localized: "定番の時間", table: "Home", comment: "Home length menu section for Pro: the preset lengths")
+                    : String(localized: "無料の集中タイマー", table: "Home", comment: "Home length menu section: the free preset lengths")
+            ) {
                 ForEach(PomodoroDuration.freePresets, id: \.self) { duration in
                     homeDurationOption(duration)
                 }
@@ -2745,7 +2887,7 @@ struct HomeView: View {
             // A preset replaces the preferred duration, so without this a
             // Pro user switching 50分 -> 25分 had to retype 50分 to go back.
             if purchase.isPro, !recentCustomDurations.isEmpty {
-                Section("最近のカスタム時間") {
+                Section(String(localized: "最近のカスタム時間", table: "Home", comment: "Home length menu section: recently used custom lengths (Pro)")) {
                     ForEach(recentCustomDurations, id: \.self) { duration in
                         homeDurationOption(duration)
                     }
@@ -2753,13 +2895,16 @@ struct HomeView: View {
             }
             Button(action: requestCustomDuration) {
                 Label(
-                    purchase.isPro ? "自由な時間を設定" : "自由な時間を設定（Pro）",
+                    purchase.isPro
+                        ? String(localized: "自由な時間を設定", table: "Home", comment: "Home length menu: open the custom length editor")
+                        : String(localized: "自由な時間を設定（Pro）", table: "Home", comment: "Home length menu for free users: the custom length editor needs Pro"),
                     systemImage: purchase.isPro ? "slider.horizontal.3" : "lock"
                 )
             }
 #if DEBUG
             if LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess {
-                Button("12秒、DEMO") {
+                // Debug only; UI tests pick the 12-second length by this title.
+                Button("12秒、DEMO" as String) {
                     selectDuration(.demo)
                 }
             }
@@ -2780,8 +2925,16 @@ struct HomeView: View {
             .frame(maxWidth: .infinity, minHeight: 48)
             .background(PomoGemTheme.raised.opacity(0.9), in: RoundedRectangle(cornerRadius: 14))
         }
-        .accessibilityLabel("集中時間、\(focusDurationLabel)")
-        .accessibilityHint("時間を変更できます。25分、45分、60分、90分は無料です")
+        .accessibilityLabel(String(
+            localized: "集中時間、\(focusDurationSpokenLabel)",
+            table: "Home",
+            comment: "VoiceOver label of Home's length menu; the argument is the chosen length"
+        ))
+        .accessibilityHint(String(
+            localized: "時間を変更できます。25分、45分、60分、90分は無料です",
+            table: "Home",
+            comment: "VoiceOver hint of Home's length menu: the four free lengths"
+        ))
         .accessibilityIdentifier("home.duration-picker")
     }
 
@@ -2825,16 +2978,35 @@ struct HomeView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(selectedSubject == nil ? "テーマを選んではじめる" : "\(focusDurationLabel)、集中する")
+                    Text(
+                        selectedSubject == nil
+                            ? Self.chooseThemeToStartTitle
+                            : String(
+                                localized: "\(focusDurationLabel)、集中する",
+                                table: "Home",
+                                comment: "Home start button; the argument is the focus length (25分)"
+                            )
+                    )
                         .font(.system(.title3, design: .rounded, weight: .black))
                         .lineLimit(2)
                     Text(
                         selectedSubject == nil
-                            ? "勉強も仕事も、同じ一覧で"
-                            : "\(selectedSubject?.safeDisplayName ?? "選択中のテーマ") ・ 完走で\(MassText.addedGrams(selectedDuration.grams))"
+                            ? String(
+                                localized: "勉強も仕事も、同じ一覧で",
+                                table: "Home",
+                                comment: "Home start button subtitle before any theme exists: study and work themes share one list"
+                            )
+                            : String(
+                                localized: "\(selectedThemeName) ・ 完走で+\(MassText.grams(selectedDuration.grams.formatted()))",
+                                table: "Home",
+                                comment: "Home start button subtitle: the theme, then the mass a completed focus adds (+625g)"
+                            )
                     )
                     .font(.system(.caption, design: .rounded, weight: .bold))
-                    .lineLimit(2)
+                    // English is longer ("English · +250 g when you finish"):
+                    // on an iPhone SE at AX5 two lines cut it off, while the
+                    // Japanese needs two. Default sizes keep two lines.
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
                 }
 
                 Spacer(minLength: 4)
@@ -2855,8 +3027,12 @@ struct HomeView: View {
         )
         .accessibilityLabel(
             selectedSubject == nil
-                ? "テーマを選んではじめる"
-                : "\(selectedSubject?.safeDisplayName ?? "選択中のテーマ")を\(focusDurationLabel)集中する、完走で\(selectedDuration.grams)グラム"
+                ? Self.chooseThemeToStartTitle
+                : String(
+                    localized: "\(selectedThemeName)を\(focusDurationSpokenLabel)集中する、完走で\(MassText.spoken(grams: selectedDuration.grams))",
+                    table: "Home",
+                    comment: "VoiceOver label of Home's start button: theme, spoken length, spoken mass a completed focus adds"
+                )
         )
         .accessibilityHint(focusActionAccessibilityHint)
         .accessibilityIdentifier("home.focus-launcher")
@@ -2864,16 +3040,32 @@ struct HomeView: View {
         .padding(.bottom, 8)
     }
 
+    private static var chooseThemeToStartTitle: String {
+        String(localized: "テーマを選んではじめる", table: "Home", comment: "Home start button before any theme exists; it opens Settings")
+    }
+
+    private var selectedThemeName: String {
+        selectedSubject?.localizedDisplayName ?? String(
+            localized: "選択中のテーマ",
+            table: "Home",
+            comment: "Stands in for the theme name on Home's start button if it is momentarily missing"
+        )
+    }
+
     private var focusActionAccessibilityHint: String {
         if breakOffer != nil || breakOfferTask != nil {
-            return "休憩の選択を終えると使えます"
+            return String(localized: "休憩の選択を終えると使えます", table: "Home", comment: "VoiceOver hint of the disabled start button while the break choice is open")
         }
         if hasPendingRewardReceipt {
-            return "積み上げ結果を閉じると使えます"
+            return String(localized: "積み上げ結果を閉じると使えます", table: "Home", comment: "VoiceOver hint of the disabled start button while the completion card is open")
         }
         return selectedSubject == nil
-            ? "設定画面を開きます"
-            : "タイマーを開始します。上のテーマと時間のボタンで内容を変更できます"
+            ? String(localized: "設定画面を開きます", table: "Home", comment: "VoiceOver hint of the start button before any theme exists")
+            : String(
+                localized: "タイマーを開始します。上のテーマと時間のボタンで内容を変更できます",
+                table: "Home",
+                comment: "VoiceOver hint of Home's start button"
+            )
     }
 
     private var recentCustomDurations: [PomodoroDuration] {
@@ -2905,6 +3097,16 @@ struct HomeView: View {
         return selectedDuration.displayLabel
     }
 
+    /// The same length for VoiceOver: ja reads 「25分」 as shown, en spells
+    /// the units out ("25 minutes").
+    private var focusDurationSpokenLabel: String {
+#if DEBUG
+        if selectedDuration == .demo { return "12秒" }
+#endif
+        guard selectedDuration.isValid else { return focusDurationLabel }
+        return DurationText.spoken(seconds: selectedDuration.seconds, units: .minutesSeconds)
+    }
+
     private var homeMenu: some View {
         Button {
             homeMenuDetent = .medium
@@ -2912,7 +3114,7 @@ struct HomeView: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "line.3.horizontal")
-                Text("メニュー")
+                Text(Self.menuTitle)
             }
                 // Make the scaling contract explicit. XCTest's Dynamic Type
                 // audit treats a compound Label-style Button conservatively;
@@ -2922,8 +3124,19 @@ struct HomeView: View {
                 .foregroundStyle(PomoGemTheme.amber)
                 .contentShape(Rectangle())
         }
-        .accessibilityLabel("メニュー")
-        .accessibilityHint("記録、設定、手動での追加、背景などを開きます")
+        .accessibilityLabel(Self.menuTitle)
+        .accessibilityHint(String(
+            localized: "記録、設定、手動での追加、背景などを開きます",
+            table: "Home",
+            comment: "VoiceOver hint of Home's menu button"
+        ))
+        // Its label is 「メニュー」 or "Menu" by language; UI tests in either
+        // language can find it by this.
+        .accessibilityIdentifier("home.menu.open")
+    }
+
+    private static var menuTitle: String {
+        String(localized: "メニュー", table: "Home", comment: "Home's menu button and the menu sheet's title")
     }
 
     private var homeMenuSheet: some View {
@@ -2946,12 +3159,12 @@ struct HomeView: View {
             .scrollBounceBehavior(.basedOnSize)
             }
             .background(NightBackground())
-            .navigationTitle("メニュー")
+            .navigationTitle(Self.menuTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     PomoGemSheetCloseButton(
-                        accessibilityLabel: "メニューを閉じる",
+                        accessibilityLabel: String(localized: "メニューを閉じる", table: "Home", comment: "VoiceOver label of the menu sheet's close button"),
                         accessibilityIdentifier: "home.menu.close"
                     ) {
                         showHomeMenu = false
@@ -2967,7 +3180,7 @@ struct HomeView: View {
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 3) {
                         SectionEyebrow(text: String(localized: "背景", table: "Home", comment: "Eyebrow over the menu card 集中する空間 (Home background)"))
-                        Text("集中する空間")
+                        Text("集中する空間", tableName: "Home", comment: "Home menu section title: the background atmosphere picker")
                             .pomogemSectionTitle(size: 21)
                     }
                     Spacer()
@@ -2975,8 +3188,16 @@ struct HomeView: View {
 
                 Text(
                     dynamicTypeSize.isAccessibilitySize
-                        ? "テーマの色はそのままに、\n背景の空気だけを変えます。"
-                        : "テーマの色はそのままに、背景の空気だけを変えます。"
+                        ? String(
+                            localized: "テーマの色はそのままに、\n背景の空気だけを変えます。",
+                            table: "Home",
+                            comment: "Atmosphere picker note at accessibility text sizes, broken into two lines at a natural point"
+                        )
+                        : String(
+                            localized: "テーマの色はそのままに、背景の空気だけを変えます。",
+                            table: "Home",
+                            comment: "Atmosphere picker note: the theme colors stay, only the background changes"
+                        )
                 )
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
@@ -3085,7 +3306,7 @@ struct HomeView: View {
         }
         .buttonStyle(PomoGemRowButtonStyle(cornerRadius: 17))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(atmosphere.title)、\(atmosphere.subtitle)")
+        .accessibilityLabel(Self.spokenPhrases([atmosphere.title, atmosphere.subtitle]))
         .accessibilityIdentifier("home.atmosphere.\(atmosphere.rawValue)")
         // `.ignore` consolidates the decorative preview into one VoiceOver
         // target, so restore the interactive role that SwiftUI otherwise drops.
@@ -3149,9 +3370,9 @@ struct HomeView: View {
                 selectSubject(subject)
             } label: {
                 if selectedSubject?.id == subject.id {
-                    Label(subject.safeDisplayName, systemImage: "checkmark")
+                    Label(subject.localizedDisplayName, systemImage: "checkmark")
                 } else {
-                    Text(subject.safeDisplayName)
+                    Text(subject.localizedDisplayName)
                 }
             }
         }
@@ -3166,8 +3387,9 @@ struct HomeView: View {
             // The running totals sit with the two actions that add to them.
             menuMetricsStrip
             menuActionButton(
-                title: "時間を手動で積む",
-                detail: "30分・1時間・2時間",
+                title: String(localized: "時間を手動で積む", table: "Home", comment: "Home menu row: add self-reported focus time"),
+                // 「30分・1時間・2時間」
+                detail: ListText.compact(ManualDuration.allCases.map { DurationText.short(minutes: $0.minutes) }),
                 symbol: "plus.circle"
             ) {
                 guard selectedSubject != nil else {
@@ -3182,8 +3404,9 @@ struct HomeView: View {
                 }
             }
             menuActionButton(
-                title: "成果を積む",
-                detail: "100点・試験合格・仕事の節目",
+                title: String(localized: "成果を積む", table: "Home", comment: "Home menu row: add a milestone stone for an achievement"),
+                // 「100点・試験合格・仕事の節目」
+                detail: ListText.compact(AchievementKind.allCases.map(\.title)),
                 symbol: "medal.fill"
             ) {
                 guard selectedSubject != nil else {
@@ -3222,17 +3445,17 @@ struct HomeView: View {
         return VStack(spacing: 8) {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(spacing: 12) {
-                    menuMetric(value: homeMenuMassValue(readout), label: "累計")
-                    menuMetric(value: homeMenuCountValue(readout), label: "集中")
-                    menuMetric(value: "\(achievementCountLabel)個", label: String(localized: "記念石", table: "Home", comment: "Home menu metric caption: achievement stone count"))
+                    menuMetric(value: homeMenuMassValue(readout), label: Self.menuMassCaption)
+                    menuMetric(value: homeMenuCountValue(readout), label: Self.menuFocusCaption)
+                    menuMetric(value: menuAchievementValue, label: Self.menuAchievementCaption)
                 }
             } else {
                 HStack(spacing: 0) {
-                    menuMetric(value: homeMenuMassValue(readout), label: "累計")
+                    menuMetric(value: homeMenuMassValue(readout), label: Self.menuMassCaption)
                     Divider().frame(height: 34)
-                    menuMetric(value: homeMenuCountValue(readout), label: "集中")
+                    menuMetric(value: homeMenuCountValue(readout), label: Self.menuFocusCaption)
                     Divider().frame(height: 34)
-                    menuMetric(value: "\(achievementCountLabel)個", label: String(localized: "記念石", table: "Home", comment: "Home menu metric caption: achievement stone count"))
+                    menuMetric(value: menuAchievementValue, label: Self.menuAchievementCaption)
                 }
             }
             // sync-03. The same caption as the jar's headline, instead of a
@@ -3252,13 +3475,34 @@ struct HomeView: View {
         .accessibilityLabel(homeMenuAccessibilitySummary(readout))
     }
 
+    private static var menuMassCaption: String {
+        String(localized: "累計", table: "Home", comment: "Home menu metric caption: lifetime mass")
+    }
+
+    private static var menuFocusCaption: String {
+        String(localized: "集中", table: "Home", comment: "Home menu metric caption: gems from focus sessions")
+    }
+
+    private static var menuAchievementCaption: String {
+        String(localized: "記念石", table: "Home", comment: "Home menu metric caption: achievement stone count")
+    }
+
+    /// 「3個」 above the 記念石 caption (「3+個」 for a lower bound).
+    private var menuAchievementValue: String {
+        String(
+            localized: "\(achievementCountLabel)個",
+            table: "Home",
+            comment: "Home menu metric: the milestone stone count (3 or 3+) above its caption; en shows the number alone"
+        )
+    }
+
     private var menuDestinationActions: some View {
         VStack(spacing: 2) {
             // The two subtitles name what only that screen holds (history-11):
             // 記録 is where records and 記念石 are read and corrected;
             // 積み上がり is the zoomable view of the jar.
             menuActionButton(
-                title: "記録を見る",
+                title: String(localized: "記録を見る", table: "Home", comment: "Home menu row: open the Log tab"),
                 detail: String(localized: "推移・履歴・記念石・月の振り返り", table: "Home", comment: "Home menu row detail: what 記録 holds"),
                 symbol: "chart.bar.fill"
             ) {
@@ -3266,7 +3510,7 @@ struct HomeView: View {
                 router.selectedTab = .log
             }
             menuActionButton(
-                title: "積み上がりを見る",
+                title: String(localized: "積み上がりを見る", table: "Home", comment: "Home menu row: open the Progress overview"),
                 detail: String(localized: "今週・時間の核・結晶・年月の瓶", table: "Home", comment: "Home menu row detail: what 積み上がり holds"),
                 symbol: "circle.hexagongrid.fill"
             ) {
@@ -3278,8 +3522,12 @@ struct HomeView: View {
                 }
             }
             menuActionButton(
-                title: "動く瓶をシェア",
-                detail: "GIF・質量・#ポモジェム をSNSへ",
+                title: String(localized: "動く瓶をシェア", table: "Home", comment: "Home menu row: open the share composer with the animated jar"),
+                detail: String(
+                    localized: "GIF・質量・#ポモジェム をSNSへ",
+                    table: "Home",
+                    comment: "Home menu row detail: a GIF of the jar with the mass and the app's hashtag (en: #PomoGem) for social media"
+                ),
                 symbol: "play.rectangle.fill"
             ) {
                 showHomeMenu = false
@@ -3288,7 +3536,11 @@ struct HomeView: View {
                     router.presentShare()
                 }
             }
-            menuActionButton(title: "設定", detail: "テーマ・通知・サウンド・Pro", symbol: "gearshape.fill") {
+            menuActionButton(
+                title: String(localized: "設定", table: "Home", comment: "Home menu row: open Settings"),
+                detail: String(localized: "テーマ・通知・サウンド・Pro", table: "Home", comment: "Home menu row detail: what Settings holds"),
+                symbol: "gearshape.fill"
+            ) {
                 showHomeMenu = false
                 router.selectedTab = .settings
             }
@@ -3298,8 +3550,12 @@ struct HomeView: View {
 
     private var menuAccumulationPlanAction: some View {
         menuActionButton(
-            title: "積み上がり計画",
-            detail: "続けた先の瓶と質量を予測",
+            title: String(localized: "積み上がり計画", table: "Home", comment: "Home menu row: open the planning sheet"),
+            detail: String(
+                localized: "続けた先の瓶と質量を予測",
+                table: "Home",
+                comment: "Home menu row detail: the planning sheet projects the jar and mass ahead"
+            ),
             symbol: "calendar.badge.clock"
         ) {
             showHomeMenu = false
@@ -3332,29 +3588,30 @@ struct HomeView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack(spacing: 13) {
-                Image(systemName: symbol)
-                    .font(.body.weight(.semibold))
-                    // The symbol sits in a fixed 28 pt column so the titles
-                    // line up. At accessibility sizes it grew past that
-                    // column and the row's rounded clip cut its left side
-                    // off (the ▶ and ⚙ glyphs on an iPhone SE at AX5); the
-                    // title and detail beside it keep growing.
-                    .dynamicTypeSize(...DynamicTypeSize.xLarge)
-                    .foregroundStyle(PomoGemTheme.amber)
-                    .frame(width: 28)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.system(.body, design: .rounded, weight: .bold))
-                    Text(detail)
-                        .font(.caption)
-                        .foregroundStyle(PomoGemTheme.muted)
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    // The symbol and the chevron take a row of their own, so
+                    // the title and detail get the row's full width. Beside
+                    // them the text column was about 230 pt on an iPhone SE
+                    // at AX5, narrower than one long word, and English broke
+                    // words mid-way ("Notifica-tions", "#Pomo-Gem").
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            menuActionSymbol(symbol)
+                            Spacer(minLength: 8)
+                            menuActionChevron
+                        }
+                        menuActionText(title: title, detail: detail)
+                    }
+                    .padding(.vertical, 10)
+                } else {
+                    HStack(spacing: 13) {
+                        menuActionSymbol(symbol)
+                        menuActionText(title: title, detail: detail)
+                        Spacer(minLength: 8)
+                        menuActionChevron
+                    }
                 }
-                .multilineTextAlignment(.leading)
-                Spacer(minLength: 8)
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(PomoGemTheme.muted)
             }
             .foregroundStyle(PomoGemTheme.text)
             .padding(.horizontal, 14)
@@ -3363,6 +3620,36 @@ struct HomeView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(PomoGemRowButtonStyle(cornerRadius: 16))
+    }
+
+    private func menuActionSymbol(_ symbol: String) -> some View {
+        Image(systemName: symbol)
+            .font(.body.weight(.semibold))
+            // The symbol sits in a fixed 28 pt column so the titles
+            // line up. At accessibility sizes it grew past that
+            // column and the row's rounded clip cut its left side
+            // off (the ▶ and ⚙ glyphs on an iPhone SE at AX5); the
+            // title and detail keep growing.
+            .dynamicTypeSize(...DynamicTypeSize.xLarge)
+            .foregroundStyle(PomoGemTheme.amber)
+            .frame(width: 28)
+    }
+
+    private func menuActionText(title: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.system(.body, design: .rounded, weight: .bold))
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+        }
+        .multilineTextAlignment(.leading)
+    }
+
+    private var menuActionChevron: some View {
+        Image(systemName: "chevron.right")
+            .font(.caption.weight(.bold))
+            .foregroundStyle(PomoGemTheme.muted)
     }
 
     /// The completion card (Docs/GemExperienceDesign.md §8.3): this focus's
@@ -3492,7 +3779,8 @@ struct HomeView: View {
     @ViewBuilder
     private func postDropAwaitingDropNote(_ offer: BreakOffer) -> some View {
         if offer.isAwaitingDrop {
-            Text("閉じると、一粒が瓶に落ちます。")
+            Text("閉じると、一粒が瓶に落ちます。", tableName: "Home",
+                 comment: "Completion card note: closing drops the saved gem into the jar")
                 .font(.caption)
                 .foregroundStyle(PomoGemTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -3551,14 +3839,14 @@ struct HomeView: View {
                     .foregroundStyle(PomoGemTheme.amber)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("完走は保護されています")
+                    Text("完走は保護されています", tableName: "Home", comment: "Home card after a completed focus could not be saved yet: it is kept safe")
                         .font(.system(.subheadline, design: .rounded, weight: .bold))
-                    Text("記録の保存を安全に再試行できます")
+                    Text("記録の保存を安全に再試行できます", tableName: "Home", comment: "Home card after a completed focus could not be saved yet: saving can be retried safely")
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
                 }
                 Spacer(minLength: 6)
-                Button("再試行") {
+                Button(String(localized: "再試行", table: "Home", comment: "Home card button: retry saving a completed focus")) {
                     guard let request = router.deferredFocusRecovery else { return }
                     router.deferredFocusRecovery = nil
                     router.recoveredFocus = request
@@ -3583,7 +3871,7 @@ struct HomeView: View {
                 .font(.system(.subheadline, design: .rounded, weight: .bold))
                 .foregroundStyle(PomoGemTheme.amber)
                 .fixedSize(horizontal: false, vertical: true)
-            Text(CompletionCardPresentation.mainLine(subjectName: offer.subjectName, grams: offer.grams))
+            Text(CompletionCardPresentation.mainLine(subjectName: offer.localizedSubjectName, grams: offer.grams))
                 .font(.system(.title3, design: .rounded, weight: .black))
                 .foregroundStyle(PomoGemTheme.text)
                 .fixedSize(horizontal: false, vertical: true)
@@ -3595,7 +3883,7 @@ struct HomeView: View {
         .accessibilityLabel(Text("集中を記録しました", tableName: "Home",
                                  comment: "Completion card headline, shown after every finished focus. en: 'Focus recorded'"))
         .accessibilityValue(SentenceText.join([
-            CompletionCardPresentation.spokenMainLine(subjectName: offer.subjectName, grams: offer.grams),
+            CompletionCardPresentation.spokenMainLine(subjectName: offer.localizedSubjectName, grams: offer.grams),
             offer.weeklySpokenTitle,
             CompletionCardPresentation.spokenRareLine(kind: offer.kind, counts: offer.rareRewardCounts),
             CompletionCardPresentation.spokenBreakAvailability(minutes: offer.minutes)
@@ -3973,6 +4261,40 @@ struct HomeView: View {
         }
     }
 
+    /// 「数学 +250g（1.0標準単位） ・ 今週 1.25kg ・ 完走5回」 under the
+    /// completion card's title.
+    private func postDropSummary(_ offer: BreakOffer, historyTitle: String) -> String {
+        let contribution = String(
+            localized: "\(offer.localizedSubjectName) +\(MassText.grams(offer.grams.formatted()))（\(EffortProgressPresentation.formattedStandardUnits(grams: offer.grams))）",
+            table: "Home",
+            comment: "Completion card: the theme, the mass this focus added (+250g) and the same in standard units"
+        )
+        let summary = Self.compactPair(contribution, historyTitle)
+        return offer.rareRewardCounts.multiDrawSummary.map { Self.compactPair(summary, $0) } ?? summary
+    }
+
+    /// VoiceOver value of the completion card's heading.
+    private func postDropSpokenSummary(_ offer: BreakOffer, historySpokenTitle: String) -> String {
+        var sentences = [
+            String(localized: "テーマは\(offer.localizedSubjectName)です。", table: "Home", comment: "VoiceOver, completion card: the theme"),
+            String(
+                localized: "今回は\(MassText.spoken(grams: offer.grams))、標準換算は\(EffortProgressPresentation.formattedStandardUnits(grams: offer.grams))です。",
+                table: "Home",
+                comment: "VoiceOver, completion card: the mass this focus added, then the same in standard units"
+            ),
+            Self.spokenSentence(historySpokenTitle)
+        ]
+        if let multiDrawSummary = offer.rareRewardCounts.multiDrawSummary {
+            sentences.append(Self.spokenSentence(multiDrawSummary))
+        }
+        sentences.append(String(
+            localized: "\(offer.minutes)分休憩を利用できます",
+            table: "Home",
+            comment: "VoiceOver, completion card: the break it offers; the argument is its length in minutes"
+        ))
+        return SentenceText.join(sentences)
+    }
+
     /// sync-03. Which projection this card shows (`PostDropProjectionPolicy`).
     /// A re-stamp waits until the weekly heading has been re-derived too, so
     /// the card never mixes verified progress with a pre-verification week.
@@ -4172,16 +4494,21 @@ struct HomeView: View {
         .background(PomoGemTheme.raised.opacity(0.78), in: RoundedRectangle(cornerRadius: 16))
         .accessibilityElement(children: .ignore)
         .accessibilityIdentifier("reward.projection-verification-pending")
-        .accessibilityLabel(
-            "\(projectionVerificationTitle)。今回の\(offer.grams)グラムは保存済みです。これまでの合計は確認が済むと表示します"
-        )
+        .accessibilityLabel(String(
+            localized: "\(projectionVerificationTitle)。今回の\(MassText.spoken(grams: offer.grams))は保存済みです。これまでの合計は確認が済むと表示します",
+            table: "Home",
+            comment: "VoiceOver, completion card while iCloud is checked: the status, this focus's spoken mass is saved, the total shows once the check is done"
+        ))
     }
 
     private func startBreakButton(_ offer: BreakOffer, fillsWidth: Bool = false) -> some View {
         Button {
             guard !rewardDropRevealIsPending, rewardDropDestination == nil else { return }
             guard let recovery = FocusPersistence.beginRewardBreak(sessionID: offer.id) else {
-                router.showToast("休憩を開始できませんでした。もう一度お試しください", symbol: "arrow.clockwise")
+                router.showToast(
+                    String(localized: "休憩を開始できませんでした。もう一度お試しください", table: "Home", comment: "Toast: the offered break could not start"),
+                    symbol: "arrow.clockwise"
+                )
                 return
             }
             RewardBreakNotificationHandoff.begin(
@@ -4200,7 +4527,11 @@ struct HomeView: View {
         // than 「5分休憩」 and the word broke mid-way (round 14).
         .lineLimit(1)
         .minimumScaleFactor(0.7)
-        .accessibilityLabel("\(offer.minutes)分休憩する")
+        .accessibilityLabel(String(
+            localized: "\(offer.minutes)分休憩する",
+            table: "Home",
+            comment: "VoiceOver label of the completion card's break button; the argument is the break length in minutes"
+        ))
     }
 
     private var postDropShareButton: some View {
@@ -4210,7 +4541,7 @@ struct HomeView: View {
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: "play.rectangle.fill")
-                Text("GIF")
+                Text(verbatim: "GIF")
                     .font(.caption2.weight(.black))
             }
             .frame(minWidth: 58, minHeight: 44)
@@ -4222,7 +4553,7 @@ struct HomeView: View {
                 isProminent: false
             )
         )
-        .accessibilityLabel("今の瓶をGIFでシェアする")
+        .accessibilityLabel(String(localized: "今の瓶をGIFでシェアする", table: "Home", comment: "VoiceOver label of the completion card's GIF share button"))
     }
 
     private func dismissBreakOfferButton(_ offer: BreakOffer, showsText: Bool) -> some View {
@@ -4233,7 +4564,7 @@ struct HomeView: View {
                 Image(systemName: "xmark")
                     .accessibilityHidden(true)
                 if showsText {
-                    Text("閉じる")
+                    Text("閉じる", tableName: "Common")
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
                 }
@@ -4254,7 +4585,7 @@ struct HomeView: View {
             .contentShape(Capsule())
         }
         .buttonStyle(PomoGemBareButtonStyle())
-        .accessibilityLabel("休憩の提案を閉じる")
+        .accessibilityLabel(String(localized: "休憩の提案を閉じる", table: "Home", comment: "VoiceOver label of the completion card's close button"))
         .accessibilityIdentifier("reward.dismiss")
     }
 
@@ -4265,7 +4596,10 @@ struct HomeView: View {
         guard !rewardDropRevealIsPending, rewardDropDestination == nil else { return }
         if offer.isAwaitingDrop,
            !PendingRewardReceiptStore.acknowledgeDrop(id: offer.id) {
-            router.showToast("もう一度「閉じる」を押してください", symbol: "arrow.clockwise")
+            router.showToast(
+                String(localized: "もう一度「閉じる」を押してください", table: "Home", comment: "Toast: the completion card could not close; tap 閉じる again"),
+                symbol: "arrow.clockwise"
+            )
             return
         }
         TimerCompletionAlertAcknowledgementStore.mark(sessionID: offer.id)
@@ -4807,14 +5141,17 @@ struct HomeView: View {
 
     private func confirmCustomDuration(_ totalSeconds: Int) -> Bool {
         guard purchase.isPro else {
-            router.showToast("Proの購入状態を確認してください", symbol: "lock")
+            router.showToast(
+                String(localized: "Proの購入状態を確認してください", table: "Home", comment: "Toast: a custom length needs Pro, and this device does not show Pro as purchased"),
+                symbol: "lock"
+            )
             return false
         }
         let duration = PomodoroDuration(totalSeconds: totalSeconds)
         guard duration.isValid else { return false }
         guard persistPreferredFocusSeconds(
             totalSeconds,
-            failureMessage: "集中時間を保存できませんでした"
+            failureMessage: String(localized: "集中時間を保存できませんでした", table: "Home", comment: "Toast: the chosen focus length could not be saved")
         ) else { return false }
         selectedDuration = duration
         rememberCustomDuration(duration)
@@ -4869,7 +5206,7 @@ struct HomeView: View {
         rememberCustomDuration(duration)
         _ = persistPreferredFocusSeconds(
             duration.seconds,
-            failureMessage: "集中時間を保存できませんでした"
+            failureMessage: String(localized: "集中時間を保存できませんでした", table: "Home", comment: "Toast: the chosen focus length could not be saved")
         )
     }
 
@@ -4884,7 +5221,11 @@ struct HomeView: View {
            duration.seconds >= Constants.Timer.customMinimumMinutes * Constants.Timer.secondsPerMinute {
             _ = persistPreferredFocusSeconds(
                 duration.seconds,
-                failureMessage: "前回使った時間として保存できませんでした"
+                failureMessage: String(
+                    localized: "前回使った時間として保存できませんでした",
+                    table: "Home",
+                    comment: "Toast: the length of the focus just started could not be saved as the last-used length"
+                )
             )
         }
         // Starting a focus answers today's daily reminder. Record it before
@@ -5237,18 +5578,29 @@ struct HomeView: View {
         // A second add never stacks two unsaved entries.
         commitPendingManualEntry()
         guard let resolvedPreferences else {
-            return "設定情報を読み込めませんでした。もう一度お試しください。"
+            return String(
+                localized: "設定情報を読み込めませんでした。もう一度お試しください。",
+                table: "Home",
+                comment: "Manual entry error: the app's settings could not be read"
+            )
         }
         guard !activeSubjects.isEmpty else {
             showManualEntry = false
             router.selectedTab = .settings
-            router.showToast("先にテーマを追加してください", symbol: "books.vertical.fill")
-            return "先にテーマを追加してください。"
+            router.showToast(
+                String(localized: "先にテーマを追加してください", table: "Home", comment: "Toast: add a theme before adding time"),
+                symbol: "books.vertical.fill"
+            )
+            return String(localized: "先にテーマを追加してください。", table: "Home", comment: "Manual entry error: add a theme before adding time")
         }
         // The sheet's list is a snapshot; the theme may have been archived
         // or removed (for example from another device) while it was open.
         guard activeSubjects.contains(where: { $0.id == subject.id }) else {
-            return "選んだテーマが見つかりません。テーマを選び直してください。"
+            return String(
+                localized: "選んだテーマが見つかりません。テーマを選び直してください。",
+                table: "Home",
+                comment: "Manual entry error: the chosen theme was archived or removed while the sheet was open"
+            )
         }
         let now = Date.now
         let decision = FairnessPolicy.consumeManualEntry(
@@ -5259,7 +5611,12 @@ struct HomeView: View {
             at: now
         )
         guard decision.isAllowed else {
-            return "\(Constants.UIStrings.manualCapToast)です。"
+            // Constants.UIStrings.manualCapToast as one whole sentence.
+            return String(
+                localized: "自己申告はこの端末で1日3回までです。",
+                table: "Home",
+                comment: "Manual entry error: self-reported time can be added at most three times a day on this device"
+            )
         }
 
         let pending = PendingManualEntry(
@@ -5283,13 +5640,17 @@ struct HomeView: View {
     /// VoiceOver only. The banner is an overlay read after the jar, the
     /// pickers and the start button, so focus moves to its 「元に戻す」 once
     /// the sheet has dismissed, and a queued announcement says what waits.
+    private func displayedSubjectName(for pending: PendingManualEntry) -> String {
+        SubjectNamePolicy.localizedDisplayName(pending.subjectName, subjectID: pending.subjectID)
+    }
+
     private func announcePendingManualEntry(_ pending: PendingManualEntry) async {
         guard UIAccessibility.isVoiceOverRunning else { return }
         try? await Task.sleep(for: .milliseconds(700))
         guard !Task.isCancelled, pendingManualEntry?.id == pending.id else { return }
         manualUndoHasFocus = true
         let message = String(
-            localized: "\(pending.subjectName)に\(DurationText.spoken(minutes: pending.duration.minutes))、\(MassText.spoken(grams: pending.duration.grams))を積みます。「元に戻す」で取り消せます",
+            localized: "\(displayedSubjectName(for: pending))に\(DurationText.spoken(minutes: pending.duration.minutes))、\(MassText.spoken(grams: pending.duration.grams))を積みます。「元に戻す」で取り消せます",
             table: "Home",
             comment: "VoiceOver, once the Undo banner of a manual entry has focus: theme, duration, grams"
         )
@@ -5345,7 +5706,7 @@ struct HomeView: View {
         pendingManualEntry = nil
 
         let failure = String(
-            localized: "\(pending.subjectName)の自己申告を保存できませんでした。もう一度積んでください",
+            localized: "\(displayedSubjectName(for: pending))の自己申告を保存できませんでした。もう一度積んでください",
             table: "Home",
             comment: "Toast when a confirmed manual entry could not be saved; the argument is the theme"
         )
@@ -5494,7 +5855,7 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 2) {
             // Time first, like every other record; the grams follow.
             Text(
-                "\(pending.subjectName)に\(DurationText.short(minutes: pending.duration.minutes))を積みます",
+                "\(displayedSubjectName(for: pending))に\(DurationText.short(minutes: pending.duration.minutes))を積みます",
                 tableName: "Home",
                 comment: "Undo banner after a manual entry: theme, then the self-reported time about to be added"
             )
@@ -5555,7 +5916,11 @@ struct HomeView: View {
             return nil
         } catch {
             modelContext.rollback()
-            return "記念石を保存できませんでした。もう一度お試しください。"
+            return String(
+                localized: "記念石を保存できませんでした。もう一度お試しください。",
+                table: "Home",
+                comment: "Achievement sheet error: the milestone stone could not be saved"
+            )
         }
     }
 
@@ -5610,7 +5975,10 @@ struct HomeView: View {
         guard scene.retryAggregatePersistence(id: request.id) else {
             failedAggregateRequest = request
             capacityRemaining = nil
-            router.showToast("再試行の準備ができませんでした", symbol: "exclamationmark.triangle")
+            router.showToast(
+                String(localized: "再試行の準備ができませんでした", table: "Home", comment: "Toast: saving an unsaved crystal could not be retried"),
+                symbol: "exclamationmark.triangle"
+            )
             return
         }
         router.showToast(String(localized: "結晶の保存を再試行します", table: "Home"), symbol: "arrow.clockwise")
@@ -5645,7 +6013,10 @@ struct HomeView: View {
             }
             scheduleCapacityCelebrationAfterRelief()
         case .hardLimitReached:
-            router.showToast("瓶の粒をまとめています", symbol: "hourglass")
+            router.showToast(
+                String(localized: "瓶の粒をまとめています", table: "Home", comment: "Toast: the jar is full, so its gems are being combined into crystals"),
+                symbol: "hourglass"
+            )
         case .layersCompacted:
             capacityRemaining = nil
         }
@@ -5704,18 +6075,27 @@ struct HomeView: View {
 
     private func handleLanding(_ event: JarLandingEvent) {
         let descriptor = event.pebble
+        let displayedSubjectName = SubjectNamePolicy.localizedDisplayName(
+            descriptor.subjectName,
+            subjectID: descriptor.subjectID
+        )
         if jarStageState.fallingManualSessionIDs.contains(descriptor.id) {
             // Now in the jar: the readout counts it (dev-D7).
             jarStageState.fallingManualSessionIDs.remove(descriptor.id)
         }
         if let achievementKind = descriptor.achievementKind {
-            let suffix = uniqueAchievementCount > Constants.Jar.maximumVisibleAchievementStones
-                ? "。前の記念石も成果の記録に残っています"
-                : ""
-            router.showToast(
-                "\(descriptor.subjectName)の\(achievementKind.title)を記念石にした\(suffix)",
-                symbol: achievementKind.systemImage
-            )
+            let message = uniqueAchievementCount > Constants.Jar.maximumVisibleAchievementStones
+                ? String(
+                    localized: "\(displayedSubjectName)の\(achievementKind.title)を記念石にした。前の記念石も成果の記録に残っています",
+                    table: "Home",
+                    comment: "Toast after a milestone stone lands while older stones have left the jar: theme, kind of achievement; the older stones stay in the records"
+                )
+                : String(
+                    localized: "\(displayedSubjectName)の\(achievementKind.title)を記念石にした",
+                    table: "Home",
+                    comment: "Toast after a milestone stone lands: theme, kind of achievement"
+                )
+            router.showToast(message, symbol: achievementKind.systemImage)
             return
         }
         // Fusion has its own completion beat in `handleCapacity`. Treating the
@@ -5725,7 +6105,10 @@ struct HomeView: View {
         if descriptor.source == .screenTime {
             // One attributed summary per import (「スクリーンタイム：英語 +30分
             // （3粒）」) instead of a generic toast per 10-minute pebble.
-            screenTimeArrivals.noteLearningLanding(subjectName: descriptor.subjectName) { text, symbol in
+            screenTimeArrivals.noteLearningLanding(
+                subjectName: descriptor.subjectName,
+                displayName: displayedSubjectName
+            ) { text, symbol in
                 router.showToast(text, symbol: symbol)
             }
             ScreenTimeGemDropStore.remove(descriptor.id)
@@ -5739,18 +6122,30 @@ struct HomeView: View {
         case .gold:
             message = rareRewardMode.usesEnhancedPresentation
                 ? Constants.UIStrings.goldToast(grams: descriptor.grams)
-                : "\(descriptor.subjectName) 金の粒 \(MassText.addedGrams(descriptor.grams))"
+                : String(
+                    localized: "\(displayedSubjectName) 金の粒 +\(MassText.grams(descriptor.grams.formatted()))",
+                    table: "Home",
+                    comment: "Toast after a gold gem lands (plain presentation): theme, mass (+600g)"
+                )
         case .prism:
             message = rareRewardMode.usesEnhancedPresentation
                 ? Constants.UIStrings.prismToast(grams: descriptor.grams)
-                : "\(descriptor.subjectName) 虹の粒 \(MassText.addedGrams(descriptor.grams))"
+                : String(
+                    localized: "\(displayedSubjectName) 虹の粒 +\(MassText.grams(descriptor.grams.formatted()))",
+                    table: "Home",
+                    comment: "Toast after a rainbow gem lands (plain presentation): theme, mass (+600g)"
+                )
         case .normal:
             message = descriptor.grams == Constants.Mass.measuredPebbleGrams
-                ? Constants.UIStrings.dropToast(subject: descriptor.subjectName)
-                : "\(descriptor.subjectName) \(MassText.addedGrams(descriptor.grams)) 積んだ"
+                ? Constants.UIStrings.dropToast(subject: displayedSubjectName)
+                : String(
+                    localized: "\(displayedSubjectName) +\(MassText.grams(descriptor.grams.formatted())) 積んだ",
+                    table: "Home",
+                    comment: "Toast after a gem of another mass lands: theme, mass (+1125g); like Common's 「%@ +250g 積んだ」"
+                )
         }
         if let batch = descriptor.presentationRewardBatchSummary {
-            message += " ・ \(batch)"
+            message = Self.compactPair(message, batch)
         }
         let usesRareSymbol = presentationKind != .normal
             && rareRewardMode.usesEnhancedPresentation
@@ -5868,6 +6263,7 @@ struct HomeView: View {
             breakMinutes: minutes,
             grams: descriptor.grams,
             subjectName: descriptor.subjectName,
+            subjectID: descriptor.subjectID,
             colorHex: descriptor.colorHex,
             weeklyCompletionCount: max(1, weeklyCompletionCount),
             weeklyStudyGrams: weeklyStudyGrams,
@@ -6230,12 +6626,24 @@ struct HomeView: View {
 
     private var jarInteractionHintText: String {
         if voiceOverEnabled {
-            return "瓶をダブルタップすると粒が跳ねます。VoiceOverのカスタムアクションで左右にも動かせます"
+            return String(
+                localized: "瓶をダブルタップすると粒が跳ねます。VoiceOverのカスタムアクションで左右にも動かせます",
+                table: "Home",
+                comment: "One-time jar tip with VoiceOver on"
+            )
         }
 #if targetEnvironment(macCatalyst)
-        return "瓶をタップすると粒が跳ね、左右にドラッグすると転がります"
+        return String(
+            localized: "瓶をタップすると粒が跳ね、左右にドラッグすると転がります",
+            table: "Home",
+            comment: "One-time jar tip on a Mac"
+        )
 #else
-        return "瓶をタップすると粒が跳ね、iPhoneを傾けると転がります"
+        return String(
+            localized: "瓶をタップすると粒が跳ね、iPhoneを傾けると転がります",
+            table: "Home",
+            comment: "One-time jar tip on iPhone"
+        )
 #endif
     }
 
@@ -6359,17 +6767,17 @@ struct HomeView: View {
         .buttonStyle(.plain)
         .accessibilityLabel(
             String(
-                localized: "\(summary.pebbleCount)粒の結晶、\(aggregateInspectionSubtitle(summary))",
+                localized: "\(CountText.gems(summary.pebbleCount))の結晶、\(aggregateInspectionSubtitle(summary))",
                 table: "Home",
-                comment: "VoiceOver, crystal inspection card: gems inside, then what its detail shows"
+                comment: "VoiceOver, crystal inspection card: the gems inside (100粒), then what its detail shows"
             )
         )
         .accessibilityHint(
             summary.hasStrongPreservationEvidence
-                ? "色、テーマ、期間などの内訳を表示します"
+                ? String(localized: "色、テーマ、期間などの内訳を表示します", table: "Home", comment: "VoiceOver hint of the crystal card: opens its details")
                 : (summary.colorMix.isEmpty
-                    ? "保存されている粒数、質量などを表示します"
-                    : "保存されている色、粒数、質量などを表示します")
+                    ? String(localized: "保存されている粒数、質量などを表示します", table: "Home", comment: "VoiceOver hint of the crystal card of an older crystal without colors")
+                    : String(localized: "保存されている色、粒数、質量などを表示します", table: "Home", comment: "VoiceOver hint of the crystal card of an older crystal"))
         )
         .accessibilityIdentifier("jar.aggregate.inspect")
     }
@@ -6420,12 +6828,12 @@ struct HomeView: View {
                         .font(.caption.weight(.bold))
                         .foregroundStyle(PomoGemTheme.text)
                 }
-                Text("保存されている粒数・質量などの内訳")
+                Text("保存されている粒数・質量などの内訳", tableName: "Home", comment: "Crystal card subtitle: its saved details (gem count, mass…)")
                     .font(.caption2)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 5) {
-                    Text("内訳を見る")
+                    Text("内訳を見る", tableName: "Home", comment: "Crystal card: open its details")
                     Image(systemName: "chevron.right")
                         .accessibilityHidden(true)
                 }
@@ -6440,14 +6848,14 @@ struct HomeView: View {
                     Text("結晶を見つけました", tableName: "Home")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(PomoGemTheme.text)
-                    Text("保存されている粒数・質量などの内訳")
+                    Text("保存されている粒数・質量などの内訳", tableName: "Home", comment: "Crystal card subtitle: its saved details (gem count, mass…)")
                         .font(.caption2)
                         .foregroundStyle(PomoGemTheme.muted)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 4)
-                Text("内訳を見る")
+                Text("内訳を見る", tableName: "Home", comment: "Crystal card: open its details")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(PomoGemTheme.amber)
                 Image(systemName: "chevron.right")
@@ -6478,8 +6886,8 @@ struct HomeView: View {
     ) -> String {
         if !summary.hasStrongPreservationEvidence {
             return summary.colorMix.isEmpty
-                ? "粒数・質量など、保存済みの内訳"
-                : "色・粒数・質量など、保存済みの内訳"
+                ? String(localized: "粒数・質量など、保存済みの内訳", table: "Home", comment: "VoiceOver, crystal card of an older crystal without colors: what its details hold")
+                : Self.savedColorDetailsDescription
         }
         let subjects = summary.subjectMix
             .filter { $0.pebbleCount > 0 }
@@ -6491,15 +6899,27 @@ struct HomeView: View {
                 return lhs.pebbleCount > rhs.pebbleCount
             }
         guard !subjects.isEmpty else {
-            return "色・粒数・質量など、保存済みの内訳"
+            return Self.savedColorDetailsDescription
         }
         var parts = subjects.prefix(2).map {
-            "\($0.name)\($0.pebbleCount.formatted())粒"
+            String(
+                localized: "\($0.name)\(CountText.gems($0.pebbleCount))",
+                table: "Home",
+                comment: "VoiceOver, crystal card: one theme in the crystal, then how many of its gems it holds (英語12粒). en: '%1$@ %2$@'"
+            )
         }
         if subjects.count > 2 {
-            parts.append("ほか\(subjects.count - 2)件")
+            parts.append(String(
+                localized: "ほか\(subjects.count - 2)件",
+                table: "Home",
+                comment: "VoiceOver, crystal card: how many more themes the crystal holds"
+            ))
         }
-        return parts.joined(separator: "・")
+        return ListText.compact(parts)
+    }
+
+    private static var savedColorDetailsDescription: String {
+        String(localized: "色・粒数・質量など、保存済みの内訳", table: "Home", comment: "VoiceOver, crystal card: what its details hold")
     }
 
     private func cancelTiltHintPresentation() {
@@ -6539,7 +6959,7 @@ struct HomeView: View {
         var sentences: [String?] = [
             String(localized: "集中を記録しました。", table: "Home",
                    comment: "VoiceOver announcement: the completion card's headline, as a sentence"),
-            CompletionCardPresentation.spokenMainLine(subjectName: offer.subjectName, grams: offer.grams),
+            CompletionCardPresentation.spokenMainLine(subjectName: offer.localizedSubjectName, grams: offer.grams),
             shown.weeklySpokenTitle,
             CompletionCardPresentation.spokenRareLine(kind: offer.kind, counts: offer.rareRewardCounts),
             progressMessage,
@@ -6560,7 +6980,11 @@ struct HomeView: View {
               announcedPostDropShareOfferID != offer.id
         else { return }
         announcedPostDropShareOfferID = offer.id
-        postLowPriorityAccessibilityAnnouncement("今の瓶をカードにする共有ボタンが利用できます")
+        postLowPriorityAccessibilityAnnouncement(String(
+            localized: "今の瓶をカードにする共有ボタンが利用できます",
+            table: "Home",
+            comment: "VoiceOver announcement: the completion card now offers sharing the jar as a card"
+        ))
     }
 
     private func postLowPriorityAccessibilityAnnouncement(_ message: String) {
@@ -7050,16 +7474,21 @@ enum PostDropProgressAccessibilityPresentation {
                 snapshot: effortProgress,
                 projectionIsLowerBound: projectionIsLowerBound
             )
-            return "\(effortDisplay.accessibilityLabel)。瓶の整理：\(physicalDisplay.accessibilityLabel)"
+            return String(
+                localized: "\(effortDisplay.accessibilityLabel)。瓶の整理：\(physicalDisplay.accessibilityLabel)",
+                table: "Home",
+                comment: "VoiceOver announcement after a focus: time-core progress, then the count toward the next crystal"
+            )
         }
 
         // Receipts from builds before mass was captured keep their original,
         // internally consistent count presentation for this one replay.
-        var legacyProgress = "\(physicalDisplay.progressLabel)。\(physicalDisplay.nextStepLabel)"
+        // Phrases without final punctuation; the last takes none either.
+        var phrases = [physicalDisplay.progressLabel, physicalDisplay.nextStepLabel]
         if let longTermContextLabel = physicalDisplay.longTermContextLabel {
-            legacyProgress += "。\(longTermContextLabel)"
+            phrases.append(longTermContextLabel)
         }
-        return legacyProgress
+        return SentenceText.join(phrases.dropLast().map(HomeView.spokenSentence) + [phrases.last ?? ""])
     }
 }
 
@@ -7631,6 +8060,10 @@ private struct BreakOffer: Identifiable {
     let minutes: Int
     let grams: Int
     let subjectName: String
+    let subjectID: UUID?
+    var localizedSubjectName: String {
+        SubjectNamePolicy.localizedDisplayName(subjectName, subjectID: subjectID)
+    }
     let colorHex: String
     private(set) var weeklyCompletionCount: Int
     private(set) var weeklyStudyGrams: Int?
@@ -7679,6 +8112,7 @@ private struct BreakOffer: Identifiable {
         minutes = receipt.breakMinutes
         grams = receipt.grams
         subjectName = receipt.subjectName
+        subjectID = receipt.subjectID
         colorHex = receipt.colorHex
         weeklyCompletionCount = receipt.weeklyCompletionCount
         weeklyStudyGrams = receipt.weeklyStudyGrams
@@ -7717,6 +8151,25 @@ private struct BreakOffer: Identifiable {
         case .normal: colorHex
         case .gold: Constants.Color.pebbleGold
         case .prism: Constants.Color.auroraViolet
+        }
+    }
+
+    func dropTitle(for mode: RareRewardMode) -> String {
+        if isAwaitingDrop {
+            return String(localized: "集中を記録しました。", table: "Home", comment: "Completion card title before the gem has dropped into the jar")
+        }
+        let gemLanded = String(localized: "一粒、着地。", table: "Home", comment: "Completion card title once the gem has landed in the jar")
+        if !mode.usesEnhancedPresentation {
+            return switch kind {
+            case .normal: gemLanded
+            case .gold: String(localized: "金の粒を積みました。", table: "Home", comment: "Completion card title for a gold gem (plain presentation)")
+            case .prism: String(localized: "虹の粒を積みました。", table: "Home", comment: "Completion card title for a rainbow gem (plain presentation)")
+            }
+        }
+        return switch kind {
+        case .normal: gemLanded
+        case .gold: String(localized: "金の粒、着地。", table: "Home", comment: "Completion card title once a gold gem has landed")
+        case .prism: String(localized: "虹の粒、着地。", table: "Home", comment: "Completion card title once a rainbow gem has landed")
         }
     }
 
@@ -8002,7 +8455,10 @@ private struct StratumCelebrationView: View {
                                             comment: "Fusion sheet action: makes a share card of the new crystal"))
             }
             .buttonStyle(PomoGemSecondaryButtonStyle())
-            Button("ここで休む", action: onContinue)
+            Button(action: onContinue) {
+                Text("ここで休む", tableName: "Home",
+                     comment: "Fusion sheet secondary action: dismiss and rest here")
+            }
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(PomoGemTheme.muted)
                 .frame(minHeight: 44)
@@ -8159,12 +8615,12 @@ private struct AggregatePersistenceRecoveryProbe: View {
     @State private var auditValue = "state=loading"
 
     var body: some View {
-        Text("Aggregate persistence recovery probe")
+        Text(verbatim: "Aggregate persistence recovery probe")
             .font(.system(size: 1))
             .foregroundStyle(Color.clear)
             .frame(width: 1, height: 1)
             .accessibilityIdentifier("aggregate.persistence.probe")
-            .accessibilityLabel("Aggregate persistence recovery probe")
+            .accessibilityLabel(Text(verbatim: "Aggregate persistence recovery probe"))
             .accessibilityValue(Text(verbatim: auditValue))
             .allowsHitTesting(false)
             .task {
@@ -8235,12 +8691,12 @@ private struct FortyYearPersistentFixtureProbe: View {
     @State private var queueCount = 0
 
     var body: some View {
-        Text("40 year fixture probe")
+        Text(verbatim: "40 year fixture probe")
             .font(.system(size: 1))
             .foregroundStyle(Color.clear)
             .frame(width: 1, height: 1)
             .accessibilityIdentifier("fixture.40y.probe")
-            .accessibilityLabel("40 year fixture probe")
+            .accessibilityLabel(Text(verbatim: "40 year fixture probe"))
             // This is a machine-readable DEBUG probe. `Text(verbatim:)` keeps
             // SwiftUI from applying locale grouping (for example 87,660,000),
             // so the UI test observes the same stable wire value in every locale.
@@ -8365,12 +8821,12 @@ private struct JarUITestPresentationProbe: View {
     @State private var journeyLine = "none"
 
     var body: some View {
-        Text("Jar presentation probe")
+        Text(verbatim: "Jar presentation probe")
             .font(.system(size: 1))
             .foregroundStyle(Color.clear)
             .frame(width: 1, height: 1)
             .accessibilityIdentifier("jar.presentation.probe")
-            .accessibilityLabel("Jar presentation probe")
+            .accessibilityLabel(Text(verbatim: "Jar presentation probe"))
             .accessibilityValue(presentationValue)
             .allowsHitTesting(false)
             .task(id: ObjectIdentifier(scene)) {

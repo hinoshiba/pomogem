@@ -153,6 +153,8 @@ enum EffortConstellationPresentation {
         )
     }
 
+    /// 「999g」「1.00kg」「87.66t」; en "999 g", "1.00 kg", "87.66 t". The
+    /// numbers keep their POSIX decimals, as before.
     static func formattedMass(_ grams: Int) -> String {
         let safe = max(0, grams)
         if safe >= 1_000_000 {
@@ -162,6 +164,18 @@ enum EffortConstellationPresentation {
             return MassText.kilograms(fromGrams: safe, fractionDigits: safe >= 10_000 ? 1 : 2)
         }
         return MassText.grams(value: safe)
+    }
+
+
+    /// 「時間の核」: the lifetime focus-time milestone at the centre of the
+    /// constellation, as a title, a legend step and a VoiceOver label.
+    static var timeCoreTitle: String {
+        String(localized: "時間の核", table: "Overview", comment: "The time core, the lifetime focus-time milestone (title, label and VoiceOver)")
+    }
+
+    /// Joins the spoken phrases of one VoiceOver label: 「、」, en ", ".
+    static var spokenPhraseSeparator: String {
+        String(localized: "、", table: "Overview", comment: "Separator between the spoken phrases of one VoiceOver label. en: ', ' (comma and space).")
     }
 
     /// VoiceOver uses the same mass-derived duration horizon as Home. A partial
@@ -177,16 +191,19 @@ enum EffortConstellationPresentation {
         // The value is time (the progress line below) and mass. The former
         // 「11.0標準単位」 and 「物理履歴」 were accounting terms, and the
         // trailing 「瓶の物理整理：集中11粒」 repeated the count.
+        let mass = formattedMass(totalGrams)
         var components = [
-            "時間の核",
-            "集中\(formattedMass(totalGrams))\(projectionIsLowerBound ? "以上" : "")",
+            timeCoreTitle,
+            projectionIsLowerBound
+                ? String(localized: "集中\(mass)以上", table: "Overview", comment: "VoiceOver, time core: at least this focus mass (still being checked)")
+                : String(localized: "集中\(mass)", table: "Overview", comment: "VoiceOver, time core: the focus mass so far"),
             projectionIsLowerBound
                 ? String(localized: "\(totalPebbleCount)粒以上", table: "Overview", comment: "VoiceOver, time core: at least this many gems (still being checked)")
-                : String(localized: "\(totalPebbleCount)粒", table: "Overview", comment: "VoiceOver, time core: gems stacked so far")
+                : CountText.gems(totalPebbleCount)
         ]
 
         if projectionIsLowerBound {
-            components.append("進捗を整理中")
+            components.append(String(localized: "進捗を整理中", table: "Overview", comment: "VoiceOver, time core: progress is still being tallied"))
         } else if let state = JarLifetimeCorePresentation.state(
             totalPebbleCount: totalPebbleCount,
             totalGrams: totalGrams,
@@ -205,7 +222,7 @@ enum EffortConstellationPresentation {
                 comment: "VoiceOver, time core: crystals on the page, how many are drawn"
             )
         )
-        return components.joined(separator: "、")
+        return components.joined(separator: spokenPhraseSeparator)
     }
 }
 
@@ -386,7 +403,11 @@ struct EffortConstellationView: View {
             .scaleEffect(auraExpanded ? 1.025 : 0.985)
 
             HStack(spacing: max(3, stageDiameter * 0.018)) {
-                Text(coreIsMaterialized ? "時間の核" : "時間の核の器")
+                Text(
+                    coreIsMaterialized
+                        ? EffortConstellationPresentation.timeCoreTitle
+                        : String(localized: "時間の核の器", table: "Overview", comment: "Label of the empty vessel the first time core will fill")
+                )
                     .font(.system(size: labelFontSize, weight: .black, design: .rounded))
                     .tracking(0.8)
                 Text(
@@ -395,7 +416,7 @@ struct EffortConstellationView: View {
                             + (projectionIsLowerBound ? "+" : "")
                         : (
                             projectionIsLowerBound
-                                ? "整理中"
+                                ? String(localized: "整理中", table: "Overview", comment: "Time core label value while progress is still being tallied")
                                 // Time, the value the core grows by, instead
                                 // of 「1.0標準単位」.
                                 : EffortProgressPresentation.formattedDuration(
@@ -426,7 +447,9 @@ struct EffortConstellationView: View {
                 : "overview.constellation.destination"
         )
         .accessibilityLabel(
-            coreIsMaterialized ? "時間の核" : "最初の時間の核"
+            coreIsMaterialized
+                ? EffortConstellationPresentation.timeCoreTitle
+                : String(localized: "最初の時間の核", table: "Overview", comment: "VoiceOver: the first time core, not formed yet")
         )
         .accessibilityValue(
             coreIsMaterialized
@@ -439,7 +462,7 @@ struct EffortConstellationView: View {
                 )
                 : (
                     projectionIsLowerBound
-                        ? "最初の結晶までの進捗を整理しています"
+                        ? String(localized: "最初の結晶までの進捗を整理しています", table: "Overview", comment: "VoiceOver, empty time-core vessel while progress is still being tallied")
                         : String(
                             localized: "集中\(EffortProgressPresentation.formattedDuration(grams: totalGrams))。最初の結晶まで、あと\(max(0, 10 - min(9, max(0, totalPebbleCount))))粒です",
                             table: "Overview",
@@ -467,7 +490,11 @@ struct EffortConstellationView: View {
             .buttonStyle(PomoGemBareButtonStyle())
             .accessibilityIdentifier("overview.constellation.node.\(node.id.uuidString)")
             .accessibilityLabel(accessibilityLabel)
-            .accessibilityHint("ダブルタップで内訳を表示します")
+            .accessibilityHint(Text(
+                "ダブルタップで内訳を表示します",
+                tableName: "Overview",
+                comment: "VoiceOver hint on a crystal: opens its details"
+            ))
         } else {
             orbitNodeVisual(node, diameter: diameter)
                 .accessibilityElement(children: .ignore)

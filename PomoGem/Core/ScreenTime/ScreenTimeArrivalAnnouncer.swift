@@ -37,9 +37,14 @@ final class ScreenTimeArrivalAnnouncer {
         self.quietInterval = quietInterval
     }
 
-    /// A Screen Time learning pebble reached the jar.
-    func noteLearningLanding(subjectName: String, announce: @escaping (String, String) -> Void) {
-        learning.addLearning(subjectName: subjectName)
+    /// A Screen Time learning pebble reached the jar. Group by the stored
+    /// name; only the final sentence uses the localized display name.
+    func noteLearningLanding(
+        subjectName: String,
+        displayName: String? = nil,
+        announce: @escaping (String, String) -> Void
+    ) {
+        learning.addLearning(subjectName: subjectName, displayName: displayName)
         scheduleFlush(announce)
     }
 
@@ -84,6 +89,7 @@ final class ScreenTimeArrivalAnnouncer {
 struct ScreenTimeArrivalTally: Equatable {
     struct Entry: Equatable {
         let name: String
+        var displayName: String
         var count: Int
     }
 
@@ -91,11 +97,12 @@ struct ScreenTimeArrivalTally: Equatable {
     private(set) var learningBySubject: [Entry] = []
     private(set) var blackStones = 0
 
-    mutating func addLearning(subjectName: String) {
+    mutating func addLearning(subjectName: String, displayName: String? = nil) {
         if let index = learningBySubject.firstIndex(where: { $0.name == subjectName }) {
             learningBySubject[index].count += 1
+            learningBySubject[index].displayName = displayName ?? subjectName
         } else {
-            learningBySubject.append(Entry(name: subjectName, count: 1))
+            learningBySubject.append(Entry(name: subjectName, displayName: displayName ?? subjectName, count: 1))
         }
     }
 
@@ -111,37 +118,46 @@ struct ScreenTimeArrivalTally: Equatable {
         return (current - acknowledged, current)
     }
 
-    var message: String? {
+    /// The counted nouns (「3粒」, 「黒い石 +2」) are phrases of their own, so
+    /// English can pick singular or plural for each number in one sentence.
+    var message: String? { localizedMessage() }
+
+    func localizedMessage(bundle: Bundle = .main, locale: Locale = PomoGemLocale.current) -> String? {
         let pebbles = learningBySubject.reduce(0) { $0 + $1.count }
         let minutes = pebbles * ScreenTimePolicy.minutesPerGem
         let stoneMinutes = blackStones.multipliedReportingOverflow(by: ScreenTimePolicy.minutesPerGem)
+        let gems = CountText.gems(pebbles, bundle: bundle, locale: locale)
+        let stones = String(localized: "黒い石 +\(blackStones)", table: "ScreenTime", bundle: bundle, locale: locale,
+                            comment: "Toast part: black stones added. en needs plural variations: '+%lld black stone' / '+%lld black stones'.")
         switch (pebbles > 0, blackStones > 0) {
         case (false, false):
             return nil
         case (true, false):
-            if learningBySubject.count == 1, let subject = learningBySubject.first?.name {
-                return String(localized: "スクリーンタイム：\(subject) +\(minutes)分（\(pebbles)粒）", table: "ScreenTime",
-                              comment: "Toast: study-app time added. 1 = theme name, 2 = minutes, 3 = pebbles")
+            if learningBySubject.count == 1, let subject = learningBySubject.first?.displayName {
+                return String(localized: "スクリーンタイム：\(subject) +\(minutes)分（\(gems)）", table: "ScreenTime",
+                              bundle: bundle, locale: locale,
+                              comment: "Toast: study-app time added. 1 = theme name, 2 = minutes, 3 = gem count such as 3粒 (3 gems)")
             }
-            return String(localized: "スクリーンタイム：勉強アプリの時間 +\(minutes)分（\(pebbles)粒）", table: "ScreenTime",
-                          comment: "Toast: study-app time added to several themes. 1 = minutes, 2 = pebbles")
+            return String(localized: "スクリーンタイム：勉強アプリの時間 +\(minutes)分（\(gems)）", table: "ScreenTime",
+                          bundle: bundle, locale: locale,
+                          comment: "Toast: study-app time added to several themes. 1 = minutes, 2 = gem count such as 3粒 (3 gems)")
         case (false, true):
             if stoneMinutes.overflow {
-                return String(localized: "スクリーンタイム：黒い石 +\(blackStones)", table: "ScreenTime",
-                              comment: "Toast: black stones added (count only)")
+                return String(localized: "スクリーンタイム：\(stones)", table: "ScreenTime", bundle: bundle, locale: locale,
+                              comment: "Toast: black stones added (count only). %@ is such as 黒い石 +2 (+2 black stones).")
             }
-            return String(localized: "スクリーンタイム：黒い石 +\(blackStones)（控えたいアプリ \(stoneMinutes.partialValue)分）",
-                          table: "ScreenTime",
-                          comment: "Toast: black stones added. 1 = stones, 2 = minutes in the apps to cut down")
+            return String(localized: "スクリーンタイム：\(stones)（控えたいアプリ \(stoneMinutes.partialValue)分）",
+                          table: "ScreenTime", bundle: bundle, locale: locale,
+                          comment: "Toast: black stones added. 1 = such as 黒い石 +2 (+2 black stones), 2 = minutes in the apps to use less")
         case (true, true):
-            if learningBySubject.count == 1, let subject = learningBySubject.first?.name {
-                return String(localized: "スクリーンタイム：\(subject) +\(minutes)分（\(pebbles)粒）、黒い石 +\(blackStones)",
-                              table: "ScreenTime",
-                              comment: "Toast: study time and black stones added. 1 = theme, 2 = minutes, 3 = pebbles, 4 = black stones")
+            if learningBySubject.count == 1, let subject = learningBySubject.first?.displayName {
+                return String(localized: "スクリーンタイム：\(subject) +\(minutes)分（\(gems)）、\(stones)",
+                              table: "ScreenTime", bundle: bundle, locale: locale,
+                              comment: "Toast: study time and black stones added. 1 = theme, 2 = minutes, 3 = gem count such as 3粒, 4 = such as 黒い石 +2")
             }
-            return String(localized: "スクリーンタイム：勉強アプリの時間 +\(minutes)分（\(pebbles)粒）、黒い石 +\(blackStones)",
-                          table: "ScreenTime",
-                          comment: "Toast: study time for several themes and black stones added. 1 = minutes, 2 = pebbles, 3 = black stones")
+            return String(localized: "スクリーンタイム：勉強アプリの時間 +\(minutes)分（\(gems)）、\(stones)",
+                          table: "ScreenTime", bundle: bundle, locale: locale,
+                          comment: "Toast: study time for several themes and black stones added. 1 = minutes, 2 = gem count such as 3粒, 3 = such as 黒い石 +2")
         }
     }
 }

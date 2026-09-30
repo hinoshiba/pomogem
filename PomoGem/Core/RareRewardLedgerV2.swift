@@ -293,13 +293,17 @@ enum RareRewardLedgerRepositoryError: Error, LocalizedError, Equatable, Sendable
     var errorDescription: String? {
         switch self {
         case .conflict:
-            "別の端末と同時に台帳を更新しました。再試行します。"
+            String(localized: "別の端末と同時に台帳を更新しました。再試行します。", table: "Models",
+                   comment: "Rare-reward ledger error (feature disabled in shipping builds)")
         case .notFound:
-            "iCloudのレア粒台帳が見つかりません。"
+            String(localized: "iCloudのレア粒台帳が見つかりません。", table: "Models",
+                   comment: "Rare-reward ledger error (feature disabled in shipping builds)")
         case .corruptRecord:
-            "iCloudのレア粒台帳を検証できませんでした。"
+            String(localized: "iCloudのレア粒台帳を検証できませんでした。", table: "Models",
+                   comment: "Rare-reward ledger error (feature disabled in shipping builds)")
         case let .transport(message):
-            "iCloudへレア粒を確定できませんでした。端末内の完走記録は保持されています。\n\(message)"
+            String(localized: "iCloudへレア粒を確定できませんでした。端末内の完走記録は保持されています。\n\(message)", table: "Models",
+                   comment: "Rare-reward ledger error (feature disabled in shipping builds); %@ is CloudKit's own error text")
         }
     }
 }
@@ -337,19 +341,26 @@ enum RareRewardLedgerError: Error, LocalizedError, Equatable, Sendable {
     var errorDescription: String? {
         switch self {
         case .corruptEpoch:
-            "iCloudのレア粒epochが不整合です。抽選を停止しました。"
+            String(localized: "iCloudのレア粒epochが不整合です。抽選を停止しました。", table: "Models",
+                   comment: "Rare-reward ledger error (feature disabled in shipping builds)")
         case .corruptReceipt:
-            "iCloudのレア粒確定結果が不整合です。抽選を停止しました。"
+            String(localized: "iCloudのレア粒確定結果が不整合です。抽選を停止しました。", table: "Models",
+                   comment: "Rare-reward ledger error (feature disabled in shipping builds)")
         case .migrationFingerprintMismatch:
-            "別の端末と旧レア粒台帳の状態が一致しません。抽選を停止しました。"
+            String(localized: "別の端末と旧レア粒台帳の状態が一致しません。抽選を停止しました。", table: "Models",
+                   comment: "Rare-reward ledger error (feature disabled in shipping builds)")
         case .submissionEpochMismatch:
-            "完走記録とレア粒epochが一致しません。"
+            String(localized: "完走記録とレア粒epochが一致しません。", table: "Models",
+                   comment: "Rare-reward ledger error (feature disabled in shipping builds)")
         case .duplicateSessionPayloadMismatch:
-            "同じ完走IDに異なる内容が届いたため、抽選を停止しました。"
+            String(localized: "同じ完走IDに異なる内容が届いたため、抽選を停止しました。", table: "Models",
+                   comment: "Rare-reward ledger error (feature disabled in shipping builds)")
         case .arithmeticOverflow:
-            "レア粒台帳の数値上限を超えました。"
+            String(localized: "レア粒台帳の数値上限を超えました。", table: "Models",
+                   comment: "Rare-reward ledger error (feature disabled in shipping builds)")
         case .retryLimitExceeded:
-            "別の端末との更新競合が続いています。完走記録を保持して後で再試行します。"
+            String(localized: "別の端末との更新競合が続いています。完走記録を保持して後で再試行します。", table: "Models",
+                   comment: "Rare-reward ledger error (feature disabled in shipping builds)")
         }
     }
 }

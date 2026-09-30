@@ -284,10 +284,11 @@ struct BreakTimerView: View {
             .buttonStyle(PomoGemIconButtonStyle())
             .accessibilityLabel(
                 remaining > 0
-                    ? "休憩をスキップ"
+                    ? Text("休憩をスキップ", tableName: "Focus", comment: "Button: end the break now")
                     : completionAlert.isActive(sessionID: sessionID)
-                        ? "終了アラートを停止して瓶へ戻る"
-                        : "瓶へ戻る"
+                        ? Text("終了アラートを停止して瓶へ戻る", tableName: "Focus",
+                               comment: "VoiceOver label of the close button: stop the break-end alert and go back to the jar")
+                        : Text("瓶へ戻る", tableName: "Focus", comment: "Button: back to the jar")
             )
         }
     }
@@ -298,7 +299,7 @@ struct BreakTimerView: View {
                 .font(.system(size: 38))
                 .foregroundStyle(PomoGemTheme.amber)
                 .accessibilityHidden(true)
-            Text("休憩")
+            Text("休憩", tableName: "Focus", comment: "Break timer heading")
                 .font(PomoGemTheme.brand(28))
                 .accessibilityAddTraits(.isHeader)
             Text(String(format: "%02d:%02d", remaining / 60, remaining % 60))
@@ -309,13 +310,14 @@ struct BreakTimerView: View {
                 .contentTransition(
                     reduceMotion ? .identity : .numericText(countsDown: true)
                 )
-                .accessibilityLabel("残り\(remaining / 60)分\(remaining % 60)秒")
+                .accessibilityLabel(TimerRemainingSpeech.text(seconds: remaining))
                 .accessibilityAddTraits(.updatesFrequently)
         }
     }
 
     private var waitingMessage: some View {
-        Text("瓶の粒は、そのまま待っています。")
+        Text("瓶の粒は、そのまま待っています。", tableName: "Focus",
+             comment: "The gems in the jar wait just as they are (nothing is lost during a break)")
             .font(.caption)
             .foregroundStyle(PomoGemTheme.muted)
             .multilineTextAlignment(.center)
@@ -348,21 +350,23 @@ struct BreakTimerView: View {
             if completionAlert.isActive(sessionID: sessionID) {
                 VStack(spacing: 7) {
                     Label(
-                        "休憩終了のアラート中",
+                        String(localized: "休憩終了のアラート中", table: "Focus",
+                               comment: "Status while the end-of-break alert repeats (keep it short: one line at large sizes)"),
                         systemImage: "bell.and.waves.left.and.right.fill"
                     )
                     .labelStyle(AccessibilitySizeTitleOnlyLabelStyle())
                     .font(.headline.weight(.bold))
                     .dynamicTypeSize(...DynamicTypeSize.accessibility2)
                     .foregroundStyle(PomoGemTheme.amber)
-                    Text("止めるまで、音と触覚を繰り返します")
+                    Text("止めるまで、音と触覚を繰り返します", tableName: "Focus",
+                         comment: "Caption under the alert status: sound and haptics repeat until stopped")
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
                         .multilineTextAlignment(.center)
                 }
             }
         } else {
-            Button("休憩をスキップ") { closeBreak() }
+            Button(String(localized: "休憩をスキップ", table: "Focus", comment: "Button: end the break now")) { closeBreak() }
                 .buttonStyle(PomoGemSecondaryButtonStyle())
                 .frame(minHeight: 44)
         }
@@ -374,8 +378,9 @@ struct BreakTimerView: View {
         } label: {
             Label(
                 completionAlert.isActive(sessionID: sessionID)
-                    ? "停止して瓶へ戻る"
-                    : "瓶へ戻る",
+                    ? String(localized: "停止して瓶へ戻る", table: "Focus",
+                             comment: "Button: stop the break-end alert and go back to the jar")
+                    : String(localized: "瓶へ戻る", table: "Focus", comment: "Button: back to the jar"),
                 systemImage: completionAlert.isActive(sessionID: sessionID)
                     ? "stop.fill"
                     : "arrow.backward"
@@ -384,7 +389,8 @@ struct BreakTimerView: View {
         .buttonStyle(PomoGemPrimaryButtonStyle())
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .frame(minHeight: 44)
-        .accessibilityHint("2本指のダブルタップでも操作できます")
+        .accessibilityHint(Text("2本指のダブルタップでも操作できます", tableName: "Focus",
+                                comment: "VoiceOver hint: a two-finger double tap does the same"))
         .accessibilityIdentifier("break.completion-alert.stop")
         .accessibilityFocused($breakEndButtonFocused)
         .modifier(TimerPinnedActionBar())
@@ -400,20 +406,25 @@ struct BreakTimerView: View {
             Button {
                 Task { await requestNotificationAuthorizationAndSchedule() }
             } label: {
-                Label("画面を閉じても知らせるため通知を設定", systemImage: "bell")
+                Label(String(localized: "画面を閉じても知らせるため通知を設定", table: "Focus",
+                             comment: "Button: allow a notification so the break end is announced even with the screen off"),
+                      systemImage: "bell")
             }
             .buttonStyle(PomoGemSecondaryButtonStyle())
             .frame(minHeight: 44)
 
         case .denied:
             VStack(spacing: 8) {
-                Label("通知は許可されていません", systemImage: "bell.slash")
+                Label(String(localized: "通知は許可されていません", table: "Focus",
+                             comment: "Status: notifications are not allowed"),
+                      systemImage: "bell.slash")
                     .font(.caption.weight(.semibold))
-                Text("休憩はこの画面で続いています。許可は端末の設定から変更できます。")
+                Text("休憩はこの画面で続いています。許可は端末の設定から変更できます。", tableName: "Focus",
+                     comment: "Caption: the break keeps running on this screen; notification permission can be changed in iOS Settings")
                     .font(.caption2)
                     .foregroundStyle(PomoGemTheme.muted)
                     .multilineTextAlignment(.center)
-                Button("設定を開く") {
+                Button(String(localized: "設定を開く", table: "Focus", comment: "Button: open iOS Settings")) {
                     openNotificationSettings()
                 }
                 .buttonStyle(PomoGemSecondaryButtonStyle())
@@ -425,14 +436,17 @@ struct BreakTimerView: View {
             HStack(spacing: 8) {
                 ProgressView()
                     .controlSize(.small)
-                Text("終了通知を設定しています")
+                Text("終了通知を設定しています", tableName: "Focus",
+                     comment: "Progress line: the timer-end notification is being scheduled")
                     .font(.caption)
             }
             .foregroundStyle(PomoGemTheme.muted)
             .accessibilityElement(children: .combine)
 
         case .scheduled:
-            Label("画面を閉じても、休憩終了時に通知します", systemImage: "bell.badge.fill")
+            Label(String(localized: "画面を閉じても、休憩終了時に通知します", table: "Focus",
+                         comment: "Status: a notification will announce the break end even with the screen off"),
+                  systemImage: "bell.badge.fill")
                 .font(.caption)
                 .foregroundStyle(PomoGemTheme.muted)
                 .accessibilityElement(children: .combine)
@@ -453,13 +467,17 @@ struct BreakTimerView: View {
 
         case .failed:
             VStack(spacing: 8) {
-                Label("終了通知を予約できませんでした", systemImage: "exclamationmark.triangle")
+                Label(String(localized: "終了通知を予約できませんでした", table: "Focus",
+                             comment: "Status: the break-end notification could not be scheduled"),
+                      systemImage: "exclamationmark.triangle")
                     .font(.caption.weight(.semibold))
-                Text("休憩タイマーはこの画面で続いています。少し待ってから再試行できます。")
+                Text("休憩タイマーはこの画面で続いています。少し待ってから再試行できます。", tableName: "Focus",
+                     comment: "Caption: the break timer keeps running on this screen; scheduling can be retried in a moment")
                     .font(.caption2)
                     .foregroundStyle(PomoGemTheme.muted)
                     .multilineTextAlignment(.center)
-                Button("通知予約を再試行") {
+                Button(String(localized: "通知予約を再試行", table: "Focus",
+                              comment: "Button: try scheduling the break-end notification again")) {
                     Task { await refreshNotificationScheduling(requestAuthorizationIfNeeded: true) }
                 }
                 .buttonStyle(PomoGemSecondaryButtonStyle())
@@ -661,7 +679,11 @@ struct BreakTimerView: View {
         updateIdleTimer()
         guard completionAlert.isActive(sessionID: sessionID),
               UIAccessibility.isVoiceOverRunning else {
-            UIAccessibility.post(notification: .announcement, argument: "休憩が終わりました")
+            UIAccessibility.post(
+                notification: .announcement,
+                argument: String(localized: "休憩が終わりました", table: "Focus",
+                                 comment: "VoiceOver announcement: the break is over")
+            )
             return
         }
         Task { @MainActor in
@@ -671,7 +693,11 @@ struct BreakTimerView: View {
             UIAccessibility.post(
                 notification: .announcement,
                 argument: NSAttributedString(
-                    string: "休憩が終わりました。2本指でダブルタップすると、アラートを止めて瓶へ戻れます",
+                    string: String(
+                        localized: "休憩が終わりました。2本指でダブルタップすると、アラートを止めて瓶へ戻れます",
+                        table: "Focus",
+                        comment: "VoiceOver announcement: the break is over; a two-finger double tap stops the alert and goes back to the jar"
+                    ),
                     attributes: [.accessibilitySpeechQueueAnnouncement: true]
                 )
             )

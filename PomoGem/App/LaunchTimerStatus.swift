@@ -195,18 +195,23 @@ struct LaunchTimerStatusCard: View {
             return String(localized: "集中が終わりました。確認が済むと、この集中を瓶に積みます。", table: "Launch",
                           comment: "VoiceOver: the focus timer ended while the app waits for iCloud")
         }
-        let minutes = remaining / 60
-        let seconds = remaining % 60
+        // Each count is its own counted phrase, so English can say "1 minute"
+        // and "34 seconds" (a String Catalog plural varies one number); the
+        // sentence then places both. Japanese reads 「12分」「34秒」 as before.
+        let minutes = String(localized: "\(remaining / 60)分", table: "Launch",
+                             comment: "VoiceOver: whole minutes left on the timer. %lld is the count (plural in English)")
+        let seconds = String(localized: "\(remaining % 60)秒", table: "Launch",
+                             comment: "VoiceOver: seconds left after the whole minutes. %lld is the count (plural in English)")
         switch status {
         case .focusPaused:
-            return String(localized: "集中は一時停止中です。残り\(minutes)分\(seconds)秒", table: "Launch",
-                          comment: "VoiceOver: paused focus with remaining minutes and seconds")
+            return String(localized: "集中は一時停止中です。残り\(minutes)\(seconds)", table: "Launch",
+                          comment: "VoiceOver: paused focus. %1$@ is the minutes left, %2$@ the seconds left")
         case .breakRunning:
-            return String(localized: "休憩中です。残り\(minutes)分\(seconds)秒", table: "Launch",
-                          comment: "VoiceOver: running break with remaining minutes and seconds")
+            return String(localized: "休憩中です。残り\(minutes)\(seconds)", table: "Launch",
+                          comment: "VoiceOver: running break. %1$@ is the minutes left, %2$@ the seconds left")
         case .focusRunning, .focusFinished:
-            return String(localized: "集中は続いています。残り\(minutes)分\(seconds)秒", table: "Launch",
-                          comment: "VoiceOver: running focus with remaining minutes and seconds")
+            return String(localized: "集中は続いています。残り\(minutes)\(seconds)", table: "Launch",
+                          comment: "VoiceOver: running focus. %1$@ is the minutes left, %2$@ the seconds left")
         }
     }
 }

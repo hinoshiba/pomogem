@@ -566,7 +566,10 @@ struct StorageTransferRecoveryAssetFiles {
 
 enum StorageTransferRecoveryCloudTransportError: Error, LocalizedError, Equatable {
     case conflict, incompleteResponse, unsafeOperation
-    var errorDescription: String? { "iCloudの復旧用コピーを確定できませんでした。元のデータを保持して再試行してください。" }
+    var errorDescription: String? {
+        String(localized: "iCloudの復旧用コピーを確定できませんでした。元のデータを保持して再試行してください。",
+               table: "Storage", comment: "The recovery copy could not be finalized in iCloud")
+    }
 }
 
 private func recoveryCloudSanitized(_ error: Error) -> Error {

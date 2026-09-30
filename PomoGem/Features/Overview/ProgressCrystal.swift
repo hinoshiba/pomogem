@@ -9,8 +9,18 @@ import UIKit
 /// should feel more important than ×10 without becoming a larger physics body
 /// that jams the bottle.
 enum AggregatePresentation {
-    static func countLabel(_ pebbleCount: Int) -> String {
+    /// 「×10」「×1千」「×35.1万」「×1億」; en "×10", "×1K", "×351K", "×100M".
+    ///
+    /// Japanese groups by 千・万・億 and English by thousand, million and
+    /// billion, so the scale itself differs by language: English uses
+    /// Foundation's compact notation instead of a translated suffix.
+    static func countLabel(_ pebbleCount: Int, locale: Locale = PomoGemLocale.current) -> String {
         let count = max(0, pebbleCount)
+        guard PomoGemLocale.composesJapanese(locale) else {
+            guard count >= 1_000 else { return "×\(count)" }
+            return "×" + count.formatted(.number.notation(.compactName).locale(locale))
+        }
+        // l10n-ignore-begin: Japanese myriad units, composed here like the formatting helpers
         switch count {
         case 100_000_000...:
             return "×\(scaled(count, divisor: 100_000_000))億"
@@ -21,18 +31,19 @@ enum AggregatePresentation {
         default:
             return "×\(count)"
         }
+        // l10n-ignore-end
     }
 
     static func title(level: Int) -> String {
         switch max(1, level) {
-        case 1: "結晶"
-        case 2: "星片"
-        case 3: "星晶"
-        case 4: "星核"
-        case 5: "軌道核"
-        case 6: "星冠"
-        case 7: "光脈核"
-        default: "永続核"
+        case 1: String(localized: "結晶", table: "Progress", comment: "Name of a level-1 crystal (10 gems); also a noun inside sentences")
+        case 2: String(localized: "星片", table: "Progress", comment: "Name of a level-2 crystal (100 gems)")
+        case 3: String(localized: "星晶", table: "Progress", comment: "Name of a level-3 crystal (1,000 gems)")
+        case 4: String(localized: "星核", table: "Progress", comment: "Name of a level-4 crystal (10,000 gems)")
+        case 5: String(localized: "軌道核", table: "Progress", comment: "Name of a level-5 crystal (100,000 gems)")
+        case 6: String(localized: "星冠", table: "Progress", comment: "Name of a level-6 crystal (a million gems)")
+        case 7: String(localized: "光脈核", table: "Progress", comment: "Name of a level-7 crystal (ten million gems)")
+        default: String(localized: "永続核", table: "Progress", comment: "Name of the highest crystal level")
         }
     }
 
@@ -65,6 +76,28 @@ enum AggregatePresentation {
         let value = Double(count) / Double(divisor)
         return String(format: "%.1f", value)
             .replacingOccurrences(of: ".0", with: "")
+    }
+}
+
+/// Sentences the crystal hierarchy repeats (the completion card, the Home
+/// HUD and the jar's time core), each one format string.
+enum FusionHierarchyText {
+    /// 「×10へ 1/10」; en "1/10 toward ×10".
+    static func toward(_ destination: String, _ done: Int, of needed: Int) -> String {
+        String(
+            localized: "\(destination)へ \(done)/\(needed)",
+            table: "Progress",
+            comment: "Progress toward a crystal: its size (e.g. ×10), then gems in / gems needed"
+        )
+    }
+
+    /// 「あと1粒で2段融合」: one more gem completes several crystal levels.
+    static func cascade(remaining: Int, levels: Int) -> String {
+        String(
+            localized: "あと\(CountText.gems(remaining))で\(levels)段融合",
+            table: "Progress",
+            comment: "Gems left (e.g. 1粒) until several crystal levels complete at once; the second argument is the number of levels (2 or more)"
+        )
     }
 }
 
@@ -174,21 +207,36 @@ struct FusionRewardBridgeState: Equatable, Sendable {
 
     var progressLabel: String {
         if isFusionComplete {
-            return "\(destinationLabel)完成 \(litSlotCount)/\(immediateHorizon.requiredSourceUnitCount)"
+            return String(
+                localized: "\(destinationLabel)完成 \(litSlotCount)/\(immediateHorizon.requiredSourceUnitCount)",
+                table: "Progress",
+                comment: "A crystal just completed: its size (e.g. ×10), then gems in / gems needed (10/10)"
+            )
         }
-        return "\(destinationLabel)へ \(litSlotCount)/\(immediateHorizon.requiredSourceUnitCount)"
+        return FusionHierarchyText.toward(
+            destinationLabel,
+            litSlotCount,
+            of: immediateHorizon.requiredSourceUnitCount
+        )
     }
 
     var nextStepLabel: String {
         if isFusionComplete {
             if completedFusionLevels.count > 1 {
-                return "\(completedFusionLevels.count)段融合が完成。小さな一粒も消えていません"
+                return String(
+                    localized: "\(completedFusionLevels.count)段融合が完成。小さな一粒も消えていません",
+                    table: "Progress",
+                    comment: "Several crystal levels completed at once; the argument is how many levels"
+                )
             }
-            return "10粒がひとつの結晶に。中の一粒と質量はそのまま"
+            return String(localized: "10粒がひとつの結晶に。中の一粒と質量はそのまま", table: "Progress")
         }
         let remaining = max(1, immediateHorizon.remainingPebbleCount)
         if immediateHorizon.cascadingDestinationLevels.count > 1 {
-            return "あと\(remaining)粒で\(immediateHorizon.cascadingDestinationLevels.count)段融合"
+            return FusionHierarchyText.cascade(
+                remaining: remaining,
+                levels: immediateHorizon.cascadingDestinationLevels.count
+            )
         }
         return String(localized: "次の結晶まで、あと\(remaining)粒", table: "Progress", comment: "Next step toward the next crystal; the argument is a gem count")
     }
@@ -197,11 +245,23 @@ struct FusionRewardBridgeState: Equatable, Sendable {
     /// quieter line preserves the broader ×100/×1,000 context without making
     /// particles 11...19 look identical to one another.
     var longTermContextLabel: String? {
-        let durableProgress = "\(AggregatePresentation.countLabel(durableHorizon.destinationPebbleCount))へ \(durableHorizon.sourceUnitCount)/\(durableHorizon.requiredSourceUnitCount)"
-        if isFusionComplete { return "次は\(durableProgress)" }
+        let destination = AggregatePresentation.countLabel(durableHorizon.destinationPebbleCount)
+        let done = durableHorizon.sourceUnitCount
+        let needed = durableHorizon.requiredSourceUnitCount
+        if isFusionComplete {
+            return String(
+                localized: "次は\(destination)へ \(done)/\(needed)",
+                table: "Progress",
+                comment: "After a crystal completes, the next larger one: its size (e.g. ×100), then crystals in / needed"
+            )
+        }
         guard durableHorizon.destinationPebbleCount != immediateHorizon.destinationPebbleCount
         else { return nil }
-        return "長期：\(durableProgress)"
+        return String(
+            localized: "長期：\(destination)へ \(done)/\(needed)",
+            table: "Progress",
+            comment: "The long-term crystal: its size (e.g. ×100), then crystals in / needed"
+        )
     }
 
     private static func decimalUnit(at level: Int) -> Int {
@@ -247,14 +307,17 @@ enum FusionRewardBridgePresentation {
         projectionIsLowerBound: Bool
     ) -> FusionRewardBridgeDisplayState {
         guard projectionIsLowerBound else {
-            let accessibilityLabel = [
-                "結晶の進み",
-                state.progressLabel,
-                state.nextStepLabel,
-                state.longTermContextLabel
-            ]
-            .compactMap { $0 }
-            .joined(separator: "、")
+            let accessibilityLabel = state.longTermContextLabel.map {
+                String(
+                    localized: "結晶の進み、\(state.progressLabel)、\(state.nextStepLabel)、\($0)",
+                    table: "Progress",
+                    comment: "VoiceOver: crystal progress, the next step and the long-term crystal"
+                )
+            } ?? String(
+                localized: "結晶の進み、\(state.progressLabel)、\(state.nextStepLabel)",
+                table: "Progress",
+                comment: "VoiceOver: crystal progress and the next step"
+            )
             return FusionRewardBridgeDisplayState(
                 progressLabel: state.progressLabel,
                 nextStepLabel: state.nextStepLabel,
@@ -265,11 +328,11 @@ enum FusionRewardBridgePresentation {
         }
 
         return FusionRewardBridgeDisplayState(
-            progressLabel: "今回 +1粒",
-            nextStepLabel: "結晶進捗を整理中",
-            longTermContextLabel: "保存データの読み込み後に正確な位置を表示します",
+            progressLabel: String(localized: "今回 +1粒", table: "Progress", comment: "After a focus while crystals are re-counted: this session added one gem"),
+            nextStepLabel: String(localized: "結晶進捗を整理中", table: "Progress", comment: "Crystal progress is being re-counted"),
+            longTermContextLabel: String(localized: "保存データの読み込み後に正確な位置を表示します", table: "Progress"),
             litSlotCount: nil,
-            accessibilityLabel: "今回の完走で1粒追加。結晶進捗を整理中です"
+            accessibilityLabel: String(localized: "今回の完走で1粒追加。結晶進捗を整理中です", table: "Progress")
         )
     }
 
@@ -303,49 +366,75 @@ enum EffortProgressPresentation {
         projectionIsLowerBound: Bool
     ) -> EffortProgressDisplayState {
         let contribution = formattedDuration(grams: snapshot.latestContributionGrams)
-        let accountingDisclosure = "粒は1完走につき1つ。核の進みは集中時間で計算します"
+        let accountingDisclosure = String(
+            localized: "粒は1完走につき1つ。核の進みは集中時間で計算します",
+            table: "Progress",
+            comment: "Why gems and the time core differ: one gem per completed focus, the core grows with focus time"
+        )
 
         guard !projectionIsLowerBound else {
             return EffortProgressDisplayState(
-                progressLabel: "今回 +\(contribution)",
-                nextStepLabel: "時間の核を整理中",
+                progressLabel: String(localized: "今回 +\(contribution)", table: "Progress", comment: "After a focus while the time core is re-counted: the time this session added"),
+                nextStepLabel: String(localized: "時間の核を整理中", table: "Progress", comment: "The time core is being re-counted"),
                 longTermContextLabel: accountingDisclosure,
                 progressFraction: nil,
-                accessibilityLabel: "今回の完走で\(contribution)を追加。時間の核を整理中。\(accountingDisclosure)"
+                accessibilityLabel: String(
+                    localized: "今回の完走で\(contribution)を追加。時間の核を整理中。\(accountingDisclosure)",
+                    table: "Progress",
+                    comment: "VoiceOver after a focus while the time core is re-counted: the time added, then the one-gem-per-focus explanation"
+                )
             )
         }
 
+        let level = max(1, snapshot.displayedTargetLevel)
         let state: EffortProgressDisplayState
         if snapshot.crossedMilestoneGrams != nil {
             let overflow = snapshot.overflowGrams
             let nextStep = overflow > 0
-                ? "超過した\(formattedDuration(grams: overflow))も次の段へ保持"
-                : "到達分は次の段の進みとして保持"
+                ? String(localized: "超過した\(formattedDuration(grams: overflow))も次の段へ保持", table: "Progress", comment: "Time core reached: the time beyond it carries over to the next stage")
+                : String(localized: "到達分は次の段の進みとして保持", table: "Progress", comment: "Time core reached exactly: the time carries over to the next stage")
             state = EffortProgressDisplayState(
-                progressLabel: "\(targetTitle(level: snapshot.displayedTargetLevel)) 到達",
+                progressLabel: level == 1
+                    ? String(localized: "最初の時間の核 到達", table: "Progress", comment: "The first time core was reached")
+                    : String(localized: "時間の核・\(level)段目 到達", table: "Progress", comment: "A later time core was reached; the argument is its stage"),
                 nextStepLabel: nextStep,
-                longTermContextLabel: "次：\(formattedDuration(grams: snapshot.totalGrams)) / \(formattedDuration(grams: snapshot.nextTargetGrams))",
+                longTermContextLabel: String(
+                    localized: "次：\(formattedDuration(grams: snapshot.totalGrams)) / \(formattedDuration(grams: snapshot.nextTargetGrams))",
+                    table: "Progress",
+                    comment: "Toward the next time core: focus time so far / time it needs"
+                ),
                 progressFraction: 1,
                 accessibilityLabel: ""
             )
         } else {
+            let done = formattedDuration(grams: snapshot.displayedProgressGrams)
+            let needed = formattedDuration(grams: snapshot.displayedTargetGrams)
             state = EffortProgressDisplayState(
-                progressLabel: "\(targetTitle(level: snapshot.displayedTargetLevel))へ \(formattedDuration(grams: snapshot.displayedProgressGrams)) / \(formattedDuration(grams: snapshot.displayedTargetGrams))",
-                nextStepLabel: "あと\(formattedDuration(grams: snapshot.remainingGrams))",
+                progressLabel: level == 1
+                    ? String(localized: "最初の時間の核へ \(done) / \(needed)", table: "Progress", comment: "Toward the first time core: focus time so far / time it needs")
+                    : String(localized: "時間の核・\(level)段目へ \(done) / \(needed)", table: "Progress", comment: "Toward a later time core: its stage, then focus time so far / time it needs"),
+                nextStepLabel: String(
+                    localized: "あと\(formattedDuration(grams: snapshot.remainingGrams))",
+                    table: "Progress",
+                    comment: "Time left to the next time core"
+                ),
                 longTermContextLabel: accountingDisclosure,
                 progressFraction: snapshot.progressFraction,
                 accessibilityLabel: ""
             )
         }
 
-        let accessibilityLabel = [
-            "時間の核",
-            state.progressLabel,
-            state.nextStepLabel,
-            state.longTermContextLabel
-        ]
-        .compactMap { $0 }
-        .joined(separator: "、")
+        let accessibilityLabel = state.longTermContextLabel.map {
+            String(
+                localized: "時間の核、\(state.progressLabel)、\(state.nextStepLabel)、\($0)",
+                table: "Progress",
+                comment: "VoiceOver: time core progress, the next step and a note"
+            )
+        } ?? String(
+            localized: "時間の核、\(state.progressLabel)、\(state.nextStepLabel)",
+            table: "Progress",
+            comment: "VoiceOver: time core progress and the next step"
+        )
         return EffortProgressDisplayState(
             progressLabel: state.progressLabel,
             nextStepLabel: state.nextStepLabel,
@@ -355,8 +444,14 @@ enum EffortProgressPresentation {
         )
     }
 
+    /// The time core a rail or a sentence leads to: 「最初の時間の核」,
+    /// 「時間の核・2段目」. English is a lower-case noun phrase ("the first
+    /// time core", "time core stage 2") for use inside a sentence.
     static func targetTitle(level: Int) -> String {
-        max(1, level) == 1 ? "最初の時間の核" : "時間の核・\(max(1, level))段目"
+        let level = max(1, level)
+        return level == 1
+            ? String(localized: "最初の時間の核", table: "Progress", comment: "The first time core, as a noun inside a sentence (e.g. before まで)")
+            : String(localized: "時間の核・\(level)段目", table: "Progress", comment: "A later time core, as a noun inside a sentence; the argument is its stage")
     }
 
     static func formattedDuration(grams rawGrams: Int) -> String {
@@ -381,7 +476,11 @@ enum EffortProgressPresentation {
         while value.hasSuffix("0"), !value.hasSuffix(".0") {
             value.removeLast()
         }
-        return "\(value)標準単位"
+        return String(
+            localized: "\(value)標準単位",
+            table: "Progress",
+            comment: "A mass in standard units (250 g each); the argument is a decimal such as 1.0 or 2.4"
+        )
     }
 
     static func formattedMass(grams rawGrams: Int) -> String {
@@ -1625,11 +1724,19 @@ struct JarFilledJarPill: View {
     }
 
     static func text(count rawCount: Int) -> String {
+        let cycles = max(0, rawCount)
+        if cycles < 1_000 {
+            return String(
+                localized: "瓶\(cycles)杯",
+                table: "Progress",
+                comment: "Jar chip: how many times the jar has filled (2.5 kg each)"
+            )
+        }
         let count = AggregatePresentation.countLabel(rawCount)
         return String(
             localized: "瓶\(String(count.dropFirst()))杯",
             table: "Progress",
-            comment: "Jar chip: how many times the jar has filled (2.5 kg each); the argument is a compact count such as 3 or 1.2万"
+            comment: "Jar chip: how many times the jar has filled (2.5 kg each); the argument is a compact count of 1,000 or more such as 1.2万 (en 1.2K)"
         )
     }
 }
@@ -1985,7 +2092,6 @@ enum JarLifetimeCorePresentation {
         let level = EffortConstellationPresentation.coreLevel(
             totalPebbleCount: equivalentCount
         )
-        let compactCount = compactParticleCount(count)
 
         guard !projectionIsLowerBound else {
             return JarLifetimeCoreState(
@@ -1998,13 +2104,19 @@ enum JarLifetimeCorePresentation {
                 visibleHaloRingCount: AggregatePresentation.ringCount(level: level),
                 litOrbitSlotCount: nil,
                 title: effortSnapshot == nil
-                    ? (count < FusionHierarchyPresentation.fanIn ? "結晶の芽" : "時間の核")
-                    : "時間の核",
+                    ? (count < FusionHierarchyPresentation.fanIn ? seedTitle : coreTitle)
+                    : coreTitle,
                 countLabel: effortSnapshot.map {
-                    "\(EffortProgressPresentation.formattedMass(grams: $0.totalGrams))以上"
-                } ?? "\(compactCount)以上",
+                    String(
+                        localized: "\(EffortProgressPresentation.formattedMass(grams: $0.totalGrams))以上",
+                        table: "Progress",
+                        comment: "A lower bound while the jar is re-counted; the argument is a mass such as 600g"
+                    )
+                } ?? compactParticleCount(count, isLowerBound: true),
                 nextFusionLabel: nil,
-                progressLabel: effortSnapshot == nil ? "結晶を整理中" : "時間の核を整理中"
+                progressLabel: effortSnapshot == nil
+                    ? String(localized: "結晶を整理中", table: "Progress", comment: "The crystals are being re-counted")
+                    : String(localized: "時間の核を整理中", table: "Progress", comment: "The time core is being re-counted")
             )
         }
 
@@ -2031,23 +2143,42 @@ enum JarLifetimeCorePresentation {
                 // that fold into 星, 冠 and ゾウ, no longer a share of the way
                 // to the next 10× core stage (D6: the core's shape shows that).
                 litOrbitSlotCount: journeyMarkers.diamonds,
-                title: "時間の核",
+                title: coreTitle,
                 countLabel: EffortProgressPresentation.formattedMass(
                     grams: effortSnapshot.totalGrams
                 ),
                 nextFusionLabel: reachedMilestone
-                    ? "次の核：\(EffortProgressPresentation.formattedDuration(grams: effortSnapshot.nextTargetGrams))"
-                    : "核まであと\(EffortProgressPresentation.formattedDuration(grams: effortSnapshot.remainingGrams))",
-                progressLabel: "時間 \(EffortProgressPresentation.formattedDuration(grams: effortSnapshot.displayedProgressGrams)) / \(EffortProgressPresentation.formattedDuration(grams: effortSnapshot.displayedTargetGrams))",
+                    ? String(
+                        localized: "次の核：\(EffortProgressPresentation.formattedDuration(grams: effortSnapshot.nextTargetGrams))",
+                        table: "Progress",
+                        comment: "Time core just reached: the time the next core needs"
+                    )
+                    : String(
+                        localized: "核まであと\(EffortProgressPresentation.formattedDuration(grams: effortSnapshot.remainingGrams))",
+                        table: "Progress",
+                        comment: "Time left until the next time core"
+                    ),
+                progressLabel: String(
+                    localized: "時間 \(EffortProgressPresentation.formattedDuration(grams: effortSnapshot.displayedProgressGrams)) / \(EffortProgressPresentation.formattedDuration(grams: effortSnapshot.displayedTargetGrams))",
+                    table: "Progress",
+                    comment: "Time core card: focus time so far / time the core needs"
+                ),
                 journeyMarkers: journeyMarkers
             )
         }
 
         let nextFusionLabel: String
         if immediateHorizon.cascadingDestinationLevels.count > 1 {
-            nextFusionLabel = "あと\(immediateHorizon.remainingPebbleCount)粒で\(immediateHorizon.cascadingDestinationLevels.count)段融合"
+            nextFusionLabel = FusionHierarchyText.cascade(
+                remaining: immediateHorizon.remainingPebbleCount,
+                levels: immediateHorizon.cascadingDestinationLevels.count
+            )
         } else {
-            nextFusionLabel = "次の結晶まであと\(immediateHorizon.remainingPebbleCount)粒"
+            nextFusionLabel = String(
+                localized: "次の結晶まであと\(immediateHorizon.remainingPebbleCount)粒",
+                table: "Progress",
+                comment: "Time core card: gems left until the next crystal"
+            )
         }
         return JarLifetimeCoreState(
             totalPebbleCount: count,
@@ -2061,19 +2192,39 @@ enum JarLifetimeCorePresentation {
                 max(0, horizon.sourceUnitCount),
                 horizon.requiredSourceUnitCount
             ),
-            title: count < FusionHierarchyPresentation.fanIn ? "結晶の芽" : "時間の核",
-            countLabel: compactCount,
+            title: count < FusionHierarchyPresentation.fanIn ? seedTitle : coreTitle,
+            countLabel: compactParticleCount(count, isLowerBound: false),
             nextFusionLabel: nextFusionLabel,
-            progressLabel: "\(AggregatePresentation.countLabel(horizon.destinationPebbleCount))へ \(horizon.sourceUnitCount)/\(horizon.requiredSourceUnitCount)"
+            progressLabel: FusionHierarchyText.toward(
+                AggregatePresentation.countLabel(horizon.destinationPebbleCount),
+                horizon.sourceUnitCount,
+                of: horizon.requiredSourceUnitCount
+            )
         )
     }
 
-    private static func compactParticleCount(_ count: Int) -> String {
+    /// The name plate before the first crystal: 「結晶の芽」.
+    private static var seedTitle: String {
+        String(localized: "結晶の芽", table: "Progress", comment: "Name plate of the jar's core before the first crystal (fewer than 10 gems)")
+    }
+
+    /// The name plate of the jar's lifetime core: 「時間の核」.
+    private static var coreTitle: String {
+        String(localized: "時間の核", table: "Progress", comment: "Name plate of the jar's lifetime time core")
+    }
+
+    /// 「9粒」「35.1万粒」, or with 「以上」 while the jar is re-counted.
+    /// English: "9 gems", "351K gems", "at least 351K gems".
+    private static func compactParticleCount(_ count: Int, isLowerBound: Bool) -> String {
         guard count >= 1_000 else {
-            return "\(count.formatted(.number.grouping(.automatic)))粒"
+            return isLowerBound
+                ? String(localized: "\(count)粒以上", table: "Progress", comment: "A lower bound of gems while the jar is re-counted")
+                : CountText.gems(count)
         }
-        let aggregate = AggregatePresentation.countLabel(count)
-        return "\(aggregate.dropFirst())粒"
+        let compact = String(AggregatePresentation.countLabel(count).dropFirst())
+        return isLowerBound
+            ? String(localized: "\(compact)粒以上", table: "Progress", comment: "A lower bound of gems while the jar is re-counted; the argument is a compact count such as 35.1万 (en 351K)")
+            : String(localized: "\(compact)粒", table: "Progress", comment: "Gems as a compact count such as 35.1万 (en 351K); always 1,000 or more")
     }
 
     /// The input is a count only for legacy projections. Current callers pass

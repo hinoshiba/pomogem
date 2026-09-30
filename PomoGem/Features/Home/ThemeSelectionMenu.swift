@@ -16,7 +16,7 @@ struct ThemeSelectionMenu: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("テーマ")
+            Text("テーマ", tableName: "Home", comment: "The word theme, alone: the caption above the sheets' theme menu, the manual-entry confirmation row, and the stand-in for a missing theme name")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(PomoGemTheme.muted)
                 .accessibilityHidden(true)
@@ -26,9 +26,9 @@ struct ThemeSelectionMenu: View {
                         selectedID = subject.id
                     } label: {
                         if selectedID == subject.id {
-                            Label(subject.safeDisplayName, systemImage: "checkmark")
+                            Label(subject.localizedDisplayName, systemImage: "checkmark")
                         } else {
-                            Text(subject.safeDisplayName)
+                            Text(subject.localizedDisplayName)
                         }
                     }
                 }
@@ -38,7 +38,11 @@ struct ThemeSelectionMenu: View {
                         .fill(Color(hex: selectedSubject?.colorHex ?? Constants.Color.textMute))
                         .frame(width: 12, height: 12)
                         .accessibilityHidden(true)
-                    Text(selectedSubject?.safeDisplayName ?? "選択してください")
+                    Text(selectedSubject?.localizedDisplayName ?? String(
+                        localized: "選択してください",
+                        table: "Home",
+                        comment: "Theme menu of the manual-entry and achievement sheets while no theme is chosen"
+                    ))
                         .font(.system(.body, design: .rounded, weight: .bold))
                         .multilineTextAlignment(.leading)
                     Spacer(minLength: 8)
@@ -54,7 +58,7 @@ struct ThemeSelectionMenu: View {
                 .background(PomoGemTheme.raised, in: RoundedRectangle(cornerRadius: 12))
             }
             .disabled(subjects.isEmpty)
-            .accessibilityLabel("テーマ、\(selectedSubject?.safeDisplayName ?? "未選択")")
+            .accessibilityLabel(Self.accessibilityLabel(for: selectedSubject))
             .accessibilityHint(accessibilityHint)
             .accessibilityIdentifier(accessibilityIdentifier)
         }
@@ -62,6 +66,21 @@ struct ThemeSelectionMenu: View {
 }
 
 extension ThemeSelectionMenu {
+    /// VoiceOver: 「テーマ、英語」, or 「テーマ、未選択」. Home's own theme
+    /// picker reads the same way.
+    static func accessibilityLabel(for subject: Subject?) -> String {
+        let name = subject?.localizedDisplayName ?? String(
+            localized: "未選択",
+            table: "Home",
+            comment: "No theme chosen yet: read after テーマ、 by VoiceOver and shown in the manual-entry confirmation row"
+        )
+        return String(
+            localized: "テーマ、\(name)",
+            table: "Home",
+            comment: "VoiceOver label of a theme menu; the argument is the chosen theme or 未選択"
+        )
+    }
+
     /// The sheet's starting theme: Home's selection while it is still active,
     /// otherwise the first active theme.
     static func initialID(for initialSubject: Subject?, in subjects: [Subject]) -> UUID? {

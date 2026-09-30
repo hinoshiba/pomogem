@@ -33,10 +33,18 @@ enum ScreenTimeError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .unavailable: return "この環境ではスクリーンタイムを利用できません。対応するiPhoneのアプリでお試しください。"
-        case .unauthorized: return "スクリーンタイムへのアクセスを許可してください。"
-        case .unboundContext: return "データの準備が完了してから、もう一度お試しください。"
-        case .applicationsOnly: return "カテゴリやWebサイトではなく、個別のアプリを選んでください。"
+        case .unavailable:
+            return String(localized: "この環境ではスクリーンタイムを利用できません。対応するiPhoneのアプリでお試しください。",
+                          table: "ScreenTime", comment: "Error: Screen Time is not available here (e.g. the Simulator or an iPad build)")
+        case .unauthorized:
+            return String(localized: "スクリーンタイムへのアクセスを許可してください。", table: "ScreenTime",
+                          comment: "Error: Screen Time access is needed first")
+        case .unboundContext:
+            return String(localized: "データの準備が完了してから、もう一度お試しください。", table: "ScreenTime",
+                          comment: "Error: the app's data is not ready yet")
+        case .applicationsOnly:
+            return String(localized: "カテゴリやWebサイトではなく、個別のアプリを選んでください。", table: "ScreenTime",
+                          comment: "Error: categories or websites were chosen; only individual apps count")
         case .overlappingApplications:
             return String(localized: "同じアプリを勉強アプリと控えたいアプリの両方には登録できません。",
                           table: "ScreenTime", comment: "Error: an app is in both Screen Time lanes")
@@ -46,9 +54,24 @@ enum ScreenTimeError: LocalizedError {
         case .missingTheme:
             return String(localized: "勉強時間を記録するテーマを選んでください。",
                           table: "ScreenTime", comment: "Error: study apps are chosen but no destination theme")
-        case .corruptedState: return "スクリーンタイムの記録を読み込めませんでした。記録の上書きは行っていません。"
+        case .corruptedState:
+            return String(localized: "スクリーンタイムの記録を読み込めませんでした。記録の上書きは行っていません。",
+                          table: "ScreenTime", comment: "Error: the Screen Time ledger could not be read; nothing was overwritten")
         }
     }
+}
+
+/// The sentences `ScreenTimeState.monitoringError` stores in the App Group
+/// ledger. The app and the monitor extension both write them, and older
+/// builds read them, so they are data: the ledger keeps these exact Japanese
+/// bytes whatever the language (Docs/Localization.md: persisted text is never
+/// translated), and the app maps them to display text when it publishes the
+/// ledger (`ScreenTimeStoredMonitoringError.displayText`, app only).
+enum ScreenTimeStoredMonitoringError {
+    // l10n-ignore-begin: persisted ledger data, mapped for display
+    static let authorizationRevoked = "スクリーンタイムの許可が解除されました。再び許可して、アプリを選び直してください。"
+    static let monitoringFailed = "スクリーンタイムの監視を開始できませんでした。もう一度お試しください。"
+    // l10n-ignore-end
 }
 
 enum ScreenTimePolicy {
@@ -442,7 +465,7 @@ struct ScreenTimeState: Codable {
         configuration.themeID = themeID
         for index in runs.indices { runs[index].active = false }
         pruneConsumedRuns()
-        monitoringError = "スクリーンタイムの許可が解除されました。再び許可して、アプリを選び直してください。"
+        monitoringError = ScreenTimeStoredMonitoringError.authorizationRevoked
         return true
     }
 

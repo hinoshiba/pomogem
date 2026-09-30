@@ -17,11 +17,15 @@ enum ScreenTimeImportCoordinator {
         case contextChanged, invalidReceipt, conflictingRecord
         var errorDescription: String? {
             switch self {
-            case .contextChanged: "記録の保存先が変わりました。もう一度開いてください。"
+            case .contextChanged:
+                String(localized: "記録の保存先が変わりました。もう一度開いてください。", table: "ScreenTime",
+                       comment: "Import error: where records are stored changed during the import; open the app again")
             case .invalidReceipt:
                 String(localized: "スクリーンタイムの記録を確認できませんでした。", table: "ScreenTime",
                        comment: "Import error: a Screen Time record failed its checks")
-            case .conflictingRecord: "同じ記録の内容が一致しないため、追加を保留しています。"
+            case .conflictingRecord:
+                String(localized: "同じ記録の内容が一致しないため、追加を保留しています。", table: "ScreenTime",
+                       comment: "Import error: a record with the same ID differs, so adding it is on hold")
             }
         }
     }
@@ -84,7 +88,7 @@ enum ScreenTimeImportCoordinator {
                 deviceDayKey: FairnessPolicy.deviceDayKey(for: receipt.endedAt),
                 // Stored with the row, so it stays a plain literal: rows
                 // already written keep the name they were written with.
-                subjectNameSnapshot: subject?.safeDisplayName ?? "スクリーンタイムの勉強",
+                subjectNameSnapshot: subject?.safeDisplayName ?? "スクリーンタイムの勉強", // l10n-ignore: persisted snapshot name (data), never translated
                 subjectIDSnapshot: receipt.themeID,
                 rareRewardRuleVersion: Constants.Gacha.creditRuleVersion,
                 rareRewardParticipated: false, rareRewardCreditedGrams: 0,

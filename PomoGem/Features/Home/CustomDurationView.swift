@@ -30,9 +30,9 @@ struct CustomDurationView: View {
                             ),
                             isUppercased: false
                         )
-                        Text("集中時間を選ぶ")
+                        Text("集中時間を選ぶ", tableName: "Home", comment: "Custom focus length sheet: title")
                             .font(.system(.title2, design: .rounded, weight: .bold))
-                        Text("1分0秒〜360分0秒")
+                        Text("1分0秒〜360分0秒", tableName: "Home", comment: "Custom focus length sheet: the shortest and longest lengths")
                             .font(.subheadline)
                             .foregroundStyle(PomoGemTheme.muted)
                     }
@@ -40,9 +40,14 @@ struct CustomDurationView: View {
 
                     durationSummary
 
-                    Picker("時間の選び方", selection: modeBinding) {
-                        Text("入力").tag(CustomDurationEditingState.Mode.input)
-                        Text("スクロール").tag(CustomDurationEditingState.Mode.scroll)
+                    Picker(
+                        String(localized: "時間の選び方", table: "Home", comment: "Custom focus length: label of the type/scroll segmented control"),
+                        selection: modeBinding
+                    ) {
+                        Text("入力", tableName: "Home", comment: "Custom focus length segment: type the minutes and seconds")
+                            .tag(CustomDurationEditingState.Mode.input)
+                        Text("スクロール", tableName: "Home", comment: "Custom focus length segment: pick the minutes and seconds on wheels")
+                            .tag(CustomDurationEditingState.Mode.scroll)
                     }
                     .pickerStyle(.segmented)
                     .disabled(!editor.canChangeMode)
@@ -63,12 +68,19 @@ struct CustomDurationView: View {
                             .accessibilityIdentifier("custom-timer.validation")
                     }
 
-                    Button("この時間にする", action: confirm)
+                    Button(
+                        String(localized: "この時間にする", table: "Home", comment: "Custom focus length: confirm button"),
+                        action: confirm
+                    )
                         .buttonStyle(PomoGemPrimaryButtonStyle())
                         .disabled(!editor.canConfirm)
                         .accessibilityIdentifier("custom-timer.confirm")
 
-                    Text("秒単位のタイマーを別の端末で引き継ぐには、両方の端末で最新バージョンを利用してください。")
+                    Text(
+                        "秒単位のタイマーを別の端末で引き継ぐには、両方の端末で最新バージョンを利用してください。",
+                        tableName: "Home",
+                        comment: "Custom focus length: a timer with seconds continues on another device only when both run the latest version"
+                    )
                         .font(.footnote)
                         .foregroundStyle(PomoGemTheme.muted)
                         .multilineTextAlignment(.center)
@@ -92,7 +104,9 @@ struct CustomDurationView: View {
                 }
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
-                    Button("入力完了") { focusedField = nil }
+                    Button(String(localized: "入力完了", table: "Home", comment: "Keyboard toolbar button that closes the number pad")) {
+                        focusedField = nil
+                    }
                         .frame(minHeight: 44)
                         .accessibilityIdentifier("custom-timer.keyboard-done")
                 }
@@ -104,9 +118,13 @@ struct CustomDurationView: View {
     private var durationSummary: some View {
         Group {
             if let total = editor.totalSeconds {
-                Text("\(total / Constants.Timer.secondsPerMinute)分 \(total % Constants.Timer.secondsPerMinute)秒")
+                Text(
+                    "\(total / Constants.Timer.secondsPerMinute)分 \(total % Constants.Timer.secondsPerMinute)秒",
+                    tableName: "Home",
+                    comment: "Custom focus length summary: minutes, then seconds (25分 0秒)"
+                )
             } else {
-                Text("分と秒を入力")
+                Text("分と秒を入力", tableName: "Home", comment: "Custom focus length summary while the input is incomplete")
             }
         }
         .font(.system(.largeTitle, design: .rounded, weight: .heavy))
@@ -114,6 +132,15 @@ struct CustomDurationView: View {
         .multilineTextAlignment(.center)
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityIdentifier("custom-timer.summary")
+    }
+
+    /// The minutes and seconds fields and wheels share their titles.
+    private static var minutesTitle: String {
+        String(localized: "分", table: "Home", comment: "Custom focus length: title and VoiceOver label of the minutes field and wheel")
+    }
+
+    private static var secondsTitle: String {
+        String(localized: "秒", table: "Home", comment: "Custom focus length: title and VoiceOver label of the seconds field and wheel")
     }
 
     private var modeBinding: Binding<CustomDurationEditingState.Mode> {
@@ -124,9 +151,9 @@ struct CustomDurationView: View {
 
     private var numericInputs: some View {
         inputLayout {
-            numericField("分", text: Binding(get: { editor.minutesText }, set: { editor.editMinutes($0) }),
+            numericField(Self.minutesTitle, text: Binding(get: { editor.minutesText }, set: { editor.editMinutes($0) }),
                          field: .minutes, identifier: "custom-timer.minutes-input")
-            numericField("秒", text: Binding(get: { editor.secondsText }, set: { editor.editSeconds($0) }),
+            numericField(Self.secondsTitle, text: Binding(get: { editor.secondsText }, set: { editor.editSeconds($0) }),
                          field: .seconds, identifier: "custom-timer.seconds-input")
         }
     }
@@ -154,9 +181,10 @@ struct CustomDurationView: View {
 
     private var wheelInputs: some View {
         inputLayout {
-            Picker("分", selection: Binding(get: { editor.wheelMinutes }, set: { editor.selectWheelMinutes($0) })) {
+            Picker(Self.minutesTitle, selection: Binding(get: { editor.wheelMinutes }, set: { editor.selectWheelMinutes($0) })) {
                 ForEach(Constants.Timer.customMinimumMinutes...Constants.Timer.customMaximumMinutes, id: \.self) { value in
-                    Text("\(value)分").tag(value)
+                    Text("\(value)分", tableName: "Home", comment: "Custom focus length: one row of the minutes wheel")
+                        .tag(value)
                 }
             }
             .pickerStyle(.wheel)
@@ -166,12 +194,13 @@ struct CustomDurationView: View {
             .clipped()
             .contentShape(Rectangle())
             .disabled(!editor.isEditing)
-            .accessibilityLabel("分")
+            .accessibilityLabel(Self.minutesTitle)
             .accessibilityIdentifier("custom-timer.minutes-wheel")
 
-            Picker("秒", selection: Binding(get: { editor.wheelSeconds }, set: { editor.selectWheelSeconds($0) })) {
+            Picker(Self.secondsTitle, selection: Binding(get: { editor.wheelSeconds }, set: { editor.selectWheelSeconds($0) })) {
                 ForEach(0...editor.maximumWheelSeconds, id: \.self) { value in
-                    Text("\(value)秒").tag(value)
+                    Text("\(value)秒", tableName: "Home", comment: "Custom focus length: one row of the seconds wheel")
+                        .tag(value)
                 }
             }
             .pickerStyle(.wheel)
@@ -181,7 +210,7 @@ struct CustomDurationView: View {
             .clipped()
             .contentShape(Rectangle())
             .disabled(!editor.isEditing)
-            .accessibilityLabel("秒")
+            .accessibilityLabel(Self.secondsTitle)
             .accessibilityIdentifier("custom-timer.seconds-wheel")
         }
     }

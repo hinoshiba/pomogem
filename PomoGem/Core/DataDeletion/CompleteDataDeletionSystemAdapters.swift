@@ -11,13 +11,17 @@ enum CompleteDataDeletionSystemError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .userDefaultsNotEmpty:
-            return "端末設定を完全に削除できませんでした。"
+            return String(localized: "端末設定を完全に削除できませんでした。", table: "Storage",
+                          comment: "Data deletion error: this device's settings could not be fully deleted")
         case .unsafePersistentStoreURL:
-            return "保存領域の場所を安全に検証できなかったため、削除を停止しました。"
+            return String(localized: "保存領域の場所を安全に検証できなかったため、削除を停止しました。", table: "Storage",
+                          comment: "Data deletion error: the data store's location could not be verified")
         case .persistentStoreArtifactRemains:
-            return "この端末の古い保存ファイルを完全に消去できませんでした。"
+            return String(localized: "この端末の古い保存ファイルを完全に消去できませんでした。", table: "Storage",
+                          comment: "Data deletion error: old storage files on this device could not be erased")
         case .cloudPersistenceRequired:
-            return "iCloud同期を利用している実機でのみ、iCloudを含む完全削除を実行できます。"
+            return String(localized: "iCloud同期を利用している実機でのみ、iCloudを含む完全削除を実行できます。", table: "Storage",
+                          comment: "Data deletion error: deleting iCloud data needs a real iPhone that uses iCloud sync")
         }
     }
 }
@@ -146,7 +150,8 @@ actor CompleteDataDeletionModelStore: CompleteDataDeletionLocalModelStoring {
             let afterCloudDelete = try counts()
             guard afterCloudDelete.cloudStoreTotal == 0 else {
                 throw CompleteDataDeletionError.invalidState(
-                    "iCloud同期対象のローカル行が削除後も残っています"
+                    String(localized: "iCloud同期対象のローカル行が削除後も残っています", table: "Storage",
+                           comment: "Diagnostic after “the resume information is invalid:”")
                 )
             }
 
@@ -154,7 +159,8 @@ actor CompleteDataDeletionModelStore: CompleteDataDeletionLocalModelStoring {
             let remaining = try counts()
             guard remaining.localProjectionStoreTotal == 0 else {
                 throw CompleteDataDeletionError.invalidState(
-                    "端末内の集計行が削除後も残っています"
+                    String(localized: "端末内の集計行が削除後も残っています", table: "Storage",
+                           comment: "Diagnostic after “the resume information is invalid:”")
                 )
             }
             return remaining

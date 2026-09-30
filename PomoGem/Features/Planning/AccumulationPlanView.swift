@@ -49,14 +49,14 @@ struct AccumulationPlanView: View {
                 .padding(.bottom, 36)
             }
             .background(NightBackground())
-            .navigationTitle("積み上がり計画")
+            .navigationTitle(Text("積み上がり計画", tableName: "Planning", comment: "Title of the plan screen"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     VStack(spacing: 0) {
-                        Text("積み上がり計画")
+                        Text("積み上がり計画", tableName: "Planning", comment: "Title of the plan screen")
                             .font(.headline)
-                        Label("予測・保存なし", systemImage: "icloud.slash.fill")
+                        Label(String(localized: "予測・保存なし", table: "Planning", comment: "Badge under the plan screen's title: a projection that is never saved"), systemImage: "icloud.slash.fill")
                             .font(.caption2.weight(.bold))
                             .foregroundStyle(Color(hex: "#5DE0BD"))
                     }
@@ -122,9 +122,9 @@ struct AccumulationPlanView: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 6) {
                     SectionEyebrow(text: String(localized: "試算・保存されません", table: "Planning", comment: "Eyebrow over これは予測です: the plan is a simulation and nothing is saved"))
-                    Text("これは予測です")
+                    Text("これは予測です", tableName: "Planning")
                         .pomogemSectionTitle(size: 21)
-                    Text("ここで動かす瓶や数値は、実際の学習記録・保存領域・ウィジェットには保存されません。画面を閉じると入力も消えます。")
+                    Text("ここで動かす瓶や数値は、実際の学習記録・保存領域・ウィジェットには保存されません。画面を閉じると入力も消えます。", tableName: "Planning")
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -140,20 +140,20 @@ struct AccumulationPlanView: View {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
                     SectionEyebrow(text: String(localized: "ペース", table: "Planning", comment: "Eyebrow over 続け方を選ぶ (focuses per week)"))
-                    Text("続け方を選ぶ")
+                    Text("続け方を選ぶ", tableName: "Planning", comment: "Plan section title: pick the routine to project")
                         .pomogemSectionTitle(size: 21)
-                    Text("1回の集中を完走する想定で、週あたりの回数から試算します。")
+                    Text("1回の集中を完走する想定で、週あたりの回数から試算します。", tableName: "Planning")
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
                 }
 
                 controlRow(
-                    title: "計画期間",
-                    value: "\(years)年",
+                    title: String(localized: "計画期間", table: "Planning", comment: "Plan control: how many years the plan runs"),
+                    value: Self.yearCount(years),
                     symbol: "calendar"
                 ) {
                     Stepper(
-                        "計画期間 \(years)年",
+                        String(localized: "計画期間 \(years)年", table: "Planning", comment: "VoiceOver: the plan-length stepper; the argument is a number of years"),
                         value: $years,
                         in: AccumulationPlanProjection.Plan.yearRange
                     )
@@ -163,12 +163,12 @@ struct AccumulationPlanView: View {
                 Divider().overlay(PomoGemTheme.glassEdge.opacity(0.12))
 
                 controlRow(
-                    title: "週の集中回数",
-                    value: "週\(sessionsPerWeek)回",
+                    title: String(localized: "週の集中回数", table: "Planning", comment: "Plan control: focus sessions per week"),
+                    value: String(localized: "週\(sessionsPerWeek)回", table: "Planning", comment: "Plan value: focus sessions per week"),
                     symbol: "repeat"
                 ) {
                     Stepper(
-                        "週の集中回数 \(sessionsPerWeek)回",
+                        String(localized: "週の集中回数 \(sessionsPerWeek)回", table: "Planning", comment: "VoiceOver: the sessions-per-week stepper; the argument is the count"),
                         value: $sessionsPerWeek,
                         in: productSessionsPerWeekRange
                     )
@@ -178,11 +178,12 @@ struct AccumulationPlanView: View {
                 Divider().overlay(PomoGemTheme.glassEdge.opacity(0.12))
 
                 VStack(alignment: .leading, spacing: 9) {
-                    Label("1回の集中時間", systemImage: "timer")
+                    Label(String(localized: "1回の集中時間", table: "Planning", comment: "Plan control: the length of one focus session"), systemImage: "timer")
                         .font(.subheadline.weight(.semibold))
-                    Picker("1回の集中時間", selection: $minutesPerSession) {
+                    Picker(String(localized: "1回の集中時間", table: "Planning", comment: "Plan control: the length of one focus session"), selection: $minutesPerSession) {
                         ForEach(minuteChoices, id: \.self) { minutes in
-                            Text("\(minutes)分").tag(minutes)
+                            // A timer length: 「90分」, never 「1時間30分」.
+                            Text(DurationText.short(seconds: minutes * 60, units: .minutesSeconds)).tag(minutes)
                         }
                     }
                     .pickerStyle(.segmented)
@@ -212,19 +213,34 @@ struct AccumulationPlanView: View {
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Label(title, systemImage: symbol)
-                        .font(.subheadline.weight(.semibold))
-                    Spacer(minLength: 8)
-                    Text(value)
-                        .font(.system(.subheadline, design: .rounded, weight: .heavy))
-                        .monospacedDigit()
-                        .foregroundStyle(PomoGemTheme.amber)
+                // Title and value on one line while they fit; otherwise
+                // the value goes under the title, so a long English title
+                // ("Focus Sessions per Week") wraps between words instead
+                // of breaking one.
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Label(title, systemImage: symbol)
+                            .font(.subheadline.weight(.semibold))
+                        Spacer(minLength: 8)
+                        controlValue(value)
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label(title, systemImage: symbol)
+                            .font(.subheadline.weight(.semibold))
+                        controlValue(value)
+                    }
                 }
                 control()
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
+    }
+
+    private func controlValue(_ value: String) -> some View {
+        Text(value)
+            .font(.system(.subheadline, design: .rounded, weight: .heavy))
+            .monospacedDigit()
+            .foregroundStyle(PomoGemTheme.amber)
     }
 
     private var timeTravelCard: some View {
@@ -236,17 +252,6 @@ struct AccumulationPlanView: View {
                         Text(previewPeriodTitle)
                             .pomogemSectionTitle(size: 23)
                     }
-                    Spacer()
-                    Text("予測")
-                        .font(.caption2.weight(.black))
-                        .tracking(0.8)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 5)
-                        .foregroundStyle(Color(hex: "#5DE0BD"))
-                        .background(
-                            Color(hex: "#5DE0BD").opacity(0.13),
-                            in: Capsule()
-                        )
                 }
 
                 Slider(
@@ -255,24 +260,45 @@ struct AccumulationPlanView: View {
                     step: 1
                 )
                 .tint(PomoGemTheme.amber)
-                .accessibilityLabel("計画の経過期間")
+                .accessibilityLabel(Text("計画の経過期間", tableName: "Planning", comment: "VoiceOver: the slider that picks how far into the plan to preview"))
                 .accessibilityValue(previewPeriodTitle)
                 .accessibilityIdentifier("planning.accumulation.timeline")
 
                 HStack {
                     Text("今日", tableName: "Planning", comment: "The start of the plan's timeline: today")
                     Spacer()
-                    Text("\(years)年後")
+                    Text(Self.laterTitle(years: years, months: 0))
                 }
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(PomoGemTheme.muted)
 
-                Text("スライダーを動かすと、その時点までに積み上がる想定の瓶・時間・質量へ巻き戻せます。")
+                Text("スライダーを動かすと、その時点までに積み上がる想定の瓶・時間・質量へ巻き戻せます。", tableName: "Planning")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    private var previewTitle: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            SectionEyebrow(text: "TIME TRAVEL PREVIEW")
+            Text(previewPeriodTitle)
+                .pomogemSectionTitle(size: 23)
+        }
+    }
+
+    private var projectionBadge: some View {
+        Text("予測", tableName: "Planning", comment: "Small badge beside the previewed month: this is a projection")
+            .font(.caption2.weight(.black))
+            .tracking(0.8)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .foregroundStyle(Color(hex: "#5DE0BD"))
+            .background(
+                Color(hex: "#5DE0BD").opacity(0.13),
+                in: Capsule()
+            )
     }
 
     private var massMilestoneCard: some View {
@@ -309,21 +335,23 @@ struct AccumulationPlanView: View {
                     ProgressView(value: jarPosition.cycleProgressFraction)
                         .tint(PomoGemTheme.amber)
                         .accessibilityLabel(Text("その時点の瓶が満ちるまで", tableName: "Planning", comment: "VoiceOver: progress of the bottle cycle at the previewed month"))
-                        .accessibilityValue(
-                            "\(Int((jarPosition.cycleProgressFraction * 100).rounded()))パーセント"
-                        )
+                        .accessibilityValue(Self.percentValue(jarPosition.cycleProgressFraction))
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text("瓶の合計", tableName: "Planning", comment: "Label: today's jar mass plus the mass the plan adds")
-                            .font(.caption)
-                            .foregroundStyle(PomoGemTheme.muted)
-                        Spacer()
-                        Text(jarTotalValue)
-                            .font(.system(.title2, design: .rounded, weight: .heavy))
-                            .monospacedDigit()
-                            .foregroundStyle(PomoGemTheme.amber)
+                    // Label and total side by side while they fit; with large
+                    // text the total goes under its label rather than
+                    // splitting "3.68 t" over two lines.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .firstTextBaseline) {
+                            jarTotalLabel
+                            Spacer()
+                            jarTotalText
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            jarTotalLabel
+                            jarTotalText
+                        }
                     }
                     .accessibilityElement(children: .combine)
                     if let startBreakdown {
@@ -337,22 +365,26 @@ struct AccumulationPlanView: View {
                 Divider().overlay(PomoGemTheme.glassEdge.opacity(0.12))
 
                 VStack(alignment: .leading, spacing: 7) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Label("長期の時間の核", systemImage: "sparkles")
-                            .font(.caption.weight(.bold))
-                        Spacer()
-                        Text(majorMilestoneStatus)
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(Color(hex: "#5DE0BD"))
+                    // Side by side while both fit; with large text the status
+                    // goes under the title, which otherwise broke into
+                    // 「Lon-」「g-」「Ter…」 beside it.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .firstTextBaseline) {
+                            longTermCoreTitle
+                            Spacer()
+                            longTermCoreStatus
+                        }
+                        VStack(alignment: .leading, spacing: 3) {
+                            longTermCoreTitle
+                            longTermCoreStatus
+                        }
                     }
 
                     if let jarPosition {
                         ProgressView(value: jarPosition.majorMilestoneProgressFraction)
                             .tint(Color(hex: "#5DE0BD"))
                             .accessibilityLabel(majorMilestoneAccessibilityLabel(jarPosition))
-                            .accessibilityValue(
-                                "\(Int((jarPosition.majorMilestoneProgressFraction * 100).rounded()))パーセント"
-                            )
+                            .accessibilityValue(Self.percentValue(jarPosition.majorMilestoneProgressFraction))
                     }
                 }
 
@@ -362,7 +394,7 @@ struct AccumulationPlanView: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 Label(
-                    "60分 = 600g = 25分×2 + 10分 = 10分×6",
+                    String(localized: "60分 = 600g = 25分×2 + 10分 = 10分×6", table: "Planning", comment: "Formula: 60 minutes are 600 g however they are split"),
                     systemImage: "equal.circle.fill"
                 )
                 .font(.caption2.weight(.bold))
@@ -373,29 +405,70 @@ struct AccumulationPlanView: View {
                     Color(hex: "#5DE0BD").opacity(0.10),
                     in: Capsule()
                 )
-                .accessibilityLabel("同じ60分なら、分け方にかかわらず600グラムです")
+                .accessibilityLabel(Text("同じ60分なら、分け方にかかわらず600グラムです", tableName: "Planning", comment: "VoiceOver reading of the 60分 = 600g formula"))
             }
         }
         .accessibilityIdentifier("planning.accumulation.mass-milestone")
     }
 
+    private var longTermCoreTitle: some View {
+        Label(String(localized: "長期の時間の核", table: "Planning", comment: "Plan: the long-term time core milestones (2.5 kg, 25 kg, 250 kg…)"), systemImage: "sparkles")
+            .font(.caption.weight(.bold))
+    }
+
+    private var longTermCoreStatus: some View {
+        Text(majorMilestoneStatus)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(Color(hex: "#5DE0BD"))
+    }
+
+    private var jarTotalLabel: some View {
+        Text("瓶の合計", tableName: "Planning", comment: "Label: today's jar mass plus the mass the plan adds")
+            .font(.caption)
+            .foregroundStyle(PomoGemTheme.muted)
+    }
+
+    private var jarTotalText: some View {
+        Text(jarTotalValue)
+            .font(.system(.title2, design: .rounded, weight: .heavy))
+            .monospacedDigit()
+            .foregroundStyle(PomoGemTheme.amber)
+    }
+
+    private var projectionHeading: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            SectionEyebrow(text: String(localized: "試算", table: "Planning", comment: "Eyebrow over この計画で積む分 (simulated mass)"))
+            Text("この計画で積む分", tableName: "Planning", comment: "Title of the card that previews only what the plan adds")
+                .pomogemSectionTitle(size: 21)
+        }
+    }
+
+    private func projectionTotals(alignment: HorizontalAlignment) -> some View {
+        VStack(alignment: alignment, spacing: 2) {
+            Text(formattedMass(projection.grams))
+                .font(.system(.headline, design: .rounded, weight: .heavy))
+                .foregroundStyle(PomoGemTheme.amber)
+            Text(DurationPresentation.minutesLabel(projection.focusMinutes))
+                .font(.caption.weight(.bold))
+                .foregroundStyle(PomoGemTheme.muted)
+        }
+    }
+
     private var projectionVisual: some View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        SectionEyebrow(text: String(localized: "試算", table: "Planning", comment: "Eyebrow over この計画で積む分 (simulated mass)"))
-                        Text("この計画で積む分", tableName: "Planning", comment: "Title of the card that previews only what the plan adds")
-                            .pomogemSectionTitle(size: 21)
+                // The totals sit beside the title while both fit; with large
+                // text they go under it, so the eyebrow is no longer
+                // squeezed into 「ACCUMULATI」「ON」 beside them.
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline) {
+                        projectionHeading
+                        Spacer()
+                        projectionTotals(alignment: .trailing)
                     }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(formattedMass(projection.grams))
-                            .font(.system(.headline, design: .rounded, weight: .heavy))
-                            .foregroundStyle(PomoGemTheme.amber)
-                        Text(DurationPresentation.minutesLabel(projection.focusMinutes))
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(PomoGemTheme.muted)
+                    VStack(alignment: .leading, spacing: 8) {
+                        projectionHeading
+                        projectionTotals(alignment: .leading)
                     }
                 }
 
@@ -445,7 +518,7 @@ struct AccumulationPlanView: View {
 
     private var totalsGrid: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("\(previewPeriodTitle)の予測")
+            Text("\(previewPeriodTitle)の予測", tableName: "Planning", comment: "Plan results title; the argument is 今日 or a time from now such as 3年後")
                 .pomogemSectionTitle()
             // An eager Grid, not a LazyVGrid: `.combine` below does not
             // reach into a lazy container, so VoiceOver heard only the title
@@ -478,13 +551,13 @@ struct AccumulationPlanView: View {
     private var calculationNote: some View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 8) {
-                Label("試算の前提", systemImage: "info.circle.fill")
+                Label(String(localized: "試算の前提", table: "Planning", comment: "Plan card title: the assumptions behind the numbers"), systemImage: "info.circle.fill")
                     .font(.subheadline.weight(.bold))
                 Text("1年を平均365.25日として週回数を換算し、1回の完走を1粒、集中1分を\(MassText.grams(value: Constants.Mass.gramsPerMinute))として計算します。2.50kgごとの瓶の満杯、長期の質量段階、瓶の光は実画面と同じ計算です。10個ずつまとめるため、長期間でも描画する可動体は\(Constants.Jar.maxPhysicsBodies)体以内です。", tableName: "Planning", comment: "Plan: calculation assumptions; the arguments are the mass of one minute (10g) and the physics body limit")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                Label("保存領域・実績への反映はありません", systemImage: "externaldrive.badge.xmark")
+                Label(String(localized: "保存領域・実績への反映はありません", table: "Planning"), systemImage: "externaldrive.badge.xmark")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(Color(hex: "#5DE0BD"))
             }
@@ -492,7 +565,10 @@ struct AccumulationPlanView: View {
     }
 
     private var focusMetric: some View {
-        metric(title: "集中時間", value: DurationPresentation.minutesLabel(projection.focusMinutes))
+        metric(
+            title: String(localized: "集中時間", table: "Planning", comment: "Plan results: focus time the plan adds"),
+            value: DurationPresentation.minutesLabel(projection.focusMinutes)
+        )
     }
 
     private var addedMassMetric: some View {
@@ -503,7 +579,10 @@ struct AccumulationPlanView: View {
     }
 
     private var rhythmMetric: some View {
-        metric(title: "予定リズム", value: "\(projection.completionCount.formatted())回")
+        metric(
+            title: String(localized: "予定リズム", table: "Planning", comment: "Plan results: how many sessions the plan completes"),
+            value: String(localized: "\(projection.completionCount)回", table: "Planning", comment: "Plan results: number of completed focus sessions")
+        )
     }
 
     private var jarTotalMetric: some View {
@@ -537,11 +616,43 @@ struct AccumulationPlanView: View {
         guard months > 0 else {
             return String(localized: "今日", table: "Planning", comment: "The start of the plan's timeline: today")
         }
-        let wholeYears = months / 12
-        let remainingMonths = months % 12
-        if wholeYears == 0 { return "\(remainingMonths)か月後" }
-        if remainingMonths == 0 { return "\(wholeYears)年後" }
-        return "\(wholeYears)年\(remainingMonths)か月後"
+        return Self.laterTitle(years: months / 12, months: months % 12)
+    }
+
+    /// 「3か月後」「2年後」「1年6か月後」: a time from today. Counts, not
+    /// calendar years, so the Int is interpolated (English plurals).
+    static func laterTitle(years: Int, months: Int) -> String {
+        if years == 0 {
+            return String(localized: "\(months)か月後", table: "Planning", comment: "A time from today in months")
+        }
+        if months == 0 {
+            return String(localized: "\(years)年後", table: "Planning", comment: "A time from today in years")
+        }
+        // Two counts, each its own plural phrase: 「1年」「6か月」.
+        return String(
+            localized: "\(yearCount(years))\(monthCount(months))後",
+            table: "Planning",
+            comment: "A time from today: a number of years (1年), then of months (6か月)"
+        )
+    }
+
+    /// 「3年」, "3 years": a count of years, not a calendar year.
+    static func yearCount(_ years: Int) -> String {
+        String(localized: "\(years)年", table: "Planning", comment: "Plan length in years (a count, not a calendar year)")
+    }
+
+    /// 「6か月」, "6 months".
+    static func monthCount(_ months: Int) -> String {
+        String(localized: "\(months)か月", table: "Planning", comment: "A number of months")
+    }
+
+    /// VoiceOver value of a progress bar: 「42パーセント」, "42 percent".
+    static func percentValue(_ fraction: Double) -> String {
+        String(
+            localized: "\(Int((fraction * 100).rounded()))パーセント",
+            table: "Planning",
+            comment: "VoiceOver: a progress bar's value in percent"
+        )
     }
 
     private var bottleCycleTitle: String {
@@ -557,8 +668,8 @@ struct AccumulationPlanView: View {
         }
         let percent = Int((jarPosition.cycleProgressFraction * 100).rounded())
         return jarGrams == 0
-            ? "最初の2.50kgへ"
-            : "瓶の\(percent)%まで積んだ"
+            ? String(localized: "最初の2.50kgへ", table: "Planning", comment: "Jar-cycle title before anything is added: heading to the first full jar (2.50 kg)")
+            : String(localized: "瓶の\(percent)%まで積んだ", table: "Planning", comment: "Jar-cycle title: how full the jar is, in percent")
     }
 
     private var bottleCycleStatus: String {
@@ -643,21 +754,29 @@ struct AccumulationPlanView: View {
 
     private var majorMilestoneStatus: String {
         guard let jarPosition else { return Self.recountingValue }
-        let reached = "\(jarPosition.completedMajorMilestoneCount.formatted())段階"
+        let reached = jarPosition.completedMajorMilestoneCount
         if jarPosition.isMajorMilestoneBoundary,
            let next = jarPosition.nextMajorMilestoneGrams {
-            return "\(reached)到達 · 次 \(formattedMass(next))"
+            return String(
+                localized: "\(reached)段階到達 · 次 \(formattedMass(next))",
+                table: "Planning",
+                comment: "Long-term milestones: the stage just reached, then the next milestone's mass"
+            )
         }
         guard let next = jarPosition.nextMajorMilestoneGrams else {
-            return "\(reached)到達"
+            return String(localized: "\(reached)段階到達", table: "Planning", comment: "Long-term milestones: how many stages are reached (no next one)")
         }
-        return "\(reached) · 次 \(formattedMass(next))"
+        return String(
+            localized: "\(reached)段階 · 次 \(formattedMass(next))",
+            table: "Planning",
+            comment: "Long-term milestones: how many stages are reached, then the next milestone's mass"
+        )
     }
 
     private func majorMilestoneAccessibilityLabel(_ position: JarAccumulationPresenceState) -> String {
         position.isMajorMilestoneBoundary
-            ? "到達した長期の質量段階"
-            : "次の長期の質量段階まで"
+            ? String(localized: "到達した長期の質量段階", table: "Planning", comment: "VoiceOver: the long-term milestone bar when a stage was just reached")
+            : String(localized: "次の長期の質量段階まで", table: "Planning", comment: "VoiceOver: the long-term milestone bar, progress to the next stage")
     }
 
     private func formattedMass(_ grams: Int) -> String {

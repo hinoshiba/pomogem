@@ -36,20 +36,34 @@ struct CustomDurationEditingState: Equatable {
     var isEditing: Bool { confirmation == .editing }
 
     var validationMessage: String? {
-        if minutesText.isEmpty { return "分を入力してください。" }
-        if secondsText.isEmpty { return "秒を入力してください。" }
+        if minutesText.isEmpty {
+            return String(localized: "分を入力してください。", table: "Home", comment: "Custom focus length: the minutes field is empty")
+        }
+        if secondsText.isEmpty {
+            return String(localized: "秒を入力してください。", table: "Home", comment: "Custom focus length: the seconds field is empty")
+        }
         guard let minutes = Self.decimalInteger(minutesText),
               (Constants.Timer.customMinimumMinutes...Constants.Timer.customMaximumMinutes).contains(minutes) else {
-            return "分は1〜360で入力してください。"
+            return String(localized: "分は1〜360で入力してください。", table: "Home", comment: "Custom focus length: minutes out of range")
         }
         guard let seconds = Self.decimalInteger(secondsText),
               (0..<Constants.Timer.secondsPerMinute).contains(seconds) else {
-            return "秒は0〜59で入力してください。"
+            return String(localized: "秒は0〜59で入力してください。", table: "Home", comment: "Custom focus length: seconds out of range")
         }
         if minutes == Constants.Timer.customMaximumMinutes, seconds != 0 {
-            return "360分にする場合は、秒を0にしてください。"
+            return String(
+                localized: "360分にする場合は、秒を0にしてください。",
+                table: "Home",
+                comment: "Custom focus length: 360 minutes is the longest, so its seconds must be 0"
+            )
         }
-        return parentRejectedConfirmation ? "設定できませんでした。もう一度お試しください。" : nil
+        return parentRejectedConfirmation
+            ? String(
+                localized: "設定できませんでした。もう一度お試しください。",
+                table: "Home",
+                comment: "Custom focus length: the chosen length could not be saved"
+            )
+            : nil
     }
 
     var wheelMinutes: Int { Self.decimalInteger(minutesText) ?? Constants.Timer.customMinimumMinutes }

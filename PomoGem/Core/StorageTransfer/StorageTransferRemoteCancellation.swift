@@ -5,7 +5,8 @@ enum StorageTransferRemoteCancellationError: Error, LocalizedError, Equatable {
     case invalidIntent, conflictingIntent, unsafeFile, localTransferPending, remoteStateChanged
 
     var errorDescription: String? {
-        "iCloudの切り替え取消を安全に確認できません。保存した取消記録を保護しています。通信状態を確認して再試行してください。"
+        String(localized: "iCloudの切り替え取消を安全に確認できません。保存した取消記録を保護しています。通信状態を確認して再試行してください。",
+               table: "Storage", comment: "Canceling an iCloud switch could not be verified")
     }
 }
 

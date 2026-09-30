@@ -2,37 +2,463 @@
   "sourceLanguage" : "ja",
   "strings" : {
     "%@集中する" : {
-      "comment" : "VoiceOver: a medium-widget button that starts a focus; the argument is its length, e.g. 25分"
+      "comment" : "VoiceOver: a medium-widget button that starts a focus; the argument is its length, e.g. 25分",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus for %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@集中する"
+          }
+        }
+      }
+    },
+    "タップしてタイマーへ" : {
+      "comment" : "Live Activity guidance while the focus is paused",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap to open the timer"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タップしてタイマーへ"
+          }
+        }
+      }
     },
     "タップして休憩へ戻る" : {
-      "comment" : "Live Activity guidance while a break counts down; like 「タップして集中へ戻る」 for a focus"
+      "comment" : "Live Activity guidance while a break counts down; like 「タップして集中へ戻る」 for a focus",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap to return to your break"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タップして休憩へ戻る"
+          }
+        }
+      }
+    },
+    "タップして完了を確認" : {
+      "comment" : "Live Activity guidance once the focus ended: the app shows the completed focus",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap to see your completed focus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タップして完了を確認"
+          }
+        }
+      }
     },
     "タップして瓶へ戻る" : {
-      "comment" : "Live Activity guidance after a break ended; the app's break screen offers 「瓶へ戻る」"
+      "comment" : "Live Activity guidance after a break ended; the app's break screen offers 「瓶へ戻る」",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap to go back to your jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タップして瓶へ戻る"
+          }
+        }
+      }
+    },
+    "タップして集中へ戻る" : {
+      "comment" : "Live Activity guidance while the focus counts down",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap to return to your focus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タップして集中へ戻る"
+          }
+        }
+      }
+    },
+    "ポモジェム" : {
+      "comment" : "The app's name, in the widget gallery, on the widgets and on the Live Activity",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PomoGem"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェム"
+          }
+        }
+      }
+    },
+    "ポモジェムで集中を始める" : {
+      "comment" : "VoiceOver: the small widget, which starts a focus in the app",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start a focus in PomoGem"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェムで集中を始める"
+          }
+        }
+      }
     },
     "ポモジェムのタイマー" : {
-      "comment" : "VoiceOver: the Dynamic Island mark during a focus"
+      "comment" : "VoiceOver: the Dynamic Island mark during a focus",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PomoGem timer"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェムのタイマー"
+          }
+        }
+      }
     },
     "ポモジェムの休憩" : {
-      "comment" : "VoiceOver: the Dynamic Island mark during a break"
+      "comment" : "VoiceOver: the Dynamic Island mark during a break",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PomoGem break"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェムの休憩"
+          }
+        }
+      }
     },
     "ポモジェムを開く" : {
-      "comment" : "VoiceOver: the medium widget's jar and heading, which open the app (its length buttons start a focus)"
+      "comment" : "VoiceOver: the medium widget's jar and heading, which open the app (its length buttons start a focus)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open PomoGem"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェムを開く"
+          }
+        }
+      }
+    },
+    "一時停止中" : {
+      "comment" : "Live Activity title while the focus is paused",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paused"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一時停止中"
+          }
+        }
+      }
+    },
+    "一時停止中の残り時間" : {
+      "comment" : "VoiceOver: label of the paused focus's remaining time",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Time remaining while paused"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一時停止中の残り時間"
+          }
+        }
+      }
+    },
+    "今日のひと粒を積もう" : {
+      "comment" : "Medium widget heading: an invitation to add today's gem, never pressure",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add a gem today"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今日のひと粒を積もう"
+          }
+        }
+      }
+    },
+    "今日の集中を始める" : {
+      "comment" : "Widget gallery: what the Home Screen widget does",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start today's focus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今日の集中を始める"
+          }
+        }
+      }
     },
     "休憩の残り時間" : {
-      "comment" : "VoiceOver: label of an unknown break countdown"
+      "comment" : "VoiceOver: label of an unknown break countdown",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Break time remaining"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩の残り時間"
+          }
+        }
+      }
     },
     "休憩の残り時間、%@" : {
-      "comment" : "VoiceOver: the break countdown; the argument is the remaining time"
+      "comment" : "VoiceOver: the break countdown; the argument is the remaining time",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Break time remaining, %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩の残り時間、%@"
+          }
+        }
+      }
     },
     "休憩中" : {
-      "comment" : "Live Activity title while a break counts down"
+      "comment" : "Live Activity title while a break counts down",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On Break"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩中"
+          }
+        }
+      }
     },
     "休憩終了" : {
-      "comment" : "Live Activity: a break past its end time (title and VoiceOver)"
+      "comment" : "Live Activity: a break past its end time (title and VoiceOver)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Break Over"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩終了"
+          }
+        }
+      }
+    },
+    "完了" : {
+      "comment" : "Live Activity countdown once the focus completed (en: Done)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完了"
+          }
+        }
+      }
+    },
+    "残り時間" : {
+      "comment" : "VoiceOver: label of an unknown focus countdown",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Time remaining"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "残り時間"
+          }
+        }
+      }
+    },
+    "残り時間、%@" : {
+      "comment" : "VoiceOver: the focus countdown; the argument is the remaining time",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Time remaining, %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "残り時間、%@"
+          }
+        }
+      }
     },
     "終了" : {
-      "comment" : "Live Activity countdown after its end time"
+      "comment" : "Live Activity countdown after its end time",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了"
+          }
+        }
+      }
+    },
+    "集中" : {
+      "comment" : "Lock Screen circular widget: starts a focus (en: Focus)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中"
+          }
+        }
+      }
+    },
+    "集中を始める" : {
+      "comment" : "Widget button text that starts a focus (the app's Start Focus)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start Focus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中を始める"
+          }
+        }
+      }
+    },
+    "集中を続けています" : {
+      "comment" : "Live Activity title while the focus counts down (en: Focusing)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focusing"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中を続けています"
+          }
+        }
+      }
+    },
+    "集中完了" : {
+      "comment" : "Live Activity: a focus that has ended (title and VoiceOver)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus Complete"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中完了"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

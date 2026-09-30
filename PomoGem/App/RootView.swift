@@ -822,7 +822,8 @@ struct RootView: View {
             } else if !isBootstrapped {
                 ProgressView()
                     .tint(PomoGemTheme.amber)
-                    .accessibilityLabel("準備中")
+                    .accessibilityLabel(Text("準備中", tableName: "Launch",
+                                             comment: "VoiceOver: the app is getting ready at startup"))
                     .accessibilityIdentifier("root.startup.progress")
             } else if shouldShowMain {
                 MainNavigationView(
@@ -891,7 +892,7 @@ struct RootView: View {
             if storageTransfer.isStarting {
                 ZStack {
                     Color.black.opacity(0.22).ignoresSafeArea()
-                    ProgressView("保存先の切り替えを準備しています")
+                    ProgressView(String(localized: "保存先の切り替えを準備しています", table: "Launch"))
                         .padding(24)
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
                         .accessibilityIdentifier("storage-switch.preparing")
@@ -934,8 +935,10 @@ struct RootView: View {
 #endif
         .alert(
             persistenceMode == .localOnly
-                ? "保存済みの進行中タイマーがあります"
-                : "iCloudに進行中のタイマーがあります",
+                ? String(localized: "保存済みの進行中タイマーがあります", table: "Launch",
+                         comment: "Alert title: a running timer was saved on this iPhone")
+                : String(localized: "iCloudに進行中のタイマーがあります", table: "Launch",
+                         comment: "Alert title: a running timer from another device is in iCloud"),
             isPresented: Binding(
                 get: { router.cloudFocusRecoveryOffer != nil },
                 set: {
@@ -947,26 +950,17 @@ struct RootView: View {
             ),
             presenting: router.cloudFocusRecoveryOffer
         ) { offer in
-            Button("この端末で続ける") {
+            Button(String(localized: "この端末で続ける", table: "Launch",
+                          comment: "Running-timer alert: continue the timer on this device")) {
                 viewTasks.start { await adoptCloudFocus(offer) }
             }
-            Button("あとで", role: .cancel) {
+            Button(String(localized: "あとで", table: "Launch", comment: "Running-timer alert: decide later"),
+                   role: .cancel) {
                 dismissedCloudFocusOfferID = offer.id
                 router.cloudFocusRecoveryOffer = nil
             }
         } message: { offer in
-            let remaining = offer.request.engine.snapshot(at: .now).remainingSeconds
-            // Adoption can never prove this device measured the remote
-            // interval, so FocusPersistence.preparedForCrossDeviceAdoption
-            // always demotes a running timer. Say so before the choice.
-            let becomesSelfReported = offer.request.pendingCompletion == nil
-                && offer.request.engine.containsRecoverableFocus
-            let selfReportedNote = becomesSelfReported
-                ? "続けた回は自己申告あつかいになります。"
-                : ""
-            Text(persistenceMode == .localOnly
-                 ? "\(offer.request.subjectSnapshot.name)・残り約\(max(0, (remaining + 59) / 60))分。保存済みの状態から再開すると、このiPhoneが終了通知を担当します。\(selfReportedNote)"
-                 : "\(offer.request.subjectSnapshot.name)・残り約\(max(0, (remaining + 59) / 60))分。この端末へ引き継ぐと、この端末が終了通知を担当します。\(selfReportedNote)元の端末がオフラインまたはロック中の場合は、古い通知が一度届くことがあります。")
+            Text(cloudFocusOfferMessage(offer))
         }
         .onChange(of: focusSyncFingerprint) { _, _ in
             guard isFirstFramePresented, !isDataDeletionQuiesced else { return }
@@ -1909,8 +1903,11 @@ struct RootView: View {
         }
     }
 
-    private static let unverifiedFenceNotice =
-        "iCloudの削除世代を未確認です。次回オンライン時に再照合します（古い記録の再流入を完全には防げません）"
+    private static let unverifiedFenceNotice = String(
+        localized: "iCloudの削除世代を未確認です。次回オンライン時に再照合します（古い記録の再流入を完全には防げません）",
+        table: "Launch",
+        comment: "Notice after a complete deletion when iCloud's deletion marker could not be checked yet"
+    )
 
     @MainActor
     private func performCompleteDataDeletion() async throws {
@@ -2060,8 +2057,8 @@ struct RootView: View {
                 modelContext.rollback()
                 router.showToast(
                     persistenceMode == .localOnly
-                        ? "端末内の記録を整理できませんでした"
-                        : "iCloudから届いた記録を整理できませんでした",
+                        ? String(localized: "端末内の記録を整理できませんでした", table: "Launch")
+                        : String(localized: "iCloudから届いた記録を整理できませんでした", table: "Launch"),
                     symbol: persistenceMode == .localOnly
                         ? "exclamationmark.triangle"
                         : "exclamationmark.icloud"
@@ -2242,7 +2239,7 @@ struct RootView: View {
             }
             guard !Task.isCancelled else { return }
             router.showToast(
-                "記録はリセット済みですが、ウィジェットの更新に失敗しました",
+                String(localized: "記録はリセット済みですが、ウィジェットの更新に失敗しました", table: "Launch"),
                 symbol: "exclamationmark.arrow.triangle.2.circlepath"
             )
         }
@@ -2457,7 +2454,8 @@ struct RootView: View {
             usagePurposeRawValue = UsagePurpose.study.rawValue
         } catch {
             modelContext.rollback()
-            router.showToast("初期設定を保存できませんでした。もう一度お試しください", symbol: "exclamationmark.triangle")
+            router.showToast(String(localized: "初期設定を保存できませんでした。もう一度お試しください", table: "Launch"),
+                             symbol: "exclamationmark.triangle")
             return
         }
 
@@ -2903,8 +2901,8 @@ struct RootView: View {
                 didReportCloudFocusIntegrityIssue = true
                 router.showToast(
                     persistenceMode == .localOnly
-                        ? "端末内のタイマー履歴を安全に確認できません。記録は変更せず保持しています。設定のサポートからお問い合わせください"
-                        : "iCloudのタイマー履歴を安全に確認できません。記録は変更せず保持しています。設定のサポートからお問い合わせください",
+                        ? String(localized: "端末内のタイマー履歴を安全に確認できません。記録は変更せず保持しています。設定のサポートからお問い合わせください", table: "Launch")
+                        : String(localized: "iCloudのタイマー履歴を安全に確認できません。記録は変更せず保持しています。設定のサポートからお問い合わせください", table: "Launch"),
                     symbol: persistenceMode == .localOnly
                         ? "exclamationmark.triangle"
                         : "exclamationmark.icloud"
@@ -2965,6 +2963,34 @@ struct RootView: View {
         )
     }
 
+    /// The running-timer alert's message: one catalog entry per sentence,
+    /// joined as sentences, so the Japanese stays exactly as it was.
+    private func cloudFocusOfferMessage(_ offer: CloudFocusRecoveryOffer) -> String {
+        let remaining = offer.request.engine.snapshot(at: .now).remainingSeconds
+        // Adoption can never prove this device measured the remote
+        // interval, so FocusPersistence.preparedForCrossDeviceAdoption
+        // always demotes a running timer. Say so before the choice.
+        let becomesSelfReported = offer.request.pendingCompletion == nil
+            && offer.request.engine.containsRecoverableFocus
+        let minutesLeft = max(0, (remaining + 59) / 60)
+        var sentences = [
+            String(localized: "\(offer.request.subjectSnapshot.name)・残り約\(minutesLeft)分。", table: "Launch",
+                   comment: "Running-timer alert: %1$@ is the theme name, %2$lld the minutes left (rounded up)")
+        ]
+        if persistenceMode == .localOnly {
+            sentences.append(String(localized: "保存済みの状態から再開すると、このiPhoneが終了通知を担当します。", table: "Launch"))
+        } else {
+            sentences.append(String(localized: "この端末へ引き継ぐと、この端末が終了通知を担当します。", table: "Launch"))
+        }
+        if becomesSelfReported {
+            sentences.append(String(localized: "続けた回は自己申告あつかいになります。", table: "Launch"))
+        }
+        if persistenceMode != .localOnly {
+            sentences.append(String(localized: "元の端末がオフラインまたはロック中の場合は、古い通知が一度届くことがあります。", table: "Launch"))
+        }
+        return SentenceText.join(sentences)
+    }
+
     @MainActor
     private func adoptCloudFocus(_ offer: CloudFocusRecoveryOffer) async {
         guard !Task.isCancelled else { return }
@@ -2981,7 +3007,7 @@ struct RootView: View {
             try modelContext.save()
         } catch {
             router.showToast(
-                "タイマーを引き継げませんでした。通信状態を確認して再試行してください",
+                String(localized: "タイマーを引き継げませんでした。通信状態を確認して再試行してください", table: "Launch"),
                 symbol: "exclamationmark.icloud"
             )
             return
@@ -3172,7 +3198,7 @@ struct RootView: View {
         guard lastPassiveNotificationErrorFingerprint != fingerprint else { return }
         lastPassiveNotificationErrorFingerprint = fingerprint
         router.showToast(
-            "通知だけ更新できませんでした。通信状態を確認し、設定で通知時刻をもう一度保存してください",
+            String(localized: "通知だけ更新できませんでした。通信状態を確認し、設定で通知時刻をもう一度保存してください", table: "Launch"),
             symbol: "bell.badge.exclamationmark"
         )
     }
@@ -3220,73 +3246,89 @@ private struct CompleteDataDeletionBlockingView: View {
             Color.black.opacity(0.82)
                 .ignoresSafeArea()
 
-            VStack(spacing: 18) {
-                Image(systemName: statusSymbol)
-                    .font(.system(size: 42, weight: .light))
-                    .foregroundStyle(PomoGemTheme.amber)
-                    .accessibilityHidden(true)
-
-                Text(statusTitle)
-                    .font(PomoGemTheme.brand(23))
-                    .multilineTextAlignment(.center)
-
-                switch controller.status {
-                case let .running(phase):
-                    ProgressView(value: phase.progressFraction)
-                        .tint(PomoGemTheme.amber)
-                        .accessibilityLabel(phase.userFacingTitle)
-                    Text(phase.userFacingTitle)
-                        .foregroundStyle(PomoGemTheme.muted)
-                        .multilineTextAlignment(.center)
-
-                case let .failed(_, message):
-                    Text(message)
-                        .foregroundStyle(PomoGemTheme.muted)
-                        .multilineTextAlignment(.center)
-                    Text("削除は完了扱いになっていません。記録の追加は停止したままです。iCloudに接続して再試行してください。")
-                        .font(.caption)
-                        .foregroundStyle(PomoGemTheme.muted)
-                        .multilineTextAlignment(.center)
-                    Button("削除を再試行") {
-                        controller.startOrRetry()
-                    }
-                    .buttonStyle(PomoGemPrimaryButtonStyle())
-                    .accessibilityHint("保存済みの削除工程から再開します")
-
-                case .rebuildingPersistence:
-                    ProgressView()
-                        .tint(PomoGemTheme.amber)
-                        .accessibilityLabel("空の保存領域を準備中")
-                    Text("ユーザー内容を削除した保存領域を閉じ、空の状態で作り直しています。古い端末からの再流入検知用に、内容を含まない削除世代記録1件だけをiCloudに残します。")
-                        .foregroundStyle(PomoGemTheme.muted)
-                        .multilineTextAlignment(.center)
-
-                case .idle:
-                    EmptyView()
+            // At accessibility sizes the rebuilding paragraph and the failure
+            // message are taller than a small screen. The card stays centered
+            // when it fits and scrolls when it does not, so nothing is clipped
+            // or squeezed.
+            GeometryReader { proxy in
+                ScrollView {
+                    card
+                        .frame(maxWidth: .infinity, minHeight: proxy.size.height)
                 }
-
-                Link(destination: AppLinks.support) {
-                    Label("サポートを見る", systemImage: "questionmark.circle")
-                }
-                .buttonStyle(PomoGemSecondaryButtonStyle())
+                .scrollBounceBehavior(.basedOnSize)
             }
-            .frame(maxWidth: 480)
-            .padding(24)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24))
-            .padding(20)
         }
         .interactiveDismissDisabled()
         .accessibilityAddTraits(.isModal)
     }
 
+    private var card: some View {
+        VStack(spacing: 18) {
+            Image(systemName: statusSymbol)
+                .font(.system(size: 42, weight: .light))
+                .foregroundStyle(PomoGemTheme.amber)
+                .accessibilityHidden(true)
+
+            Text(statusTitle)
+                .font(PomoGemTheme.brand(23))
+                .multilineTextAlignment(.center)
+
+            switch controller.status {
+            case let .running(phase):
+                ProgressView(value: phase.progressFraction)
+                    .tint(PomoGemTheme.amber)
+                    .accessibilityLabel(phase.userFacingTitle)
+                Text(phase.userFacingTitle)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .multilineTextAlignment(.center)
+
+            case let .failed(_, message):
+                Text(message)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .multilineTextAlignment(.center)
+                Text("削除は完了扱いになっていません。記録の追加は停止したままです。iCloudに接続して再試行してください。", tableName: "Launch")
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .multilineTextAlignment(.center)
+                Button(String(localized: "削除を再試行", table: "Launch")) {
+                    controller.startOrRetry()
+                }
+                .buttonStyle(PomoGemPrimaryButtonStyle())
+                .accessibilityHint(Text("保存済みの削除工程から再開します", tableName: "Launch",
+                                        comment: "VoiceOver hint for Retry Deletion"))
+
+            case .rebuildingPersistence:
+                ProgressView()
+                    .tint(PomoGemTheme.amber)
+                    .accessibilityLabel(Text("空の保存領域を準備中", tableName: "Launch",
+                                             comment: "VoiceOver: progress while the emptied store is rebuilt"))
+                Text("ユーザー内容を削除した保存領域を閉じ、空の状態で作り直しています。古い端末からの再流入検知用に、内容を含まない削除世代記録1件だけをiCloudに残します。", tableName: "Launch")
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .multilineTextAlignment(.center)
+
+            case .idle:
+                EmptyView()
+            }
+
+            Link(destination: AppLinks.support) {
+                Label(String(localized: "サポートを見る", table: "Launch"), systemImage: "questionmark.circle")
+            }
+            .buttonStyle(PomoGemSecondaryButtonStyle())
+        }
+        .frame(maxWidth: 480)
+        .padding(24)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24))
+        .padding(20)
+    }
+
     private var statusTitle: String {
         switch controller.status {
         case .running:
-            "ユーザー内容を削除中"
+            String(localized: "ユーザー内容を削除中", table: "Launch")
         case .failed:
-            "削除を完了できませんでした"
+            String(localized: "削除を完了できませんでした", table: "Launch")
         case .rebuildingPersistence:
-            "削除結果を反映中"
+            String(localized: "削除結果を反映中", table: "Launch")
         case .idle:
             ""
         }
@@ -3317,12 +3359,12 @@ private struct StartupErrorView: View {
                     .accessibilityHidden(true)
 
                 VStack(spacing: 8) {
-                    Text("保存領域を開けませんでした")
+                    Text("保存領域を開けませんでした", tableName: "Launch")
                         .font(PomoGemTheme.brand(24))
                         .multilineTextAlignment(.center)
                     Text(persistenceMode == .localOnly
-                         ? "記録を保護するため、別の保存先には切り替えていません。このiPhoneの空き容量を確認してください。"
-                         : "記録を保護するため、別の保存先には切り替えていません。iCloudと空き容量を確認してください。")
+                         ? String(localized: "記録を保護するため、別の保存先には切り替えていません。このiPhoneの空き容量を確認してください。", table: "Launch")
+                         : String(localized: "記録を保護するため、別の保存先には切り替えていません。iCloudと空き容量を確認してください。", table: "Launch"))
                         .font(.body)
                         .foregroundStyle(PomoGemTheme.muted)
                         .multilineTextAlignment(.center)
@@ -3330,10 +3372,10 @@ private struct StartupErrorView: View {
 
                 VStack(spacing: 10) {
                     if canRetry {
-                        Button("もう一度試す", action: onRetry)
+                        Button(String(localized: "もう一度試す", table: "Launch"), action: onRetry)
                             .buttonStyle(PomoGemPrimaryButtonStyle())
                     } else {
-                        Button("設定を開く") {
+                        Button(String(localized: "設定を開く", table: "Launch")) {
                             guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
                             openURL(url)
                         }
@@ -3341,12 +3383,13 @@ private struct StartupErrorView: View {
                     }
 
                     Link(destination: AppLinks.support) {
-                        Label("サポートを見る", systemImage: "questionmark.circle")
+                        Label(String(localized: "サポートを見る", table: "Launch"), systemImage: "questionmark.circle")
                     }
                     .buttonStyle(PomoGemSecondaryButtonStyle())
                 }
 
-                DisclosureGroup("診断情報") {
+                DisclosureGroup(String(localized: "診断情報", table: "Launch",
+                                       comment: "Startup error: disclosure with technical details for support")) {
                     Text(diagnostic)
                         .font(.caption.monospaced())
                         .foregroundStyle(PomoGemTheme.muted)

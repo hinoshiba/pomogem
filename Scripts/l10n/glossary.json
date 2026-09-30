@@ -338,6 +338,7 @@
     {
       "ja": "このiPhoneだけに保存",
       "en": "Save on This iPhone Only",
+      "scope": "exact_key",
       "lint": "error"
     },
     {
@@ -386,6 +387,7 @@
     {
       "ja": "購入を復元",
       "en": "Restore Purchases",
+      "scope": "exact_key",
       "lint": "error"
     },
     {

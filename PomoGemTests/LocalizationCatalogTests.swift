@@ -32,7 +32,9 @@ final class LocalizationCatalogTests: XCTestCase {
     /// A stray catalog (including a default Localizable.xcstrings) or a legacy
     /// `.strings` file would silently take strings the table map assigns elsewhere.
     func testNoCatalogOrLegacyStringsOutsideTheTableMap() throws {
-        let expected = Set(map.catalogs.values).union(map.infoPlistCatalogs.map(\.catalog))
+        let expected = Set(map.catalogs.values)
+            .union(map.infoPlistCatalogs.map(\.catalog))
+            .union((map.systemCatalogs ?? [:]).values)
         var found: Set<String> = []
         var legacy: [String] = []
         for root in map.sourceRoots {
@@ -127,6 +129,37 @@ final class LocalizationCatalogTests: XCTestCase {
                         )
                     }
                 }
+            }
+        }
+    }
+
+    /// App Shortcut phrases (AppShortcuts.xcstrings, one stringSet per shortcut)
+    /// carry their Japanese phrases while the development region is not
+    /// Japanese, and every translated phrase names the app, as Apple requires.
+    func testAppShortcutPhrasesKeepTheirJapaneseAndNameTheApp() throws {
+        guard let path = map.systemCatalogs?["AppShortcuts"] else {
+            return XCTFail("Scripts/l10n/table-map.json lists no AppShortcuts catalog")
+        }
+        let catalog = try LocalizationCatalogFile(table: "AppShortcuts", relativePath: path)
+        XCTAssertEqual(catalog.sourceLanguage, "ja")
+        XCTAssertFalse(catalog.strings.isEmpty, "build and run Scripts/l10n/l10n.py sync")
+        for (key, entry) in catalog.strings where entry["extractionState"] as? String != "stale" {
+            let localizations = LocalizationCatalogFile.localizations(of: entry)
+            for (language, localization) in localizations {
+                XCTAssertTrue(map.shippingLanguages.contains(language), "\(key): \(language) is not shipping")
+                let phrases = localization["stringSet"] as? [String: Any]
+                let values = phrases?["values"] as? [String] ?? []
+                XCTAssertFalse(values.isEmpty, "\(key) [\(language)] has no phrases")
+                XCTAssertEqual(phrases?["state"] as? String, "translated", "\(key) [\(language)]")
+                for value in values {
+                    XCTAssertTrue(value.contains("${applicationName}"), "\(key) [\(language)] \(value)")
+                    if language != map.sourceLanguage {
+                        XCTAssertFalse(LocalizationTestSupport.containsJapanese(value), "\(key) [\(language)] \(value)")
+                    }
+                }
+            }
+            if map.developmentRegion != map.sourceLanguage {
+                XCTAssertNotNil(localizations[map.sourceLanguage], "\(key) needs its Japanese phrases (l10n.py sync)")
             }
         }
     }

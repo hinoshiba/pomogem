@@ -142,7 +142,15 @@ struct AccumulationTimelineYear: Identifiable, Equatable, Hashable, Sendable {
     let interval: DateInterval
 
     var id: Int { year }
-    var title: String { "\(year)年" }
+
+    /// 「2026年」, en "2026": the bucket labelled by `DateText.year`, never by
+    /// the Int (which a localized string would print as 「2,026年」). It
+    /// passes the middle of the bucket, not its start, so the label names the
+    /// same year in any time zone the formatter uses (a bucket built in Tokyo
+    /// starts on Dec 31 in UTC).
+    var title: String {
+        DateText.year(interval.start.addingTimeInterval(interval.duration / 2))
+    }
 }
 
 enum AccumulationTimelineYearPolicy {
@@ -232,6 +240,7 @@ struct HistorySessionSummary: Identifiable, Equatable, Sendable {
     let seconds: Int
     let grams: Int
     let subjectName: String
+    let subjectID: UUID?
     let colorHex: String
     let source: SessionSource
     let pebbleKind: PebbleKind
@@ -244,6 +253,7 @@ struct HistorySessionSummary: Identifiable, Equatable, Sendable {
         seconds = NonnegativeIntPolicy.clamped(session.seconds)
         grams = NonnegativeIntPolicy.clamped(session.grams)
         subjectName = session.displaySubjectName
+        subjectID = session.subject?.id ?? session.subjectIDSnapshot
         colorHex = session.displaySubjectColorHex
         source = session.effectiveSource
         pebbleKind = session.pebbleKind
@@ -376,9 +386,9 @@ enum AccumulationTimelineRepositoryError: Error, LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .invalidCalendarInterval:
-            "年月の範囲を確認できませんでした。"
+            String(localized: "年月の範囲を確認できませんでした。", table: "Overview")
         case .unsupportedDateSpan:
-            "記録の日付範囲を安全に表示できませんでした。"
+            String(localized: "記録の日付範囲を安全に表示できませんでした。", table: "Overview")
         }
     }
 }

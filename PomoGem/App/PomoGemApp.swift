@@ -465,7 +465,7 @@ enum PersistenceContainerRetirementError: LocalizedError, Equatable {
     case previousContainerStillActive
 
     var errorDescription: String? {
-        "以前の保存領域がまだ閉じていません。しばらく待って再試行するか、アプリを終了して再起動してください。記録は削除されません。"
+        String(localized: "以前の保存領域がまだ閉じていません。しばらく待って再試行するか、アプリを終了して再起動してください。記録は削除されません。", table: "Launch")
     }
 }
 
@@ -581,7 +581,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         get { sessionHolder.session }
         nonmutating set { sessionHolder.session = newValue }
     }
-    @State private var launchState: LaunchState = .preparing("保存方式を確認しています")
+    @State private var launchState: LaunchState = .preparing(String(localized: "保存方式を確認しています", table: "Launch"))
     @State private var launchAttempt = 0
     @State private var launchAttemptGate = PersistenceLaunchAttemptGate()
     @State private var isPreparing = false
@@ -634,7 +634,11 @@ private struct PomoGemPersistenceLaunchHost: View {
     @State private var offlineMessage = PomoGemPersistenceLaunchHost.defaultOfflineMessage
     /// The ordinary offline session's banner message: a restored connection
     /// is re-checked and sync resumes.
-    private static let defaultOfflineMessage = "タイマーや記録を利用できます。接続回復後に同期を再開します。"
+    private static let defaultOfflineMessage = String(
+        localized: "タイマーや記録を利用できます。接続回復後に同期を再開します。",
+        table: "Launch",
+        comment: "Offline session banner details: the timer and records keep working"
+    )
     @State private var networkPath = CloudNetworkPathObserver()
     /// This host survives background CloudKit container retirement, so the
     /// return reminder's background window lives here, not in a focus view.
@@ -818,11 +822,12 @@ private struct PomoGemPersistenceLaunchHost: View {
                     .systemShareSheetPresentation()
                 }
             }
-            .alert("書き出せませんでした", isPresented: Binding(
+            .alert(String(localized: "書き出せませんでした", table: "Launch",
+                          comment: "Alert title: exporting this device's data failed"), isPresented: Binding(
                 get: { deviceDataExportError != nil },
                 set: { if !$0 { deviceDataExportError = nil } }
             )) {
-                Button("閉じる", role: .cancel) {}
+                Button(String(localized: "閉じる", table: "Launch", comment: "Button: closes an alert"), role: .cancel) {}
             } message: {
                 Text(deviceDataExportError ?? "")
             }
@@ -953,7 +958,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                 } : nil)
         } else if current.mode == .cloudKit, networkPath.isOffline == true {
             return CloudConnectionPresentation(sessionID: current.id, isChecking: false,
-                message: "通信の回復を待っています。端末への記録は続けられます。", retry: nil)
+                message: String(localized: "通信の回復を待っています。端末への記録は続けられます。", table: "Launch"), retry: nil)
         }
         return nil
     }
@@ -1219,12 +1224,12 @@ private struct PomoGemPersistenceLaunchHost: View {
                 canChooseLocalOnly = false
                 remoteRecoveryAction = nil
                 try containerLifetimes.requireAllReleased()
-                launchState = .preparing("中断されたiCloudの切り替え取消を再開しています")
+                launchState = .preparing(String(localized: "中断されたiCloudの切り替え取消を再開しています", table: "Launch"))
                 try await transferRuntime.resumeRemoteCancellation(validateAccess: {
                     try requireActiveLaunchAttempt(attempt, checkpoint: "during-remote-cancellation-resume")
                 })
                 try requireActiveLaunchAttempt(attempt, checkpoint: "after-remote-cancellation-resume")
-                requireStorageTransferRelaunch(message: "切り替えを取り消しました。元の記録を保護したまま、アプリを終了して開き直してください。",
+                requireStorageTransferRelaunch(message: String(localized: "切り替えを取り消しました。元の記録を保護したまま、アプリを終了して開き直してください。", table: "Launch"),
                                                afterCancellation: true)
                 return
             }
@@ -1260,7 +1265,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                 remoteRecoveryAction = nil
                 try requireActiveLaunchAttempt(attempt, checkpoint: "before-transfer-recovery")
                 try containerLifetimes.requireAllReleased()
-                launchState = .preparing("iCloudの切り替え状況を確認しています")
+                launchState = .preparing(String(localized: "iCloudの切り替え状況を確認しています", table: "Launch"))
                 var completionMessage: String?
                 var cancelled = false
                 switch action {
@@ -1278,7 +1283,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                         expectedTransactionID: transactionID, validateAccess: {
                         try requireActiveLaunchAttempt(attempt, checkpoint: "during-transfer-cancellation")
                     })
-                    completionMessage = "切り替えを取り消しました。iCloudの記録を残しています。アプリを終了して開き直してください。"
+                    completionMessage = String(localized: "切り替えを取り消しました。iCloudの記録を残しています。アプリを終了して開き直してください。", table: "Launch")
                     cancelled = true
                 case let .refresh(generation):
                     guard let binding = storageTransferRecoveryBinding else { throw StorageTransferError.staleTransaction }
@@ -1321,8 +1326,8 @@ private struct PomoGemPersistenceLaunchHost: View {
                         try requireActiveLaunchAttempt(attempt, checkpoint: "during-local-transfer-cancellation")
                     })
                     completionMessage = retainsCopy
-                        ? "取り込みを取り消しました。元の保存先とiCloudの記録、途中までのコピーを保持しています。アプリを終了して開き直すと、元の保存先から改めて切り替えを開始できます。"
-                        : "切り替えを取り消しました。元の記録を残しています。アプリを終了して開き直してください。"
+                        ? String(localized: "取り込みを取り消しました。元の保存先とiCloudの記録、途中までのコピーを保持しています。アプリを終了して開き直すと、元の保存先から改めて切り替えを開始できます。", table: "Launch")
+                        : String(localized: "切り替えを取り消しました。元の記録を残しています。アプリを終了して開き直してください。", table: "Launch")
                     cancelled = true
                 }
                 try requireActiveLaunchAttempt(attempt, checkpoint: "after-transfer-recovery")
@@ -1342,7 +1347,7 @@ private struct PomoGemPersistenceLaunchHost: View {
             if pendingTransfer != nil {
                 canChooseLocalOnly = false
                 guard scenePhase == .active else {
-                    launchState = .preparing("保存先の切り替えを再開する準備をしています")
+                    launchState = .preparing(String(localized: "保存先の切り替えを再開する準備をしています", table: "Launch"))
                     return
                 }
                 // transfer-04. A planned continuation is not an interruption.
@@ -1375,7 +1380,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                     }
                 )
                 if cancelledRetainedImport {
-                    requireStorageTransferRelaunch(message: "中断された取り込みの取消しを完了しました。元の保存先とiCloudの記録、途中までのコピーを保持しています。アプリを終了して開き直してください。",
+                    requireStorageTransferRelaunch(message: String(localized: "中断された取り込みの取消しを完了しました。元の保存先とiCloudの記録、途中までのコピーを保持しています。アプリを終了して開き直してください。", table: "Launch"),
                                                    afterCancellation: true)
                     return
                 }
@@ -1400,7 +1405,7 @@ private struct PomoGemPersistenceLaunchHost: View {
             guard validation != .recoveryRequired else {
                 canChooseLocalOnly = false
                 launchState = .blocked(
-                    "保存方式の設定と端末内の保存ファイルを安全に対応付けられません。新しい保存方式へ切り替えず、記録を保護しています。"
+                    String(localized: "保存方式の設定と端末内の保存ファイルを安全に対応付けられません。新しい保存方式へ切り替えず、記録を保護しています。", table: "Launch")
                 )
                 return
             }
@@ -1435,7 +1440,7 @@ private struct PomoGemPersistenceLaunchHost: View {
             // Transfer recovery may have suspended since the entry check.
             // Confirm the foreground again before starting account access.
             guard scenePhase == .active else {
-                launchState = .preparing("Apple Accountを確認できるまでお待ちください")
+                launchState = .preparing(String(localized: "Apple Accountを確認できるまでお待ちください", table: "Launch"))
                 return
             }
 
@@ -1452,7 +1457,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                 offlineFallbackRequested = false
                 if try await openOfflineSession(binding: expectedCloudBinding, attempt: attempt) { return }
                 if wasFallback || networkPath.isOffline == true {
-                    launchState = .blocked("オフラインで利用するための確認済みデータがまだありません。通信が使えるときに一度開いてください。記録や保存先の設定は変更していません。")
+                    launchState = .blocked(String(localized: "オフラインで利用するための確認済みデータがまだありません。通信が使えるときに一度開いてください。記録や保存先の設定は変更していません。", table: "Launch"))
                     return
                 }
             }
@@ -1468,7 +1473,7 @@ private struct PomoGemPersistenceLaunchHost: View {
             cloudLaunchMeasurement = CloudLaunchMeasurement(attempt: attempt, existingStore: hasExistingStore)
 
             AccountScopedLocalState.beginCloudBoundary()
-            launchState = .preparing("Apple Accountを安全に確認しています")
+            launchState = .preparing(String(localized: "Apple Accountを安全に確認しています", table: "Launch"))
             let resolvedBoundary = try await deadline.run {
                 try await AppleAccountBoundaryResolver().resolve(expectedBinding: expectedCloudBinding)
             }
@@ -1577,7 +1582,8 @@ private struct PomoGemPersistenceLaunchHost: View {
 
             case .allowUnverifiedOffline:
                 session = try await makeCloudSessionWithinDeadline(
-                    safetyNotice: "iCloudの削除世代を未確認です。次回オンライン時に再照合します（古い記録の再流入を完全には防げません）",
+                    safetyNotice: String(localized: "iCloudの削除世代を未確認です。次回オンライン時に再照合します（古い記録の再流入を完全には防げません）", table: "Launch",
+                                         comment: "Notice after a complete deletion when iCloud's deletion marker could not be checked yet"),
                     binding: resolvedBoundary.binding,
                     launchBoundary: resolvedBoundary,
                     attempt: attempt
@@ -1585,7 +1591,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                 finishVerifiedCloudMount()
 
             case let .eraseLocalStoreBeforeUse(fence):
-                launchState = .preparing("別端末の削除をこの端末へ反映しています")
+                launchState = .preparing(String(localized: "別端末の削除をこの端末へ反映しています", table: "Launch"))
                 try destroyPersistentArtifacts(
                     for: mode,
                     accountNamespace: accountNamespace
@@ -1602,7 +1608,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                 finishVerifiedCloudMount()
 
             case .resumeDeletion:
-                launchState = .preparing("中断された削除を安全な位置から再開しています")
+                launchState = .preparing(String(localized: "中断された削除を安全な位置から再開しています", table: "Launch"))
                 // No CloudKit-backed ModelContainer is created in this path.
                 // Removing the exact old stores first prevents a crash between
                 // remote commit and journal removal from reopening stale rows.
@@ -1934,7 +1940,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         // A new or partially hydrated replica can otherwise create activity
         // under an obsolete reset epoch. Keep Root, bootstrap, and all app
         // writers unmounted until the local winner covers the server history.
-        launchState = .preparing("iCloudの記録の履歴を確認しています")
+        launchState = .preparing(String(localized: "iCloudの記録の履歴を確認しています", table: "Launch"))
         let history = try await StorageTransferHostCloudPublicationGate.verify(
             prepareCandidate: {
                 // The history check reads the identity on both sides of its
@@ -2229,7 +2235,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                 invalidateAttempt: { valid = false }, onExpiry: {
                     guard offlineConnectionAttempt == retryID, session?.id == sessionID,
                           launchAttempt == attempt else { return }
-                    offlineMessage = "接続を確認できませんでした。端末への記録を続けられます。"
+                    offlineMessage = String(localized: "接続を確認できませんでした。端末への記録を続けられます。", table: "Launch")
                 })
             defer { deadline.cancel() }
             let validate: @MainActor () throws -> Void = {
@@ -2323,7 +2329,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         // Claim the action before returning to SwiftUI so a second tap cannot
         // create a competing attempt while the view task is being scheduled.
         isPreparing = true
-        launchState = .preparing("オンラインで保存領域を再確認しています")
+        launchState = .preparing(String(localized: "オンラインで保存領域を再確認しています", table: "Launch"))
         launchAttempt += 1
     }
 
@@ -2340,7 +2346,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         requestedOnlineCloudLaunch = true
         NotificationManager.shared.suspendTimerSchedulingForAccountBoundary()
         beginContainerRetirement()
-        launchState = .preparing("記録を保持したままiCloudの復旧手順を確認しています")
+        launchState = .preparing(String(localized: "記録を保持したままiCloudの復旧手順を確認しています", table: "Launch"))
         isQuiescingAccountChange = true
         launchAttempt += 1
         let generation = launchAttempt
@@ -2375,7 +2381,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         } catch { return false }
         cloudLaunchDeadline?.cancel()
         cloudLaunchDeadline = nil
-        offlineMessage = "通信を確認できないため、端末のデータで利用を続けています。変更は端末に保存されます。"
+        offlineMessage = String(localized: "通信を確認できないため、端末のデータで利用を続けています。変更は端末に保存されます。", table: "Launch")
         offlineFallbackRequested = true
         isPreparing = false
         launchAttempt += 1
@@ -2659,7 +2665,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         CloudActivityHistoryMarkerCacheStore.clearLive()
         mirroringActivity.stop()
         session = nil
-        launchState = .preparing("空の保存領域を準備しています")
+        launchState = .preparing(String(localized: "空の保存領域を準備しています", table: "Launch"))
         mustDestroyPersistentStores = true
         await Task.yield()
         launchAttempt += 1
@@ -2946,7 +2952,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         isPreparing = false
         relaunchCompletesTransfer = !afterCancellation
             && ((try? StorageTransferRuntime.live())?.pendingTransferCompletesOnNextLaunch() ?? false)
-        launchState = .relaunchRequired(message ?? "保存先の切り替えを受け付けました。Appスイッチャーでポモジェムを終了し、もう一度開いてください。元の記録を保護したまま切り替えを続けます。")
+        launchState = .relaunchRequired(message ?? String(localized: "保存先の切り替えを受け付けました。Appスイッチャーでポモジェムを終了し、もう一度開いてください。元の記録を保護したまま切り替えを続けます。", table: "Launch"))
         launchAttempt += 1
     }
 
@@ -2955,7 +2961,7 @@ private struct PomoGemPersistenceLaunchHost: View {
               storageTransferRecoveryBinding != nil,
               storageTransferRecoveryTransactionID != nil else { return }
         remoteRecoveryAction = action
-        launchState = .preparing("iCloudの切り替え状況を確認しています")
+        launchState = .preparing(String(localized: "iCloudの切り替え状況を確認しています", table: "Launch"))
         launchAttempt += 1
     }
 
@@ -2970,7 +2976,7 @@ private struct PomoGemPersistenceLaunchHost: View {
               let generation = storageTransferRefreshGenerationID else { return }
         datasetPreviewRequest = nil
         remoteRecoveryAction = .refresh(generation)
-        launchState = .preparing("iCloudからの再取得を準備しています")
+        launchState = .preparing(String(localized: "iCloudからの再取得を準備しています", table: "Launch"))
         launchAttempt += 1
     }
 
@@ -2993,7 +2999,7 @@ private struct PomoGemPersistenceLaunchHost: View {
               let generation = storageTransferRefreshGenerationID else { return }
         datasetPreviewRequest = nil
         remoteRecoveryAction = .overwrite(generation)
-        launchState = .preparing("この端末のデータでiCloudを置き換える準備をしています")
+        launchState = .preparing(String(localized: "この端末のデータでiCloudを置き換える準備をしています", table: "Launch"))
         launchAttempt += 1
     }
 
@@ -3020,7 +3026,7 @@ private struct PomoGemPersistenceLaunchHost: View {
               storageTransferRefreshGenerationID == nil else { return }
         datasetPreviewRequest = nil
         remoteRecoveryAction = .startLineage
-        launchState = .preparing("このiPhoneのデータでiCloudを使い始める準備をしています")
+        launchState = .preparing(String(localized: "このiPhoneのデータでiCloudを使い始める準備をしています", table: "Launch"))
         launchAttempt += 1
     }
 
@@ -3061,7 +3067,7 @@ private struct PomoGemPersistenceLaunchHost: View {
               storageTransferRefreshGenerationID == nil else { return }
         datasetPreviewRequest = nil
         remoteRecoveryAction = .refreshWithoutLineage
-        launchState = .preparing("iCloudからの再取得を準備しています")
+        launchState = .preparing(String(localized: "iCloudからの再取得を準備しています", table: "Launch"))
         launchAttempt += 1
     }
 
@@ -3153,7 +3159,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         guard !isPreparing, !requiresStorageTransferRelaunch,
               cancellableLocalTransferID == target else { return }
         remoteRecoveryAction = .cancelPending(target)
-        launchState = .preparing("この端末の切り替えを取り消しています")
+        launchState = .preparing(String(localized: "この端末の切り替えを取り消しています", table: "Launch"))
         launchAttempt += 1
     }
 
@@ -3286,7 +3292,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         if isQuiescingAccountChange {
             guard !containerLifetimes.hasLiveContainers else {
                 launchState = .blocked(
-                    "以前の保存領域はまだ閉じていません。二重に開かないため停止中です。アプリを終了して再起動してください。"
+                    String(localized: "以前の保存領域はまだ閉じていません。二重に開かないため停止中です。アプリを終了して再起動してください。", table: "Launch")
                 )
                 return
             }
@@ -3307,7 +3313,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         ) {
             requestedCloudSelection = true
         }
-        launchState = .preparing("保存領域を再確認しています")
+        launchState = .preparing(String(localized: "保存領域を再確認しています", table: "Launch"))
         launchAttempt += 1
     }
 
@@ -3319,7 +3325,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         }
         requestedCloudSelection = true
         didConfirmCloudSelection = true
-        launchState = .preparing("Apple Accountを安全に確認しています")
+        launchState = .preparing(String(localized: "Apple Accountを安全に確認しています", table: "Launch"))
         launchAttempt += 1
     }
 
@@ -3334,7 +3340,7 @@ private struct PomoGemPersistenceLaunchHost: View {
             AccountScopedLocalState.activateLocalOnly(namespace: namespace)
             requestedCloudSelection = false
             canChooseLocalOnly = false
-            launchState = .preparing("このiPhoneの保存領域を準備しています")
+            launchState = .preparing(String(localized: "このiPhoneの保存領域を準備しています", table: "Launch"))
             launchAttempt += 1
         } catch {
             canChooseLocalOnly = false
@@ -3440,7 +3446,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         // and black gems under an owner this app has already deactivated.
         ScreenTimeOwnerBoundaryPolicy.retire(for: .accountIdentityChange)
         beginContainerRetirement()
-        launchState = .preparing("Apple Accountの変更を確認しています")
+        launchState = .preparing(String(localized: "Apple Accountの変更を確認しています", table: "Launch"))
         isQuiescingAccountChange = true
         launchAttempt += 1
         let quiescenceAttempt = launchAttempt
@@ -3469,7 +3475,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                     "Timed out waiting for the prior account container to retire"
                 )
                 launchState = .blocked(
-                    "以前の保存領域が完全に閉じたことを確認できません。二つの保存領域を同時に開かないため停止しました。解放後に再試行するか、アプリを終了して再起動してください。"
+                    String(localized: "以前の保存領域が完全に閉じたことを確認できません。二つの保存領域を同時に開かないため停止しました。解放後に再試行するか、アプリを終了して再起動してください。", table: "Launch")
                 )
             case .cancelled, .continueWaiting:
                 return
@@ -3535,7 +3541,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         )
         switch action {
         case .preparePersistence:
-            launchState = .preparing("保存方式を確認しています")
+            launchState = .preparing(String(localized: "保存方式を確認しています", table: "Launch"))
             launchAttempt += 1
             return
         case .resumeAfterContainerRetirement:
@@ -3599,7 +3605,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         suspendedAccountBinding = suspendedAccountBinding
             ?? AccountScopedLocalState.activeBinding()
         beginContainerRetirement()
-        launchState = .preparing("Apple Accountを再確認しています")
+        launchState = .preparing(String(localized: "Apple Accountを再確認しています", table: "Launch"))
         isQuiescingAccountChange = true
         launchAttempt += 1
         let quiescenceAttempt = launchAttempt
@@ -3625,7 +3631,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                     "Timed out waiting for a backgrounded CloudKit container to retire"
                 )
                 launchState = .blocked(
-                    "保存領域が完全に閉じたことを確認できません。二重に開かないため停止しました。解放後に再試行するか、アプリを終了して再起動してください。"
+                    String(localized: "保存領域が完全に閉じたことを確認できません。二重に開かないため停止しました。解放後に再試行するか、アプリを終了して再起動してください。", table: "Launch")
                 )
             case .cancelled, .continueWaiting:
                 return
@@ -3794,15 +3800,15 @@ private struct PomoGemPersistenceLaunchHost: View {
     ) -> String {
         switch reason {
         case .localDeletionPending:
-            "この端末の削除処理を再開する必要があります。"
+            String(localized: "この端末の削除処理を再開する必要があります。", table: "Launch")
         case .cloudUnavailable:
-            "iCloudへ接続できません。削除処理が始まっているため、接続後に再試行してください。"
+            String(localized: "iCloudへ接続できません。削除処理が始まっているため、接続後に再試行してください。", table: "Launch")
         case .remoteDeletionPending:
-            "別の端末で削除処理が進行中です。完了後に再試行してください。"
+            String(localized: "別の端末で削除処理が進行中です。完了後に再試行してください。", table: "Launch")
         case .remoteFenceMissing:
-            "iCloudの削除世代を確認できません。記録を保護するため、サポートへお問い合わせください。"
+            String(localized: "iCloudの削除世代を確認できません。記録を保護するため、サポートへお問い合わせください。", table: "Launch")
         case .remoteFenceInvalid:
-            "iCloudの削除世代記録が不正です。古い記録を開かずに保護しています。サポートへお問い合わせください。"
+            String(localized: "iCloudの削除世代記録が不正です。古い記録を開かずに保護しています。サポートへお問い合わせください。", table: "Launch")
         }
     }
 }
@@ -3973,7 +3979,7 @@ private struct PersistenceLaunchStatusView: View {
 
                         Link(destination: AppLinks.privacyPolicy) {
                             Label(
-                                "プライバシーポリシー",
+                                String(localized: "プライバシーポリシー", table: "Launch"),
                                 systemImage: "hand.raised"
                             )
                             .font(.footnote.weight(.semibold))
@@ -3993,7 +3999,7 @@ private struct PersistenceLaunchStatusView: View {
                         // not by the legacy `allowsCloudReplacement`. Reading
                         // the injected policy, not `.standard`, keeps this
                         // screen and the runtime naming the same prohibition.
-                        Button("復旧を続ける", action: onRecoverTransfer)
+                        Button(String(localized: "復旧を続ける", table: "Launch"), action: onRecoverTransfer)
                             .buttonStyle(PomoGemPrimaryButtonStyle())
                             .disabled(!releasePolicy.allowsRemoteResumeBeforeReplacing)
                             .accessibilityIdentifier("storage-transfer-recover")
@@ -4004,7 +4010,7 @@ private struct PersistenceLaunchStatusView: View {
                                 .accessibilityIdentifier("storage-transfer-recover-unavailable")
                         }
                         if canCancel, onCancelLocalTransfer == nil {
-                            Button("切り替えを取り消す") { confirmsTransferCancellation = true }
+                            Button(String(localized: "切り替えを取り消す", table: "Launch")) { confirmsTransferCancellation = true }
                                 .buttonStyle(PomoGemSecondaryButtonStyle())
                                 .accessibilityIdentifier("storage-transfer-cancel")
                         }
@@ -4012,7 +4018,7 @@ private struct PersistenceLaunchStatusView: View {
                         // the resume door is closed, and past `.backupVerified`
                         // nothing here can be cancelled either. Re-checking
                         // clears the screen once the other device finishes.
-                        Button("もう一度試す", action: onRetry)
+                        Button(String(localized: "もう一度試す", table: "Launch"), action: onRetry)
                             .buttonStyle(PomoGemSecondaryButtonStyle())
                             .accessibilityIdentifier("storage-transfer-recovery-retry")
                         supportLink
@@ -4069,15 +4075,15 @@ private struct PersistenceLaunchStatusView: View {
                                 .fixedSize(horizontal: false, vertical: true)
                                 .accessibilityIdentifier("storage-refresh-blocked-explanation")
                         }
-                        Button("もう一度試す", action: onRetry)
+                        Button(String(localized: "もう一度試す", table: "Launch"), action: onRetry)
                             .buttonStyle(PomoGemPrimaryButtonStyle())
                         if let onContinueOffline {
-                            Button("端末のデータでオフライン利用", action: onContinueOffline)
+                            Button(Self.continueOfflineTitle, action: onContinueOffline)
                                 .buttonStyle(PomoGemSecondaryButtonStyle())
                                 .accessibilityIdentifier("cloud-offline-continue")
                         }
                         if onChooseLocalOnly != nil {
-                            Button("このiPhoneだけで始める") {
+                            Button(String(localized: "このiPhoneだけで始める", table: "Launch")) {
                                 storageConfirmation = .localOnly
                             }
                             .buttonStyle(PomoGemSecondaryButtonStyle())
@@ -4090,7 +4096,7 @@ private struct PersistenceLaunchStatusView: View {
                             .foregroundStyle(PomoGemTheme.muted)
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityIdentifier("storage-transfer-cancel-local-explanation")
-                        Button("この端末の切り替えを取り消す") {
+                        Button(String(localized: "この端末の切り替えを取り消す", table: "Launch")) {
                             storageConfirmation = .cancelPendingTransfer
                         }
                         .buttonStyle(PomoGemSecondaryButtonStyle())
@@ -4124,12 +4130,12 @@ private struct PersistenceLaunchStatusView: View {
                 // what still works offline (AppStore/app-privacy.md checks
                 // that this is shown before the choice is confirmed).
                 Alert(
-                    title: Text("iCloudに保存して同期しますか？"),
+                    title: Text("iCloudに保存して同期しますか？", tableName: "Launch"),
                     message: Text("テーマ名、成果メモ、集中記録、設定、進行中タイマーをApple AccountのプライベートiCloudへ送信します。オンラインでApple Accountを確認した後に保存方式を確定します。このiPhoneに保存済みの記録があれば、オフラインでも使えます。初回の取得や同期の再開には通信が必要です。後で同期を止めるときは、iCloudの記録をこのiPhoneへコピーし、iCloudの記録も残します。",
                                   tableName: "Launch",
                                   comment: "First-run storage choice: iCloud confirmation message (full caveats)"),
-                    primaryButton: .cancel(Text("キャンセル")),
-                    secondaryButton: .default(Text("確認して続ける")) {
+                    primaryButton: .cancel(Text("キャンセル", tableName: "Launch", comment: "Button: cancels a confirmation")),
+                    secondaryButton: .default(Text("確認して続ける", tableName: "Launch")) {
                         onChooseCloud()
                     }
                 )
@@ -4143,32 +4149,33 @@ private struct PersistenceLaunchStatusView: View {
                 // uploads. The old copy said 「後で…切り替えられます」 first
                 // and the loss last, in engineering terms.
                 Alert(
-                    title: Text("このiPhoneだけに保存しますか？"),
+                    title: Text("このiPhoneだけに保存しますか？", tableName: "Launch"),
                     message: Text("記録はこのiPhoneだけに保存し、iCloudへは送信しません。アプリを削除すると、記録は失われます。あとでiCloud同期に切り替えると、このiPhoneの記録はiCloudの記録に置き換わります。このiPhoneの記録をiCloudへ移すことは、現在できません。",
                                   tableName: "Launch",
                                   comment: "First-run storage choice: local-only confirmation message (full caveats)"),
-                    primaryButton: .cancel(Text("キャンセル")),
-                    secondaryButton: .default(Text("このiPhoneだけで始める")) {
+                    primaryButton: .cancel(Text("キャンセル", tableName: "Launch", comment: "Button: cancels a confirmation")),
+                    secondaryButton: .default(Text("このiPhoneだけで始める", tableName: "Launch")) {
                         onChooseLocalOnly?()
                     }
                 )
             case .cancelPendingTransfer:
                 Alert(
-                    title: Text("この端末の切り替えを取り消しますか？"),
+                    title: Text("この端末の切り替えを取り消しますか？", tableName: "Launch"),
                     message: Text(localTransferCancellationExplanation),
-                    primaryButton: .cancel(Text("戻る")),
-                    secondaryButton: .destructive(Text("切り替えを取り消す")) {
+                    primaryButton: .cancel(Text("戻る", tableName: "Launch", comment: "Button: back without canceling")),
+                    secondaryButton: .destructive(Text("切り替えを取り消す", tableName: "Launch")) {
                         onCancelLocalTransfer?()
                     }
                 )
             }
         }
-        .confirmationDialog("保存先の切り替えを取り消しますか？", isPresented: $confirmsTransferCancellation,
+        .confirmationDialog(String(localized: "保存先の切り替えを取り消しますか？", table: "Launch"), isPresented: $confirmsTransferCancellation,
                             titleVisibility: .visible) {
-            Button("切り替えを取り消す", role: .destructive, action: onCancelTransfer)
-            Button("続けて確認する", role: .cancel) { }
+            Button(String(localized: "切り替えを取り消す", table: "Launch"), role: .destructive, action: onCancelTransfer)
+            Button(String(localized: "続けて確認する", table: "Launch",
+                          comment: "Cancel-role button: keep the switch and keep reviewing"), role: .cancel) { }
         } message: {
-            Text("元のiCloudの記録を残して、この切り替えを取り消します。データの置き換えが始まっている場合は取り消せません。")
+            Text("元のiCloudの記録を残して、この切り替えを取り消します。データの置き換えが始まっている場合は取り消せません。", tableName: "Launch")
         }
         .sheet(isPresented: $presentsOverwriteConfirmation) {
             overwriteConfirmationSheet
@@ -4219,7 +4226,8 @@ private struct PersistenceLaunchStatusView: View {
                 .accessibilityIdentifier("storage-dataset-retry-preview")
         }
 
-        doorHeader("iCloudのデータを使う")
+        doorHeader(String(localized: "iCloudのデータを使う", table: "Launch",
+                          comment: "Section heading: take iCloud's data (this deletes this device's data)"))
         // One text, quoted by every surface that offers this direction.
         Text(StorageTransferRefreshCopy.dataLossWarning)
             .foregroundStyle(PomoGemTheme.muted)
@@ -4247,7 +4255,9 @@ private struct PersistenceLaunchStatusView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("storage-refresh-export-note")
         }
-        Toggle("端末データの削除を確認しました", isOn: $understandsRefreshDataLoss)
+        Toggle(String(localized: "端末データの削除を確認しました", table: "Launch",
+                      comment: "Acknowledgement toggle: the user understands this device's data will be deleted"),
+               isOn: $understandsRefreshDataLoss)
             .accessibilityIdentifier("storage-refresh-confirm-data-loss")
         let refresh = Button(StorageTransferRefreshCopy.confirmTitle, role: .destructive, action: onRefreshDataset)
             // S14: nobody is asked to discard this device's side on the
@@ -4270,12 +4280,13 @@ private struct PersistenceLaunchStatusView: View {
                 .foregroundStyle(PomoGemTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("storage-refresh-offline-explanation")
-            Button("端末のデータでオフライン利用", action: onContinueOffline)
+            Button(Self.continueOfflineTitle, action: onContinueOffline)
                 .buttonStyle(PomoGemSecondaryButtonStyle())
                 .accessibilityIdentifier("cloud-offline-continue")
         }
 
-        doorHeader("このiPhoneのデータを使う")
+        doorHeader(String(localized: "このiPhoneのデータを使う", table: "Launch",
+                          comment: "Section heading: keep this iPhone's data and replace iCloud with it"))
         if releasePolicy.allowsDatasetOverwriteFromDevice {
             Text(overwriteOtherDeviceEvidence)
                 .font(.caption)
@@ -4306,7 +4317,7 @@ private struct PersistenceLaunchStatusView: View {
         .disabled(!canRequestOverwrite)
         .accessibilityIdentifier("storage-overwrite-confirm")
 
-        Button("もう一度試す", action: onRetry)
+        Button(String(localized: "もう一度試す", table: "Launch"), action: onRetry)
             .buttonStyle(PomoGemSecondaryButtonStyle())
             .accessibilityIdentifier("storage-refresh-retry")
         supportLink
@@ -4314,7 +4325,7 @@ private struct PersistenceLaunchStatusView: View {
 
     private var supportLink: some View {
         Link(destination: AppLinks.support) {
-            Label("サポートを見る", systemImage: "questionmark.circle")
+            Label(String(localized: "サポートを見る", table: "Launch"), systemImage: "questionmark.circle")
         }
         .buttonStyle(PomoGemSecondaryButtonStyle())
     }
@@ -4353,7 +4364,7 @@ private struct PersistenceLaunchStatusView: View {
         if let onContinueOffline {
             // The EXISTING offline continuation, with no second implementation:
             // the same action and the same identifier the other screens use.
-            Button("端末のデータでオフライン利用", action: onContinueOffline)
+            Button(Self.continueOfflineTitle, action: onContinueOffline)
                 .buttonStyle(PomoGemPrimaryButtonStyle())
                 .accessibilityIdentifier("cloud-offline-continue")
         }
@@ -4431,7 +4442,7 @@ private struct PersistenceLaunchStatusView: View {
         // reason fell through to `.blocked`, which always carries 「もう一度試す」.
         // Without it a device whose offline copy is ineligible has no way to
         // re-attempt inside the app — and then it is the primary control.
-        let retry = Button("もう一度試す", action: onRetry)
+        let retry = Button(String(localized: "もう一度試す", table: "Launch"), action: onRetry)
             .accessibilityIdentifier("storage-lineage-retry")
         if onContinueOffline == nil {
             retry.buttonStyle(PomoGemPrimaryButtonStyle())
@@ -4439,13 +4450,13 @@ private struct PersistenceLaunchStatusView: View {
             retry.buttonStyle(PomoGemSecondaryButtonStyle())
         }
         if onChooseLocalOnly != nil {
-            Button("このiPhoneだけで始める") {
+            Button(String(localized: "このiPhoneだけで始める", table: "Launch")) {
                 storageConfirmation = .localOnly
             }
             .buttonStyle(PomoGemSecondaryButtonStyle())
         }
         Link(destination: AppLinks.support) {
-            Label("サポートを見る", systemImage: "questionmark.circle")
+            Label(String(localized: "サポートを見る", table: "Launch"), systemImage: "questionmark.circle")
         }
         .buttonStyle(PomoGemSecondaryButtonStyle())
     }
@@ -4454,10 +4465,22 @@ private struct PersistenceLaunchStatusView: View {
     /// Settings comparison so the two surfaces cannot disagree about one
     /// dataset. The iCloud row never prints a 「最終」 date here: there is no
     /// control record, so a lineage row would imply one that does not exist.
+    /// One title for every offline door on these screens.
+    private static var continueOfflineTitle: String {
+        String(localized: "端末のデータでオフライン利用", table: "Launch",
+               comment: "Button: keep using this device's saved data without iCloud")
+    }
+
+    /// The device row's label in both comparisons, beside the 「iCloud」 row.
+    private static var thisIPhoneSide: String {
+        String(localized: "このiPhone", table: "Launch",
+               comment: "Label of this iPhone's row in the record comparison, as in 「このiPhone: テーマ12・記録480…」")
+    }
+
     private var lineageComparison: String {
         if cloudPreviewFailed { return StorageTransferOverwriteCopy.comparisonUnavailable }
         guard let cloudPreview else { return StorageTransferOverwriteCopy.comparisonReading }
-        return StorageTransferOverwriteCopy.side("このiPhone", preview: devicePreview) + "\n"
+        return StorageTransferOverwriteCopy.side(Self.thisIPhoneSide, preview: devicePreview) + "\n"
             + StorageTransferOverwriteCopy.cloudSideWithoutLineage(preview: cloudPreview)
     }
 
@@ -4496,15 +4519,15 @@ private struct PersistenceLaunchStatusView: View {
             .foregroundStyle(PomoGemTheme.muted)
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityIdentifier("storage-dataset-explanation")
-        Button("もう一度試す", action: onRetry)
+        Button(String(localized: "もう一度試す", table: "Launch"), action: onRetry)
             .buttonStyle(PomoGemPrimaryButtonStyle())
         if let onContinueOffline {
-            Button("端末のデータでオフライン利用", action: onContinueOffline)
+            Button(Self.continueOfflineTitle, action: onContinueOffline)
                 .buttonStyle(PomoGemSecondaryButtonStyle())
                 .accessibilityIdentifier("cloud-offline-continue")
         }
         Link(destination: AppLinks.support) {
-            Label("サポートを見る", systemImage: "questionmark.circle")
+            Label(String(localized: "サポートを見る", table: "Launch"), systemImage: "questionmark.circle")
         }
         .buttonStyle(PomoGemSecondaryButtonStyle())
     }
@@ -4553,7 +4576,7 @@ private struct PersistenceLaunchStatusView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("戻る") {
+                    Button(String(localized: "戻る", table: "Launch", comment: "Toolbar button: back without confirming")) {
                         understandsLineageStart = false
                         presentsLineageConfirmation = false
                     }
@@ -4618,7 +4641,7 @@ private struct PersistenceLaunchStatusView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("戻る") {
+                    Button(String(localized: "戻る", table: "Launch", comment: "Toolbar button: back without confirming")) {
                         understandsOverwriteDataLoss = false
                         presentsOverwriteConfirmation = false
                     }
@@ -4661,7 +4684,7 @@ private struct PersistenceLaunchStatusView: View {
     private var datasetComparison: String {
         if cloudPreviewFailed { return StorageTransferOverwriteCopy.comparisonUnavailable }
         guard cloudPreview != nil else { return StorageTransferOverwriteCopy.comparisonReading }
-        return StorageTransferOverwriteCopy.side("このiPhone", preview: devicePreview)
+        return StorageTransferOverwriteCopy.side(Self.thisIPhoneSide, preview: devicePreview)
             + "\n" + StorageTransferOverwriteCopy.side("iCloud", preview: cloudPreview)
     }
 
@@ -4676,14 +4699,18 @@ private struct PersistenceLaunchStatusView: View {
     /// first; this is the way out when retrying does not help. The alert keeps
     /// the plain explanation: by then the user has already chosen to cancel.
     private var localTransferCancellationCaption: String {
-        "「もう一度試す」で先へ進めない場合は、ここで取り消せます。" + localTransferCancellationExplanation
+        SentenceText.join([
+            String(localized: "「もう一度試す」で先へ進めない場合は、ここで取り消せます。", table: "Launch",
+                   comment: "「もう一度試す」 is the Try Again button on the same screen"),
+            localTransferCancellationExplanation
+        ])
     }
 
     private var localTransferCancellationExplanation: String {
         if retainsTransferCopyOnCancellation {
-            return "元の保存先とiCloudの記録を残して、取り込みを取り消せます。途中までのコピーも保護のため端末に保持します。取り消した後はアプリを終了して開き直し、改めて切り替えを開始してください。"
+            return String(localized: "元の保存先とiCloudの記録を残して、取り込みを取り消せます。途中までのコピーも保護のため端末に保持します。取り消した後はアプリを終了して開き直し、改めて切り替えを開始してください。", table: "Launch")
         }
-        return "置き換えが始まる前なので、この端末の切り替えを取り消して元の保存先へ戻れます。取り消した後はアプリを終了して開き直してください。"
+        return String(localized: "置き換えが始まる前なので、この端末の切り替えを取り消して元の保存先へ戻れます。取り消した後はアプリを終了して開き直してください。", table: "Launch")
     }
 
     private var launchMessage: some View {
@@ -4807,26 +4834,26 @@ private struct PersistenceLaunchStatusView: View {
             String(localized: "記録の保存先を選んでください", table: "Launch",
                    comment: "First-run storage choice: screen title")
         case .preparing:
-            "準備中"
+            String(localized: "準備中", table: "Launch", comment: "Launch screen title while storage is being prepared")
         case .blocked:
-            "保存領域を確認できません"
+            String(localized: "保存領域を確認できません", table: "Launch", comment: "Launch screen title: the data store could not be verified")
         case .failed:
-            "保存領域を準備できませんでした"
+            String(localized: "保存領域を準備できませんでした", table: "Launch", comment: "Launch screen title: the data store could not be prepared")
         case .relaunchRequired:
-            "アプリを開き直してください"
+            String(localized: "アプリを開き直してください", table: "Launch", comment: "Launch screen title: quit and reopen the app")
         case .offlineRelaunchRequired:
             String(localized: "通信が戻るのを待っています", table: "Launch",
                    comment: "Launch wall title: offline after an iCloud session; a restored connection resumes automatically")
         case .cloudVerificationTimedOut:
-            "iCloudの確認に時間がかかっています"
+            String(localized: "iCloudの確認に時間がかかっています", table: "Launch", comment: "Launch screen title: the iCloud check timed out")
         case .remoteRecovery:
-            "保存先の切り替えを復旧します"
+            String(localized: "保存先の切り替えを復旧します", table: "Launch", comment: "Launch screen title: recovering an interrupted storage switch")
         case let .datasetRefresh(_, claimsReplacement):
             // Only the state that actually observed two different committed
             // generations may say the dataset was replaced. A missing LOCAL
             // ledger is the device's gap, not evidence about the server.
             claimsReplacement
-                ? "iCloudのデータが置き換わりました"
+                ? String(localized: "iCloudのデータが置き換わりました", table: "Launch", comment: "Launch screen title: another device replaced the iCloud data")
                 : StorageTransferLineageCopy.localLedgerMissingTitle
         case .cloudLineageUnavailable:
             StorageTransferLineageCopy.title
@@ -4895,7 +4922,7 @@ struct CloudLaunchTimeoutUITestFixtureView: View {
         switch wall {
         case .timedOut: .cloudVerificationTimedOut(CloudLaunchDeadlineError.expired.localizedDescription)
         case .offline: .offlineRelaunchRequired(CloudOfflineSessionError.relaunchRequired.localizedDescription)
-        case .backgroundReturn: .preparing("Apple Accountを再確認しています")
+        case .backgroundReturn: .preparing(String(localized: "Apple Accountを再確認しています", table: "Launch"))
         }
     }
 
@@ -4903,7 +4930,7 @@ struct CloudLaunchTimeoutUITestFixtureView: View {
         PersistenceLaunchStatusView(
             state: retryCalls == 0
                 ? wallState
-                : .preparing("オンラインで保存領域を再確認しています"),
+                : .preparing(String(localized: "オンラインで保存領域を再確認しています", table: "Launch")),
             onRetry: {}, onRetryOnline: {
                 guard retryCalls == 0 else { return }
                 retryCalls += 1

@@ -78,45 +78,66 @@ enum JarAccessibilityPresentation {
         let prismPebbleCount = RareRewardPresentationPolicy.prismCount(
             rawPrismPebbleCount
         )
-        let aggregate = aggregateCount > 0
-            ? String(localized: "、結晶\(aggregateCount)個、合計\(representedPebbleCount)粒分", table: "Jar",
-                     comment: "VoiceOver jar value fragment: crystal count, gems they hold")
-            : ""
-        let legacyAggregate = legacyAggregateCount > 0
-            ? String(localized: "、旧形式の結晶\(legacyAggregateCount)個（保存済み情報を確認できます）", table: "Jar",
-                     comment: "VoiceOver jar value fragment: crystals saved in the old format")
-            : ""
-        let fusion = projectionIsUnverified
-            ? ""
-            : (fusionProgressDescription.map { "、\($0)" } ?? "")
-        let rare = [
-            goldPebbleCount > 0 ? "金\(goldPebbleCount)粒" : nil,
-            prismPebbleCount > 0 ? "虹\(prismPebbleCount)粒" : nil
-        ].compactMap { $0 }.joined(separator: "、")
-        let rareSuffix = rare.isEmpty ? "" : "、\(rare)"
+        // Three sentences: the mass, what the jar holds (one list item per
+        // fact, ListText: ja 「、」), then the milestone stones.
+        var organization = [CountText.gems(pebbleCount)]
+        if aggregateCount > 0 {
+            // Two keys so each count takes its own plural form in English.
+            let crystals = String(localized: "結晶\(aggregateCount)個", table: "Jar",
+                                  comment: "VoiceOver, jar contents: the number of crystals")
+            let heldGems = String(localized: "合計\(representedPebbleCount)粒分", table: "Jar",
+                                  comment: "VoiceOver, jar contents: how many gems the crystals hold together (follows the crystal count)")
+            organization.append(String(localized: "jar.value.crystals", defaultValue: "\(crystals)、\(heldGems)", table: "Jar",
+                                       comment: "VoiceOver, jar contents item: the crystals (結晶1個), then the gems they hold (合計10粒分). en: '%1$@ %2$@'"))
+        }
+        if legacyAggregateCount > 0 {
+            organization.append(String(localized: "旧形式の結晶\(legacyAggregateCount)個（保存済み情報を確認できます）", table: "Jar",
+                                       comment: "VoiceOver, jar contents item: crystals saved in the old format; their saved details can be opened"))
+        }
+        if goldPebbleCount > 0 {
+            organization.append(JarRareGemText.gold(goldPebbleCount))
+        }
+        if prismPebbleCount > 0 {
+            organization.append(JarRareGemText.prism(prismPebbleCount))
+        }
+        if !projectionIsUnverified, let fusionProgressDescription {
+            organization.append(fusionProgressDescription)
+        }
         let massDescription: String
         if projectionIsUnverified {
             // sync-03 (icloud-life batch): say what the visible headline says
             // while iCloud is checked — the mass Home can stand behind, or
             // that the total follows once checked (`pendingMass` nil).
-            let status = isCloudOfflineSession ? "このiPhoneの集計を確認中" : "iCloudを確認中"
+            let status = isCloudOfflineSession
+                ? String(localized: "このiPhoneの集計を確認中", table: "Jar",
+                         comment: "VoiceOver, jar: the totals are being checked on this iPhone (iCloud unavailable); a sentence without its period")
+                : String(localized: "iCloudを確認中", table: "Jar",
+                         comment: "VoiceOver, jar: iCloud is being checked; a sentence without its period")
             if let pendingMass {
                 let mass = formattedMass(max(0, pendingMass.grams))
                 massDescription = pendingMass.isLowerBound
-                    ? String(localized: "\(status)。この端末で確認済みの集中時間の質量：\(mass)以上", table: "Jar",
+                    ? String(localized: "\(status)。この端末で確認済みの集中時間の質量：\(mass)以上。", table: "Jar",
                              comment: "VoiceOver, jar while iCloud is checked: status, a lower bound of the lifetime mass")
-                    : String(localized: "\(status)。この端末で確認済みの集中時間の質量：\(mass)", table: "Jar",
+                    : String(localized: "\(status)。この端末で確認済みの集中時間の質量：\(mass)。", table: "Jar",
                              comment: "VoiceOver, jar while iCloud is checked: status, the lifetime mass")
             } else {
-                massDescription = String(localized: "\(status)。これまでの合計は確認が済むと表示します", table: "Jar",
+                massDescription = String(localized: "\(status)。これまでの合計は確認が済むと表示します。", table: "Jar",
                                          comment: "VoiceOver, jar while iCloud is checked and no lifetime total can be shown: status")
             }
         } else if projectionIsLowerBound {
-            massDescription = "現在確認できた集中時間の質量：\(formattedMass(totalGrams))以上、集計整理中"
+            massDescription = String(localized: "現在確認できた集中時間の質量：\(formattedMass(totalGrams))以上、集計整理中。", table: "Jar",
+                                     comment: "VoiceOver, jar: a lower bound of the lifetime mass while the totals are tidied up. Argument: spoken mass")
         } else {
-            massDescription = "記録した集中時間の質量：\(formattedMass(totalGrams))"
+            massDescription = String(localized: "記録した集中時間の質量：\(formattedMass(totalGrams))。", table: "Jar",
+                                     comment: "VoiceOver, jar: the lifetime mass of recorded focus. Argument: spoken mass")
         }
-        return "\(massDescription)。瓶の整理：\(pebbleCount)粒\(aggregate)\(legacyAggregate)\(rareSuffix)\(fusion)。記念石\(achievementCount)個"
+        return SentenceText.join([
+            massDescription,
+            String(localized: "瓶の整理：\(ListText.inSentence(organization))。", table: "Jar",
+                   comment: "VoiceOver, jar: what the jar holds. Argument: the items (3粒、結晶1個、合計10粒分)"),
+            String(localized: "記念石\(achievementCount)個", table: "Jar",
+                   comment: "VoiceOver, jar, last sentence (no final period): how many milestone stones")
+        ])
     }
 
     /// device-verify-2 P2 (review of #56): before Home has read its records
@@ -134,9 +155,47 @@ enum JarAccessibilityPresentation {
         let isLowerBound: Bool
     }
 
+    /// 「600グラム」 under a kilogram, 「3.10キログラム」 from there
+    /// (en "600 grams", "3.10 kilograms").
     private static func formattedMass(_ grams: Int) -> String {
-        guard grams >= 1_000 else { return "\(grams)グラム" }
-        return String(format: "%.2fキログラム", Double(grams) / 1_000)
+        guard grams >= 1_000 else { return MassText.spoken(grams: grams) }
+        return MassText.spoken(kilograms: Double(grams) / 1_000, fractionDigits: 2)
+    }
+}
+
+/// The rare gems a crystal or the jar holds, for VoiceOver (in-app only:
+/// rare rewards are off in shipping builds).
+enum JarRareGemText {
+    static func gold(_ count: Int) -> String {
+        String(localized: "金\(count)粒", table: "Jar",
+               comment: "VoiceOver: how many rare gold gems (in-app only)")
+    }
+
+    static func prism(_ count: Int) -> String {
+        String(localized: "虹\(count)粒", table: "Jar",
+               comment: "VoiceOver: how many rare rainbow (prism) gems (in-app only)")
+    }
+}
+
+/// Names the jar gives history saved before themes existed: 「過去の集中」,
+/// 「過去の集中 2」… (StrataRenderer, StrataMath, SeedData). They are stored
+/// and synced as Japanese data (Docs/Localization.md), so they are named in
+/// the app's language only when read out. Any other name is the person's own
+/// theme and is read as stored.
+enum JarSubjectDisplayName {
+    static func name(_ stored: String, bundle: Bundle = .main, locale: Locale = PomoGemLocale.current) -> String {
+        // l10n-ignore: compares with the persisted sentinel, which is data
+        let sentinel = "過去の集中"
+        if stored == sentinel {
+            return String(localized: "過去の集中", table: "Jar", bundle: bundle, locale: locale,
+                          comment: "VoiceOver: the theme name the jar gives focus saved before themes existed")
+        }
+        let numbered = sentinel + " "
+        if stored.hasPrefix(numbered), let index = Int(stored.dropFirst(numbered.count)), index > 1 {
+            return String(localized: "過去の集中 \(index)", table: "Jar", bundle: bundle, locale: locale,
+                          comment: "VoiceOver: the theme name the jar gives the second, third … colour of focus saved before themes existed. Argument: the number")
+        }
+        return stored
     }
 }
 
@@ -645,7 +704,7 @@ struct JarSpriteView: View {
         // iPhone SE, it ran 40 pt below the jar over the row under it),
         // which VoiceOver then treated as the jar. Merge of #47 into #50.
         .contentShape(.accessibility, Rectangle())
-        .accessibilityLabel("瓶")
+        .accessibilityLabel(Text("瓶", tableName: "Jar", comment: "VoiceOver label of the jar. en: Jar"))
         .accessibilityValue(accessibilityValue)
         .accessibilityHint(accessibilityHint)
         .modifier(JarAccessibilityInteractionModifier(
@@ -879,19 +938,23 @@ struct JarSpriteView: View {
         guard let obstacles = scene.screenTimeObstacleAccessibilityDescription else {
             return studyValue
         }
-        return "\(studyValue)、\(obstacles)"
+        return String(localized: "\(studyValue)、\(obstacles)", table: "Jar",
+                      comment: "VoiceOver, jar value with black stones: the jar's study value (ends with the milestone stone count, no period), then the black stones sentence. en: '%1$@. %2$@'")
     }
 
     private var accessibilityHint: String {
         // Still loading, not empty: 「まだ粒はありません」 would say otherwise.
         guard !isLoadingRecords else { return "" }
         guard hasPhysicalContent else {
-            return "まだ粒はありません。集中を完走するか成果を積むと、瓶に粒が入ります"
+            return String(localized: "まだ粒はありません。集中を完走するか成果を積むと、瓶に粒が入ります", table: "Jar",
+                          comment: "VoiceOver hint of the empty jar")
         }
 #if targetEnvironment(macCatalyst)
-        let base = "瓶をクリックすると粒が跳ねます。左右にドラッグするか、VoiceOverのカスタムアクションでも粒を動かせます"
+        let base = String(localized: "瓶をクリックすると粒が跳ねます。左右にドラッグするか、VoiceOverのカスタムアクションでも粒を動かせます", table: "Jar",
+                          comment: "VoiceOver hint of the jar on a Mac (Mac Catalyst, not a shipping destination today)")
 #else
-        let base = "瓶をタップすると数秒だけ1粒が大きく跳ね、ぶつかった周囲の粒も自然に動いて止まります。その間はiPhoneを傾けたり、軽く振ったりして動かせます"
+        let base = String(localized: "瓶をタップすると数秒だけ1粒が大きく跳ね、ぶつかった周囲の粒も自然に動いて止まります。その間はiPhoneを傾けたり、軽く振ったりして動かせます", table: "Jar",
+                          comment: "VoiceOver hint of the jar: tapping bounces one gem for a few seconds; tilting or shaking the iPhone moves the gems meanwhile")
 #endif
         guard inspectableAggregateID != nil else { return base }
         return String(
@@ -1109,7 +1172,7 @@ private struct JarAccessibilityInteractionModifier: ViewModifier {
                 .accessibilityAction {
                     performBounce()
                 }
-                .accessibilityAction(named: "瓶の粒を動かす") {
+                .accessibilityAction(named: Text("瓶の粒を動かす", tableName: "Jar", comment: "VoiceOver custom action on the jar: bounce the gems")) {
                     performBounce()
                 }
                 .modifier(JarDirectionalAccessibilityModifier(scene: scene))
@@ -1126,7 +1189,8 @@ private struct JarAccessibilityInteractionModifier: ViewModifier {
         guard scene.bouncePebbles() else { return }
         UIAccessibility.post(
             notification: .announcement,
-            argument: "瓶の粒が跳ねました"
+            argument: String(localized: "瓶の粒が跳ねました", table: "Jar",
+                             comment: "VoiceOver announcement after the bounce action")
         )
     }
 }
@@ -1153,10 +1217,10 @@ private struct JarDirectionalAccessibilityModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .accessibilityAction(named: "瓶の粒を左へ動かす") {
+            .accessibilityAction(named: Text("瓶の粒を左へ動かす", tableName: "Jar", comment: "VoiceOver custom action on the jar: nudge the gems left")) {
                 scene.nudge(horizontal: -1)
             }
-            .accessibilityAction(named: "瓶の粒を右へ動かす") {
+            .accessibilityAction(named: Text("瓶の粒を右へ動かす", tableName: "Jar", comment: "VoiceOver custom action on the jar: nudge the gems right")) {
                 scene.nudge(horizontal: 1)
             }
     }

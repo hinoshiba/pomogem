@@ -102,21 +102,25 @@ extension CompleteDataDeletionPhase {
     var userFacingTitle: String {
         switch self {
         case .establishRemoteFence:
-            "iCloudに削除要求を保護しています"
+            String(localized: "iCloudに削除要求を保護しています", table: "Storage",
+                   comment: "Data deletion step 1: recording the deletion request safely in iCloud")
         case .quiesceApplication:
-            "タイマーと保存処理を停止しています"
+            String(localized: "タイマーと保存処理を停止しています", table: "Storage",
+                   comment: "Data deletion step 2: stopping the timer and all saving (the app stops writing data; it is not saving anything)")
         case .clearDeviceState:
-            "この端末の設定と一時ファイルを消去しています"
+            String(localized: "この端末の設定と一時ファイルを消去しています", table: "Storage",
+                   comment: "Data deletion step 3")
         case .deleteLocalModels:
-            "この端末の記録を消去しています"
+            String(localized: "この端末の記録を消去しています", table: "Storage", comment: "Data deletion step 4")
         case .deletePrivateCloudData:
-            "iCloudの記録を消去しています"
+            String(localized: "iCloudの記録を消去しています", table: "Storage", comment: "Data deletion step 5")
         case .commitRemoteFence:
-            "iCloudで削除完了を確認しています"
+            String(localized: "iCloudで削除完了を確認しています", table: "Storage", comment: "Data deletion step 6")
         case .persistGenerationReceipt:
-            "この端末に削除世代を記録しています"
+            String(localized: "この端末に削除世代を記録しています", table: "Storage",
+                   comment: "Data deletion step 7: recording the deletion marker on this device")
         case .finish:
-            "削除結果を検証しています"
+            String(localized: "削除結果を検証しています", table: "Storage", comment: "Data deletion, last step")
         }
     }
 
@@ -185,7 +189,8 @@ final class CompleteDataDeletionController {
                 let phase = currentPhase
                 status = .failed(
                     phase,
-                    "削除処理が中断されました。再試行すると安全な位置から続けます。"
+                    String(localized: "削除処理が中断されました。再試行すると安全な位置から続けます。", table: "Storage",
+                           comment: "Data deletion was canceled partway; retrying resumes safely")
                 )
             } catch {
                 let phase = currentPhase
@@ -524,9 +529,11 @@ enum CompleteDataDeletionError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .alreadyRunning:
-            return "データ削除はすでに実行中です。"
+            return String(localized: "データ削除はすでに実行中です。", table: "Storage",
+                          comment: "Data deletion error: it is already running")
         case let .invalidState(reason):
-            return "データ削除の再開情報が不正です: \(reason)"
+            return String(localized: "データ削除の再開情報が不正です: \(reason)", table: "Storage",
+                          comment: "Data deletion error. %@ is a diagnostic sentence from the same table")
         case let .phaseFailed(_, error):
             // a11y-07. The phase is shown above this message in its own
             // words (`userFacingTitle`); interpolating the case printed a

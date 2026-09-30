@@ -2,13 +2,123 @@
   "sourceLanguage" : "ja",
   "strings" : {
     "タイマーを一時停止しました。ポモジェムに戻ると続きから再開できます。" : {
-      "comment" : "First notification after leaving the app during a focus. Suggested English: Your timer is paused. Come back to PomoGem to pick up where you left off."
+      "comment" : "First notification after leaving the app during a focus. Suggested English: Your timer is paused. Come back to PomoGem to pick up where you left off.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your timer is paused. Come back to PomoGem to pick up where you left off."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマーを一時停止しました。ポモジェムに戻ると続きから再開できます。"
+          }
+        }
+      }
     },
     "一時停止して%@たちました。戻れば続きから再開できます。" : {
-      "comment" : "Later notification after leaving the app during a focus. %@ is how long the timer has been paused, e.g. 5分. Suggested English: Paused for %@. Come back any time to pick up where you left off."
+      "comment" : "Later notification after leaving the app during a focus. %@ is how long the timer has been paused, e.g. 5分. Suggested English: Paused for %@. Come back any time to pick up where you left off.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paused for %@. Come back any time to pick up where you left off."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一時停止して%@たちました。戻れば続きから再開できます。"
+          }
+        }
+      }
+    },
+    "休憩はここまで。次の一粒へ、ゆっくり戻りましょう。" : {
+      "comment" : "Notification when a break timer ends (Time Sensitive). Gentle, no pressure to start the next focus.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Break's over. Ease back in toward your next gem."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩はここまで。次の一粒へ、ゆっくり戻りましょう。"
+          }
+        }
+      }
+    },
+    "先月の瓶ができた。積み上がりを眺めよう。" : {
+      "comment" : "Opt-in monthly notification on the 1st: last month's jar (Month in Review) is ready",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Last month's jar is ready. Take a look at your progress."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先月の瓶ができた。積み上がりを眺めよう。"
+          }
+        }
+      }
     },
     "集中が切れています" : {
-      "comment" : "Notification title after the person left the app during a focus; the timer is now paused. Suggested English: Focus interrupted"
+      "comment" : "Notification title after the person left the app during a focus; the timer is now paused. Suggested English: Focus interrupted",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus paused"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中が切れています"
+          }
+        }
+      }
+    },
+    "集中時間が終わりました。おつかれさまでした。" : {
+      "comment" : "Notification when a focus timer ends (Time Sensitive). Never promise a gem: the session is saved only when the app opens.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your focus time is over. Nice work."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中時間が終わりました。おつかれさまでした。"
+          }
+        }
+      }
+    },
+    "集中時間が続いています。タイマーに戻って続けましょう。" : {
+      "comment" : "Reminder shortly after leaving the app while a focus keeps running",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your focus is still running. Head back to the timer to keep going."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中時間が続いています。タイマーに戻って続けましょう。"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

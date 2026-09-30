@@ -797,7 +797,11 @@ final class NotificationManager {
             // account. Keep the immutable payload account-neutral, and never
             // promise a gem: the completion is saved only when the app opens.
             // Live Activity content is gated independently by account identity.
-            body: "集中時間が終わりました。おつかれさまでした。",
+            body: String(
+                localized: "集中時間が終わりました。おつかれさまでした。",
+                table: "Notifications",
+                comment: "Notification when a focus timer ends (Time Sensitive). Never promise a gem: the session is saved only when the app opens."
+            ),
             playsSound: playsSound,
             timerCompletionSound: completionSound,
             interruptionLevel: .timeSensitive
@@ -978,7 +982,11 @@ final class NotificationManager {
                 requestCreatedAt: .now
             )
             let content = notificationContent(
-                body: "集中時間が続いています。タイマーに戻って続けましょう。",
+                body: String(
+                    localized: "集中時間が続いています。タイマーに戻って続けましょう。",
+                    table: "Notifications",
+                    comment: "Reminder shortly after leaving the app while a focus keeps running"
+                ),
                 playsSound: playsSound
             )
             let request = UNNotificationRequest(
@@ -1194,7 +1202,11 @@ final class NotificationManager {
             return .superseded
         }
         let content = notificationContent(
-            body: "休憩はここまで。次の一粒へ、ゆっくり戻りましょう。",
+            body: String(
+                localized: "休憩はここまで。次の一粒へ、ゆっくり戻りましょう。",
+                table: "Notifications",
+                comment: "Notification when a break timer ends (Time Sensitive). Gentle, no pressure to start the next focus."
+            ),
             playsSound: playsSound,
             timerCompletionSound: completionSound,
             interruptionLevel: .timeSensitive
@@ -1458,6 +1470,11 @@ final class NotificationManager {
                     to: firstDate
                 ) else { continue }
 
+                // Resolved now, in the app's current language (the
+                // Notifications table). No locale observer is needed: a
+                // language change relaunches the app, and changing the region
+                // or calendar happens in the Settings app, so the launch or
+                // foreground re-sync (RootView) re-books these requests.
                 let body: String
                 switch PassiveReminderSchedulePolicy.kind(
                     for: date,
@@ -1468,9 +1485,15 @@ final class NotificationManager {
                     calendar: calendar
                 ) {
                 case .wrapped:
-                    body = "先月の瓶ができた。積み上がりを眺めよう。"
+                    body = String(
+                        localized: "先月の瓶ができた。積み上がりを眺めよう。",
+                        table: "Notifications",
+                        comment: "Opt-in monthly notification on the 1st: last month's jar (Month in Review) is ready"
+                    )
                 case .dailyReminder:
-                    body = "瓶が待ってる。今日のひと粒、積んでいく？"
+                    // The sentence Settings shows as this notification's
+                    // example (Common), so the two can never diverge.
+                    body = Constants.UIStrings.eveningNotification
                 case nil:
                     continue
                 }
@@ -1549,7 +1572,10 @@ final class NotificationManager {
     /// return reminder are nudges and stay `.active`. People can still turn
     /// Time Sensitive off per app or per Focus in iOS Settings.
     private func notificationContent(
-        title: String = "ポモジェム",
+        // The brand from Common, with that key's own comment so the frozen
+        // catalog does not change.
+        title: String = String(localized: "ポモジェム", table: "Common",
+                               comment: "Brand wordmark beside the jar mark (en: PomoGem)"),
         body: String,
         playsSound: Bool,
         timerCompletionSound: TimerCompletionSound? = nil,

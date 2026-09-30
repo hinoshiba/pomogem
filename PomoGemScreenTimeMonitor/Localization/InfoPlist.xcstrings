@@ -5,6 +5,12 @@
       "comment" : "Name of the Screen Time monitor extension shown by iOS",
       "extractionState" : "manual",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PomoGem Screen Time"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",

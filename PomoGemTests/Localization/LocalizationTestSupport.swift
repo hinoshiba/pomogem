@@ -39,6 +39,8 @@ enum LocalizationTestSupport {
         let shippingLanguages: [String]
         let sourceRoots: [String]
         let catalogs: [String: String]
+        /// Catalogs Apple reads by file name (AppShortcuts.xcstrings), outside the feature tables.
+        let systemCatalogs: [String: String]?
         let catalogBundles: [String: [String]]
         let infoPlistCatalogs: [InfoPlistCatalog]
         let bundlePaths: [String: String]
@@ -49,6 +51,7 @@ enum LocalizationTestSupport {
             case shippingLanguages = "shipping_languages"
             case sourceRoots = "source_roots"
             case catalogs
+            case systemCatalogs = "system_catalogs"
             case catalogBundles = "catalog_bundles"
             case infoPlistCatalogs = "info_plist_catalogs"
             case bundlePaths = "bundle_paths"

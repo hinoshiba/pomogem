@@ -2,331 +2,2596 @@
   "sourceLanguage" : "ja",
   "strings" : {
     "%lld / 5アプリ" : {
-      "comment" : "Study apps chosen out of the free plan's five"
+      "comment" : "Study apps chosen out of the free plan's five",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld / 5 apps"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld / 5アプリ"
+          }
+        }
+      }
     },
     "%lldアプリ" : {
-      "comment" : "Study apps chosen, before the purchase status is known"
+      "comment" : "Study apps chosen, before the purchase status is known",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld app"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld apps"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lldアプリ"
+          }
+        }
+      }
     },
     "%lldアプリ・無制限" : {
-      "comment" : "Apps chosen in a lane with no limit"
+      "comment" : "Apps chosen in a lane with no limit",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld app · no limit"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld apps · no limit"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lldアプリ・無制限"
+          }
+        }
+      }
+    },
+    "%lldアプリ選択中" : {
+      "comment" : "Number of apps chosen. en needs plural variations.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld app selected"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld apps selected"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lldアプリ選択中"
+          }
+        }
+      }
+    },
+    "%lld分" : {
+      "comment" : "Minutes spent in the apps to cut down (en: '%lld min')",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld min"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld分"
+          }
+        }
+      }
+    },
+    "%lld分以上" : {
+      "comment" : "Black-stone minutes beyond what can be counted (never seen in practice)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld+ min"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld分以上"
+          }
+        }
+      }
+    },
+    "10分未満の端数は、日付の切り替わりや設定の変更・停止でリセットされます。タイマー中の二重加算を避けるため、勉強アプリの計測もいったん区切ります。" : {
+      "comment" : "About recording: leftovers under 10 minutes reset at the day boundary or on changes; study-app timing also breaks during a timer",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leftover time under 10 minutes resets when the day changes, or when you change or stop these settings. Study-app timing also restarts around a timer, so no time is counted twice."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "10分未満の端数は、日付の切り替わりや設定の変更・停止でリセットされます。タイマー中の二重加算を避けるため、勉強アプリの計測もいったん区切ります。"
+          }
+        }
+      }
+    },
+    "Proで勉強アプリを無制限に" : {
+      "comment" : "Button: Pro allows unlimited study apps (opens the paywall)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unlimited Study Apps with Pro"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proで勉強アプリを無制限に"
+          }
+        }
+      }
+    },
+    "Pro：アプリ数は無制限です。" : {
+      "comment" : "Footer: with Pro, any number of study apps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pro: any number of apps."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pro：アプリ数は無制限です。"
+          }
+        }
+      }
     },
     "SNSなど、控えたいアプリを選べます。合計10分使うごとに、瓶の中で場所をとる黒い石が1つ増えます。" : {
-      "comment" : "Footer: what the black-stone lane does"
+      "comment" : "Footer: what the black-stone lane does",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose apps you want to use less, such as social media. Every 10 minutes in them adds one black stone that takes up space in your jar."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SNSなど、控えたいアプリを選べます。合計10分使うごとに、瓶の中で場所をとる黒い石が1つ増えます。"
+          }
+        }
+      }
     },
     "「ミュージック」や「Apple Music Classical」を控えたいアプリに選ぶと、集中中は音楽も再生できなくなります。" : {
-      "comment" : "Footer under the focus shield toggle: picking Apple's Music or Apple Music Classical app as an app to cut down also blocks focus music. Use the apps' names as shown on the Home Screen in that language."
+      "comment" : "Footer under the focus shield toggle: picking Apple's Music or Apple Music Classical app as an app to cut down also blocks focus music. Use the apps' names as shown on the Home Screen in that language.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "If you choose “Music” or “Apple Music Classical” as apps you want to use less, music can't play during a focus either."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「ミュージック」や「Apple Music Classical」を控えたいアプリに選ぶと、集中中は音楽も再生できなくなります。"
+          }
+        }
+      }
     },
     "このiPhoneでは、ほかのアプリがすでに保護者による管理（ペアレンタルコントロール）を行っているため、許可できませんでした。そのアプリを管理している人（保護者など）に相談してください。" : {
-      "comment" : "Screen Time access failed: another parental-control app holds the authorization"
+      "comment" : "Screen Time access failed: another parental-control app holds the authorization",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Access couldn't be allowed because another app already manages parental controls on this iPhone. Talk to the person who manages that app, such as a parent."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneでは、ほかのアプリがすでに保護者による管理（ペアレンタルコントロール）を行っているため、許可できませんでした。そのアプリを管理している人（保護者など）に相談してください。"
+          }
+        }
+      }
     },
     "このiPhoneでは、スクリーンタイムの制限や学校・会社などの管理設定によって許可できません。設定アプリの最初の画面にある「スクリーンタイム」の制限や、「一般」の「VPNとデバイス管理」を確認してください。" : {
-      "comment" : "Screen Time access failed: restricted by Screen Time limits or device management"
+      "comment" : "Screen Time access failed: restricted by Screen Time limits or device management",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Access can't be allowed on this iPhone because of Screen Time restrictions or management settings from a school or company. In the Settings app, check the restrictions in “Screen Time” on the first screen, and “VPN & Device Management” in “General.”"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneでは、スクリーンタイムの制限や学校・会社などの管理設定によって許可できません。設定アプリの最初の画面にある「スクリーンタイム」の制限や、「一般」の「VPNとデバイス管理」を確認してください。"
+          }
+        }
+      }
+    },
+    "このiPhoneで使うアプリを、Appleの選択画面から指定します。" : {
+      "comment" : "Footer: apps are chosen in Apple's picker",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You choose the apps on this iPhone in Apple's app picker."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneで使うアプリを、Appleの選択画面から指定します。"
+          }
+        }
+      }
     },
     "このiPhoneのApple Accountでは許可できませんでした。設定アプリの最初の画面のいちばん上で、Apple Accountにサインインしているか確認してください。ファミリー共有で保護者が管理している子どものアカウントでは、この機能を使えないことがあります。" : {
-      "comment" : "Screen Time access failed: not signed in, or a child or managed account"
+      "comment" : "Screen Time access failed: not signed in, or a child or managed account",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Access couldn't be allowed with this iPhone's Apple Account. At the very top of the first screen of the Settings app, check that you're signed in to your Apple Account. A child account managed by a parent through Family Sharing may not be able to use this feature."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneのApple Accountでは許可できませんでした。設定アプリの最初の画面のいちばん上で、Apple Accountにサインインしているか確認してください。ファミリー共有で保護者が管理している子どものアカウントでは、この機能を使えないことがあります。"
+          }
+        }
+      }
     },
     "このテーマは、スクリーンタイムで選んだ勉強アプリの記録先です。削除すると勉強アプリの選択も解除され、記録を続けるにはアプリと記録先を選び直す必要があります。" : {
-      "comment" : "Theme delete confirmation: the theme is the Screen Time destination"
+      "comment" : "Theme delete confirmation: the theme is the Screen Time destination",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your Screen Time study apps record to this theme. Deleting it also clears the study-app selection. To keep recording, choose the apps and a theme again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このテーマは、スクリーンタイムで選んだ勉強アプリの記録先です。削除すると勉強アプリの選択も解除され、記録を続けるにはアプリと記録先を選び直す必要があります。"
+          }
+        }
+      }
+    },
+    "この環境ではスクリーンタイムを利用できません。対応するiPhoneのアプリでお試しください。" : {
+      "comment" : "Error: Screen Time is not available here (e.g. the Simulator or an iPad build)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screen Time isn't available here. Try the app on a supported iPhone."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この環境ではスクリーンタイムを利用できません。対応するiPhoneのアプリでお試しください。"
+          }
+        }
+      }
+    },
+    "アクセスが許可されていないため、自動記録は停止しています。「アクセスを許可」からもう一度確認してください。" : {
+      "comment" : "Footer: access was denied, so recording stopped; quotes the Allow Access button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recording has stopped because access isn't allowed. Tap “Allow Access” to check again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アクセスが許可されていないため、自動記録は停止しています。「アクセスを許可」からもう一度確認してください。"
+          }
+        }
+      }
+    },
+    "アクセスの許可が必要です" : {
+      "comment" : "Status: Screen Time access is needed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Access needed"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アクセスの許可が必要です"
+          }
+        }
+      }
+    },
+    "アクセスを許可" : {
+      "comment" : "Button: ask for Screen Time access",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow Access"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アクセスを許可"
+          }
+        }
+      }
+    },
+    "アクセス許可済み" : {
+      "comment" : "Status: Screen Time access is allowed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Access allowed"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アクセス許可済み"
+          }
+        }
+      }
     },
     "アプリで過ごした時間も、瓶に。" : {
-      "comment" : "Screen Time settings: headline"
+      "comment" : "Screen Time settings: headline",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Time in apps goes into your jar, too."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリで過ごした時間も、瓶に。"
+          }
+        }
+      }
+    },
+    "アプリとテーマを選び、保存すると反映されます" : {
+      "comment" : "VoiceOver hint: choose apps and a theme, then save",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose apps and a theme, then save to apply."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリとテーマを選び、保存すると反映されます"
+          }
+        }
+      }
+    },
+    "アプリの利用時間を記録" : {
+      "comment" : "Toggle: record time spent in the chosen apps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Record App Time"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリの利用時間を記録"
+          }
+        }
+      }
     },
     "アプリの選択、まだ取り込んでいない利用記録、黒い石をこのiPhoneから削除し、自動記録を停止して、集中中のアプリ制限もオフにします。取り消せません。保存済みの勉強時間と粒は残ります。" : {
-      "comment" : "Screen Time reset confirmation. The reset also switches the focus shield (集中中のアプリ制限) off."
+      "comment" : "Screen Time reset confirmation. The reset also switches the focus shield (集中中のアプリ制限) off.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This deletes your app selection, usage not yet added, and black stones from this iPhone, stops recording, and turns off app blocking during focus. This can't be undone. Study time and gems you already saved are kept."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリの選択、まだ取り込んでいない利用記録、黒い石をこのiPhoneから削除し、自動記録を停止して、集中中のアプリ制限もオフにします。取り消せません。保存済みの勉強時間と粒は残ります。"
+          }
+        }
+      }
     },
     "アプリの選択、未取り込みの利用記録、黒い石は、このiPhoneだけに保存します。JSON書き出しや保存先の切り替えでは引き継ぎません。" : {
-      "comment" : "About recording: device-local data"
+      "comment" : "About recording: device-local data",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your app selection, usage not yet added, and black stones are saved only on this iPhone. They aren't included in JSON exports or carried over when you switch storage."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリの選択、未取り込みの利用記録、黒い石は、このiPhoneだけに保存します。JSON書き出しや保存先の切り替えでは引き継ぎません。"
+          }
+        }
+      }
     },
     "アプリの選択・未取り込みの利用記録・黒い石を削除し、自動記録を停止して、集中中のアプリ制限もオフにします。保存済みの勉強時間と粒は残ります。" : {
-      "comment" : "Footer under the full Screen Time reset. The reset also switches the focus shield (集中中のアプリ制限) off."
+      "comment" : "Footer under the full Screen Time reset. The reset also switches the focus shield (集中中のアプリ制限) off.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deletes your app selection, usage not yet added, and black stones, stops recording, and turns off app blocking during focus. Study time and gems you already saved are kept."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリの選択・未取り込みの利用記録・黒い石を削除し、自動記録を停止して、集中中のアプリ制限もオフにします。保存済みの勉強時間と粒は残ります。"
+          }
+        }
+      }
+    },
+    "アプリを選ぶ" : {
+      "comment" : "Button: open Apple's app picker",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose Apps"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリを選ぶ"
+          }
+        }
+      }
     },
     "アプリ数は無制限です" : {
-      "comment" : "VoiceOver hint: no app limit"
+      "comment" : "VoiceOver hint: no app limit",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No limit on the number of apps"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリ数は無制限です"
+          }
+        }
+      }
+    },
+    "アプリ数は無制限です。" : {
+      "comment" : "Apple app picker footer: no app limit",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No limit on the number of apps."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリ数は無制限です。"
+          }
+        }
+      }
+    },
+    "カテゴリやWebサイトではなく、個別のアプリを選んでください。" : {
+      "comment" : "Error: categories or websites were chosen; only individual apps count",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose individual apps, not categories or websites."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カテゴリやWebサイトではなく、個別のアプリを選んでください。"
+          }
+        }
+      }
+    },
+    "カテゴリやWebサイトは選べません。カテゴリを開き、アプリを1つずつ選んでください。" : {
+      "comment" : "Validation: a category or website was picked; open the category and pick apps one by one",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Categories and websites can't be chosen. Open a category and choose apps one by one."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カテゴリやWebサイトは選べません。カテゴリを開き、アプリを1つずつ選んでください。"
+          }
+        }
+      }
+    },
+    "カテゴリを開き、記録するアプリを1つずつ選んでください。" : {
+      "comment" : "Apple app picker header: open a category and pick apps one by one",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open a category and choose the apps to record one by one."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カテゴリを開き、記録するアプリを1つずつ選んでください。"
+          }
+        }
+      }
+    },
+    "キャンセル" : {
+      "comment" : "Button: cancel",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャンセル"
+          }
+        }
+      }
+    },
+    "スクリーンタイム" : {
+      "comment" : "Navigation title: the Screen Time page",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screen Time"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイム"
+          }
+        }
+      }
+    },
+    "スクリーンタイムの内容をリセット" : {
+      "comment" : "Button and alert title: delete this iPhone's Screen Time data and stop recording",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset Screen Time Data"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイムの内容をリセット"
+          }
+        }
+      }
+    },
+    "スクリーンタイムの内容をリセットしました" : {
+      "comment" : "Toast: Screen Time was reset",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screen Time data was reset"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイムの内容をリセットしました"
+          }
+        }
+      }
     },
     "スクリーンタイムの内容をリセットできませんでした。もう一度お試しください。" : {
-      "comment" : "Alert: resetting Screen Time failed for an unexpected reason"
+      "comment" : "Alert: resetting Screen Time failed for an unexpected reason",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't reset the Screen Time data. Please try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイムの内容をリセットできませんでした。もう一度お試しください。"
+          }
+        }
+      }
+    },
+    "スクリーンタイムの監視を開始できませんでした。もう一度お試しください。" : {
+      "comment" : "Recording stopped: iOS refused to start Screen Time monitoring",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't start Screen Time monitoring. Please try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイムの監視を開始できませんでした。もう一度お試しください。"
+          }
+        }
+      }
     },
     "スクリーンタイムの記録を保留しています" : {
-      "comment" : "Alert title: imported Screen Time records are on hold"
+      "comment" : "Alert title: imported Screen Time records are on hold",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screen Time Records on Hold"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイムの記録を保留しています"
+          }
+        }
+      }
     },
     "スクリーンタイムの記録を確認できませんでした。" : {
-      "comment" : "Import error: a Screen Time record failed its checks"
+      "comment" : "Import error: a Screen Time record failed its checks",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't verify a Screen Time record."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイムの記録を確認できませんでした。"
+          }
+        }
+      }
+    },
+    "スクリーンタイムの記録を読み込めませんでした。記録の上書きは行っていません。" : {
+      "comment" : "Error: the Screen Time ledger could not be read; nothing was overwritten",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't read the Screen Time records. Nothing was overwritten."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイムの記録を読み込めませんでした。記録の上書きは行っていません。"
+          }
+        }
+      }
     },
     "スクリーンタイムの設定を保存できませんでした。もう一度お試しください。" : {
-      "comment" : "Alert: saving the Screen Time settings failed for an unexpected reason"
+      "comment" : "Alert: saving the Screen Time settings failed for an unexpected reason",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save the Screen Time settings. Please try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイムの設定を保存できませんでした。もう一度お試しください。"
+          }
+        }
+      }
+    },
+    "スクリーンタイムの設定を反映中…" : {
+      "comment" : "Progress line: the Screen Time settings are being applied",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Applying Screen Time settings…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイムの設定を反映中…"
+          }
+        }
+      }
+    },
+    "スクリーンタイムの設定を反映中です。完了するまでお待ちください。" : {
+      "comment" : "Error: another Screen Time change is still being applied",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screen Time settings are still being applied. Please wait until that finishes."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイムの設定を反映中です。完了するまでお待ちください。"
+          }
+        }
+      }
+    },
+    "スクリーンタイムの許可が解除されました。再び許可して、アプリを選び直してください。" : {
+      "comment" : "Recording stopped: Screen Time access was turned off, which also clears the chosen apps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screen Time access was turned off. Allow it again, then choose your apps again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイムの許可が解除されました。再び許可して、アプリを選び直してください。"
+          }
+        }
+      }
     },
     "スクリーンタイムの許可には、iPhoneのパスコードが必要です。設定アプリの最初の画面にある「Face IDとパスコード」（または「Touch IDとパスコード」）でパスコードを設定してから、もう一度お試しください。" : {
-      "comment" : "Screen Time access failed: no device passcode"
+      "comment" : "Screen Time access failed: no device passcode",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screen Time access needs an iPhone passcode. Set one in “Face ID & Passcode” (or “Touch ID & Passcode”) on the first screen of the Settings app, then try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイムの許可には、iPhoneのパスコードが必要です。設定アプリの最初の画面にある「Face IDとパスコード」（または「Touch IDとパスコード」）でパスコードを設定してから、もう一度お試しください。"
+          }
+        }
+      }
+    },
+    "スクリーンタイムへのアクセス" : {
+      "comment" : "Section header: Screen Time access",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screen Time Access"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイムへのアクセス"
+          }
+        }
+      }
     },
     "スクリーンタイムへのアクセスを確認できませんでした。少し時間をおいて、もう一度お試しください。" : {
-      "comment" : "Screen Time access failed for another reason"
+      "comment" : "Screen Time access failed for another reason",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't check Screen Time access. Wait a little, then try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイムへのアクセスを確認できませんでした。少し時間をおいて、もう一度お試しください。"
+          }
+        }
+      }
     },
     "スクリーンタイムへのアクセスを許可してください。" : {
-      "comment" : "Validation: the focus shield is switched on without Screen Time access"
+      "comment" : "Error: Screen Time access is needed first",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Please allow access to Screen Time."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイムへのアクセスを許可してください。"
+          }
+        }
+      }
     },
     "スクリーンタイムへのアクセスを許可すると使えます。" : {
-      "comment" : "Focus shield footer: the shield needs Screen Time access"
-    },
-    "スクリーンタイム：%@ +%lld分（%lld粒）" : {
-      "comment" : "Toast: study-app time added. 1 = theme name, 2 = minutes, 3 = pebbles",
+      "comment" : "Focus shield footer: the shield needs Screen Time access",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Available once you allow Screen Time access."
+          }
+        },
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "スクリーンタイム：%1$@ +%2$lld分（%3$lld粒）"
+            "state" : "translated",
+            "value" : "スクリーンタイムへのアクセスを許可すると使えます。"
           }
         }
       }
     },
-    "スクリーンタイム：%@ +%lld分（%lld粒）、黒い石 +%lld" : {
-      "comment" : "Toast: study time and black stones added. 1 = theme, 2 = minutes, 3 = pebbles, 4 = black stones",
+    "スクリーンタイム：%@" : {
+      "comment" : "Toast: black stones added (count only). %@ is such as 黒い石 +2 (+2 black stones).",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screen Time: %@"
+          }
+        },
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "スクリーンタイム：%1$@ +%2$lld分（%3$lld粒）、黒い石 +%4$lld"
+            "state" : "translated",
+            "value" : "スクリーンタイム：%@"
           }
         }
       }
     },
-    "スクリーンタイム：勉強アプリの時間 +%lld分（%lld粒）" : {
-      "comment" : "Toast: study-app time added to several themes. 1 = minutes, 2 = pebbles",
+    "スクリーンタイム：%@ +%lld分（%@）" : {
+      "comment" : "Toast: study-app time added. 1 = theme name, 2 = minutes, 3 = gem count such as 3粒 (3 gems)",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screen Time: %1$@ +%2$lld min (%3$@)"
+          }
+        },
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "スクリーンタイム：勉強アプリの時間 +%1$lld分（%2$lld粒）"
+            "state" : "translated",
+            "value" : "スクリーンタイム：%@ +%lld分（%@）"
           }
         }
       }
     },
-    "スクリーンタイム：勉強アプリの時間 +%lld分（%lld粒）、黒い石 +%lld" : {
-      "comment" : "Toast: study time for several themes and black stones added. 1 = minutes, 2 = pebbles, 3 = black stones",
+    "スクリーンタイム：%@ +%lld分（%@）、%@" : {
+      "comment" : "Toast: study time and black stones added. 1 = theme, 2 = minutes, 3 = gem count such as 3粒, 4 = such as 黒い石 +2",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screen Time: %1$@ +%2$lld min (%3$@), %4$@"
+          }
+        },
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "スクリーンタイム：勉強アプリの時間 +%1$lld分（%2$lld粒）、黒い石 +%3$lld"
+            "state" : "translated",
+            "value" : "スクリーンタイム：%@ +%lld分（%@）、%@"
           }
         }
       }
     },
-    "スクリーンタイム：黒い石 +%lld" : {
-      "comment" : "Toast: black stones added (count only)"
-    },
-    "スクリーンタイム：黒い石 +%lld（控えたいアプリ %lld分）" : {
-      "comment" : "Toast: black stones added. 1 = stones, 2 = minutes in the apps to cut down",
+    "スクリーンタイム：%@（控えたいアプリ %lld分）" : {
+      "comment" : "Toast: black stones added. 1 = such as 黒い石 +2 (+2 black stones), 2 = minutes in the apps to use less",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screen Time: %1$@ (%2$lld min in apps you want to use less)"
+          }
+        },
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "スクリーンタイム：黒い石 +%1$lld（控えたいアプリ %2$lld分）"
+            "state" : "translated",
+            "value" : "スクリーンタイム：%@（控えたいアプリ %lld分）"
+          }
+        }
+      }
+    },
+    "スクリーンタイム：勉強アプリの時間 +%lld分（%@）" : {
+      "comment" : "Toast: study-app time added to several themes. 1 = minutes, 2 = gem count such as 3粒 (3 gems)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screen Time: study apps +%1$lld min (%2$@)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイム：勉強アプリの時間 +%lld分（%@）"
+          }
+        }
+      }
+    },
+    "スクリーンタイム：勉強アプリの時間 +%lld分（%@）、%@" : {
+      "comment" : "Toast: study time for several themes and black stones added. 1 = minutes, 2 = gem count such as 3粒, 3 = such as 黒い石 +2",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screen Time: study apps +%1$lld min (%2$@), %3$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイム：勉強アプリの時間 +%lld分（%@）、%@"
           }
         }
       }
     },
     "タイマーの計測中は勉強アプリの自動記録を休止し、終了後に自動で再開します。" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Study-app recording pauses while a timer runs and resumes on its own afterward."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマーの計測中は勉強アプリの自動記録を休止し、終了後に自動で再開します。"
+          }
+        }
+      }
+    },
+    "テーマが未選択、または削除されています。記録先を選び直してください。" : {
+      "comment" : "Footer: no destination theme, or it was deleted",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No theme is chosen, or it was deleted. Choose a theme to record to."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマが未選択、または削除されています。記録先を選び直してください。"
+          }
+        }
+      }
+    },
+    "データの準備が完了してから、もう一度お試しください。" : {
+      "comment" : "Error: the app's data is not ready yet",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Please try again once your data is ready."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "データの準備が完了してから、もう一度お試しください。"
+          }
+        }
+      }
     },
     "ポモジェムで集中しているあいだ、控えたいアプリを開けなくします。休憩になるか集中が終わると解除します。一時停止中も、予定の終了時刻まで続きます。" : {
-      "comment" : "Footer under the focus shield toggle: when apps are blocked and when they are released"
+      "comment" : "Footer under the focus shield toggle: when apps are blocked and when they are released",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "While you focus in PomoGem, apps you want to use less can't be opened. They open again when your break starts or the focus ends. While paused, the block stays on until the planned end time."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェムで集中しているあいだ、控えたいアプリを開けなくします。休憩になるか集中が終わると解除します。一時停止中も、予定の終了時刻まで続きます。"
+          }
+        }
+      }
+    },
+    "リセット" : {
+      "comment" : "Destructive alert button: reset Screen Time",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "リセット"
+          }
+        }
+      }
+    },
+    "一部のアプリは、OSが関連Webサイトの利用も含める場合があります。" : {
+      "comment" : "About recording: iOS may include related websites in an app's time",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "For some apps, iOS may also count time on related websites."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一部のアプリは、OSが関連Webサイトの利用も含める場合があります。"
+          }
+        }
+      }
     },
     "今すぐ制限を解除" : {
-      "comment" : "Button: lift the focus shield now (escape hatch)"
+      "comment" : "Button: lift the focus shield now (escape hatch)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unblock Apps Now"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今すぐ制限を解除"
+          }
+        }
+      }
+    },
+    "保存" : {
+      "comment" : "Toolbar button: save the Screen Time settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存"
+          }
+        }
+      }
     },
     "保存して戻る" : {
-      "comment" : "Dialog action: save the Screen Time edits, then go back"
+      "comment" : "Dialog action: save the Screen Time edits, then go back",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save and Go Back"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存して戻る"
+          }
+        }
+      }
     },
     "保存しました" : {
-      "comment" : "Toast after saving Screen Time settings before monitoring is confirmed"
+      "comment" : "Toast after saving Screen Time settings before monitoring is confirmed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存しました"
+          }
+        }
+      }
     },
     "保存しました。自動記録はオフです" : {
-      "comment" : "Toast after saving Screen Time settings with recording off"
+      "comment" : "Toast after saving Screen Time settings with recording off",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved. Recording is off"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存しました。自動記録はオフです"
+          }
+        }
+      }
     },
     "保存しました。自動記録中です" : {
-      "comment" : "Toast after saving Screen Time settings with recording on"
+      "comment" : "Toast after saving Screen Time settings with recording on",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved. Recording is on"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存しました。自動記録中です"
+          }
+        }
+      }
     },
     "保存しました。集中中のアプリ制限はオフです" : {
-      "comment" : "Toast after a save that only switched the focus shield off"
+      "comment" : "Toast after a save that only switched the focus shield off",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved. App blocking during focus is off"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存しました。集中中のアプリ制限はオフです"
+          }
+        }
+      }
     },
     "保存しました。集中中のアプリ制限はオンです" : {
-      "comment" : "Toast after saving the Screen Time settings with the focus shield switched on"
+      "comment" : "Toast after saving the Screen Time settings with the focus shield switched on",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved. App blocking during focus is on"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存しました。集中中のアプリ制限はオンです"
+          }
+        }
+      }
     },
     "保存すると反映されます" : {
-      "comment" : "VoiceOver hint on the focus shield toggle: it takes effect after 保存"
+      "comment" : "VoiceOver hint on the focus shield toggle: it takes effect after 保存",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Takes effect when you save."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存すると反映されます"
+          }
+        }
+      }
     },
     "制限しているあいだは控えたいアプリを開けないため、その時間は黒い石になりません。" : {
-      "comment" : "Footer under the focus shield toggle: blocked time adds no black stones"
+      "comment" : "Footer under the focus shield toggle: blocked time adds no black stones",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "While blocked, apps you want to use less can't be opened, so that time adds no black stones."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "制限しているあいだは控えたいアプリを開けないため、その時間は黒い石になりません。"
+          }
+        }
+      }
     },
     "制限を自動で解除する準備ができなかったため、今回の集中では制限していません。" : {
-      "comment" : "Notice: the failsafe that lifts the shield could not be registered, so nothing was shielded"
+      "comment" : "Notice: the failsafe that lifts the shield could not be registered, so nothing was shielded",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apps aren't blocked during this focus, because the automatic unblock couldn't be set up."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "制限を自動で解除する準備ができなかったため、今回の集中では制限していません。"
+          }
+        }
+      }
     },
     "制限を解除しました" : {
-      "comment" : "Toast after 今すぐ制限を解除: the apps to cut down can be opened again for this focus"
+      "comment" : "Toast after 今すぐ制限を解除: the apps to cut down can be opened again for this focus",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apps unblocked"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "制限を解除しました"
+          }
+        }
+      }
     },
     "制限を解除できませんでした。もう一度お試しください。" : {
-      "comment" : "Alert: 今すぐ制限を解除 did not lift the shield; the button stays so the user can retry"
+      "comment" : "Alert: 今すぐ制限を解除 did not lift the shield; the button stays so the user can retry",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't unblock the apps. Please try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "制限を解除できませんでした。もう一度お試しください。"
+          }
+        }
+      }
+    },
+    "削除されたテーマ" : {
+      "comment" : "Picker value: the chosen theme was deleted",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deleted theme"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "削除されたテーマ"
+          }
+        }
+      }
     },
     "前回の集中では、制限を自動で解除する準備ができなかったため、制限しませんでした。次の集中でもう一度試します。" : {
-      "comment" : "Notice after a focus: its failsafe could not be registered, so it ran unshielded; the next focus tries again"
+      "comment" : "Notice after a focus: its failsafe could not be registered, so it ran unshielded; the next focus tries again",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apps weren't blocked during your last focus, because the automatic unblock couldn't be set up. PomoGem will try again next focus."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "前回の集中では、制限を自動で解除する準備ができなかったため、制限しませんでした。次の集中でもう一度試します。"
+          }
+        }
+      }
     },
     "勉強アプリ" : {
-      "comment" : "Picker title: study apps"
+      "comment" : "Picker title: study apps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Study Apps"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "勉強アプリ"
+          }
+        }
+      }
     },
     "勉強アプリと控えたいアプリは別々に合計します。同じアプリを両方には登録できません。" : {
-      "comment" : "About recording: the two lanes are summed separately"
+      "comment" : "About recording: the two lanes are summed separately",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Study apps and apps you want to use less are totaled separately. The same app can't be in both."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "勉強アプリと控えたいアプリは別々に合計します。同じアプリを両方には登録できません。"
+          }
+        }
+      }
     },
     "勉強アプリの粒" : {
-      "comment" : "Section header: study apps that add pebbles"
+      "comment" : "Section header: study apps that add pebbles",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Study-App Gems"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "勉強アプリの粒"
+          }
+        }
+      }
     },
     "勉強アプリの粒と黒い石を10分ごとに積む" : {
-      "comment" : "Settings row subtitle: Screen Time, when there is nothing to report"
+      "comment" : "Settings row subtitle: Screen Time, when there is nothing to report",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adds study-app gems and black stones every 10 minutes"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "勉強アプリの粒と黒い石を10分ごとに積む"
+          }
+        }
+      }
     },
     "勉強アプリを使った時間は10分ごとに粒として、控えたいアプリの時間は黒い石として、瓶に積みます。" : {
-      "comment" : "Screen Time settings: what the feature does"
+      "comment" : "Screen Time settings: what the feature does",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Every 10 minutes in study apps adds a gem to your jar, and time in apps you want to use less adds black stones."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "勉強アプリを使った時間は10分ごとに粒として、控えたいアプリの時間は黒い石として、瓶に積みます。"
+          }
+        }
+      }
     },
     "勉強アプリを選ぶ" : {
-      "comment" : "VoiceOver: open the study-app picker"
+      "comment" : "VoiceOver: open the study-app picker",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose study apps"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "勉強アプリを選ぶ"
+          }
+        }
+      }
     },
     "勉強時間を記録するテーマを選んでください。" : {
-      "comment" : "Error: study apps are chosen but no destination theme"
+      "comment" : "Error: study apps are chosen but no destination theme",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a theme to record study time to."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "勉強時間を記録するテーマを選んでください。"
+          }
+        }
+      }
+    },
+    "反映" : {
+      "comment" : "App picker button: use this selection (it is saved later with Save)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apply"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "反映"
+          }
+        }
+      }
     },
     "同じアプリを勉強アプリと控えたいアプリの両方には登録できません。" : {
-      "comment" : "Error: an app is in both Screen Time lanes"
+      "comment" : "Error: an app is in both Screen Time lanes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The same app can't be in both study apps and apps you want to use less."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同じアプリを勉強アプリと控えたいアプリの両方には登録できません。"
+          }
+        }
+      }
     },
     "同じアプリを勉強アプリと控えたいアプリの両方には登録できません。もう一方の選択から外してください。" : {
-      "comment" : "Validation: an app is in both lanes"
+      "comment" : "Validation: an app is in both lanes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The same app can't be in both study apps and apps you want to use less. Remove it from the other list."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同じアプリを勉強アプリと控えたいアプリの両方には登録できません。もう一方の選択から外してください。"
+          }
+        }
+      }
+    },
+    "同じ記録の内容が一致しないため、追加を保留しています。" : {
+      "comment" : "Import error: a record with the same ID differs, so adding it is on hold",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A record with the same ID has different contents, so adding it is on hold."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同じ記録の内容が一致しないため、追加を保留しています。"
+          }
+        }
+      }
     },
     "変更が保存されていません" : {
-      "comment" : "Dialog title: leaving Screen Time settings with unsaved edits"
+      "comment" : "Dialog title: leaving Screen Time settings with unsaved edits",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Changes Not Saved"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "変更が保存されていません"
+          }
+        }
+      }
+    },
+    "変更は右上の「保存」で反映します。記録を再開できないときも、保存から再試行できます。" : {
+      "comment" : "Footer: changes apply with the Save button at the top right; quotes that button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap “Save” at the top right to apply changes. If recording can't resume, you can try again with Save."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "変更は右上の「保存」で反映します。記録を再開できないときも、保存から再試行できます。"
+          }
+        }
+      }
     },
     "変更を破棄して戻る" : {
-      "comment" : "Dialog action: drop the Screen Time edits and go back"
+      "comment" : "Dialog action: drop the Screen Time edits and go back",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard Changes and Go Back"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "変更を破棄して戻る"
+          }
+        }
+      }
     },
     "戻る" : {
-      "comment" : "Back button shown while Screen Time edits are unsaved"
+      "comment" : "Back button shown while Screen Time edits are unsaved",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "戻る"
+          }
+        }
+      }
     },
     "控えたいアプリ" : {
-      "comment" : "Picker title: apps to cut down"
+      "comment" : "Picker title: apps to cut down",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apps You Want to Use Less"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控えたいアプリ"
+          }
+        }
+      }
     },
     "控えたいアプリが%lld個あります。集中中に開けないようにできるのは50個までなので、いまは制限していません。" : {
-      "comment" : "Focus shield warning. %lld is the number of apps to cut down, always more than 50 (Apple's limit). en needs plural variations."
+      "comment" : "Focus shield warning. %lld is the number of apps to cut down, always more than 50 (Apple's limit). en needs plural variations.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "You have %lld app you want to use less. Only up to 50 can be blocked during focus, so none are blocked for now."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "You have %lld apps you want to use less. Only up to 50 can be blocked during focus, so none are blocked for now."
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控えたいアプリが%lld個あります。集中中に開けないようにできるのは50個までなので、いまは制限していません。"
+          }
+        }
+      }
     },
     "控えたいアプリだけ自動記録中" : {
-      "comment" : "Status: only the black-stone lane is recording"
+      "comment" : "Status: only the black-stone lane is recording",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recording only apps you want to use less"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控えたいアプリだけ自動記録中"
+          }
+        }
+      }
     },
     "控えたいアプリを1つ以上選ぶと使えます。" : {
-      "comment" : "Focus shield footer: the shield needs at least one app to cut down"
+      "comment" : "Focus shield footer: the shield needs at least one app to cut down",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Available once you choose one or more apps you want to use less."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控えたいアプリを1つ以上選ぶと使えます。"
+          }
+        }
+      }
     },
     "控えたいアプリを選ぶ" : {
-      "comment" : "VoiceOver: open the picker for apps to cut down"
+      "comment" : "VoiceOver: open the picker for apps to cut down",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose apps you want to use less"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控えたいアプリを選ぶ"
+          }
+        }
+      }
+    },
+    "次にポモジェムを開くと、届いた記録を瓶に反映します。反映が遅れることがあります。" : {
+      "comment" : "About recording: new records reach the jar the next time the app opens",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New records reach your jar the next time you open PomoGem. This can take a while."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "次にポモジェムを開くと、届いた記録を瓶に反映します。反映が遅れることがあります。"
+          }
+        }
+      }
     },
     "気が散るアプリを制限中" : {
-      "comment" : "Focus screen notice line: the apps to cut down are shielded right now"
+      "comment" : "Focus screen notice line: the apps to cut down are shielded right now",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Blocking distracting apps"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "気が散るアプリを制限中"
+          }
+        }
+      }
     },
     "無料では5つまで選べます" : {
-      "comment" : "VoiceOver hint: the free plan's study-app limit"
+      "comment" : "VoiceOver hint: the free plan's study-app limit",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Up to 5 on the free plan"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無料では5つまで選べます"
+          }
+        }
+      }
+    },
+    "無料では勉強アプリを5つまで選べます。5つ以下に減らしてください。Proでは無制限です。" : {
+      "comment" : "Validation: more than 5 study apps on the free plan",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On the free plan you can choose up to 5 study apps. Choose 5 or fewer. Pro has no limit."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無料では勉強アプリを5つまで選べます。5つ以下に減らしてください。Proでは無制限です。"
+          }
+        }
+      }
+    },
+    "無料でもアプリ数は無制限です。" : {
+      "comment" : "Footer: apps to cut down are unlimited, even on the free plan",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Any number of apps, even on the free plan."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無料でもアプリ数は無制限です。"
+          }
+        }
+      }
     },
     "無料で登録できる勉強アプリは5つまでです。5つ以下にするか、Proをご利用ください。" : {
-      "comment" : "Error: more study apps than the free plan records"
+      "comment" : "Error: more study apps than the free plan records",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The free plan records up to 5 study apps. Choose 5 or fewer, or use Pro."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無料で登録できる勉強アプリは5つまでです。5つ以下にするか、Proをご利用ください。"
+          }
+        }
+      }
     },
     "無料で記録できる勉強アプリは5つまでです。このまま反映して、設定画面でProにするか、5つ以下に減らしてから保存してください。" : {
-      "comment" : "Picker notice: over the free learning-app limit; applying is still allowed"
+      "comment" : "Picker notice: over the free learning-app limit; applying is still allowed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The free plan records up to 5 study apps. You can apply this selection, then get Pro on the settings screen or choose 5 or fewer before saving."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無料で記録できる勉強アプリは5つまでです。このまま反映して、設定画面でProにするか、5つ以下に減らしてから保存してください。"
+          }
+        }
+      }
+    },
+    "無料は5つまで。Proでは無制限です。" : {
+      "comment" : "Apple app picker footer: free plan up to 5 study apps, unlimited with Pro",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Free: up to 5. Pro: unlimited."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無料は5つまで。Proでは無制限です。"
+          }
+        }
+      }
+    },
+    "無料：5つまで。Pro：無制限。" : {
+      "comment" : "Footer: free plan up to 5 study apps; Pro unlimited",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Free: up to 5. Pro: unlimited."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無料：5つまで。Pro：無制限。"
+          }
+        }
+      }
     },
     "片付ける" : {
-      "comment" : "Alert action: clear the black stones"
+      "comment" : "Alert action: clear the black stones",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "片付ける"
+          }
+        }
+      }
+    },
+    "現在の選択は無料枠を超えています。5つ以下に減らすか、Proの購入を確認してください。" : {
+      "comment" : "Footer: more study apps than the free plan allows",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your selection is over the free limit. Choose 5 or fewer, or check your Pro purchase."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "現在の選択は無料枠を超えています。5つ以下に減らすか、Proの購入を確認してください。"
+          }
+        }
+      }
     },
     "瓶の黒い石を、このiPhoneから片付けます。選んだアプリと自動記録はそのまま続き、勉強時間と粒は変わりません。片付けた石は戻せません。" : {
-      "comment" : "Alert message: what clearing the black stones does"
+      "comment" : "Alert message: what clearing the black stones does",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This clears the black stones in your jar from this iPhone. Your chosen apps and recording continue, and your study time and gems don't change. Cleared stones can't be brought back."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶の黒い石を、このiPhoneから片付けます。選んだアプリと自動記録はそのまま続き、勉強時間と粒は変わりません。片付けた石は戻せません。"
+          }
+        }
+      }
+    },
+    "累計 %@" : {
+      "comment" : "Total time in the apps to cut down. %@ is a duration, e.g. 30分 (30 min).",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ in total"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "累計 %@"
+          }
+        }
+      }
     },
     "編集を続ける" : {
-      "comment" : "Dialog action: stay on the Screen Time settings"
+      "comment" : "Dialog action: stay on the Screen Time settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep Editing"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "編集を続ける"
+          }
+        }
+      }
+    },
+    "自動記録は停止中です。" : {
+      "comment" : "Status: recording is off",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recording is off."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自動記録は停止中です。"
+          }
+        }
+      }
     },
     "自動記録中" : {
-      "comment" : "Settings row subtitle: recording"
+      "comment" : "Settings row subtitle: recording",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recording"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自動記録中"
+          }
+        }
+      }
     },
     "要確認：勉強アプリの記録が止まっています" : {
-      "comment" : "Settings row subtitle: study apps stopped recording (free-plan limit); black stones still record"
+      "comment" : "Settings row subtitle: study apps stopped recording (free-plan limit); black stones still record",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Needs attention: study-app recording has stopped"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要確認：勉強アプリの記録が止まっています"
+          }
+        }
+      }
     },
     "要確認：自動記録が止まっています" : {
-      "comment" : "Settings row subtitle: recording stopped because of an error"
+      "comment" : "Settings row subtitle: recording stopped because of an error",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Needs attention: recording has stopped"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要確認：自動記録が止まっています"
+          }
+        }
+      }
     },
     "要確認：記録先のテーマが削除されました" : {
-      "comment" : "Settings row subtitle: the study-app destination theme was deleted"
+      "comment" : "Settings row subtitle: the study-app destination theme was deleted",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Needs attention: the theme for study apps was deleted"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要確認：記録先のテーマが削除されました"
+          }
+        }
+      }
     },
     "解除するのはこの集中のあいだだけです。次の集中では、また開けないようにします。" : {
-      "comment" : "Footer under the escape hatch: it lifts the shield for this focus only"
+      "comment" : "Footer under the escape hatch: it lifts the shield for this focus only",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This unblocks them for this focus only. Next focus, they're blocked again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "解除するのはこの集中のあいだだけです。次の集中では、また開けないようにします。"
+          }
+        }
+      }
+    },
+    "記録するアプリを1つ以上選んでください。" : {
+      "comment" : "Validation: recording is on but no apps are chosen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose at least one app to record."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録するアプリを1つ以上選んでください。"
+          }
+        }
+      }
+    },
+    "記録について" : {
+      "comment" : "Section header: about recording",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "About Recording"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録について"
+          }
+        }
+      }
+    },
+    "記録の保存先が変わりました。もう一度開いてください。" : {
+      "comment" : "Import error: where records are stored changed during the import; open the app again",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Where your records are stored has changed. Please open PomoGem again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録の保存先が変わりました。もう一度開いてください。"
+          }
+        }
+      }
+    },
+    "記録の準備が完了していないため、いまは変更を保存できません。「保存」を押すと、理由をお知らせします。" : {
+      "comment" : "Footer: the records are not ready, so changes cannot be saved yet; tapping Save explains why",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your records aren't ready yet, so changes can't be saved right now. Tap “Save” to see why."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録の準備が完了していないため、いまは変更を保存できません。「保存」を押すと、理由をお知らせします。"
+          }
+        }
+      }
+    },
+    "記録先のテーマ" : {
+      "comment" : "Picker: the theme that study-app time is added to",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Theme to Record To"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録先のテーマ"
+          }
+        }
+      }
     },
     "記録先のテーマが削除されたため、勉強アプリの記録を止めました" : {
-      "comment" : "Toast: the Screen Time destination theme was deleted, so study-app recording stopped"
+      "comment" : "Toast: the Screen Time destination theme was deleted, so study-app recording stopped",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Study-app recording stopped because its theme was deleted"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録先のテーマが削除されたため、勉強アプリの記録を止めました"
+          }
+        }
+      }
     },
     "記録先のテーマが削除されたため、勉強アプリの選択を解除しました。アプリとテーマを選び直して保存すると、記録を再開します。" : {
-      "comment" : "Footer: the destination theme was deleted and the study apps were cleared"
+      "comment" : "Footer: the destination theme was deleted and the study apps were cleared",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The theme for study apps was deleted, so the study-app selection was cleared. Choose apps and a theme again, then save to resume recording."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録先のテーマが削除されたため、勉強アプリの選択を解除しました。アプリとテーマを選び直して保存すると、記録を再開します。"
+          }
+        }
+      }
+    },
+    "設定を完了できませんでした" : {
+      "comment" : "Alert title: saving, clearing or resetting the Screen Time settings failed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't Update Screen Time"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定を完了できませんでした"
+          }
+        }
+      }
     },
     "設定アプリを開く" : {
-      "comment" : "Button: open the iOS Settings app to fix Screen Time access"
+      "comment" : "Button: open the iOS Settings app to fix Screen Time access",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open the Settings App"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定アプリを開く"
+          }
+        }
+      }
     },
     "許可するには、iPhoneのパスコード、Apple Accountへのサインイン、インターネット接続が必要です。" : {
-      "comment" : "Footer: prerequisites for Screen Time access"
+      "comment" : "Footer: prerequisites for Screen Time access",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allowing access needs an iPhone passcode, a signed-in Apple Account, and an internet connection."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "許可するには、iPhoneのパスコード、Apple Accountへのサインイン、インターネット接続が必要です。"
+          }
+        }
+      }
+    },
+    "許可を確認中…" : {
+      "comment" : "Button while the Screen Time permission request runs",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking Access…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "許可を確認中…"
+          }
+        }
+      }
     },
     "購入状況を確認しています。確認が終わると保存できます。" : {
-      "comment" : "Footer: StoreKit has not answered yet, so a selection over the free limit waits"
+      "comment" : "Footer: StoreKit has not answered yet, so a selection over the free limit waits",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking your purchase. You can save once that's done."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "購入状況を確認しています。確認が終わると保存できます。"
+          }
+        }
+      }
     },
     "通信できなかったため、許可を確認できませんでした。インターネットにつながる状態で、もう一度お試しください。" : {
-      "comment" : "Screen Time access failed: network error"
+      "comment" : "Screen Time access failed: network error",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't check access because there was no connection. Connect to the internet, then try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通信できなかったため、許可を確認できませんでした。インターネットにつながる状態で、もう一度お試しください。"
+          }
+        }
+      }
     },
     "選んだアプリや記録の設定は、保存するまで反映されません。" : {
-      "comment" : "Dialog message: unsaved Screen Time edits"
+      "comment" : "Dialog message: unsaved Screen Time edits",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your chosen apps and recording settings don't take effect until you save."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選んだアプリや記録の設定は、保存するまで反映されません。"
+          }
+        }
+      }
     },
     "選んだアプリや記録の設定は、保存するまで反映されません。いまの内容のままでは保存できないため、戻ると変更は破棄されます。" : {
-      "comment" : "Dialog message: unsaved Screen Time edits that cannot be saved yet"
+      "comment" : "Dialog message: unsaved Screen Time edits that cannot be saved yet",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your chosen apps and recording settings don't take effect until you save. These changes can't be saved as they are, so going back discards them."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選んだアプリや記録の設定は、保存するまで反映されません。いまの内容のままでは保存できないため、戻ると変更は破棄されます。"
+          }
+        }
+      }
     },
     "選んだアプリを合計10分使うごとに、記録先のテーマへ粒（10分・100g）と勉強時間を追加します。" : {
-      "comment" : "Footer: how study-app time becomes pebbles"
+      "comment" : "Footer: how study-app time becomes pebbles",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Every 10 minutes in the chosen apps adds a gem (10 min · 100 g) and study time to the chosen theme."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選んだアプリを合計10分使うごとに、記録先のテーマへ粒（10分・100g）と勉強時間を追加します。"
+          }
+        }
+      }
+    },
+    "選んでください" : {
+      "comment" : "Picker placeholder: no theme chosen yet",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選んでください"
+          }
+        }
+      }
+    },
+    "閉じる" : {
+      "comment" : "Alert button: dismiss",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "閉じる"
+          }
+        }
+      }
     },
     "開くのはポモジェムの設定ページです。左上の「<」で設定の最初の画面まで戻ってください。" : {
-      "comment" : "Caption under the button that opens the Settings app: how to reach the page the message names"
+      "comment" : "Caption under the button that opens the Settings app: how to reach the page the message names",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This opens PomoGem's page in Settings. Tap “<” at the top left to go back to the first Settings screen."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開くのはポモジェムの設定ページです。左上の「<」で設定の最初の画面まで戻ってください。"
+          }
+        }
+      }
     },
     "集中中のアプリ制限" : {
-      "comment" : "Section header on the Screen Time page: blocking the apps to cut down while a PomoGem focus runs"
+      "comment" : "Section header on the Screen Time page: blocking the apps to cut down while a PomoGem focus runs",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App Blocking During Focus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中中のアプリ制限"
+          }
+        }
+      }
     },
     "集中中は気が散るアプリを開けないようにする" : {
-      "comment" : "Toggle: shield the apps to cut down while a PomoGem focus runs"
+      "comment" : "Toggle: shield the apps to cut down while a PomoGem focus runs",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Block Distracting Apps During Focus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中中は気が散るアプリを開けないようにする"
+          }
+        }
+      }
     },
     "黒い石" : {
-      "comment" : "Section header: apps to cut down that add black stones"
+      "comment" : "Section header: apps to cut down that add black stones",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Black Stones"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "黒い石"
+          }
+        }
+      }
+    },
+    "黒い石 +%lld" : {
+      "comment" : "Toast part: black stones added. en needs plural variations: '+%lld black stone' / '+%lld black stones'.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "+%lld black stone"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "+%lld black stones"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "黒い石 +%lld"
+          }
+        }
+      }
     },
     "黒い石、10分 × %lld個ぶん、累計 %@" : {
       "comment" : "VoiceOver: black-stone total and minutes",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Black stones, %1$lld × 10 min, %2$@ in total"
+          }
+        },
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "黒い石、10分 × %1$lld個ぶん、累計 %2$@"
+            "state" : "translated",
+            "value" : "黒い石、10分 × %lld個ぶん、累計 %@"
           }
         }
       }
     },
     "黒い石だけを片付けるときは、上の「黒い石を片付ける」を使います。アプリの選択はそのまま残ります。" : {
-      "comment" : "Footer: point to the lighter black-stone clear"
+      "comment" : "Footer: point to the lighter black-stone clear",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To clear only the black stones, use “Clear Black Stones” above. Your app selection stays."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "黒い石だけを片付けるときは、上の「黒い石を片付ける」を使います。アプリの選択はそのまま残ります。"
+          }
+        }
+      }
     },
     "黒い石を片付けました" : {
-      "comment" : "Toast: the black stones were cleared"
+      "comment" : "Toast: the black stones were cleared",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Black stones cleared"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "黒い石を片付けました"
+          }
+        }
+      }
     },
     "黒い石を片付けますか？" : {
-      "comment" : "Alert title: clear only the black stones"
+      "comment" : "Alert title: clear only the black stones",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear Black Stones?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "黒い石を片付けますか？"
+          }
+        }
+      }
     },
     "黒い石を片付けられませんでした。もう一度お試しください。" : {
-      "comment" : "Alert: clearing the black stones failed for an unexpected reason"
+      "comment" : "Alert: clearing the black stones failed for an unexpected reason",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't clear the black stones. Please try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "黒い石を片付けられませんでした。もう一度お試しください。"
+          }
+        }
+      }
     },
     "黒い石を片付ける" : {
-      "comment" : "Button: clear only the black stones"
+      "comment" : "Button: clear only the black stones",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear Black Stones"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "黒い石を片付ける"
+          }
+        }
+      }
     },
     "黒い石同士だけがまとまります。勉強時間には加算されず、積んだ粒も減りません。" : {
-      "comment" : "Footer: black stones never reduce study"
+      "comment" : "Footer: black stones never reduce study",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Black stones only combine with each other. They don't count toward study time and never reduce your gems."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "黒い石同士だけがまとまります。勉強時間には加算されず、積んだ粒も減りません。"
+          }
+        }
+      }
     },
     "黒い石：10分 × %lld個ぶん" : {
-      "comment" : "Black-stone total; the number counts ten-minute units"
+      "comment" : "Black-stone total; the number counts ten-minute units",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Black stones: %lld × 10 min"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "黒い石：10分 × %lld個ぶん"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

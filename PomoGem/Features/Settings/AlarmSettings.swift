@@ -137,7 +137,11 @@ enum AlarmSettingsCopy {
     /// description is the substance of the choice, so it is never left to
     /// a hint that people may have turned off.
     static func optionLabel(title: String, detail: String) -> String {
-        detail.isEmpty ? title : "\(title)。\(detail)"
+        detail.isEmpty ? title : String(
+            localized: "\(title)。\(detail)",
+            table: "Settings",
+            comment: "VoiceOver option label: option title, then its detail as a sentence. en: '%1$@. %2$@'"
+        )
     }
 
     /// VoiceOver hint of a sound option: what choosing it does.

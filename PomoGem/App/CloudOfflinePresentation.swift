@@ -114,88 +114,145 @@ struct CloudOfflineBanner: View {
     @State private var showsDetails = false
 
     var body: some View {
-        HStack(spacing: 12) {
-            Button {
-                showsDetails = true
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "icloud.slash")
-                        .font(.system(size: 18))
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("端末に保存")
-                            .font(.caption.weight(.semibold))
-                        Text(syncIsStopped ? "同期停止中" : "同期待ち")
-                            .font(.caption)
-                    }
-                    .fixedSize(horizontal: false, vertical: true)
-                    Image(systemName: "info.circle")
-                        .font(.system(size: 16))
-                        .accessibilityHidden(true)
-                }
-                .frame(minHeight: 44, alignment: .leading)
-                .contentShape(Rectangle())
+        layout
+            .foregroundStyle(PomoGemTheme.text)
+            .padding(12)
+            .background(PomoGemTheme.background)
+            // Identifiers belong to the controls. An identifier on this container
+            // can replace the children's identifiers in SwiftUI's AX hierarchy.
+            .sheet(isPresented: $showsDetails) {
+                details
+                    .dynamicTypeSize(dynamicTypeSize)
+                    .presentationDetents([.large])
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("\(statusTitle)。詳細を表示")
-            .accessibilityIdentifier("cloud-offline-details")
+    }
+
+    /// The status sits in one row with the action beside it. At accessibility
+    /// sizes an English status line ("Saving to device") is wider than a phone,
+    /// and the row wrapped it into four short lines. When a status line cannot
+    /// stay on one line in the row, the action moves under the status and the
+    /// small fixed-size cloud symbol is dropped, so each status line gets the
+    /// banner's full width. The Japanese status fits the row, so its layout
+    /// does not change.
+    @ViewBuilder
+    private var layout: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            ViewThatFits(in: .horizontal) {
+                row
+                VStack(alignment: .trailing, spacing: 8) {
+                    detailsButton(showsStatusSymbol: false)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    trailingAction
+                }
+            }
+        } else {
+            row
+        }
+    }
+
+    private var row: some View {
+        HStack(spacing: 12) {
+            detailsButton(showsStatusSymbol: true)
+                // Without a priority the HStack splits the free width evenly
+                // between this button and the Spacer, so the status wrapped at
+                // half the row while the other half stayed empty.
+                .layoutPriority(1)
 
             Spacer(minLength: 0)
 
-            if recoveryKind != nil {
-                Button {
-                    showsDetails = true
-                } label: {
-                    Group {
-                        if dynamicTypeSize.isAccessibilitySize {
-                            Image(systemName: "exclamationmark.icloud")
-                                .font(.system(size: 20))
-                        } else {
-                            Text("復旧手順")
-                                .font(.subheadline.weight(.semibold))
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .frame(minWidth: 44, minHeight: 44)
-                    .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 10))
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("端末の記録を保持して復旧手順を表示")
-                .accessibilityIdentifier("cloud-offline-recovery-details")
-            } else if let retry {
-                Button(action: retry) {
-                    Group {
-                        if dynamicTypeSize.isAccessibilitySize {
-                            // A labelled icon leaves room for the readable,
-                            // uncapped status text at accessibility sizes.
-                            Image(systemName: isChecking ? "hourglass" : "arrow.clockwise")
-                                .font(.system(size: 20))
-                        } else {
-                            Text(isChecking ? "確認中" : "同期を再開")
-                                .font(.subheadline.weight(.semibold))
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .frame(minWidth: 44, minHeight: 44)
-                    .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 10))
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .disabled(isChecking)
-                .accessibilityLabel(isChecking ? "接続を確認中" : "同期を再開")
-                .accessibilityIdentifier("cloud-offline-retry")
-            }
+            trailingAction
         }
-        .foregroundStyle(PomoGemTheme.text)
-        .padding(12)
-        .background(PomoGemTheme.background)
-        // Identifiers belong to the controls. An identifier on this container
-        // can replace the children's identifiers in SwiftUI's AX hierarchy.
-        .sheet(isPresented: $showsDetails) {
-            details
-                .dynamicTypeSize(dynamicTypeSize)
-                .presentationDetents([.large])
+    }
+
+    private func detailsButton(showsStatusSymbol: Bool) -> some View {
+        Button {
+            showsDetails = true
+        } label: {
+            HStack(spacing: 8) {
+                if showsStatusSymbol {
+                    Image(systemName: "icloud.slash")
+                        .font(.system(size: 18))
+                        .accessibilityHidden(true)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("端末に保存", tableName: "Launch",
+                         comment: "Offline banner, first line: records are being saved on this device")
+                        .font(.caption.weight(.semibold))
+                    Text(syncIsStopped
+                         ? String(localized: "同期停止中", table: "Launch",
+                                  comment: "Offline banner, second line: iCloud sync is stopped until a decision")
+                         : String(localized: "同期待ち", table: "Launch",
+                                  comment: "Offline banner, second line: iCloud sync waits for a connection"))
+                        .font(.caption)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                Image(systemName: "info.circle")
+                    .font(.system(size: 16))
+                    .accessibilityHidden(true)
+            }
+            .frame(minHeight: 44, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("\(statusTitle)。詳細を表示", tableName: "Launch",
+                                 comment: "VoiceOver: offline banner button. %@ is the sync status title"))
+        .accessibilityIdentifier("cloud-offline-details")
+    }
+
+    @ViewBuilder
+    private var trailingAction: some View {
+        if recoveryKind != nil {
+            Button {
+                showsDetails = true
+            } label: {
+                Group {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        Image(systemName: "exclamationmark.icloud")
+                            .font(.system(size: 20))
+                    } else {
+                        Text("復旧手順", tableName: "Launch",
+                             comment: "Offline banner button: opens the recovery steps")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                }
+                .padding(.horizontal, 12)
+                .frame(minWidth: 44, minHeight: 44)
+                .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 10))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("端末の記録を保持して復旧手順を表示", tableName: "Launch",
+                                     comment: "VoiceOver: offline banner recovery button"))
+            .accessibilityIdentifier("cloud-offline-recovery-details")
+        } else if let retry {
+            Button(action: retry) {
+                Group {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        // A labelled icon leaves room for the readable,
+                        // uncapped status text at accessibility sizes.
+                        Image(systemName: isChecking ? "hourglass" : "arrow.clockwise")
+                            .font(.system(size: 20))
+                    } else {
+                        Text(isChecking
+                             ? String(localized: "確認中", table: "Launch",
+                                      comment: "Offline banner button while the connection is being checked")
+                             : String(localized: "同期を再開", table: "Launch",
+                                      comment: "Offline banner button: re-check the connection and resume sync"))
+                            .font(.subheadline.weight(.semibold))
+                    }
+                }
+                .padding(.horizontal, 12)
+                .frame(minWidth: 44, minHeight: 44)
+                .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 10))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(isChecking)
+            .accessibilityLabel(isChecking
+                ? Text("接続を確認中", tableName: "Launch", comment: "VoiceOver: the connection is being checked")
+                : Text("同期を再開", tableName: "Launch",
+                       comment: "Offline banner button: re-check the connection and resume sync"))
+            .accessibilityIdentifier("cloud-offline-retry")
         }
     }
 
@@ -207,7 +264,11 @@ struct CloudOfflineBanner: View {
     private var syncIsStopped: Bool { recoveryKind != nil }
 
     private var statusTitle: String {
-        syncIsStopped ? "このiPhoneに保存・iCloud同期は停止中" : "このiPhoneに保存・iCloud同期は待機中"
+        syncIsStopped
+            ? String(localized: "このiPhoneに保存・iCloud同期は停止中", table: "Launch",
+                     comment: "Sync status title: saving on this iPhone; iCloud sync is stopped until a decision")
+            : String(localized: "このiPhoneに保存・iCloud同期は待機中", table: "Launch",
+                     comment: "Sync status title: saving on this iPhone; iCloud sync waits for a connection")
     }
 
     private var details: some View {
@@ -220,35 +281,37 @@ struct CloudOfflineBanner: View {
                     Text(message)
                         .accessibilityIdentifier("cloud-offline-details-message")
                     if retry != nil {
-                        Text("変更はこのiPhoneに保存されます。iCloudへの送信はまだ完了していません。")
+                        Text("変更はこのiPhoneに保存されます。iCloudへの送信はまだ完了していません。", tableName: "Launch")
                             .accessibilityIdentifier("cloud-offline-details-pending")
                         Text(CloudOfflineAccessPolicy.accessDescription)
                             .accessibilityIdentifier("cloud-offline-details-account")
                         if recoveryKind == nil {
-                            Text("通信が戻ったら「同期を再開」で接続を確認できます。")
+                            Text("通信が戻ったら「同期を再開」で接続を確認できます。", tableName: "Launch",
+                                 comment: "「同期を再開」 is the banner button's title")
                         }
-                        Text("同じアカウントとデータを確認できるまで、iCloudとの同期は始まりません。")
+                        Text("同じアカウントとデータを確認できるまで、iCloudとの同期は始まりません。", tableName: "Launch")
                             .accessibilityIdentifier("cloud-offline-details-recovery")
                         if recoveryKind == .storageTransfer, let reviewRecovery {
-                            Text("端末の記録を保持して、この画面を閉じて利用を続けられます。復旧手順へ進むと現在の記録画面を閉じ、iCloudの状態を確認します。データの置き換えや削除には、その後の確認が必要です。")
+                            Text("端末の記録を保持して、この画面を閉じて利用を続けられます。復旧手順へ進むと現在の記録画面を閉じ、iCloudの状態を確認します。データの置き換えや削除には、その後の確認が必要です。", tableName: "Launch")
                                 .accessibilityIdentifier("cloud-offline-recovery-disclosure")
-                            Button("復旧手順を確認", action: reviewRecovery)
+                            Button(String(localized: "復旧手順を確認", table: "Launch"), action: reviewRecovery)
                                 .buttonStyle(PomoGemPrimaryButtonStyle())
                                 .disabled(isChecking)
                                 .accessibilityIdentifier("cloud-offline-review-recovery")
                         } else if recoveryKind == .resetHistory {
-                            Text("記録の履歴が異なるため、自動で結合・送信できません。この画面を閉じて端末への記録を続けるか、設定の「データを書き出す」で記録を保存してください。同期の復旧についてはサポートへご相談ください。この操作で端末やiCloudの記録は削除しません。")
+                            Text("記録の履歴が異なるため、自動で結合・送信できません。この画面を閉じて端末への記録を続けるか、設定の「データを書き出す」で記録を保存してください。同期の復旧についてはサポートへご相談ください。この操作で端末やiCloudの記録は削除しません。", tableName: "Launch",
+                                 comment: "「データを書き出す」 is the export button's title in Settings")
                                 .accessibilityIdentifier("cloud-offline-history-options")
-                            Link("サポートを見る", destination: AppLinks.support)
+                            Link(String(localized: "サポートを見る", table: "Launch"), destination: AppLinks.support)
                                 .buttonStyle(PomoGemSecondaryButtonStyle())
                         }
                     } else {
                         // A normally mirrored store also uses this banner when
                         // the path goes offline. It does not use manual retry
                         // admission and CloudKit continues its own scheduling.
-                        Text("このiPhoneへの保存と、iCloudへの送信完了は別です。接続状態だけでは送信完了を確認できません。")
+                        Text("このiPhoneへの保存と、iCloudへの送信完了は別です。接続状態だけでは送信完了を確認できません。", tableName: "Launch")
                             .accessibilityIdentifier("cloud-offline-details-pending")
-                        Text("通信の回復後、iCloudの同期はシステムが再試行します。")
+                        Text("通信の回復後、iCloudの同期はシステムが再試行します。", tableName: "Launch")
                             .accessibilityIdentifier("cloud-offline-details-recovery")
                     }
                 }
@@ -259,7 +322,7 @@ struct CloudOfflineBanner: View {
             }
             .foregroundStyle(PomoGemTheme.text)
             .background(PomoGemTheme.background)
-            .navigationTitle("同期の状態")
+            .navigationTitle(Text("同期の状態", tableName: "Launch"))
             .navigationBarTitleDisplayMode(.inline)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 // A navigation toolbar may shrink the accessible button frame
@@ -268,7 +331,7 @@ struct CloudOfflineBanner: View {
                 Button {
                     showsDetails = false
                 } label: {
-                    Text("閉じる")
+                    Text("閉じる", tableName: "Launch", comment: "Button: closes the sync status sheet")
                         .font(.headline)
                         .frame(maxWidth: .infinity, minHeight: 44)
                         .padding(.vertical, 8)

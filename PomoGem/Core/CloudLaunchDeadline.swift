@@ -6,9 +6,9 @@ enum CloudLaunchDeadlineError: Error, LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .expired:
-            "iCloudの確認に時間がかかっています。端末内の記録を保護しています。通信状態を確認して再試行してください。"
+            String(localized: "iCloudの確認に時間がかかっています。端末内の記録を保護しています。通信状態を確認して再試行してください。", table: "Launch")
         case .finished, .operationsInFlight:
-            "起動処理の状態が変わりました。もう一度お試しください。"
+            String(localized: "起動処理の状態が変わりました。もう一度お試しください。", table: "Launch")
         }
     }
 }

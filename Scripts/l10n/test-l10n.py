@@ -42,7 +42,7 @@ class FixtureRepo:
         config["development_region"] = development_region
         self.write("Scripts/l10n/table-map.json", json.dumps(config, ensure_ascii=False, indent=2))
         self.write("Scripts/l10n/glossary.json", (HERE / "glossary.json").read_text(encoding="utf-8"))
-        for relative in config["catalogs"].values():
+        for relative in list(config["catalogs"].values()) + list(config.get("system_catalogs", {}).values()):
             self.catalog(relative, {})
         info = {
             "PomoGem/Info.plist": {"CFBundleDisplayName": "ポモジェム", "NSMotionUsageDescription": "動かします。"},
@@ -350,6 +350,43 @@ class CatalogCheckTests(unittest.TestCase):
         finally:
             fixture.close()
 
+    def test_action_label_glossary_does_not_force_label_into_a_sentence(self):
+        fixture = FixtureRepo(shipping=("ja", "en"))
+        try:
+            fixture.catalog("PomoGem/Localization/Paywall.xcstrings", {
+                "購入を復元": {"localizations": {"en": unit("Restore Purchases")}},
+                "購入を復元しました。Proの機能を使えます。": {
+                    "localizations": {"en": unit("Your purchase has been restored. You can use Pro features.")}
+                },
+            })
+            _, output = fixture.run("check", "--strict")
+            self.assertNotIn("glossary term 購入を復元", output)
+
+            fixture.catalog("PomoGem/Localization/Paywall.xcstrings", {
+                "購入を復元": {"localizations": {"en": unit("Restore your purchase")}},
+                "購入を復元しました。Proの機能を使えます。": {
+                    "localizations": {"en": unit("Your purchase has been restored. You can use Pro features.")}
+                },
+            })
+            _, output = fixture.run("check", "--strict")
+            self.assertIn("'購入を復元' [en]: glossary term 購入を復元", output)
+            self.assertNotIn("'購入を復元しました。Proの機能を使えます。' [en]: glossary term 購入を復元", output)
+        finally:
+            fixture.close()
+
+    def test_brand_spelling_is_matched_by_case(self):
+        fixture = FixtureRepo(shipping=("ja", "en"))
+        try:
+            fixture.catalog("PomoGem/Localization/Home.xcstrings", {
+                "ポモジェム": {"localizations": {"en": unit("PomoGem")}},
+                "ポモジェムPro": {"localizations": {"en": unit("Pomogem Pro")}},
+            })
+            code, output = fixture.run("check", "--verbose")
+            self.assertNotIn("'ポモジェム' [en]: 'Pomogem'", output, "the correct spelling is not a misspelling")
+            self.assertIn("'ポモジェムPro' [en]: 'Pomogem' is not used", output)
+        finally:
+            fixture.close()
+
     def test_info_plist_catalog_must_repeat_info_plist(self):
         fixture = FixtureRepo()
         try:
@@ -507,6 +544,112 @@ class StringsdataTests(unittest.TestCase):
             code, output = fixture.run("check", "--derived-data", derived)
             self.assertEqual(code, 1)
             self.assertIn("outside this checkout", output)
+        finally:
+            fixture.close()
+
+
+APP_SHORTCUTS = "PomoGem/Localization/AppShortcuts.xcstrings"
+PHRASES_KEY = "${applicationName}で集中を始める"
+PHRASES = [PHRASES_KEY, "${applicationName}で${length}集中する"]
+
+
+def phrase_set(values, state="translated"):
+    return {"stringSet": {"state": state, "values": list(values)}}
+
+
+def write_phrases(derived, fixture, phrases=PHRASES):
+    """ExtractedAppShortcutsMetadata.stringsdata as the App Intents metadata processor writes it."""
+    intent = "PomoGem/App/Intents/StartFocusIntent.swift"
+    if not (fixture.root / intent).exists():
+        fixture.write(intent, "// source\n")
+    objects = Path(derived) / "Build/Intermediates.noindex/PomoGem.build/Debug-iphonesimulator/PomoGem.build/Objects-normal/arm64"
+    objects.mkdir(parents=True, exist_ok=True)
+    (objects / "ExtractedAppShortcutsMetadata.stringsdata").write_text(json.dumps({
+        "source": str(fixture.root / intent),
+        "tables": {"AppShortcuts": [{"key": phrases[0], "values": list(phrases)}]},
+        "version": 2,
+    }, ensure_ascii=False), encoding="utf-8")
+
+
+class AppShortcutPhraseTests(unittest.TestCase):
+    """App Shortcut phrases live in AppShortcuts.xcstrings as one stringSet per shortcut."""
+
+    def test_the_catalog_is_part_of_the_table_map(self):
+        self.assertEqual(REAL_CONFIG["system_catalogs"], {"AppShortcuts": APP_SHORTCUTS})
+        self.assertIn("AppShortcuts", REAL_CONFIG["system_tables"])
+
+    def test_english_phrases_need_the_japanese_ones_while_english_is_the_fallback(self):
+        fixture = FixtureRepo(shipping=("ja", "en"), development_region="en")
+        try:
+            english = phrase_set(["Start focus in ${applicationName}", "Focus for ${length} in ${applicationName}"])
+            fixture.catalog(APP_SHORTCUTS, {PHRASES_KEY: {"localizations": {"en": english}}})
+            code, output = fixture.run("check")
+            self.assertEqual(code, 1)
+            self.assertIn("has no 'ja' phrases", output)
+            fixture.catalog(APP_SHORTCUTS, {PHRASES_KEY: {"localizations": {"en": english, "ja": phrase_set(PHRASES, "new")}}})
+            self.assertIn("has no 'ja' phrases", fixture.run("check")[1], "a 'new' Japanese set is not compiled")
+            fixture.catalog(APP_SHORTCUTS, {PHRASES_KEY: {"localizations": {"en": english, "ja": phrase_set(PHRASES)}}})
+            code, output = fixture.run("check")
+            self.assertNotIn("AppShortcuts", output)
+            self.assertEqual(code, 0, output)
+        finally:
+            fixture.close()
+
+    def test_every_translated_phrase_names_the_app_and_known_parameters(self):
+        fixture = FixtureRepo(shipping=("ja", "en"))
+        try:
+            fixture.catalog(APP_SHORTCUTS, {PHRASES_KEY: {"localizations": {
+                "ja": phrase_set(PHRASES),
+                "en": phrase_set(["Start a focus", "Focus for ${minutes} in ${applicationName}", "集中 in ${applicationName}"]),
+            }}})
+            code, output = fixture.run("check")
+            self.assertEqual(code, 1)
+            self.assertIn("'Start a focus' must contain ${applicationName}", output)
+            self.assertIn("uses unknown parameter(s) ['minutes']", output)
+            self.assertIn("Japanese characters left", output)
+        finally:
+            fixture.close()
+
+    @unittest.skipUnless(has_xcstringstool(), "xcstringstool is part of Xcode")
+    def test_sync_writes_the_japanese_phrases_and_check_compares_them_with_the_code(self):
+        fixture = FixtureRepo(shipping=("ja", "en"), development_region="en")
+        try:
+            derived = build_derived_data(fixture, {
+                "PomoGem": {"PomoGem/App/Intents/StartFocusIntent.swift": {"Focus": ["集中を始める"]}},
+                "PomoGemWidgets": {"PomoGemWidgets/Widget.swift": {}},
+                "PomoGemScreenTimeMonitor": {"PomoGemScreenTimeMonitor/Monitor.swift": {}},
+            })
+            write_phrases(derived, fixture)
+            code, output = fixture.run("check", "--derived-data", derived)
+            self.assertIn(f"{PHRASES_KEY!r} is not in the catalog", output)
+            self.assertEqual(fixture.run("sync", "--derived-data", derived)[0], 0)
+            path = fixture.root / APP_SHORTCUTS
+            strings = json.loads(path.read_text(encoding="utf-8"))["strings"]
+            self.assertEqual(strings[PHRASES_KEY]["localizations"]["ja"], phrase_set(PHRASES))
+            code, output = fixture.run("check", "--derived-data", derived)
+            self.assertEqual(code, 0, output)
+            self.assertNotIn("is not in the catalog", output)
+            self.assertNotIn("[source-value]", output)
+            self.assertIn("has no 'en' phrases", output, "missing English is reported, not enforced, until the table has English")
+            with tempfile.TemporaryDirectory() as directory:
+                subprocess.run(["xcrun", "xcstringstool", "compile", str(path), "--output-directory", directory], check=True)
+                self.assertTrue((Path(directory) / "ja.lproj" / "AppShortcuts.strings").exists())
+
+            # An edited Japanese phrase reaches the catalog on the next sync.
+            edited = [PHRASES_KEY, "${applicationName}で${length}集中を始める"]
+            write_phrases(derived, fixture, edited)
+            code, output = fixture.run("check", "--derived-data", derived)
+            self.assertIn("Japanese phrases differ from the code", output)
+            self.assertEqual(fixture.run("sync", "--derived-data", derived)[0], 0)
+            strings = json.loads(path.read_text(encoding="utf-8"))["strings"]
+            self.assertEqual(strings[PHRASES_KEY]["localizations"]["ja"], phrase_set(edited))
+
+            # English goes in with `set`, as a list of phrases.
+            english = fixture.write("en.json", json.dumps({PHRASES_KEY: ["Start focus in ${applicationName}", "Focus for ${length} in ${applicationName}"]}))
+            self.assertEqual(fixture.run("set", "--table", "AppShortcuts", "--from", str(english))[0], 0)
+            strings = json.loads(path.read_text(encoding="utf-8"))["strings"]
+            self.assertEqual(strings[PHRASES_KEY]["localizations"]["en"]["stringSet"]["values"][0], "Start focus in ${applicationName}")
+            self.assertEqual(fixture.run("format", "--check")[0], 0)
         finally:
             fixture.close()
 
@@ -681,11 +824,13 @@ class BundleTests(unittest.TestCase):
         fixture = FixtureRepo(shipping=("ja", "en"))
         try:
             fixture.catalog("PomoGem/Localization/Home.xcstrings", {"集中": {"localizations": {"en": unit("Focus")}}})
+            fixture.catalog("PomoGem/Localization/Log.xcstrings", {"記録": {}})
             every = set(REAL_CONFIG["bundle_paths"])
             app = self.make_app(fixture, "app", {"ja": every, "en": every})
             code, output = fixture.run("verify-bundle", str(app))
             self.assertEqual(code, 1)
             self.assertIn("PomoGem.app: en.lproj has no Home table", output)
+            self.assertNotIn("no Log table", output, "a table without English yet compiles nothing for English")
             (app / "en.lproj" / "Home.strings").write_text('"集中" = "Focus";\n', encoding="utf-8")
             code, output = fixture.run("verify-bundle", str(app))
             self.assertEqual(code, 0, output)

@@ -2,15 +2,20 @@ import XCTest
 
 /// The language every UI test launches PomoGem in.
 ///
-/// UI tests find elements by their Japanese labels. Today the app has only a
-/// Japanese localization, but once it also ships English a Simulator or iPhone
-/// set to English would open the app in English and those queries would miss.
-/// Every launch goes through this helper so none can forget the pin;
+/// Most UI tests find elements by their Japanese labels; the English smoke
+/// test checks the shipping English interface. Every launch goes through this
+/// helper so none can forget the intended language;
 /// `Scripts/l10n/l10n.py check` rejects a launch that is not pinned. For the
 /// same reason it also tags the launch with the running test
 /// (`PomoGemUITestScenario`).
 enum PomoGemUITestLanguage {
     static let japaneseArguments = ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+    static let englishArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+
+    static func configureEnglish(_ application: XCUIApplication) {
+        application.launchArguments = withoutLanguagePin(application.launchArguments) + englishArguments
+        PomoGemUITestScenario.tag(application)
+    }
 
     /// Launch in Japanese with the Japan region. Idempotent: a relaunch of the
     /// same application keeps exactly one language pin.

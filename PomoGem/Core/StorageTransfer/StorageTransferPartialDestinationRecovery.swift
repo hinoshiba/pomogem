@@ -7,7 +7,8 @@ enum StorageTransferPartialRecoveryError: Error, LocalizedError, Equatable {
     case invalidPlan, stalePlan, wrongRecovery, destinationAlreadyStarted
 
     var errorDescription: String? {
-        "iCloudの途中データが復旧用コピーの一部であると確認できないため、復旧を停止しています。"
+        String(localized: "iCloudの途中データが復旧用コピーの一部であると確認できないため、復旧を停止しています。",
+               table: "Storage", comment: "Recovery stopped: partial data in iCloud cannot be matched to the recovery copy")
     }
 }
 

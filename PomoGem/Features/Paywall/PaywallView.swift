@@ -51,7 +51,7 @@ struct PaywallView: View {
             get: { alert != nil },
             set: { if !$0 { alert = nil } }
         ), presenting: alert) { _ in
-            Button("閉じる", role: .cancel) {
+            Button(String(localized: "閉じる", table: "Paywall", comment: "Paywall alert button: close the alert"), role: .cancel) {
                 if purchase.isPro { dismiss() }
             }
         } message: { alert in
@@ -113,9 +113,11 @@ struct PaywallView: View {
         case .aggregateLabels:
             String(localized: "結晶に、作った月を刻めます。", table: "Paywall", comment: "Paywall subtitle when opened from the crystal month-label hint")
         case .screenTimeApps:
-            "勉強時間を記録するアプリを、数の制限なく選べます。"
+            String(localized: "勉強時間を記録するアプリを、数の制限なく選べます。", table: "Paywall",
+                   comment: "Paywall subtitle when opened from Screen Time's study-app limit")
         case .settings:
-            "集中のリズムと、残し方をもっと自由に。"
+            String(localized: "集中のリズムと、残し方をもっと自由に。", table: "Paywall",
+                   comment: "Paywall subtitle when opened from Settings: more freedom in how you focus and keep your record")
         }
     }
 
@@ -158,17 +160,8 @@ struct PaywallView: View {
     private var currentEntitlementCard: some View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .center, spacing: 12) {
-                    Label {
-                        Text("ポモジェムPro", tableName: "Paywall", comment: "Paywall: title of the card shown once Pro is owned")
-                    } icon: {
-                        Image(systemName: "checkmark.seal.fill")
-                            .accessibilityHidden(true)
-                    }
-                        .font(.headline)
-                        .foregroundStyle(PomoGemTheme.amber)
-                    Spacer()
-                    Text("購入済み")
+                cardHeader(symbol: "checkmark.seal.fill", alignment: .center) {
+                    Text("購入済み", tableName: "Paywall", comment: "Paywall badge: Pro is already purchased")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(PomoGemTheme.background)
                         .padding(.horizontal, 10)
@@ -177,15 +170,21 @@ struct PaywallView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("買い切り版")
+                    Text("買い切り版", tableName: "Paywall", comment: "Paywall, Pro owned: the one-time purchase edition")
                         .font(.title3.weight(.bold))
-                    Text("Pro機能をずっと利用できます。更新や解約はありません。")
+                    Text("Pro機能をずっと利用できます。更新や解約はありません。", tableName: "Paywall",
+                         comment: "Paywall, Pro owned: Pro features stay available; nothing to renew or cancel")
                         .font(.subheadline)
                         .foregroundStyle(PomoGemTheme.muted)
                 }
 
                 Link(destination: Self.purchaseHistoryURL) {
-                    Label("Appleの購入履歴を確認", systemImage: "arrow.up.right.square")
+                    Label {
+                        Text("Appleの購入履歴を確認", tableName: "Paywall",
+                             comment: "Paywall, Pro owned: link to Apple's purchase history on reportaproblem.apple.com")
+                    } icon: {
+                        Image(systemName: "arrow.up.right.square")
+                    }
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(PomoGemTheme.text)
                         .frame(maxWidth: .infinity)
@@ -202,12 +201,8 @@ struct PaywallView: View {
     private func productCard(_ product: Product) -> some View {
         PomoGemCard {
             VStack(spacing: 18) {
-                HStack(spacing: 12) {
-                    Label("ポモジェムPro", systemImage: "sparkles")
-                        .font(.headline)
-                        .foregroundStyle(PomoGemTheme.amber)
-                    Spacer()
-                    Text("買い切り")
+                cardHeader(symbol: "sparkles") {
+                    Text("買い切り", tableName: "Paywall", comment: "Paywall badge: one-time purchase (no subscription)")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(PomoGemTheme.amber)
                         .padding(.horizontal, 10)
@@ -218,13 +213,14 @@ struct PaywallView: View {
                 VStack(spacing: 5) {
                     Text(product.displayPrice)
                         .font(.system(.largeTitle, design: .rounded, weight: .heavy))
-                    Text("1回だけのお支払い")
+                    Text("1回だけのお支払い", tableName: "Paywall", comment: "Paywall: under the price, you pay once")
                         .font(.subheadline)
                         .foregroundStyle(PomoGemTheme.muted)
                 }
 
                 legalLink(
-                    "価格・提供条件・販売者情報を確認",
+                    String(localized: "価格・提供条件・販売者情報を確認", table: "Paywall",
+                           comment: "Paywall link: price, terms of sale and seller information (commercial disclosure page)"),
                     destination: AppLinks.commercialDisclosure
                 )
 
@@ -240,16 +236,54 @@ struct PaywallView: View {
                     .buttonStyle(PomoGemSecondaryButtonStyle())
                 } else {
                     purchaseButton(product, spinnerTint: PomoGemTheme.background) {
-                        Text("\(product.displayPrice)でProを購入")
+                        Text("\(product.displayPrice)でProを購入", tableName: "Paywall",
+                             comment: "Paywall buy button; %@ is the App Store price, e.g. ¥480")
                     }
                     .buttonStyle(PomoGemPrimaryButtonStyle())
                 }
 
-                Text("自動更新・無料トライアルはありません。")
+                Text("自動更新・無料トライアルはありません。", tableName: "Paywall",
+                     comment: "Paywall: no auto-renewal and no free trial")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
                     .multilineTextAlignment(.center)
             }
+        }
+    }
+
+    /// The product name and a badge on one line, as before; stacked when
+    /// they do not fit on one line. At accessibility sizes the row broke
+    /// both words letter by letter (「ポモジェ／ムPro」, "Po/mo/Ge/m"), and the
+    /// English badge "One-Time Purchase" is far wider than 「買い切り」.
+    private func cardHeader<Badge: View>(
+        symbol: String,
+        alignment: VerticalAlignment = .center,
+        @ViewBuilder badge: () -> Badge
+    ) -> some View {
+        let name = Label {
+            Text("ポモジェムPro", tableName: "Paywall", comment: "Paywall card title: the product name, on the buy card and once Pro is owned")
+        } icon: {
+            Image(systemName: symbol)
+                .accessibilityHidden(true)
+        }
+            .font(.headline)
+            .foregroundStyle(PomoGemTheme.amber)
+        let badge = badge()
+        return ViewThatFits(in: .horizontal) {
+            HStack(alignment: alignment, spacing: 12) {
+                name
+                Spacer()
+                badge
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                // Like the hero title: the product name shrinks rather than
+                // breaking mid-word (「ポモ／ジェム」, "Pomo-Gem").
+                name
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                badge
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -267,7 +301,7 @@ struct PaywallView: View {
             if purchase.isPurchasing {
                 HStack(spacing: 8) {
                     ProgressView().tint(spinnerTint)
-                    Text("購入処理中…")
+                    Text("購入処理中…", tableName: "Paywall", comment: "Paywall buy button while the purchase is in progress")
                 }
             } else {
                 idleLabel
@@ -313,7 +347,8 @@ struct PaywallView: View {
         HStack(spacing: 12) {
             ProgressView()
                 .tint(PomoGemTheme.amber)
-            Text("App Storeの商品情報を確認しています…")
+            Text("App Storeの商品情報を確認しています…", tableName: "Paywall",
+                 comment: "Paywall: loading the product from the App Store")
                 .font(.subheadline)
                 .foregroundStyle(PomoGemTheme.muted)
         }
@@ -328,12 +363,14 @@ struct PaywallView: View {
                 Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
                     .font(.title2)
                     .foregroundStyle(PomoGemTheme.amber)
-                Text("商品情報を読み込めませんでした")
+                Text("商品情報を読み込めませんでした", tableName: "Paywall",
+                     comment: "Paywall: the product could not be loaded from the App Store")
                     .font(.headline)
                     .multilineTextAlignment(.center)
                 Text(
                     purchase.productLoadErrorDescription
-                        ?? "通信状態を確認して、App Storeの商品情報を再読み込みしてください。"
+                        ?? String(localized: "通信状態を確認して、App Storeの商品情報を再読み込みしてください。", table: "Paywall",
+                                  comment: "Paywall, under 商品情報を読み込めませんでした: check the connection and reload")
                 )
                 .font(.caption)
                 .foregroundStyle(PomoGemTheme.muted)
@@ -351,10 +388,14 @@ struct PaywallView: View {
             if purchase.isLoadingProducts {
                 HStack(spacing: 8) {
                     ProgressView()
-                    Text("再読み込み中…")
+                    Text("再読み込み中…", tableName: "Paywall", comment: "Paywall: reloading the product")
                 }
             } else {
-                Label("商品情報を再読み込み", systemImage: "arrow.clockwise")
+                Label {
+                    Text("商品情報を再読み込み", tableName: "Paywall", comment: "Paywall button: reload the product from the App Store")
+                } icon: {
+                    Image(systemName: "arrow.clockwise")
+                }
             }
         }
         .buttonStyle(PomoGemSecondaryButtonStyle())
@@ -388,10 +429,14 @@ struct PaywallView: View {
                 HStack(spacing: 8) {
                     ProgressView()
                         .controlSize(.small)
-                    Text("購入情報を復元中…")
+                    Text("購入情報を復元中…", tableName: "Paywall", comment: "Paywall: restoring purchases in progress")
                 }
             } else {
-                Label("購入を復元", systemImage: "arrow.clockwise")
+                Label {
+                    Text("購入を復元", tableName: "Paywall", comment: "Paywall button: Restore Purchases")
+                } icon: {
+                    Image(systemName: "arrow.clockwise")
+                }
             }
         }
         .font(.subheadline.weight(.semibold))
@@ -405,7 +450,8 @@ struct PaywallView: View {
 
     private var legalNote: some View {
         VStack(spacing: 10) {
-            Text("購入はApple Accountに請求されます。ポモジェムProは1回限りの買い切りで、自動更新はありません。")
+            Text("購入はApple Accountに請求されます。ポモジェムProは1回限りの買い切りで、自動更新はありません。", tableName: "Paywall",
+                 comment: "Paywall legal note: charged to the Apple Account; a one-time purchase that never auto-renews")
                 .multilineTextAlignment(.center)
             legalLinks
         }
@@ -415,17 +461,20 @@ struct PaywallView: View {
 
     @ViewBuilder
     private var legalLinks: some View {
+        let terms = String(localized: "利用規約", table: "Paywall", comment: "Paywall legal link: Apple's standard EULA (Terms of Use)")
+        let privacy = String(localized: "プライバシー", table: "Paywall", comment: "Paywall legal link: the privacy policy")
+        let sale = String(localized: "販売条件", table: "Paywall", comment: "Paywall legal link: Terms of Sale (commercial disclosure)")
         if dynamicTypeSize.isAccessibilitySize {
             VStack(spacing: 0) {
-                legalLink("利用規約", destination: AppLinks.standardEULA)
-                legalLink("プライバシー", destination: AppLinks.privacyPolicy)
-                legalLink("販売条件", destination: AppLinks.commercialDisclosure)
+                legalLink(terms, destination: AppLinks.standardEULA)
+                legalLink(privacy, destination: AppLinks.privacyPolicy)
+                legalLink(sale, destination: AppLinks.commercialDisclosure)
             }
         } else {
             HStack(spacing: 8) {
-                legalLink("利用規約", destination: AppLinks.standardEULA)
-                legalLink("プライバシー", destination: AppLinks.privacyPolicy)
-                legalLink("販売条件", destination: AppLinks.commercialDisclosure)
+                legalLink(terms, destination: AppLinks.standardEULA)
+                legalLink(privacy, destination: AppLinks.privacyPolicy)
+                legalLink(sale, destination: AppLinks.commercialDisclosure)
             }
         }
     }
@@ -592,6 +641,10 @@ private struct PaywallFeature: View {
             Text(verbatim: monthLabelExample)
                 .font(.system(.caption, design: .rounded, weight: .bold))
                 .monospacedDigit()
+                // "September 2026" is wider than 「2026年9月」: at accessibility
+                // sizes it shrinks instead of breaking the month in two.
+                .lineLimit(1)
+                .minimumScaleFactor(0.35)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)

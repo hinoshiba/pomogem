@@ -192,17 +192,23 @@ enum FocusCloudSyncError: Error, LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .missingSubject:
-            "同期するタイマーの科目情報がありません。"
+            String(localized: "同期するタイマーの科目情報がありません。", table: "Storage",
+                   comment: "Timer sync error: the timer has no theme")
         case .missingSessionID:
-            "同期するタイマーの識別情報がありません。"
+            String(localized: "同期するタイマーの識別情報がありません。", table: "Storage",
+                   comment: "Timer sync error: the timer has no identifier")
         case .missingTimerRecord:
-            "同期するタイマーの保存情報が見つかりません。"
+            String(localized: "同期するタイマーの保存情報が見つかりません。", table: "Storage",
+                   comment: "Timer sync error: the timer's saved record is missing")
         case .invalidPayload:
-            "保存領域のタイマー情報を読み取れませんでした。"
+            String(localized: "保存領域のタイマー情報を読み取れませんでした。", table: "Storage",
+                   comment: "Timer sync error: the timer's data could not be read")
         case .ownershipLost:
-            "このタイマーは別の端末へ引き継がれています。"
+            String(localized: "このタイマーは別の端末へ引き継がれています。", table: "Storage",
+                   comment: "Timer sync: another device has taken over this timer")
         case .timerAlreadyTerminal:
-            "このタイマーはすでに完了または終了しています。"
+            String(localized: "このタイマーはすでに完了または終了しています。", table: "Storage",
+                   comment: "Timer sync: the timer already finished or ended")
         case .timerHistoryRequiresMaintenance:
             // Shown by timer operations and handoff as well as by storage
             // switching, which adds the action it could not finish.
@@ -210,13 +216,17 @@ enum FocusCloudSyncError: Error, LocalizedError, Equatable {
             // persistent (a damaged history), so it offers both next steps.
             // 「履歴」 matches the launch toast; 「記録」 would read as the
             // user's completed focus records.
-            "タイマーの履歴を確認できませんでした。少し時間をおいてから、もう一度お試しください。解決しない場合は、設定のサポートからお問い合わせください。"
+            String(localized: "タイマーの履歴を確認できませんでした。少し時間をおいてから、もう一度お試しください。解決しない場合は、設定のサポートからお問い合わせください。", table: "Storage",
+                   comment: "Timer history could not be checked; shown by timer actions and handoff")
         case .ownershipSequenceExhausted:
-            "タイマーの引き継ぎ履歴が上限に達しました。サポートへお問い合わせください。"
+            String(localized: "タイマーの引き継ぎ履歴が上限に達しました。サポートへお問い合わせください。", table: "Storage",
+                   comment: "Timer handoff history is full")
         case .recoveryOfferChanged:
-            "表示後にタイマーの状態が変わりました。最新状態を確認してください。"
+            String(localized: "表示後にタイマーの状態が変わりました。最新状態を確認してください。", table: "Storage",
+                   comment: "Timer offer changed after it was shown")
         case .activityWasReset:
-            "このタイマーは記録のリセット以前に開始されたため終了しました。"
+            String(localized: "このタイマーは記録のリセット以前に開始されたため終了しました。", table: "Storage",
+                   comment: "Timer ended because it started before the records were reset")
         }
     }
 }

@@ -126,14 +126,18 @@ struct DayHistorySheet: View {
     }
 
     private func summary(_ detail: AccumulationTimelineDayDetail) -> some View {
+        // Tiles in a row share one height: in English a value such as
+        // "6 hr 15 min" can wrap to two lines beside "15 gems".
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 10) {
                 timeMetric(detail)
                 countMetrics(detail)
             }
+            .fixedSize(horizontal: false, vertical: true)
             VStack(spacing: 10) {
                 timeMetric(detail)
                 HStack(spacing: 10) { countMetrics(detail) }
+                    .fixedSize(horizontal: false, vertical: true)
             }
             VStack(spacing: 10) {
                 timeMetric(detail)
@@ -144,11 +148,17 @@ struct DayHistorySheet: View {
         .accessibilityIdentifier(HistoryDrillDownAccessibilityID.daySummary)
         .accessibilityLabel(
             String(
-                localized: "この日の記録、\(DurationPresentation.focusLabel(grams: detail.totalGrams))、\(detail.sessions.count)粒、\(max(0, detail.totalGrams))グラム",
+                localized: "この日の記録、\(Self.spokenFocusTime(grams: detail.totalGrams))、\(CountText.gems(detail.sessions.count))、\(MassText.spoken(grams: Int(clamping: max(0, detail.totalGrams))))",
                 table: "Log",
-                comment: "VoiceOver summary of a day: focus time, gem count, mass in grams"
+                comment: "VoiceOver summary of a day: focus time, gem count and mass, each already spoken (1 hour, 15 minutes / 3 gems / 750 grams)"
             )
         )
+    }
+
+    /// VoiceOver's form of the credited focus time: the same text as the
+    /// tile in Japanese, spelled out in English ("1 hour, 15 minutes").
+    static func spokenFocusTime(grams: Int64) -> String {
+        DurationText.spoken(minutes: DurationPresentation.focusMinutes(grams: grams))
     }
 
     private func timeMetric(_ detail: AccumulationTimelineDayDetail) -> some View {
@@ -162,7 +172,7 @@ struct DayHistorySheet: View {
     private func countMetrics(_ detail: AccumulationTimelineDayDetail) -> some View {
         HistoryMetricTile(
             title: String(localized: "積んだ粒", table: "Log", comment: "Day summary tile: number of gems"),
-            value: String(localized: "\(detail.sessions.count)粒", table: "Log", comment: "Gem count")
+            value: CountText.gems(detail.sessions.count)
         )
         HistoryMetricTile(
             title: String(localized: "質量", table: "Log", comment: "Day summary tile: total mass"),
@@ -294,7 +304,7 @@ struct HistoryThemeBreakdown: View {
                     }
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(String(
-                        localized: "\(theme.name)、\(DurationPresentation.focusLabel(grams: theme.grams))、\(percentage(theme))パーセント",
+                        localized: "\(displayName(theme))、\(DayHistorySheet.spokenFocusTime(grams: theme.grams))、\(percentage(theme))パーセント",
                         table: "Log",
                         comment: "VoiceOver theme row: theme name, time, share in percent"
                     ))
@@ -306,10 +316,14 @@ struct HistoryThemeBreakdown: View {
     private func themeName(_ theme: AccumulationTimelineThemeSummary) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             HistoryThemeDot(colorHex: theme.colorHex)
-            Text(theme.name)
+            Text(displayName(theme))
                 .font(.subheadline.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private func displayName(_ theme: AccumulationTimelineThemeSummary) -> String {
+        SubjectNamePolicy.localizedDisplayName(theme.name, subjectID: UUID(uuidString: theme.id))
     }
 
     private func percentage(_ theme: AccumulationTimelineThemeSummary) -> Int {
@@ -353,7 +367,7 @@ struct HistoryMetricTile: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(13)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 16))
     }
 }
@@ -383,6 +397,10 @@ struct HistorySessionRow: View {
     let item: HistorySessionSummary
     var timeStyle: TimeStyle = .dateAndTime
 
+    private var displayedSubjectName: String {
+        SubjectNamePolicy.localizedDisplayName(item.subjectName, subjectID: item.subjectID)
+    }
+
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -406,7 +424,7 @@ struct HistorySessionRow: View {
             pebble
                 .padding(.top, 6)
             VStack(alignment: .leading, spacing: 4) {
-                Text(item.subjectName)
+                Text(displayedSubjectName)
                     .font(.subheadline.weight(.semibold))
                     .fixedSize(horizontal: false, vertical: true)
                 Text(timeText)
@@ -450,7 +468,7 @@ struct HistorySessionRow: View {
         HStack(spacing: 12) {
             pebble
             VStack(alignment: .leading, spacing: 2) {
-                Text(item.subjectName)
+                Text(displayedSubjectName)
                     .font(.subheadline.weight(.semibold))
                 Text(timeText)
                     .font(.caption2)
@@ -485,7 +503,7 @@ struct HistorySessionRow: View {
             String(
                 localized: "\(item.startAt.formatted(date: .omitted, time: .shortened))〜\(item.endAt.formatted(date: .omitted, time: .shortened))",
                 table: "Log",
-                comment: "A record's start and end time, e.g. 13:24〜13:49"
+                comment: "A range: its first and last day (e.g. 9月20日(日)〜9月26日(土)) or a record's start and end time (13:24〜13:49)"
             )
         }
     }
@@ -502,14 +520,21 @@ struct HistorySessionRow: View {
                 comment: "VoiceOver: a record's start and end time"
             )
         }
-        let batch = RareRewardPresentationPolicy
-            .counts(item.rareRewardCounts)
-            .multiDrawSummary
-            .map { "、\($0)" } ?? ""
+        // 「250グラム」, "250 grams" (read as a word, never "g").
+        let grams = MassText.spoken(grams: item.grams)
+        // One sentence per shape: the rare summary sits between the mass
+        // and the date only when there is one.
+        if let batch = RareRewardPresentationPolicy.counts(item.rareRewardCounts).multiDrawSummary {
+            return String(
+                localized: "\(displayedSubjectName)、\(pebbleKindLabel)、\(source)、プラス\(grams)、\(batch)、\(date)",
+                table: "Log",
+                comment: "VoiceOver history row: theme, gem kind, how it was recorded, the mass added (spoken, e.g. 250 grams), the rare-gem summary, date"
+            )
+        }
         return String(
-            localized: "\(item.subjectName)、\(pebbleKindLabel)、\(source)、プラス\(item.grams)グラム\(batch)、\(date)",
+            localized: "\(displayedSubjectName)、\(pebbleKindLabel)、\(source)、プラス\(grams)、\(date)",
             table: "Log",
-            comment: "VoiceOver history row: theme, gem kind, how recorded, grams added, optional rare summary, date"
+            comment: "VoiceOver history row: theme, gem kind, how it was recorded, the mass added (spoken, e.g. 250 grams), date"
         )
     }
 

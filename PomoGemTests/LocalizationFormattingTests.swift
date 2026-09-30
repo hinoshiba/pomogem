@@ -36,9 +36,11 @@ final class LocalizationFormattingTests: XCTestCase {
         XCTAssertEqual(DurationText.short(minutes: 25), "25分")
     }
 
-    /// Once English ships, a Korean iPhone falls back to the Japanese strings
-    /// while `Locale.current` turns English (en_KR). Formatting follows the
-    /// language the strings resolve in, so those screens stay in one language.
+    /// The strings' language and `Locale.current` can differ: with a Japanese
+    /// development region a Korean iPhone read Japanese strings while
+    /// `Locale.current` was en_KR. Formatting follows the language the strings
+    /// resolve in, so a screen stays in one language whichever the fallback is
+    /// (English now: CommonLocalizationTests.testThirdLanguagesFallBackToEnglish).
     func testFormattingFollowsTheLanguageOfTheStringsNotTheDevice() {
         let koreanDevice = Locale(identifier: "en_KR")
         let japaneseStrings = PomoGemLocale.locale(localization: "ja", base: koreanDevice)

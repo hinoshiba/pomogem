@@ -98,7 +98,13 @@ struct AccumulationPlanProjection: Equatable, Sendable {
             )
         }
 
-        private static let sampleSubjectName = "計画上の集中"
+        /// The theme name of the preview's gems. Never saved: the plan is a
+        /// preview only, so it can be resolved in the language on screen.
+        private static let sampleSubjectName = String(
+            localized: "計画上の集中",
+            table: "Planning",
+            comment: "Theme name of the gems in the plan's preview jar (never saved)"
+        )
         private static let sampleColorHex = Constants.Color.auroraWarm
         private static let sampleColorMix = [
             StratumColorFraction(hex: sampleColorHex, fraction: 1)

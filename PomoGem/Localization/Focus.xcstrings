@@ -1,284 +1,3388 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "%@  ·  %lld%% 残り" : {
+      "comment" : "Ring status: 1 = FOCUS, BREAK or the paused word; 2 = percent of time left",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@  ·  %2$lld%% left"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@  ·  %lld%% 残り"
+          }
+        }
+      }
+    },
+    "%@、%lldパーセント残り" : {
+      "comment" : "VoiceOver value of the timer ring. 1 = time left, e.g. 残り24分59秒 (24 minutes, 59 seconds left); 2 = percent left.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, %2$lld percent remaining"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@、%lldパーセント残り"
+          }
+        }
+      }
+    },
+    "%@、%lldパーセント残り、一時停止中" : {
+      "comment" : "VoiceOver value of the paused timer ring. 1 = time left, e.g. 残り24分59秒 (24 minutes, 59 seconds left); 2 = percent left.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, %2$lld percent remaining, paused"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@、%lldパーセント残り、一時停止中"
+          }
+        }
+      }
+    },
+    "%@集中" : {
+      "comment" : "Timer header: the focus length. %@ is a duration, e.g. 25分 (25 min).",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus · %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@集中"
+          }
+        }
+      }
+    },
+    "%lld%% 残り" : {
+      "comment" : "Ring status when space is short: percent of time left",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld%% left"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld%% 残り"
+          }
+        }
+      }
+    },
+    "%lld分" : {
+      "comment" : "VoiceOver: whole minutes left, read inside 残り%@%@. en needs plural variations: '%lld minute' / '%lld minutes'.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld minute"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld minutes"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld分"
+          }
+        }
+      }
+    },
+    "%lld秒" : {
+      "comment" : "VoiceOver: seconds left, read inside 残り%@%@. en needs plural variations: '%lld second' / '%lld seconds'.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld second"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld seconds"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld秒"
+          }
+        }
+      }
+    },
+    "15分休憩" : {
+      "comment" : "Timer header: the long break",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "15-Min Break"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "15分休憩"
+          }
+        }
+      }
+    },
     "25分" : {
-      "comment" : "Shortcuts and Siri: a 25-minute focus"
+      "comment" : "Shortcuts and Siri: a 25-minute focus",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "25 minutes"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "25分"
+          }
+        }
+      }
+    },
+    "2本指のダブルタップでも操作できます" : {
+      "comment" : "VoiceOver hint: a two-finger double tap does the same",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A two-finger double tap also works."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "2本指のダブルタップでも操作できます"
+          }
+        }
+      }
+    },
+    "3つの選択肢から1つ選んでください" : {
+      "comment" : "VoiceOver hint: pick one of the three rare-gem options first",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose one of the three options."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "3つの選択肢から1つ選んでください"
+          }
+        }
+      }
     },
     "45分" : {
-      "comment" : "Shortcuts and Siri: a 45-minute focus"
+      "comment" : "Shortcuts and Siri: a 45-minute focus",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "45 minutes"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "45分"
+          }
+        }
+      }
+    },
+    "5分休憩" : {
+      "comment" : "Timer header: the short break",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "5-Min Break"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "5分休憩"
+          }
+        }
+      }
     },
     "60分" : {
-      "comment" : "Shortcuts and Siri: a 60-minute focus"
+      "comment" : "Shortcuts and Siri: a 60-minute focus",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "60 minutes"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "60分"
+          }
+        }
+      }
     },
     "90分" : {
-      "comment" : "Shortcuts and Siri: a 90-minute focus"
+      "comment" : "Shortcuts and Siri: a 90-minute focus",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "90 minutes"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "90分"
+          }
+        }
+      }
     },
     "Apple Musicについて見る" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Learn About Apple Music"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Musicについて見る"
+          }
+        }
+      }
     },
     "Apple Musicに登録すると、ここから再生できます。" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "With an Apple Music subscription, you can play music from here."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Musicに登録すると、ここから再生できます。"
+          }
+        }
+      }
     },
     "Apple Musicの登録状況を確認できませんでした。通信を確認して、もう一度お試しください。" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't check your Apple Music subscription. Check your connection, then try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Musicの登録状況を確認できませんでした。通信を確認して、もう一度お試しください。"
+          }
+        }
+      }
     },
     "Apple Musicへのアクセスが許可されていません。「設定」アプリのポモジェムで「メディアとApple Music」をオンにすると使えます。" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Access to Apple Music isn't allowed. To use it, turn on “Media & Apple Music” for PomoGem in the Settings app."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Musicへのアクセスが許可されていません。「設定」アプリのポモジェムで「メディアとApple Music」をオンにすると使えます。"
+          }
+        }
+      }
     },
     "Apple Musicへのアクセスが許可されていません。集中が終わってから、「設定」アプリのポモジェムで「メディアとApple Music」をオンにすると使えます。" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Access to Apple Music isn't allowed. To use it, turn on “Media & Apple Music” for PomoGem in the Settings app after your focus."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Musicへのアクセスが許可されていません。集中が終わってから、「設定」アプリのポモジェムで「メディアとApple Music」をオンにすると使えます。"
+          }
+        }
+      }
     },
     "Apple Musicへのアクセスを許可" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow Access to Apple Music"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Musicへのアクセスを許可"
+          }
+        }
+      }
     },
     "Apple Musicを確認しています" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking Apple Music…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Musicを確認しています"
+          }
+        }
+      }
     },
     "focus-music.source.concentration" : {
       "comment" : "Apple Music Focus playlist title (US storefront: Concentration)",
-      "extractionState" : "extracted_with_value",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Concentration"
+          }
+        },
         "ja" : {
           "stringUnit" : {
-            "state" : "new",
+            "state" : "translated",
             "value" : "集中"
           }
         }
       }
     },
+    "focus.header.paused" : {
+      "comment" : "Timer header while the timer is paused (a state, not the Pause button)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paused"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一時停止"
+          }
+        }
+      }
+    },
+    "focus.ring.mode.paused" : {
+      "comment" : "Timer ring status while paused, before the percent left (en: PAUSED)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PAUSED"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一時停止"
+          }
+        }
+      }
+    },
+    "timer.rotation.automatic" : {
+      "comment" : "Small timer button that goes back to following the device's orientation (keep it short)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自動"
+          }
+        }
+      }
+    },
     "「設定」アプリを開く" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open the Settings App"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「設定」アプリを開く"
+          }
+        }
+      }
     },
     "このiPhoneでは、Apple Musicの曲を再生できません。" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This iPhone can't play songs from Apple Music."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneでは、Apple Musicの曲を再生できません。"
+          }
+        }
+      }
     },
     "このiPhoneでは、スクリーンタイムなどの制限でApple Musicを利用できません。" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Music isn't available on this iPhone because of restrictions such as Screen Time."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneでは、スクリーンタイムなどの制限でApple Musicを利用できません。"
+          }
+        }
+      }
     },
     "このiPhoneで集中を始めたときに、選んだ音楽を自動で再生します。ほかの音楽や音声を再生中のときは入れ替えません。" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "When you start a focus on this iPhone, the music you chose plays automatically. It never replaces other music or audio that's already playing."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneで集中を始めたときに、選んだ音楽を自動で再生します。ほかの音楽や音声を再生中のときは入れ替えません。"
+          }
+        }
+      }
+    },
+    "このバージョンではアカウント情報をウィジェットへ共有しません。" : {
+      "comment" : "Error: this version never shares account data with the widgets",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This version doesn't share account data with widgets."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このバージョンではアカウント情報をウィジェットへ共有しません。"
+          }
+        }
+      }
+    },
+    "この回の粒は積まれません。これまでの瓶はそのままです。" : {
+      "comment" : "Stop-for-today confirmation: this session adds no gem, and the jar keeps everything so far",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This session won't add a gem. Everything already in your jar stays."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この回の粒は積まれません。これまでの瓶はそのままです。"
+          }
+        }
+      }
+    },
+    "この回は自己申告あつかいです" : {
+      "comment" : "Timer notice: this session counts as self-reported (cause unknown)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This session counts as self-reported."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この回は自己申告あつかいです"
+          }
+        }
+      }
     },
     "この地域のApple Musicでは、用意した音楽を再生できませんでした。" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Music in your region couldn't play the music chosen for focus."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この地域のApple Musicでは、用意した音楽を再生できませんでした。"
+          }
+        }
+      }
+    },
+    "この完走は別の保存処理が担当しています。記録が保存領域へ反映されるまで、この端末の復元情報を保持します。しばらく待ってから保存状態を確認してください。" : {
+      "comment" : "Completion save notice: another save (e.g. another device) owns this completed session; this device keeps its recovery copy",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Another save is handling this completed session. This device keeps its recovery copy until the record reaches storage. Wait a moment, then check the save status."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この完走は別の保存処理が担当しています。記録が保存領域へ反映されるまで、この端末の復元情報を保持します。しばらく待ってから保存状態を確認してください。"
+          }
+        }
+      }
+    },
+    "この選択でタイマーへ" : {
+      "comment" : "Button: save the rare-gem choice and start the timer",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue to Timer"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この選択でタイマーへ"
+          }
+        }
+      }
     },
     "この音楽を選んでおきます。今は再生しません" : {
-      "comment" : "VoiceOver hint of a music row while Apple Music cannot play: the tap only remembers the choice"
+      "comment" : "VoiceOver hint of a music row while Apple Music cannot play: the tap only remembers the choice",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chooses this music without playing it now"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この音楽を選んでおきます。今は再生しません"
+          }
+        }
+      }
+    },
+    "まだレア粒の扱いを選んでいません。説明なしで抽選creditを貯め始めないため、最初の実測タイマーより前に確認します。" : {
+      "comment" : "Rare-gem choice before the first timed focus: why it is asked now (no draw credits are collected without an explanation)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You haven't chosen how rare gems work yet. So that no draw credits build up without an explanation, we ask before your first timed focus."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "まだレア粒の扱いを選んでいません。説明なしで抽選creditを貯め始めないため、最初の実測タイマーより前に確認します。"
+          }
+        }
+      }
+    },
+    "もう一度保存する" : {
+      "comment" : "Button: try saving the completed session again",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save Again"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "もう一度保存する"
+          }
+        }
+      }
     },
     "もう一度確認する" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check Again"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "もう一度確認する"
+          }
+        }
+      }
     },
     "アプリを開く" : {
-      "comment" : "Button on the system alarm at the end of a focus or break; opens PomoGem. Suggested English: Open App"
+      "comment" : "Button on the system alarm at the end of a focus or break; opens PomoGem. Suggested English: Open App",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open App"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリを開く"
+          }
+        }
+      }
     },
     "アプリを離れていたので一時停止しました" : {
-      "comment" : "Paused timer notice after the person left the app during a focus. Suggested English: Paused because you left the app"
+      "comment" : "Paused timer notice after the person left the app during a focus. Suggested English: Paused because you left the app",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paused because you left the app"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリを離れていたので一時停止しました"
+          }
+        }
+      }
     },
     "キーンコーンカーンコーンの鐘の旋律" : {
-      "comment" : "Alarm sound description; the onomatopoeia is how Japanese hear the Westminster chime. Suggested English: The Westminster chime heard at school"
+      "comment" : "Alarm sound description; the onomatopoeia is how Japanese hear the Westminster chime. Suggested English: The Westminster chime heard at school",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Westminster chimes, as heard at school"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キーンコーンカーンコーンの鐘の旋律"
+          }
+        }
+      }
     },
     "クラシックステーション" : {
-      "comment" : "Apple Music station title (US storefront: Classical Station)"
+      "comment" : "Apple Music station title (US storefront: Classical Station)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Classical Station"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "クラシックステーション"
+          }
+        }
+      }
     },
     "ジリリリと鳴る、ベル式の目覚まし時計" : {
-      "comment" : "Alarm sound description. Suggested English: The ring of a mechanical bell alarm clock"
+      "comment" : "Alarm sound description. Suggested English: The ring of a mechanical bell alarm clock",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The ring of a mechanical bell alarm clock"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ジリリリと鳴る、ベル式の目覚まし時計"
+          }
+        }
+      }
     },
     "ステーション" : {
-      "comment" : "An Apple Music radio station"
+      "comment" : "An Apple Music radio station",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Station"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ステーション"
+          }
+        }
+      }
+    },
+    "タイマーの前に、1つだけ。" : {
+      "comment" : "Rare-gem choice before the first timed focus: heading",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "One Thing Before the Timer"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマーの前に、1つだけ。"
+          }
+        }
+      }
+    },
+    "タイマーの向きを変える" : {
+      "comment" : "VoiceOver label: the button that rotates the timer",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rotate timer"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマーの向きを変える"
+          }
+        }
+      }
+    },
+    "タイマーは別の端末へ引き継がれました" : {
+      "comment" : "Toast: another device took over this timer",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This timer moved to another device"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマーは別の端末へ引き継がれました"
+          }
+        }
+      }
+    },
+    "タイマーを開始できませんでした" : {
+      "comment" : "Alert title: the focus timer could not start",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't Start the Timer"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマーを開始できませんでした"
+          }
+        }
+      }
     },
     "デジタル" : {
-      "comment" : "Alarm sound name: the four-beep electronic alarm clock. Suggested English: Digital"
+      "comment" : "Alarm sound name: the four-beep electronic alarm clock. Suggested English: Digital",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Digital"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デジタル"
+          }
+        }
+      }
     },
     "ピアノ・チル" : {
-      "comment" : "Apple Music Classical playlist title (US storefront: Piano Chill)"
+      "comment" : "Apple Music Classical playlist title (US storefront: Piano Chill)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Piano Chill"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ピアノ・チル"
+          }
+        }
+      }
     },
     "ピピピピッと鳴る、電子音の目覚まし" : {
-      "comment" : "Alarm sound description. Suggested English: The beep-beep-beep-beep of a digital alarm clock"
+      "comment" : "Alarm sound description. Suggested English: The beep-beep-beep-beep of a digital alarm clock",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The beep-beep-beep-beep of a digital alarm clock"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ピピピピッと鳴る、電子音の目覚まし"
+          }
+        }
+      }
     },
     "プレイリスト" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Playlist"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プレイリスト"
+          }
+        }
+      }
     },
     "ベル" : {
-      "comment" : "Alarm sound name: a small struck bell rung three times. Suggested English: Bell"
+      "comment" : "Alarm sound name: a small struck bell rung three times. Suggested English: Bell",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bell"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ベル"
+          }
+        }
+      }
     },
     "ポモジェムから「ミュージック」アプリの再生を操作するには、Apple Musicへのアクセスを許可してください。" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To control the Music app from PomoGem, allow access to Apple Music."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェムから「ミュージック」アプリの再生を操作するには、Apple Musicへのアクセスを許可してください。"
+          }
+        }
+      }
     },
     "ポモジェムを開き、ホームで選んでいるテーマで集中を始めます。" : {
-      "comment" : "Shortcuts: what the start-focus action does"
+      "comment" : "Shortcuts: what the start-focus action does",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opens PomoGem and starts a focus with the theme selected on Home."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェムを開き、ホームで選んでいるテーマで集中を始めます。"
+          }
+        }
+      }
     },
     "マリンバ" : {
-      "comment" : "Alarm sound name: a rising marimba arpeggio. Suggested English: Marimba"
+      "comment" : "Alarm sound name: a rising marimba arpeggio. Suggested English: Marimba",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marimba"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "マリンバ"
+          }
+        }
+      }
     },
     "マリンバの音が軽やかに駆け上がります" : {
-      "comment" : "Alarm sound description. Suggested English: Marimba notes skipping upward"
+      "comment" : "Alarm sound description. Suggested English: Marimba notes skipping upward",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marimba notes skipping upward"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "マリンバの音が軽やかに駆け上がります"
+          }
+        }
+      }
     },
     "ミュージックアプリで再生します。Apple Musicの登録が必要です。" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plays in the Music app. Requires an Apple Music subscription."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ミュージックアプリで再生します。Apple Musicの登録が必要です。"
+          }
+        }
+      }
     },
     "ミュージックアプリで再生する音楽を選びます" : {
-      "comment" : "VoiceOver hint: the timer music button opens the music list"
+      "comment" : "VoiceOver hint: the timer music button opens the music list",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chooses the music to play in the Music app"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ミュージックアプリで再生する音楽を選びます"
+          }
+        }
+      }
     },
     "レア粒の扱い" : {
-      "comment" : "Eyebrow of the rare-gem choice asked before the first timer"
+      "comment" : "Eyebrow of the rare-gem choice asked before the first timer",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rare Gems"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "レア粒の扱い"
+          }
+        }
+      }
+    },
+    "レア粒の選択を保存できませんでした。タイマーはまだ始まっていません。\n%@" : {
+      "comment" : "Error: saving the rare-gem choice failed. %@ is the system's error description, on its own line.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save your rare gem choice. The timer hasn't started yet.\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "レア粒の選択を保存できませんでした。タイマーはまだ始まっていません。\n%@"
+          }
+        }
+      }
     },
     "一時停止" : {
-      "comment" : "Pause the Music app"
+      "comment" : "Pause the Music app",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pause"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一時停止"
+          }
+        }
+      }
+    },
+    "一時停止しました" : {
+      "comment" : "VoiceOver announcement after the timer paused",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paused"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一時停止しました"
+          }
+        }
+      }
+    },
+    "一時停止ボタンでタイマーを止められます" : {
+      "comment" : "VoiceOver hint of the timer ring: the Pause button pauses it",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use the Pause button to pause the timer."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一時停止ボタンでタイマーを止められます"
+          }
+        }
+      }
     },
     "一時停止中" : {
-      "comment" : "Paused line without a track title"
+      "comment" : "Paused line without a track title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paused"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一時停止中"
+          }
+        }
+      }
+    },
+    "一時停止中です。再開後の終了通知を許可" : {
+      "comment" : "Button while paused: allow the timer-end notification for after resuming",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paused. Allow a notification for when the timer ends"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一時停止中です。再開後の終了通知を許可"
+          }
+        }
+      }
+    },
+    "一時停止中です。終了通知は端末の設定から" : {
+      "comment" : "Button while paused and notifications are off: opens iOS Settings to allow timer-end notifications",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paused. Turn on end notifications in Settings"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一時停止中です。終了通知は端末の設定から"
+          }
+        }
+      }
+    },
+    "一時停止中はタイマーは進みません" : {
+      "comment" : "Notice while paused: the timer does not run",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The timer doesn't run while paused"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一時停止中はタイマーは進みません"
+          }
+        }
+      }
     },
     "一時停止中：%@" : {
-      "comment" : "Paused line; the argument is the Music app's current track title"
+      "comment" : "Paused line; the argument is the Music app's current track title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paused: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一時停止中：%@"
+          }
+        }
+      }
+    },
+    "上" : {
+      "comment" : "VoiceOver value: the timer's top points up",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Up"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上"
+          }
+        }
+      }
+    },
+    "上、右、下、左の順に回転し、選んだ向きを保ちます" : {
+      "comment" : "VoiceOver hint: each tap turns the timer up, right, down, left, and keeps the chosen direction",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turns the timer up, right, down, then left, and keeps the direction you choose."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上、右、下、左の順に回転し、選んだ向きを保ちます"
+          }
+        }
+      }
+    },
+    "上（縦）" : {
+      "comment" : "Settings: default timer orientation option, top of the timer up (portrait)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Up (Portrait)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上（縦）"
+          }
+        }
+      }
+    },
+    "下" : {
+      "comment" : "VoiceOver value: the timer's top points down",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Down"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下"
+          }
+        }
+      }
     },
     "下から音楽を選ぶと再生が始まります。" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose music below to start playing."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下から音楽を選ぶと再生が始まります。"
+          }
+        }
+      }
+    },
+    "下（縦・上下逆）" : {
+      "comment" : "Settings: default timer orientation option, top of the timer down (portrait, upside down)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Down (Portrait, Upside Down)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下（縦・上下逆）"
+          }
+        }
+      }
+    },
+    "今は戻る" : {
+      "comment" : "Button: leave the rare-gem choice for now",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not Now"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今は戻る"
+          }
+        }
+      }
     },
     "休憩" : {
-      "comment" : "Timer ring status: the phase, before the percent left (休憩 · 35% 残り)"
+      "comment" : "Break timer heading\nTimer ring status: the phase, before the percent left (休憩 · 35% 残り)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Break"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩"
+          }
+        }
+      }
     },
     "休憩が終わりました" : {
-      "comment" : "Title of the system alarm when a break ends. Suggested English: Break is over"
+      "comment" : "Title of the system alarm when a break ends. Suggested English: Break is over\nVoiceOver announcement: the break is over",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Break is over"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩が終わりました"
+          }
+        }
+      }
+    },
+    "休憩が終わりました。2本指でダブルタップすると、アラートを止めて瓶へ戻れます" : {
+      "comment" : "VoiceOver announcement: the break is over; a two-finger double tap stops the alert and goes back to the jar",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Break's over. Double-tap with two fingers to stop the alert and go back to the jar."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩が終わりました。2本指でダブルタップすると、アラートを止めて瓶へ戻れます"
+          }
+        }
+      }
     },
     "休憩のときなどに「ミュージック」アプリでApple Musicにサインインすると、再生できるようになります。" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in to Apple Music in the Music app, during a break for example, to start playing."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩のときなどに「ミュージック」アプリでApple Musicにサインインすると、再生できるようになります。"
+          }
+        }
+      }
+    },
+    "休憩はここまで" : {
+      "comment" : "Heading when a break is over",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Break's Over"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩はここまで"
+          }
+        }
+      }
+    },
+    "休憩はこの画面で続いています。許可は端末の設定から変更できます。" : {
+      "comment" : "Caption: the break keeps running on this screen; notification permission can be changed in iOS Settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your break continues on this screen. You can change the permission in Settings."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩はこの画面で続いています。許可は端末の設定から変更できます。"
+          }
+        }
+      }
+    },
+    "休憩をはじめる" : {
+      "comment" : "Button: start the break",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start Break"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩をはじめる"
+          }
+        }
+      }
+    },
+    "休憩をスキップ" : {
+      "comment" : "Button: end the break now",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skip Break"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩をスキップ"
+          }
+        }
+      }
+    },
+    "休憩タイマー" : {
+      "comment" : "VoiceOver label of the timer ring during a break",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Break timer"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩タイマー"
+          }
+        }
+      }
+    },
+    "休憩タイマーはこの画面で続いています。少し待ってから再試行できます。" : {
+      "comment" : "Caption: the break timer keeps running on this screen; scheduling can be retried in a moment",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The break timer continues on this screen. You can try again in a moment."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩タイマーはこの画面で続いています。少し待ってから再試行できます。"
+          }
+        }
+      }
+    },
+    "休憩中" : {
+      "comment" : "Timer header while a break runs",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On Break"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩中"
+          }
+        }
+      }
+    },
+    "休憩終了のアラート中" : {
+      "comment" : "Status while the end-of-break alert repeats (keep it short: one line at large sizes)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Break Alert Sounding"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "休憩終了のアラート中"
+          }
+        }
+      }
     },
     "作業用BGM：クラシック" : {
-      "comment" : "Apple Music Classical playlist title (US storefront: Classical Concentration)"
+      "comment" : "Apple Music Classical playlist title (US storefront: Classical Concentration)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Classical Concentration"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "作業用BGM：クラシック"
+          }
+        }
+      }
+    },
+    "保存済みの状態から再開したため、この回は自己申告あつかいです" : {
+      "comment" : "Timer notice: the timer resumed from a saved state, so this session counts as self-reported",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resumed from a saved state, so this session counts as self-reported."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存済みの状態から再開したため、この回は自己申告あつかいです"
+          }
+        }
+      }
+    },
+    "保存状態を確認する" : {
+      "comment" : "Button: check whether the completed session has been saved",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check Save Status"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存状態を確認する"
+          }
+        }
+      }
+    },
+    "停止して瓶へ戻る" : {
+      "comment" : "Button: stop the break-end alert and go back to the jar",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop and Go Back to Jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止して瓶へ戻る"
+          }
+        }
+      }
+    },
+    "先に始めた別端末のタイマーを残しました" : {
+      "comment" : "Toast: two devices started a timer; the one started first (on another device) was kept",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kept the timer that another device started first"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先に始めた別端末のタイマーを残しました"
+          }
+        }
+      }
     },
     "再生" : {
-      "comment" : "Play the chosen focus music"
+      "comment" : "Play the chosen focus music",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Play"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再生"
+          }
+        }
+      }
     },
     "再生していません" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not playing"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再生していません"
+          }
+        }
+      }
     },
     "再生すると、ミュージックアプリの再生中のリストが入れ替わります。タイマーが終わっても音楽は止まりません。" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Playing replaces the queue in the Music app. The music keeps playing after the timer ends."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再生すると、ミュージックアプリの再生中のリストが入れ替わります。タイマーが終わっても音楽は止まりません。"
+          }
+        }
+      }
     },
     "再生を始められませんでした。休憩のときなどに「ミュージック」アプリを一度開いてから、もう一度お試しください。" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't start playing. Open the Music app once, during a break for example, then try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再生を始められませんでした。休憩のときなどに「ミュージック」アプリを一度開いてから、もう一度お試しください。"
+          }
+        }
+      }
     },
     "再生中" : {
-      "comment" : "Now playing line without a track title"
+      "comment" : "Now playing line without a track title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Playing"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再生中"
+          }
+        }
+      }
     },
     "再生中：%@" : {
-      "comment" : "Now playing line; the argument is the Music app's current track title"
+      "comment" : "Now playing line; the argument is the Music app's current track title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Playing: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再生中：%@"
+          }
+        }
+      }
+    },
+    "再起動などで計測が途切れたため、この回は自己申告あつかいです" : {
+      "comment" : "Timer notice: timing was interrupted (e.g. a restart), so this session counts as self-reported",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Timing was interrupted (by a restart, for example), so this session counts as self-reported."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再起動などで計測が途切れたため、この回は自己申告あつかいです"
+          }
+        }
+      }
+    },
+    "再開しました。%@" : {
+      "comment" : "VoiceOver announcement after the timer resumed. %@ is the time left, e.g. 残り24分59秒 (24 minutes, 59 seconds left).",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resumed. %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再開しました。%@"
+          }
+        }
+      }
+    },
+    "再開ボタンでタイマーを再開できます" : {
+      "comment" : "VoiceOver hint of the paused timer ring: the Resume button restarts it",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use the Resume button to restart the timer."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再開ボタンでタイマーを再開できます"
+          }
+        }
+      }
+    },
+    "別の端末から引き継いだため、この回は自己申告あつかいです" : {
+      "comment" : "Timer notice: the timer was continued from another device, so this session counts as self-reported",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continued from another device, so this session counts as self-reported."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "別の端末から引き継いだため、この回は自己申告あつかいです"
+          }
+        }
+      }
+    },
+    "別の端末で記録がリセットされたため、このタイマーを終了しました" : {
+      "comment" : "Toast: records were reset on another device, so this timer ended",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Records were reset on another device, so this timer ended"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "別の端末で記録がリセットされたため、このタイマーを終了しました"
+          }
+        }
+      }
+    },
+    "右" : {
+      "comment" : "VoiceOver value: the timer's top points right",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Right"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右"
+          }
+        }
+      }
+    },
+    "右（横）" : {
+      "comment" : "Settings: default timer orientation option, top of the timer to the right (landscape)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Right (Landscape)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右（横）"
+          }
+        }
+      }
     },
     "学校のチャイム" : {
-      "comment" : "Alarm sound name: the Westminster chime Japanese schools play between classes. Suggested English: School chime"
+      "comment" : "Alarm sound name: the Westminster chime Japanese schools play between classes. Suggested English: School chime",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "School chime"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "学校のチャイム"
+          }
+        }
+      }
     },
-    "控えめ" : {
-      "comment" : "Alarm strength option: today's short cue. Suggested English: Gentle"
-    },
-    "最大" : {
-      "comment" : "Alarm strength option: also rings through the silent switch and as a system alarm. Suggested English: Maximum"
+    "完了状態が先に届き、履歴本体が保存領域へ反映されるのを待っています。この端末の復元情報は保持しています。しばらく待ってから保存状態を確認してください。" : {
+      "comment" : "Completion save notice: the completion mark synced before the session record itself; this device keeps its recovery copy",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The completion arrived before the session record itself, which hasn't reached storage yet. This device keeps its recovery copy. Wait a moment, then check the save status."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完了状態が先に届き、履歴本体が保存領域へ反映されるのを待っています。この端末の復元情報は保持しています。しばらく待ってから保存状態を確認してください。"
+          }
+        }
+      }
     },
     "完走" : {
-      "comment" : "Eyebrow over the gem dropping into the jar after a completed focus"
+      "comment" : "Eyebrow over the gem dropping into the jar after a completed focus",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Completed"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完走"
+          }
+        }
+      }
+    },
+    "完走は端末に保護されています。ホームから保存を再試行できます" : {
+      "comment" : "Toast: the completed session is kept on this device; saving can be retried from Home",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your completed session is kept on this device. You can try saving again from Home."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完走は端末に保護されています。ホームから保存を再試行できます"
+          }
+        }
+      }
+    },
+    "完走は端末に残り、ホームから保存を再試行できます" : {
+      "comment" : "VoiceOver hint of the keep-and-go-home button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The completed session stays on this device. You can try saving again from Home."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完走は端末に残り、ホームから保存を再試行できます"
+          }
+        }
+      }
+    },
+    "完走を保護してホームへ戻る" : {
+      "comment" : "Button: keep the unsaved completed session on this device and go back to Home",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep Session and Go Home"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完走を保護してホームへ戻る"
+          }
+        }
+      }
+    },
+    "左" : {
+      "comment" : "VoiceOver value: the timer's top points left",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Left"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左"
+          }
+        }
+      }
+    },
+    "左（横）" : {
+      "comment" : "Settings: default timer orientation option, top of the timer to the left (landscape)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Left (Landscape)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左（横）"
+          }
+        }
+      }
+    },
+    "控えめ" : {
+      "comment" : "Alarm strength option: today's short cue. Suggested English: Gentle",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gentle"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控えめ"
+          }
+        }
+      }
+    },
+    "操作を完了できませんでした" : {
+      "comment" : "Alert title: a timer action (pause, resume, stop) could not finish",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't Complete the Action"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "操作を完了できませんでした"
+          }
+        }
+      }
+    },
+    "最大" : {
+      "comment" : "Alarm strength option: also rings through the silent switch and as a system alarm. Suggested English: Maximum",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maximum"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最大"
+          }
+        }
+      }
     },
     "未選択" : {
-      "comment" : "VoiceOver value: this music is not chosen"
+      "comment" : "VoiceOver value: this music is not chosen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not selected"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未選択"
+          }
+        }
+      }
     },
     "標準" : {
-      "comment" : "Alarm strength option (default): rings until stopped. Suggested English: Standard"
+      "comment" : "Alarm strength option (default): rings until stopped. Suggested English: Standard",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standard"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "標準"
+          }
+        }
+      }
     },
     "標準に加えて、アプリを開いているときはサイレントスイッチがオンでも音を鳴らします。iOS 26以降でアラームを許可すると、アプリを開いていないときもアラームで知らせます。" : {
-      "comment" : "Alarm strength description. Suggested English: Everything in Standard, and while the app is open the sound plays even with the silent switch on. On iOS 26 or later, once you allow alarms, an alarm also rings when the app is not open."
+      "comment" : "Alarm strength description. Suggested English: Everything in Standard, and while the app is open the sound plays even with the silent switch on. On iOS 26 or later, once you allow alarms, an alarm also rings when the app is not open.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In addition to Standard, sound plays even with the silent switch on while the app is open. On iOS 26 or later, allowing alarms also makes an alarm ring when the app is not open."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "標準に加えて、アプリを開いているときはサイレントスイッチがオンでも音を鳴らします。iOS 26以降でアラームを許可すると、アプリを開いていないときもアラームで知らせます。"
+          }
+        }
+      }
     },
     "標準に加えて、サイレントスイッチがオンでも鳴らします" : {
-      "comment" : "One-line summary of the Maximum alarm strength under its Settings row; the status line below it explains when the app is not open. Suggested English: Like Standard, and plays even with the silent switch on"
+      "comment" : "One-line summary of the Maximum alarm strength under its Settings row; the status line below it explains when the app is not open. Suggested English: Like Standard, and plays even with the silent switch on",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Like Standard, with sound even when the silent switch is on"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "標準に加えて、サイレントスイッチがオンでも鳴らします"
+          }
+        }
+      }
     },
     "次の曲" : {
-      "comment" : "Skip to the next track in the Music app"
+      "comment" : "Skip to the next track in the Music app",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next Track"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "次の曲"
+          }
+        }
+      }
     },
     "止める" : {
-      "comment" : "Stop button on the system alarm (iOS 26.0 only). Suggested English: Stop"
+      "comment" : "Stop button on the system alarm (iOS 26.0 only). Suggested English: Stop",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "止める"
+          }
+        }
+      }
+    },
+    "止めるまで、音と触覚を繰り返します" : {
+      "comment" : "Caption under the alert status: sound and haptics repeat until stopped",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sound and haptics repeat until you stop them"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "止めるまで、音と触覚を繰り返します"
+          }
+        }
+      }
     },
     "止めるまで音と強い振動をくり返します。鳴っている間は画面をつけたままにし、%@で自動的に止まります。サイレントスイッチに従います。" : {
-      "comment" : "Alarm strength description; %@ is a duration such as 3分 (3 min). Suggested English: Repeats the sound and a strong vibration until you stop it. The screen stays on while it rings, and it stops by itself after %@. Follows the silent switch."
+      "comment" : "Alarm strength description; %@ is a duration such as 3分 (3 min). Suggested English: Repeats the sound and a strong vibration until you stop it. The screen stays on while it rings, and it stops by itself after %@. Follows the silent switch.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Repeats the sound and a strong vibration until you stop it. The screen stays on while it rings, and it stops by itself after %@. Follows the silent switch."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "止めるまで音と強い振動をくり返します。鳴っている間は画面をつけたままにし、%@で自動的に止まります。サイレントスイッチに従います。"
+          }
+        }
+      }
     },
     "止めるまで鳴らし続けます" : {
-      "comment" : "One-line summary of the Standard alarm strength under its Settings row. Suggested English: Rings until you stop it"
+      "comment" : "One-line summary of the Standard alarm strength under its Settings row. Suggested English: Rings until you stop it",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rings until you stop it"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "止めるまで鳴らし続けます"
+          }
+        }
+      }
+    },
+    "残り%@%@" : {
+      "comment" : "VoiceOver: time left on the timer. 1 = minutes, 2 = seconds, both always read (e.g. 残り25分0秒).",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, %2$@ left"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "残り%@%@"
+          }
+        }
+      }
     },
     "澄んだ鐘を3回ずつ打ち鳴らします" : {
-      "comment" : "Alarm sound description. Suggested English: A clear bell struck three times, over and over"
+      "comment" : "Alarm sound description. Suggested English: A clear bell struck three times, over and over",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A clear bell struck three times, over and over"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "澄んだ鐘を3回ずつ打ち鳴らします"
+          }
+        }
+      }
+    },
+    "瓶の画像を保存できませんでした。" : {
+      "comment" : "Error: the jar image for the widget could not be saved",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save the jar image."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶の画像を保存できませんでした。"
+          }
+        }
+      }
+    },
+    "瓶の粒は、そのまま待っています。" : {
+      "comment" : "The gems in the jar wait just as they are (nothing is lost during a break)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your gems are waiting in the jar, just as they were."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶の粒は、そのまま待っています。"
+          }
+        }
+      }
+    },
+    "瓶へ戻ります" : {
+      "comment" : "VoiceOver label of the spinner before going back to the jar",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Going back to the jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶へ戻ります"
+          }
+        }
+      }
+    },
+    "瓶へ戻る" : {
+      "comment" : "Button: back to the jar",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back to Jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶へ戻る"
+          }
+        }
+      }
     },
     "瓶へ戻ると、集中が始まります" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your focus starts when you go back to the jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶へ戻ると、集中が始まります"
+          }
+        }
+      }
+    },
+    "瓶を見る" : {
+      "comment" : "Button: go back to the jar",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View Jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶を見る"
+          }
+        }
+      }
     },
     "画面を消したり、ほかのアプリに移ると一時停止します。" : {
-      "comment" : "Running focus on an iPhone without a passcode: locking or switching apps pauses the timer. Suggested English: Locking the screen or switching apps pauses the timer."
+      "comment" : "Running focus on an iPhone without a passcode: locking or switching apps pauses the timer. Suggested English: Locking the screen or switching apps pauses the timer.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Locking the screen or switching apps pauses the timer."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面を消したり、ほかのアプリに移ると一時停止します。"
+          }
+        }
+      }
+    },
+    "画面を閉じても、休憩終了時にアラームで知らせます" : {
+      "comment" : "Running break whose end is announced by a system alarm (iOS 26 AlarmKit, strength 最大). Suggested English: An alarm rings when the break ends, even with the screen off",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An alarm rings when the break ends, even with the screen off."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面を閉じても、休憩終了時にアラームで知らせます"
+          }
+        }
+      }
+    },
+    "画面を閉じても、休憩終了時に通知します" : {
+      "comment" : "Status: a notification will announce the break end even with the screen off",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You'll be notified when the break ends, even with the screen off"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面を閉じても、休憩終了時に通知します"
+          }
+        }
+      }
+    },
+    "画面を閉じてもタイマーは進み、終了時にアラームで知らせます" : {
+      "comment" : "Running focus whose end is announced by a system alarm (iOS 26 AlarmKit, strength 最大). Suggested English: Keeps running with the screen off, and an alarm rings at the end",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The timer keeps running with the screen off, and an alarm rings when focus ends."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面を閉じてもタイマーは進み、終了時にアラームで知らせます"
+          }
+        }
+      }
+    },
+    "画面を閉じてもタイマーは進み、終了時に通知します" : {
+      "comment" : "Running notice: the timer keeps running with the screen off and notifies at the end",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The timer keeps running with the screen off and notifies you when it ends"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面を閉じてもタイマーは進み、終了時に通知します"
+          }
+        }
+      }
+    },
+    "画面を閉じても知らせるため通知を設定" : {
+      "comment" : "Button: allow a notification so the break end is announced even with the screen off",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Notify Me When the Break Ends"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面を閉じても知らせるため通知を設定"
+          }
+        }
+      }
+    },
+    "画面を閉じても進みます。終了通知は端末の設定から" : {
+      "comment" : "Button opening iOS Settings when timer-end notifications are denied; the timer keeps running with the screen off",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keeps running with the screen off. Turn on end notifications in Settings"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面を閉じても進みます。終了通知は端末の設定から"
+          }
+        }
+      }
+    },
+    "画面を閉じても進みます。終了通知を許可" : {
+      "comment" : "Button asking for notification permission; the timer keeps running with the screen off",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keeps running with the screen off. Allow end notifications"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面を閉じても進みます。終了通知を許可"
+          }
+        }
+      }
     },
     "画面ロック中も通常は進みます。ほかのアプリに移ると一時停止します。" : {
-      "comment" : "Running focus with a passcode: locking usually keeps the timer running (a lock right after an unlock can still pause it, so keep the hedge), switching apps pauses it. Suggested English: Usually keeps running while locked. Switching apps pauses it."
+      "comment" : "Running focus with a passcode: locking usually keeps the timer running (a lock right after an unlock can still pause it, so keep the hedge), switching apps pauses it. Suggested English: Usually keeps running while locked. Switching apps pauses it.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usually keeps running while locked. Switching apps pauses it."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面ロック中も通常は進みます。ほかのアプリに移ると一時停止します。"
+          }
+        }
+      }
     },
     "画面ロック中も通常は進みます。終了通知は端末の設定から" : {
-      "comment" : "Button opening iOS Settings when end notifications are denied; the timer usually keeps running while locked (keep the hedge). Suggested English: Usually keeps running while locked. Turn on end alerts in Settings"
+      "comment" : "Button opening iOS Settings when end notifications are denied; the timer usually keeps running while locked (keep the hedge). Suggested English: Usually keeps running while locked. Turn on end alerts in Settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usually keeps running while locked. Turn on end notifications in Settings"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面ロック中も通常は進みます。終了通知は端末の設定から"
+          }
+        }
+      }
     },
     "画面ロック中も通常は進みます。終了通知を許可" : {
-      "comment" : "Button asking for notification permission; the timer usually keeps running while locked (keep the hedge). Suggested English: Usually keeps running while locked. Allow end alerts"
+      "comment" : "Button asking for notification permission; the timer usually keeps running while locked (keep the hedge). Suggested English: Usually keeps running while locked. Allow end alerts",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usually keeps running while locked. Allow end notifications"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面ロック中も通常は進みます。終了通知を許可"
+          }
+        }
+      }
     },
     "目覚まし時計" : {
-      "comment" : "Alarm sound name: a mechanical twin-bell alarm clock. Suggested English: Alarm clock"
+      "comment" : "Alarm sound name: a mechanical twin-bell alarm clock. Suggested English: Alarm clock",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alarm clock"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目覚まし時計"
+          }
+        }
+      }
     },
     "短い音と振動で知らせます" : {
-      "comment" : "One-line summary of the Gentle alarm strength under its Settings row. Suggested English: A short sound and vibration"
+      "comment" : "One-line summary of the Gentle alarm strength under its Settings row. Suggested English: A short sound and vibration",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A short sound and vibration"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "短い音と振動で知らせます"
+          }
+        }
+      }
     },
     "短い音と振動で知らせます。サイレントスイッチに従います。" : {
-      "comment" : "Alarm strength description. Suggested English: A short sound and vibration. Follows the silent switch."
+      "comment" : "Alarm strength description. Suggested English: A short sound and vibration. Follows the silent switch.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A short sound and vibration. Follows the silent switch."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "短い音と振動で知らせます。サイレントスイッチに従います。"
+          }
+        }
+      }
     },
     "穏やかに集中するとき" : {
-      "comment" : "Apple Music Focus playlist title (US storefront: Peaceful Focus)"
+      "comment" : "Apple Music Focus playlist title (US storefront: Peaceful Focus)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Peaceful Focus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "穏やかに集中するとき"
+          }
+        }
+      }
     },
     "空欄なら、ホームで選んでいる時間で始めます。" : {
-      "comment" : "Shortcuts: what an empty focus length means"
+      "comment" : "Shortcuts: what an empty focus length means",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "If empty, the focus uses the length selected on Home."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "空欄なら、ホームで選んでいる時間で始めます。"
+          }
+        }
+      }
+    },
+    "端末の向きに合わせる" : {
+      "comment" : "VoiceOver label: make the timer follow the device's orientation again",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Follow device orientation"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "端末の向きに合わせる"
+          }
+        }
+      }
+    },
+    "端末時刻の大きな変化を検出。この回だけ自己申告あつかいです" : {
+      "comment" : "Timer notice: the device clock jumped, so this session counts as self-reported",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The device clock changed a lot, so this session counts as self-reported."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "端末時刻の大きな変化を検出。この回だけ自己申告あつかいです"
+          }
+        }
+      }
+    },
+    "粒を瓶へ運んでいます" : {
+      "comment" : "Completion heading while the new gem is being saved to the jar",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Carrying Your Gem to the Jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粒を瓶へ運んでいます"
+          }
+        }
+      }
+    },
+    "終了アラートを停止して瓶へ戻る" : {
+      "comment" : "VoiceOver label of the close button: stop the break-end alert and go back to the jar",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop the alert and go back to the jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了アラートを停止して瓶へ戻る"
+          }
+        }
+      }
+    },
+    "終了アラートを止める" : {
+      "comment" : "Button: stop the repeating end-of-timer alert (sound and haptics)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop Alert"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了アラートを止める"
+          }
+        }
+      }
+    },
+    "終了アラート中" : {
+      "comment" : "Status while the end-of-focus alert repeats (keep it short: one line at large sizes)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alert Sounding"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了アラート中"
+          }
+        }
+      }
+    },
+    "終了状態を安全に保存できませんでした。タイマーは継続しています。もう一度お試しください。" : {
+      "comment" : "Error: stopping the timer could not be saved safely, so the timer keeps running",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't safely save that the timer stopped. The timer is still running. Please try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了状態を安全に保存できませんでした。タイマーは継続しています。もう一度お試しください。"
+          }
+        }
+      }
     },
     "終了通知は端末の設定から" : {
-      "comment" : "Button opening iOS Settings when end notifications are denied (no passcode, so no promise about locking). Suggested English: Turn on end alerts in Settings"
+      "comment" : "Button opening iOS Settings when end notifications are denied (no passcode, so no promise about locking). Suggested English: Turn on end alerts in Settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn on end notifications in Settings"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了通知は端末の設定から"
+          }
+        }
+      }
+    },
+    "終了通知を予約できませんでした" : {
+      "comment" : "Status: the break-end notification could not be scheduled",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't schedule the end notification"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了通知を予約できませんでした"
+          }
+        }
+      }
+    },
+    "終了通知を設定" : {
+      "comment" : "Button: schedule the timer-end notification",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Set an end notification"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了通知を設定"
+          }
+        }
+      }
+    },
+    "終了通知を設定しています" : {
+      "comment" : "Progress line: the timer-end notification is being scheduled",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scheduling the end notification…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了通知を設定しています"
+          }
+        }
+      }
     },
     "終了通知を許可" : {
-      "comment" : "Button asking for notification permission (no passcode, so no promise about locking). Suggested English: Allow end alerts"
+      "comment" : "Button asking for notification permission (no passcode, so no promise about locking). Suggested English: Allow end alerts",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow end notifications"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了通知を許可"
+          }
+        }
+      }
+    },
+    "続ける" : {
+      "comment" : "Alert button: keep focusing instead of stopping for today",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep Going"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "続ける"
+          }
+        }
+      }
+    },
+    "自動" : {
+      "comment" : "Settings: default timer orientation option that follows the device",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Automatic"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自動"
+          }
+        }
+      }
+    },
+    "自己申告あつかい・一時停止" : {
+      "comment" : "Timer header: paused, and this session counts as self-reported",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Self-reported · Paused"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自己申告あつかい・一時停止"
+          }
+        }
+      }
+    },
+    "記録をまだ安全に保存できていません" : {
+      "comment" : "Completion heading: the session is not safely saved yet",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not Safely Saved Yet"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録をまだ安全に保存できていません"
+          }
+        }
+      }
+    },
+    "記録をまだ安全に保存できていません。完走は端末に保護されています" : {
+      "comment" : "VoiceOver announcement: the completed session is not safely saved yet, but this device keeps it",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your session isn't safely saved yet. This device is keeping the completed session."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録をまだ安全に保存できていません。完走は端末に保護されています"
+          }
+        }
+      }
+    },
+    "記録を保存中" : {
+      "comment" : "VoiceOver label of the spinner while the session is saved",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saving session"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録を保存中"
+          }
+        }
+      }
+    },
+    "設定できない時間" : {
+      "comment" : "A timer length outside 1–360 minutes, read from damaged data",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unavailable length"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定できない時間"
+          }
+        }
+      }
+    },
+    "設定の保存先を準備できませんでした。いったん戻り、もう一度お試しください。" : {
+      "comment" : "Error: the settings storage was not ready, so the rare-gem choice was not saved",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't get your settings storage ready. Go back, then try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定の保存先を準備できませんでした。いったん戻り、もう一度お試しください。"
+          }
+        }
+      }
+    },
+    "設定を開く" : {
+      "comment" : "Button: open iOS Settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Settings"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定を開く"
+          }
+        }
+      }
+    },
+    "通知は許可されていません" : {
+      "comment" : "Status: notifications are not allowed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Notifications aren't allowed"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通知は許可されていません"
+          }
+        }
+      }
+    },
+    "通知を予約できませんでした。もう一度試す" : {
+      "comment" : "Button: scheduling the timer-end notification failed; tap to try again",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't schedule the notification. Try again"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通知を予約できませんでした。もう一度試す"
+          }
+        }
+      }
+    },
+    "通知予約を再試行" : {
+      "comment" : "Button: try scheduling the break-end notification again",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try Scheduling Again"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通知予約を再試行"
+          }
+        }
+      }
     },
     "選んで再生します" : {
-      "comment" : "VoiceOver hint of a music row"
+      "comment" : "VoiceOver hint of a music row",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chooses and plays this music"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選んで再生します"
+          }
+        }
+      }
+    },
+    "選択やタイマーを開始せず瓶へ戻ります" : {
+      "comment" : "VoiceOver hint: go back to the jar without choosing or starting the timer",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Goes back to the jar without choosing or starting the timer."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択やタイマーを開始せず瓶へ戻ります"
+          }
+        }
+      }
+    },
+    "選択を保存領域へ確定してからタイマーを開始します" : {
+      "comment" : "VoiceOver hint: the choice is saved before the timer starts",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saves your choice, then starts the timer."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択を保存領域へ確定してからタイマーを開始します"
+          }
+        }
+      }
     },
     "選択中" : {
-      "comment" : "VoiceOver value: this music is the chosen one"
+      "comment" : "VoiceOver value: this music is the chosen one",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selected"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択中"
+          }
+        }
+      }
     },
     "長押しで音楽を選べます" : {
-      "comment" : "VoiceOver hint: long press the timer music button to choose music"
+      "comment" : "VoiceOver hint: long press the timer music button to choose music",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Touch and hold to choose music"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "長押しで音楽を選べます"
+          }
+        }
+      }
+    },
+    "閉じる" : {
+      "comment" : "Alert button: dismiss",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "閉じる"
+          }
+        }
+      }
     },
     "集中" : {
-      "comment" : "Timer ring status: the phase, before the percent left (集中 · 35% 残り)"
+      "comment" : "Timer ring status: the phase, before the percent left (集中 · 35% 残り)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中"
+          }
+        }
+      }
+    },
+    "集中が完了しました。%@、%@グラム。2本指でダブルタップすると終了アラートを止められます" : {
+      "comment" : "VoiceOver announcement when a focus completes while the end alert repeats. 1 = theme name, 2 = grams as plain digits (always 10 or more, so en says 'grams').",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus complete. %1$@, %2$@ grams. Double-tap with two fingers to stop the alert."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中が完了しました。%@、%@グラム。2本指でダブルタップすると終了アラートを止められます"
+          }
+        }
+      }
+    },
+    "集中が完了しました。%@、%@グラムを保存しています" : {
+      "comment" : "VoiceOver announcement when a focus completes. 1 = theme name, 2 = grams as plain digits (always 10 or more, so en says 'grams').",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus complete. Saving %2$@ grams to %1$@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中が完了しました。%@、%@グラムを保存しています"
+          }
+        }
+      }
     },
     "集中を始めたら再生する" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Play When Focus Starts"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中を始めたら再生する"
+          }
+        }
+      }
     },
     "集中を始める" : {
-      "comment" : "Siri, Spotlight and Shortcuts: the start-focus action"
+      "comment" : "Siri, Spotlight and Shortcuts: the start-focus action",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start Focus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中を始める"
+          }
+        }
+      }
+    },
+    "集中を完走しました" : {
+      "comment" : "Completion heading: the focus session is complete and saved",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus Complete"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中を完走しました"
+          }
+        }
+      }
+    },
+    "集中タイマー" : {
+      "comment" : "VoiceOver label of the timer ring during a focus",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus timer"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中タイマー"
+          }
+        }
+      }
+    },
+    "集中中" : {
+      "comment" : "Timer header while a focus runs",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focusing"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中中"
+          }
+        }
+      }
     },
     "集中時間" : {
-      "comment" : "Shortcuts: the focus length parameter"
+      "comment" : "Shortcuts: the focus length parameter",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus Length"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中時間"
+          }
+        }
+      }
     },
     "集中時間が終わりました" : {
-      "comment" : "Title of the system alarm when a focus ends. Suggested English: Focus time is over"
+      "comment" : "Title of the system alarm when a focus ends. Suggested English: Focus time is over",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus time is over"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中時間が終わりました"
+          }
+        }
+      }
     },
     "集中用の音楽" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus Music"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中用の音楽"
+          }
+        }
+      }
     },
     "集中用の音楽を一時停止" : {
-      "comment" : "VoiceOver label: pause the Music app from the timer"
+      "comment" : "VoiceOver label: pause the Music app from the timer",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pause focus music"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中用の音楽を一時停止"
+          }
+        }
+      }
     },
     "集中用の音楽を再生" : {
-      "comment" : "VoiceOver label: play the chosen focus music from the timer"
+      "comment" : "VoiceOver label: play the chosen focus music from the timer",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Play focus music"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中用の音楽を再生"
+          }
+        }
+      }
     },
     "集中用の音楽を選ぶ" : {
-      "comment" : "VoiceOver label: open the focus music list from the timer"
+      "comment" : "VoiceOver label: open the focus music list from the timer",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose focus music"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中用の音楽を選ぶ"
+          }
+        }
+      }
+    },
+    "音と触覚を止めます。記録の保存中でも操作でき、2本指のダブルタップでも止められます" : {
+      "comment" : "VoiceOver hint of the stop-alert button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stops the sound and haptics. Works even while the session is saving. A two-finger double tap stops it too."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音と触覚を止めます。記録の保存中でも操作でき、2本指のダブルタップでも止められます"
+          }
+        }
+      }
     },
     "音楽の画面を閉じる" : {
-      "comment" : "VoiceOver label of the music sheet's close button"
+      "comment" : "VoiceOver label of the music sheet's close button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close focus music"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音楽の画面を閉じる"
+          }
+        }
+      }
     },
     "音楽を選ぶ" : {
-      "comment" : "Focus music list: its heading, and the timer button's VoiceOver action that opens it"
+      "comment" : "Focus music list: its heading, and the timer button's VoiceOver action that opens it",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose Music"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音楽を選ぶ"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

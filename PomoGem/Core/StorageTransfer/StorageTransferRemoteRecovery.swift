@@ -31,7 +31,8 @@ enum StorageTransferRecoveryError: Error, LocalizedError, Equatable {
     case incompleteBackup, destinationMismatch
 
     var errorDescription: String? {
-        "iCloudの復旧用コピーを安全に確認できません。接続状態を確認して、保存先の切り替えを再試行してください。"
+        String(localized: "iCloudの復旧用コピーを安全に確認できません。接続状態を確認して、保存先の切り替えを再試行してください。",
+               table: "Storage", comment: "The recovery copy in iCloud could not be verified")
     }
 }
 

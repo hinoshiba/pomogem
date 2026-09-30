@@ -7,9 +7,11 @@ enum StorageTransferCleanupError: Error, LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .limitExceeded:
-            "安全に保持できる復旧処理の上限に達したため、新しい保存先の切り替えを開始できません。現在のデータは保護されています。"
+            String(localized: "安全に保持できる復旧処理の上限に達したため、新しい保存先の切り替えを開始できません。現在のデータは保護されています。",
+                   table: "Storage", comment: "Storage switch: too many retained recovery jobs to start another")
         default:
-            "保存先の切り替えに使った一時データを安全に確認できません。削除を保留しています。"
+            String(localized: "保存先の切り替えに使った一時データを安全に確認できません。削除を保留しています。",
+                   table: "Storage", comment: "Storage switch cleanup: temporary data is kept because it could not be verified")
         }
     }
 }

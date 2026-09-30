@@ -27,15 +27,33 @@ enum AchievementNotePolicy {
     /// above the keyboard while typing.
     static func shortStatus(for value: String) -> String {
         let excess = excessCharacters(for: value)
-        if excess > 0 { return "\(excess)文字超過" }
-        return "あと\(maximumCharacters - characterCount(for: value))文字"
+        if excess > 0 {
+            return String(
+                localized: "\(excess)文字超過",
+                table: "Home",
+                comment: "Milestone-stone name counter beside the field title: characters over the limit"
+            )
+        }
+        return String(
+            localized: "あと\(maximumCharacters - characterCount(for: value))文字",
+            table: "Home",
+            comment: "Milestone-stone name counter beside the field title: characters still available"
+        )
     }
 
     static func statusMessage(for value: String) -> String {
         let excess = excessCharacters(for: value)
         if excess > 0 {
-            return "\(maximumCharacters)文字以内で入力してください（\(excess)文字超過）。"
+            return String(
+                localized: "\(maximumCharacters)文字以内で入力してください（\(excess)文字超過）。",
+                table: "Home",
+                comment: "Milestone-stone name over the limit, above the disabled save button: the limit, then the characters over it"
+            )
         }
-        return "あと\(maximumCharacters - characterCount(for: value))文字入力できます。"
+        return String(
+            localized: "あと\(maximumCharacters - characterCount(for: value))文字入力できます。",
+            table: "Home",
+            comment: "VoiceOver hint of the milestone-stone name field: characters still available"
+        )
     }
 }
