@@ -284,7 +284,9 @@ final class JarIdleEnergyTests: XCTestCase {
         XCTAssertEqual(filter.ingest(peak), .shake)
 
         // F3: a turn the pile must re-settle for wakes the jar with or
-        // without Reduce Motion (the gems keep the same physics).
+        // without Reduce Motion (the gems keep the same physics), once the
+        // slow pose average has turned (review S1: the second idle sample
+        // here).
         for followsTilt in [false, true] {
             var turned = JarIdleTiltFilter(
                 reading: reading(0),
@@ -292,8 +294,84 @@ final class JarIdleEnergyTests: XCTestCase {
                 drawnLight: 0,
                 followsTilt: followsTilt
             )
+            let first = turned.ingest(sample(0.6))
+            XCTAssertNotEqual(first, .reorient, "followsTilt \(followsTilt)")
             XCTAssertEqual(turned.ingest(sample(0.6)), .reorient, "followsTilt \(followsTilt)")
         }
+    }
+
+    func testTheIdleCheckJudgesTheSlowPoseAverageSoASwayNeverWakesTheRestingPile() {
+        // Review S1: the resting pile once recorded the pose it settled
+        // under at whatever instant of a sway it stopped, so a ±5° sway
+        // reached 10° from it on the other side and woke the jar. The pose
+        // it settles under is now the slow pose average (τ 1.5 s), and the
+        // idle check compares that average with it: held upright or leaned
+        // back 30° or 45°, swayed ±5° at 0.25 and 0.5 Hz, from whatever
+        // phase the pile settled at, a minute of the sway never wakes it.
+        // A deliberate turn still does: past 30° at once, on the gravity's
+        // own smoothing (`JarTiltMath.immediateResettleTurn`): sideways at
+        // the first idle sample, upside down within two.
+        XCTAssertEqual(JarTiltMath.poseTimeConstant, 1.5)
+        XCTAssertEqual(
+            JarTiltMath.poseFraction(updatesPerSecond: JarMotionRate.idleUpdatesPerSecond),
+            CGFloat(1 - exp(-0.2 / 1.5)),
+            accuracy: 1e-9
+        )
+        XCTAssertEqual(
+            JarTiltMath.poseFraction(updatesPerSecond: JarMotionRate.fullUpdatesPerSecond),
+            CGFloat(1 - exp(-1.0 / 45)),
+            accuracy: 1e-9
+        )
+        func swayed(_ elevation: Double, _ amplitude: Double, _ hertz: Double, _ time: Double) -> JarMotionSample {
+            let e = elevation * .pi / 180
+            let r = amplitude * sin(2 * .pi * hertz * time) * .pi / 180
+            if elevation >= 90 {
+                // Upright: a twist in the screen's plane.
+                return JarMotionSample(gravityX: sin(r), gravityY: -cos(r), gravityZ: 0, timestamp: time)
+            }
+            // Leaned back: a roll about the long axis.
+            return JarMotionSample(gravityX: cos(e) * sin(r), gravityY: -sin(e), gravityZ: -cos(e) * cos(r), timestamp: time)
+        }
+        let rate = JarMotionRate.idleUpdatesPerSecond
+        for elevation in [90.0, 30.0, 45.0] {
+            for hertz in [0.25, 0.5] {
+                for settlePhase in 0 ..< 10 {
+                    let context = "\(elevation)°, ±5° at \(hertz) Hz, settled at phase \(settlePhase)"
+                    // The awake jar's pose average through 8 s of the sway
+                    // (at the idle rate: the same time constant), then the
+                    // pile rests under it.
+                    let steady = swayed(elevation, 0, hertz, 0).gravityReading!
+                    var warmup = JarIdleTiltFilter(reading: steady, settledReading: steady, drawnLight: 0, followsTilt: false)
+                    let settleSample = 40 + settlePhase
+                    for index in 0 ..< settleSample {
+                        _ = warmup.ingest(swayed(elevation, 5, hertz, Double(index) / rate))
+                    }
+                    let settled = warmup.poseReading!
+                    var filter = JarIdleTiltFilter(
+                        reading: warmup.reading,
+                        poseReading: settled,
+                        settledReading: settled,
+                        drawnLight: 0,
+                        followsTilt: false
+                    )
+                    for index in settleSample ..< settleSample + 300 {
+                        XCTAssertNil(filter.ingest(swayed(elevation, 5, hertz, Double(index) / rate)), context)
+                    }
+                }
+            }
+        }
+        // A deliberate turn wakes it.
+        let upright = reading(0)
+        var sideways = JarIdleTiltFilter(reading: upright, settledReading: upright, drawnLight: 0, followsTilt: false)
+        XCTAssertEqual(sideways.ingest(JarMotionSample(gravityX: 1, gravityY: 0, timestamp: 0)), .reorient, "Sideways: the first idle sample")
+        var flipped = JarIdleTiltFilter(reading: upright, settledReading: upright, drawnLight: 0, followsTilt: false)
+        var samples = 0
+        var woke = false
+        while samples < 2, !woke {
+            samples += 1
+            woke = flipped.ingest(JarMotionSample(gravityX: 0, gravityY: 1, timestamp: Double(samples) / rate)) == .reorient
+        }
+        XCTAssertTrue(woke, "Upside down within two idle samples")
     }
 
     func testIdleTiltMonitorWakesMainAtMostOncePerRunFromAnyThread() {
@@ -313,7 +391,8 @@ final class JarIdleEnergyTests: XCTestCase {
         XCTAssertEqual(wakes.count, 1)
         let latest = monitor.disarm()
         XCTAssertNotNil(latest)
-        XCTAssertGreaterThan(latest?.x ?? 0, 0.49)
+        XCTAssertGreaterThan(latest?.reading.x ?? 0, 0.49)
+        XCTAssertNotNil(latest?.poseReading, "The slow pose average goes with it")
         XCTAssertFalse(monitor.isArmed)
         XCTAssertNil(monitor.ingest(sample(0.9), generation: 7), "Disarmed")
     }

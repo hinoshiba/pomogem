@@ -183,25 +183,14 @@ enum Constants {
         static let restingDamping: CGFloat = 0.997
         /// F3, Reduce Motion (Docs/JarOrientationGravity.md): the damping a
         /// turn's calm re-settle gives the resting pile for its window, so
-        /// the gems slide to the new wall or the cap without a bounce or a
-        /// tumble. SpriteKit damps like Box2D (not clamped to 1): at 5 the
-        /// jar's gravity (7.2 m/s², 150 pt/m) tops out near 216 pt/s, so an
-        /// upside-down turn still crosses the jar in about 1.5 s, well
-        /// inside the window's 5 s hard stop (the ordinary damping slams
-        /// the pile into the cap after about 0.9 s and bounces it back up to
-        /// 20 pt). The angular damping stills a gem that was already
-        /// spinning.
-        static let calmResettleLinearDamping: CGFloat = 5
-        static let calmResettleAngularDamping: CGFloat = 20
-        /// F3, Reduce Motion: the friction of the calm re-settle's pile. A
-        /// gem sliding on the glass or on its neighbours is rolled by its
-        /// friction: with the ordinary 0.5 the raised angular damping still
-        /// let the calm pile turn about 4 rad/s. The gems of a round body
-        /// turn only through friction, so without it they slide into place
-        /// without turning. Holding their rotation instead is no substitute:
-        /// gems that can neither roll nor slip freely jam, and a sideways
-        /// pile then hangs across the jar instead of piling at the wall.
-        static let calmResettleFriction: CGFloat = 0
+        /// the gems slide to the new wall or the cap without a bounce. It is
+        /// the calm re-settle's only change (owner ruling 2026-09-29:
+        /// damping only; friction and contacts stay as they are).
+        /// SpriteKit damps like Box2D (not clamped to 1): the jar's gravity
+        /// (7.2 m/s², 150 pt/m) then tops out near 1080 / damping pt/s.
+        /// The angular damping stills a gem that was already spinning.
+        static let calmResettleLinearDamping: CGFloat = 3
+        static let calmResettleAngularDamping: CGFloat = 60
 
         static let completionDropDelay: TimeInterval = 0.350
         static let dropSpawnDelay = completionDropDelay

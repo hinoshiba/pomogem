@@ -348,6 +348,7 @@
 		C94D41C8F2E3F291CB6BE07C /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E44B05ED15660B2277666445 /* HomeView.swift */; };
 		CA9C6731181068A241AFFECF /* RareRewardLedgerV2Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ED4A83E537DFC93B1D07F98 /* RareRewardLedgerV2Tests.swift */; };
 		CD314C58727C0833F9311662 /* AcceptedActivityResetCleanup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DE3919E7D5B261B493E73C6 /* AcceptedActivityResetCleanup.swift */; };
+		CFFFD64CEE9A866BB3E08ACD /* JarHeadroomProbeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5303D692349D8E69104DAC38 /* JarHeadroomProbeUITests.swift */; };
 		D0069C8F579D2AF0EB430806 /* PomoGemDataExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F80442D2D22E628B70A0E36 /* PomoGemDataExporterTests.swift */; };
 		D11ECA681CE6BAD33AC1AEE6 /* StorageTransferCloudAuthorityFence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A908FB4DE4BB8B9BEB33044 /* StorageTransferCloudAuthorityFence.swift */; };
 		D18F4C6891682464DA3530F1 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00B48EE312926E6EAC5412EE /* AppRouter.swift */; };
@@ -633,6 +634,7 @@
 		4FB16E3D6A5C3CCBA74EFC70 /* StorageTransferSettingsUITestFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferSettingsUITestFixture.swift; sourceTree = "<group>"; };
 		50E849952EFAEFD4597EE5ED /* PomoGemApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomoGemApp.swift; sourceTree = "<group>"; };
 		51B82C324CF27A923F2B69D0 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
+		5303D692349D8E69104DAC38 /* JarHeadroomProbeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JarHeadroomProbeUITests.swift; sourceTree = "<group>"; };
 		5349315C26CBB480C0EDB7FD /* CloudKitMirroringActivityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitMirroringActivityTests.swift; sourceTree = "<group>"; };
 		5365DD134569D0BA0958D3E2 /* ViewTaskScope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewTaskScope.swift; sourceTree = "<group>"; };
 		55359B654256C762CB953477 /* NotificationPreferenceIntentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationPreferenceIntentTests.swift; sourceTree = "<group>"; };
@@ -1172,6 +1174,7 @@
 				B646D23FDCC8F9053F943B3F /* GIFShareLifecycleUITests.swift */,
 				94B7EA27B2F6A609BB55291B /* HomeIdleRenderUITests.swift */,
 				6B8674E12A35CF439F8FB33B /* HomeMenuAndManualEntryUITests.swift */,
+				5303D692349D8E69104DAC38 /* JarHeadroomProbeUITests.swift */,
 				1844B82DC222AD01D3D479B8 /* JarInteractionUITests.swift */,
 				64136B31D658F0554B6ECD98 /* PomoGemUITestLanguage.swift */,
 				2408A7B34EB06AEB1260EBE9 /* PomoGemUITestScenario.swift */,
@@ -2279,6 +2282,7 @@
 				2C4CC152BE16517C844AC96C /* GIFShareLifecycleUITests.swift in Sources */,
 				ADD937369B5C629419B05CDB /* HomeIdleRenderUITests.swift in Sources */,
 				F556F1942379F92113BF673C /* HomeMenuAndManualEntryUITests.swift in Sources */,
+				CFFFD64CEE9A866BB3E08ACD /* JarHeadroomProbeUITests.swift in Sources */,
 				A374879F73D328AA043A35C4 /* JarInteractionUITests.swift in Sources */,
 				20EB56F991481C1AAB9EFEC5 /* PomoGemUITestLanguage.swift in Sources */,
 				BC381C50B866CF9465087E4C /* PomoGemUITestScenario.swift in Sources */,

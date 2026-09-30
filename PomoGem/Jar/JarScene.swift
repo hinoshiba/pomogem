@@ -211,6 +211,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         /// upside down) passes them for at most this long before it joins
         /// ordinary collisions anyway.
         static let clearingTimeout: TimeInterval = 1.5
+        /// A gem waiting at the mouth (`EntryPhase.heldAtMouth`) lands
+        /// after this long there, so Home's receipt, the completion drop's
+        /// guard and the onboarding trial never wait on a pile that may
+        /// lie across the mouth for as long as the phone is held sideways.
+        /// It keeps waiting at the mouth until there is room.
+        static let heldLandingDelay: TimeInterval = 1.5
         /// Two bodies closer than the sum of their radii minus this overlap.
         static let overlapTolerance: CGFloat = 0.5
     }
@@ -229,8 +235,27 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         /// passes them under the entry gravity until it is clear, the
         /// gravity turns away from the mouth, or `clearingTimeout`. Under
         /// any other gravity a new gem that overlaps the pile joins it at
-        /// once, as before F3.
+        /// once, as before F3 — except a pile leaning on a wall, which a
+        /// gem waits on (`heldAtMouth`).
         case clearingPile(since: TimeInterval)
+        /// Review S2 (2026-09-29): held sideways (the gravity neither on
+        /// the floor nor toward the mouth), a crowded pile lies against the
+        /// lower wall and across the mouth. A gem joining it there would
+        /// start deep inside several gems, and the solver would throw one
+        /// of them out past the cap. The gem waits in the neck instead,
+        /// resting on the gems under the mouth (no collisions, no gravity),
+        /// until there is room where it would join; it lands there after
+        /// `CompletionEntryPhysics.heldLandingDelay`. It enters through the
+        /// mouth as always.
+        case heldAtMouth(since: TimeInterval)
+
+        /// Whether the gem is still above the collar, in the neck.
+        var isInTheNeck: Bool {
+            switch self {
+            case .throughMouth, .heldAtMouth: true
+            case .clearingPile: false
+            }
+        }
     }
 
     private struct QueuedDrop {
@@ -435,22 +460,35 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// (`setGravityReading`); nil when the gravity was set directly
     /// (`setGravityVector`) or reset, which reads as the default gravity.
     private(set) var appliedReading: JarGravityMapping.Reading?
+    /// F3 (review S1): the slow pose average of the sensed reading
+    /// (`JarTiltMath.poseTimeConstant`, about 1.5 s): the pose a pile
+    /// settles under, and what a resting jar compares with it to wake for
+    /// a turn. Nil with `appliedReading`.
+    private(set) var poseReading: JarGravityMapping.Reading?
     /// What the light follows (scene units, `JarTiltMath.lightFraction`):
     /// the sensed sideways reading, or a directly set gravity's dx.
     private var appliedLightHorizontal: CGFloat = 0
-    /// The reading the resting pile settled under (`.flat` stands for the
-    /// jar's default gravity). A resting jar re-settles when the phone
-    /// turns away from it (`JarGravityMapping.needsResettle`).
+    /// The pose the resting pile settled under: the slow pose average when
+    /// it stopped (`.flat` stands for the jar's default gravity). A resting
+    /// jar re-settles when the pose average turns away from it
+    /// (`JarGravityMapping.needsResettle`).
     private(set) var settledReading: JarGravityMapping.Reading = .flat
     /// The gravity the resting pile settled under.
     private var settledGravityVector = Constants.Jar.gravityVector
-    /// F3: the reading the awake pile has had the chance to follow — the
-    /// settled one when the jar woke, or the one a turn (re)opened the
-    /// interaction window for. A turn past `needsRefollow` (15°) from it
-    /// while the jar is awake opens the window again from that moment, so
-    /// neither the idle settle nor the hard stop can freeze a pile in
-    /// mid-flight after a deliberate turn.
-    private var followedReading: JarGravityMapping.Reading = .flat
+    /// F3: which turns give the awake pile its interaction window again
+    /// (`JarGravityMapping.Refollow`, review B1): from the pose the jar woke
+    /// under, a turn of the phone itself past 15° from the pose last
+    /// followed, and only as far as the phone turns — so neither the idle
+    /// settle nor the hard stop freezes a pile in mid-flight after a
+    /// deliberate turn, and a swaying hand never keeps the jar awake.
+    private var refollow = JarGravityMapping.Refollow(wakePose: .flat)
+    /// F3 (review B2): whether the app is active (`JarSpriteView` sets it
+    /// from its scene phase before it stops or starts motion). While it is
+    /// not, the SKView does not step the scene, so a reset of the gravity
+    /// never opens an interaction window whose deadlines would run out
+    /// unseen; the pile finishes its move through the ordinary idle
+    /// lifecycle once the app is back.
+    var hostIsActive = true
     /// The gravity the bodies rest under: the settled one while the jar
     /// rests (a stopped motion observer resets the live gravity without
     /// moving the frozen pile), the live one while it is awake. Share
@@ -501,6 +539,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// The scene time of the latest `update(_:)` (the landing fallback and
     /// the entry ritual's timeout use it; a paused scene does not advance).
     private var lastSceneUpdateTime: TimeInterval = 0
+    /// `interactionClock` at the latest `update(_:)` (review B2).
+    private var lastSceneUpdateUptime: TimeInterval?
+    /// A gap longer than this (seconds) between two frames means the scene
+    /// was not stepping (the app inactive or in the background, the view
+    /// off screen, a stalled main thread), not a slow frame: the time does
+    /// not count toward any deadline (`shiftDeadlinesOverASteppingGap`).
+    static let steppingGap: TimeInterval = 0.25
     /// When each new, not yet landed gem was first seen slow (F3 landing
     /// fallback).
     private var slowNewGemSince: [UUID: TimeInterval] = [:]
@@ -518,13 +563,39 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     static let pileProfileBinCount = 12
     /// Bodies slower than this (pt/s) count as resting for the profile.
     static let pileProfileRestingSpeed: CGFloat = 24
-    /// F3 (owner ruling 2026-09-27): the bounds of the same resting bodies
-    /// as the profile (scene points, y up, rounded out to 4 pt), or nil when
-    /// none rests. A pile held upside down rests against the cap, where the
-    /// profile's column tops cannot tell it from a tall upright one; Home
-    /// strengthens its HUD's ink scrim while these bounds meet the HUD
-    /// (`JarHUDScrimPolicy`).
-    @Published private(set) var settledPileBounds: CGRect?
+    /// F3 (owner ruling 2026-09-27; review F2/F5, 2026-09-29): the same
+    /// resting bodies as the profile, each as its circle (scene points, y
+    /// up, rounded to 1 pt). A pile held upside down rests against the cap,
+    /// where the profile's column tops cannot tell it from a tall upright
+    /// one. Home strengthens its HUD's ink scrim, and draws the 「N巡」 pill
+    /// in front of the scene, while one of these circles meets their frame
+    /// (`JarHUDScrimPolicy`), and the time core's labels judge a pile that
+    /// does not stand upright by them (`settledPileTop(minX:maxX:below:)`).
+    @Published private(set) var settledPileBodies: [JarHUDScrimPolicy.Body] = []
+    /// Whether the settled pile stands upright (`JarGravityMapping
+    /// .standsUpright` of `pileGravityVector` when it was published): its
+    /// column profile is then its height over the floor.
+    private(set) var settledPileStandsUpright = true
+
+    /// The bounds of `settledPileBodies` (rounded out to 4 pt), or nil
+    /// when none rests.
+    var settledPileBounds: CGRect? {
+        guard !settledPileBodies.isEmpty else { return nil }
+        var bounds = CGRect.null
+        for body in settledPileBodies {
+            bounds = bounds.union(CGRect(
+                x: body.center.x - body.radius,
+                y: body.center.y - body.radius,
+                width: body.radius * 2,
+                height: body.radius * 2
+            ))
+        }
+        let minX = (bounds.minX / 4).rounded(.down) * 4
+        let minY = (bounds.minY / 4).rounded(.down) * 4
+        let maxX = (bounds.maxX / 4).rounded(.up) * 4
+        let maxY = (bounds.maxY / 4).rounded(.up) * 4
+        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+    }
 
     /// Highest settled body over the horizontal span `minX...maxX` (scene
     /// coordinates), or 0 when that span is clear.
@@ -537,6 +608,29 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         let last = min(settledPileProfile.count - 1, Int(min(max(maxX, 0), size.width) / binWidth))
         guard first <= last else { return 0 }
         return settledPileProfile[first ... last].max() ?? 0
+    }
+
+    /// Review F5: the settled pile's top over `minX...maxX` for something
+    /// whose top edge is at scene y `ceiling` (the time core's label block
+    /// or its stone). A pile standing upright is judged by its column
+    /// profile, as before (`settledPileTop(minX:maxX:)`). A pile resting
+    /// against a wall or the cap is judged body by body: only resting
+    /// bodies over the span that reach below `ceiling` count, so a pile at
+    /// the cap never hides what lies below it, while one reaching down into
+    /// the labels still does.
+    func settledPileTop(minX: CGFloat, maxX: CGFloat, below ceiling: CGFloat?) -> CGFloat {
+        guard !settledPileStandsUpright, let ceiling, ceiling.isFinite else {
+            return settledPileTop(minX: minX, maxX: maxX)
+        }
+        guard minX.isFinite, maxX.isFinite else { return 0 }
+        var top: CGFloat = 0
+        for body in settledPileBodies
+        where body.center.x + body.radius >= minX
+            && body.center.x - body.radius <= maxX
+            && body.center.y - body.radius < ceiling {
+            top = max(top, (min(body.center.y + body.radius, size.height) / 4).rounded(.up) * 4)
+        }
+        return top
     }
     /// Observation-only revision for SwiftUI accessibility. The actual source
     /// of truth remains `livePebbles`; consumers read `physicalPebbleCount`
@@ -567,14 +661,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// F3, Reduce Motion (Docs/JarOrientationGravity.md, owner ruling
     /// 2026-09-27): the open window is a turn's calm re-settle. The physics
     /// is kept — a sideways phone still piles sideways — but the resting
-    /// pile carries `Constants.Jar.calmResettleLinearDamping`,
-    /// `calmResettleAngularDamping` and `calmResettleFriction` for the
-    /// window, so nothing bounces or tumbles, and the re-settle adds no
-    /// light or effect. It ends when the window does (rest, hard stop,
-    /// restore, a covered Home), when a tap, shake, VoiceOver action or
-    /// drag opens a window of its own, or when Reduce Motion turns off; the
-    /// pile then gets its ordinary damping and friction back (the resting
-    /// damping once it rests).
+    /// pile carries `Constants.Jar.calmResettleLinearDamping` and
+    /// `calmResettleAngularDamping` for the window — damping only (owner
+    /// ruling 2026-09-29): friction and contacts are untouched — so nothing
+    /// bounces, and the re-settle adds no light or effect. It ends when the
+    /// window does (rest, hard stop, restore, a covered Home), when a tap,
+    /// shake, VoiceOver action or drag opens a window of its own, or when
+    /// Reduce Motion turns off; the pile then gets its ordinary damping
+    /// back (the resting damping once it rests).
     private(set) var isCalmResettleActive = false
     /// F3, Reduce Motion: a shake threw the pile in the open window. Until
     /// that pile rests (the window ends), a turn — a shaking wrist turns the
@@ -892,13 +986,17 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         effect.run(.sequence([.wait(forDuration: 0.3), .removeFromParent()]))
         let node = makePebbleNode(destination)
         let range = allowedHorizontalRange(at: point.y, radius: node.radius)
+        // F3 (review F7): the new root forms a little above the fragments,
+        // away from the surface they rest on: along the gravity frame's up,
+        // as its birth velocity (straight up for an upright phone, as
+        // before), inside the same clamp.
+        let up = gestureFrame.up
         node.position = CGPoint(
-            x: min(max(point.x, range.lowerBound), range.upperBound),
-            y: min(max(point.y + 12, currentFloorY + node.radius + 6), interiorRect.maxY - node.radius)
+            x: min(max(point.x + up.dx * 12, range.lowerBound), range.upperBound),
+            y: min(max(point.y + up.dy * 12, currentFloorY + node.radius + 6), interiorRect.maxY - node.radius)
         )
         node.setScale(0.4 * node.jarScale)
         node.alpha = 0.25
-        let up = gestureFrame.up
         node.physicsBody?.velocity = CGVector(dx: up.dx * 32, dy: up.dy * 32)
         node.run(.scale(to: node.jarScale, duration: 0.28), withKey: PebbleNode.birthActionKey)
         node.run(.fadeIn(withDuration: 0.28))
@@ -1533,9 +1631,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         // not under the pose the removed pile rested in (a sheet may have
         // reset the gravity since, or the phone turned while Home was
         // covered). The clearances below and the next wake judge by it.
-        settledReading = appliedReading ?? .flat
+        settledReading = poseReading ?? appliedReading ?? .flat
         settledGravityVector = appliedGravityVector
-        followedReading = settledReading
+        refollow = JarGravityMapping.Refollow(wakePose: settledReading)
         // The rows start on the floor: they leave it only for a live
         // gravity off it.
         awakePileLeftTheFloor = !JarGravityMapping.restsOnTheFloor(appliedGravityVector)
@@ -1687,8 +1785,6 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             body.angularVelocity = oldBody.angularVelocity
             body.linearDamping = oldBody.linearDamping
             body.angularDamping = oldBody.angularDamping
-            // A calm re-settle (Reduce Motion) carries its friction too.
-            body.friction = oldBody.friction
             body.usesPreciseCollisionDetection = oldBody.usesPreciseCollisionDetection
             body.isDynamic = oldBody.isDynamic
             body.isResting = oldBody.isResting
@@ -2470,6 +2566,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             next.dy - appliedGravityVector.dy
         ) > 0.01 else { return }
         appliedReading = nil
+        poseReading = nil
         applyGravity(next, lightHorizontal: next.dx, wakesSimulation: wakesSimulation)
     }
 
@@ -2483,28 +2580,41 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// its glints still follow a tilt. The first reading after a reset (or
     /// a directly set gravity) stands as it is.
     ///
-    /// A resting jar whose phone turned from the pose its pile settled
-    /// under, turning the jar's gravity with it
+    /// The sensed reading also feeds the slow pose average (`poseReading`).
+    /// A resting jar whose pose average turned from the pose its pile
+    /// settled under, turning the jar's gravity with it
     /// (`JarGravityMapping.needsResettle`), wakes through one bounded
     /// interaction window (settle 3 s, hard stop 5 s), so the pile
     /// re-settles under the new gravity. An awake jar whose phone turns
-    /// more than 15° from the pose its pile has been following opens the
+    /// more than 15° from the pose its pile has been following, further
+    /// than it has turned so far (`JarGravityMapping.Refollow`), opens the
     /// window again from that moment (`followTurn`), so a turn late in a
     /// window never freezes the pile in mid-flight, while a swaying hand
     /// never extends it. The wake does not depend on Reduce
     /// Motion: the gems follow the phone either way. Under Reduce Motion the
-    /// re-settle runs calm — raised damping and no friction for its window,
-    /// no bounce or tumble, no light or effect (`isCalmResettleActive`) —
-    /// unless a shaken pile is still settling.
+    /// re-settle runs calm — raised damping for its window (damping only),
+    /// no bounce, no light or effect (`isCalmResettleActive`) — unless a
+    /// shaken pile is still settling.
+    ///
+    /// `smoothing: false` takes `sensed` as it is (the first reading after
+    /// a reset, or the idle check's latest reading when the jar goes back
+    /// to the full rate); `pose` is then the pose average to take with it
+    /// (the idle check's own), or `sensed` itself.
     func setGravityReading(
         _ sensed: JarGravityMapping.Reading,
-        smoothing: Bool = true
+        smoothing: Bool = true,
+        pose: JarGravityMapping.Reading? = nil
     ) {
         let next: JarGravityMapping.Reading
         if smoothing, let current = appliedReading {
             next = current.smoothed(toward: sensed, fraction: Constants.Jar.gravitySmoothingFactor)
+            poseReading = (poseReading ?? current).smoothed(
+                toward: sensed,
+                fraction: JarTiltMath.poseFraction(updatesPerSecond: JarMotionRate.fullUpdatesPerSecond)
+            )
         } else {
             next = sensed
+            poseReading = pose ?? sensed
         }
         appliedReading = next
         let gravity = JarGravityMapping.gravity(for: next)
@@ -2522,30 +2632,41 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
     /// F3: re-settles the pile for a turn of the phone. A resting pile
-    /// wakes when the reading turned from the pose it settled under
-    /// (`needsResettle`, about 6°); an awake one opens its interaction
-    /// window again only when the jar's gravity turned more than 15° from
-    /// the pose it has been following (`needsRefollow`). The awake check
-    /// measures from the last reopening, so with the resting jar's 6° a
-    /// hand swaying a few degrees each way would reopen the window on
-    /// every swing and keep the physics awake indefinitely; at 15° a sway
+    /// wakes for a turn past 30° at once, and for a smaller one (about 6°)
+    /// once its slow pose average turned from the pose it settled under
+    /// (`needsResettle(from:pose:current:)`, review S1); an awake one opens its
+    /// interaction window again only for a turn of the phone past 15° from
+    /// the pose it has been following, and only as far as the phone turns
+    /// from the pose the jar woke under (`JarGravityMapping.Refollow`,
+    /// review B1). The awake check measures from the last reopening, so
+    /// with the resting jar's 6° a hand swaying a few degrees each way
+    /// would reopen the window on every swing and keep the physics awake
+    /// indefinitely; measured on the phone and bounded by its turn, a sway
     /// never does, and a deliberate turn reopens it about once per 15° it
     /// turns (each window still settles after 3 s and stops after 5 s).
     /// Smaller turns while awake move the pile within the open window, as
     /// any tilt did before F3.
     private func followTurn(to reading: JarGravityMapping.Reading) {
         if isIdlePaused {
-            guard JarGravityMapping.needsResettle(from: settledReading, to: reading) else { return }
+            guard JarGravityMapping.needsResettle(
+                from: settledReading,
+                pose: poseReading ?? reading,
+                current: reading
+            ) else { return }
             beginInteractionMotionWindow(uptime: interactionClock())
-            followedReading = reading
+            refollow = JarGravityMapping.Refollow(wakePose: settledReading, followed: reading)
             beginCalmResettleUnderReduceMotion()
-        } else if JarGravityMapping.needsRefollow(from: followedReading, to: reading) {
-            followedReading = reading
-            // Only the deadlines move: the tapped gem's flight damping and
-            // the idle observation stay as they are.
-            interactionMotionWindow = JarInteractionMotionWindow(openedAt: interactionClock())
-            beginCalmResettleUnderReduceMotion()
+        } else if refollow.reopens(for: reading) {
+            reopenInteractionMotionWindowForATurn()
         }
+    }
+
+    /// Gives the awake pile a new window from now for a turn it has not
+    /// had its settle time under. Only the deadlines move: the tapped
+    /// gem's flight damping and the idle observation stay as they are.
+    private func reopenInteractionMotionWindowForATurn() {
+        interactionMotionWindow = JarInteractionMotionWindow(openedAt: interactionClock())
+        beginCalmResettleUnderReduceMotion()
     }
 
     /// F3, Reduce Motion: the re-settle a turn just opened (or reopened)
@@ -2561,8 +2682,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
     /// Ends a calm re-settle: the pile's bodies get their ordinary awake
-    /// damping and their friction back (a pile coming to rest then takes
-    /// the resting damping).
+    /// damping back (a pile coming to rest then takes the resting damping).
     private func endCalmResettle() {
         guard isCalmResettleActive else { return }
         let calmBodies = livePebbles.filter(takesCalmResettle)
@@ -2570,13 +2690,6 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         for pebble in calmBodies {
             pebble.physicsBody?.linearDamping = Constants.Jar.linearDamping
             pebble.physicsBody?.angularDamping = Constants.Jar.angularDamping
-        }
-        // Every body, not only the ones that are calm now: a gem that was
-        // calm may since have been tapped.
-        for pebble in livePebbles {
-            if let body = pebble.physicsBody {
-                setFriction(Constants.Jar.friction, of: body)
-            }
         }
     }
 
@@ -2590,32 +2703,24 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             && pebble.descriptor.id != activeTapMotion?.pebbleID
     }
 
-    /// The calm re-settle's body: raised damping (no bounce) and no
-    /// friction (no tumble: a round gem turns only through friction, so it
-    /// slides into place without turning; `Constants.Jar.calmResettleFriction`).
+    /// The calm re-settle's body: raised damping only (owner ruling
+    /// 2026-09-29: damping, nothing else), so the pile slides and rolls to
+    /// the new wall or the cap without a bounce. Friction, contacts and
+    /// the body type stay as they are.
     private func applyCalmResettle(to pebble: PebbleNode) {
         guard let body = pebble.physicsBody else { return }
         body.linearDamping = Constants.Jar.calmResettleLinearDamping
         body.angularDamping = Constants.Jar.calmResettleAngularDamping
-        setFriction(Constants.Jar.calmResettleFriction, of: body)
+#if DEBUG
+        if let tuning = Self.calmTuningOverride {
+            body.linearDamping = tuning.0
+            body.angularDamping = tuning.1
+        }
+#endif
     }
-
-    /// Gives a body a new friction at once. A contact keeps the friction
-    /// its bodies had when it began, so a resting pile's contacts would
-    /// keep rolling its gems: the body's contacts are dropped by switching
-    /// it static and back (they are made again, with the new friction, on
-    /// the next step), and its motion is kept.
-    private func setFriction(_ friction: CGFloat, of body: SKPhysicsBody) {
-        guard body.friction != friction else { return }
-        body.friction = friction
-        guard body.isDynamic else { return }
-        let velocity = body.velocity
-        let angularVelocity = body.angularVelocity
-        body.isDynamic = false
-        body.isDynamic = true
-        body.velocity = velocity
-        body.angularVelocity = angularVelocity
-    }
+#if DEBUG
+    static var calmTuningOverride: (CGFloat, CGFloat)?
+#endif
 
     private func applyGravity(
         _ next: CGVector,
@@ -2656,12 +2761,28 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         appliedLightHorizontal = 0
         appliedGravityVector = Constants.Jar.gravityVector
         physicsWorld.gravity = Constants.Jar.gravityVector
+        poseReading = nil
         // A resting jar returns its light exactly to the level position.
         updateOpticalTilt(horizontal: appliedLightHorizontal)
-        // An awake pile follows the default gravity like a turn to it; a
-        // resting one stays frozen in its settled pose (share support and
-        // the next wake judge by that pose), and nothing wakes it here.
-        if !isIdlePaused { followTurn(to: .flat) }
+        // An awake pile follows the default gravity like a turn to it: a
+        // reset is one event, not a sway, so its window opens whatever the
+        // pile has followed before, and later turns are measured from the
+        // default gravity as from a new wake. A resting one stays frozen in
+        // its settled pose (share support and the next wake judge by that
+        // pose), and nothing wakes it here. While the app is not active
+        // (review B2) the SKView does not step the scene, so no window
+        // opens: its deadlines would run out unseen and the first frame back
+        // would freeze the pile wherever it was. The pile then finishes its
+        // move under the ordinary idle lifecycle when the app is back (the
+        // gravity the motion brings back decides where), and the idle
+        // observation does not count the time the scene did not step
+        // (`shiftDeadlinesOverASteppingGap`).
+        guard !isIdlePaused, hostIsActive else { return }
+        let followed = refollow.followed
+        refollow = JarGravityMapping.Refollow(wakePose: .flat)
+        if JarGravityMapping.needsRefollow(from: followed, to: .flat) {
+            reopenInteractionMotionWindowForATurn()
+        }
     }
 
     /// Idle tilt (Docs/GemExperienceDesign.md §7.13). While the jar rests,
@@ -2748,7 +2869,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             // F3: the woken pile starts from the pose it settled under,
             // and leaves the floor if it lay off it or the live gravity
             // now pulls it off.
-            followedReading = settledReading
+            refollow = JarGravityMapping.Refollow(wakePose: settledReading)
             awakePileLeftTheFloor = !JarGravityMapping.restsOnTheFloor(settledGravityVector)
                 || !JarGravityMapping.restsOnTheFloor(appliedGravityVector)
         }
@@ -2872,7 +2993,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         JarFrameProbe.shared?.sceneUpdated()
 #endif
         refreshLightEdgeFade()
+        let uptime = interactionClock()
+        shiftDeadlinesOverASteppingGap(currentTime: currentTime, uptime: uptime)
         lastSceneUpdateTime = currentTime
+        lastSceneUpdateUptime = uptime
         let capacity = StrataMath.capacityUnits(pebbleRadii: bakeEligibleRadii)
         if capacity >= Constants.Jar.aggregateCapacityUnits {
             isCapacityReliefActive = true
@@ -2897,8 +3021,40 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
         updateIdlePause(
             currentTime: currentTime,
-            uptime: interactionClock()
+            uptime: uptime
         )
+    }
+
+    /// F3 (review B2): time the scene did not step never counts toward a
+    /// deadline. SpriteKit stops stepping while the app is inactive or in
+    /// the background (the SKView pauses itself) or the view is off screen,
+    /// while the interaction window runs on uptime and the idle
+    /// observation, the landing fallback and the entry ritual's timeout on
+    /// the frames' own clock, which both jump over such a gap. Unshifted,
+    /// the first frame back could find the window's hard stop (or the idle
+    /// observation's three seconds) long passed and freeze a pile in the
+    /// middle of its move. A window opened during the gap counts from its
+    /// opening; the jar's own idle pause resets the idle observation when
+    /// it wakes, so no gap is counted for it.
+    private func shiftDeadlinesOverASteppingGap(currentTime: TimeInterval, uptime: TimeInterval) {
+        let frameGap = currentTime - lastSceneUpdateTime
+        if lastSceneUpdateTime > 0, frameGap.isFinite, frameGap > Self.steppingGap {
+            if let started = idleSampleStartedAt { idleSampleStartedAt = started + frameGap }
+            for (id, since) in slowNewGemSince { slowNewGemSince[id] = since + frameGap }
+            for (id, phase) in enteringPhases {
+                switch phase {
+                case let .clearingPile(since): enteringPhases[id] = .clearingPile(since: since + frameGap)
+                case let .heldAtMouth(since): enteringPhases[id] = .heldAtMouth(since: since + frameGap)
+                case .throughMouth: break
+                }
+            }
+        }
+        if let window = interactionMotionWindow, let lastUptime = lastSceneUpdateUptime {
+            let windowGap = uptime - max(lastUptime, window.openedAt)
+            if windowGap.isFinite, windowGap > Self.steppingGap {
+                interactionMotionWindow = window.shifted(by: windowGap)
+            }
+        }
     }
 
     override func didSimulatePhysics() {
@@ -4075,11 +4231,18 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             )
             // Just under the mouth. Gems the gravity presses against the
             // cap there (held upside down) are passed first, like a
-            // completion drop past the collar; under any other gravity an
-            // overlapping gem joins at once, as before F3.
-            entryPhase = JarGravityMapping.pullsTowardTheMouth(appliedGravityVector) && overlapsRestingBody(node)
-                ? .clearingPile(since: lastSceneUpdateTime)
-                : nil
+            // completion drop past the collar; a pile leaning on a wall
+            // that lies across the mouth is waited on in the neck (review
+            // S2); under a downward gravity an overlapping gem joins at
+            // once, as before F3.
+            if let wait = mouthWaitY(for: node, x: node.position.x) {
+                node.position.y = wait
+                entryPhase = .heldAtMouth(since: lastSceneUpdateTime)
+            } else if JarGravityMapping.pullsTowardTheMouth(appliedGravityVector), overlapsRestingBody(node) {
+                entryPhase = .clearingPile(since: lastSceneUpdateTime)
+            } else {
+                entryPhase = nil
+            }
         }
         node.physicsBody?.velocity = CGVector(
             dx: origin == .sceneTop ? 0 : CGFloat.random(
@@ -4093,6 +4256,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         insertPebble(node)
         if let entryPhase {
             beginEntryRitual(for: node, phase: entryPhase)
+            if case .heldAtMouth = entryPhase {
+                node.physicsBody?.velocity = .zero
+                node.physicsBody?.angularVelocity = 0
+            }
         }
         if origin == .sceneTop {
             completionDropSequence &+= 1
@@ -4143,6 +4310,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             body.collisionBitMask = 0
         case .clearingPile:
             body.collisionBitMask = JarPhysicsCategory.wall | JarPhysicsCategory.floor
+        case .heldAtMouth:
+            // Still, touching nothing, pulled by nothing: placed each frame.
+            body.collisionBitMask = 0
+            body.fieldBitMask = 0
+            body.velocity = .zero
+            body.angularVelocity = 0
         }
     }
 
@@ -4187,6 +4360,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                     pebble.position.x = min(max(pebble.position.x, neck.lowerBound), neck.upperBound)
                 }
                 if body.velocity.dx != 0 { body.velocity.dx = 0 }
+                // Review S2: a pile leaning on a wall across the mouth is
+                // waited on where the gem meets it in the neck.
+                if let wait = mouthWaitY(for: pebble, x: pebble.position.x), pebble.position.y <= wait {
+                    pebble.position.y = wait
+                    beginEntryRitual(for: pebble, phase: .heldAtMouth(since: now))
+                    continue
+                }
                 guard pebble.position.y + pebble.radius <= interiorRect.maxY else { continue }
                 if JarGravityMapping.pullsTowardTheMouth(appliedGravityVector), overlapsRestingBody(pebble) {
                     beginEntryRitual(for: pebble, phase: .clearingPile(since: now))
@@ -4202,8 +4382,64 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                     entryClearingTimeoutCount &+= 1
                     finishEntryRitual(for: pebble)
                 }
+            case let .heldAtMouth(since):
+                body.velocity = .zero
+                body.angularVelocity = 0
+                if let wait = mouthWaitY(for: pebble, x: pebble.position.x) {
+                    // The pile may shift under it (a gem settling, the
+                    // phone turning a little): it keeps resting on it.
+                    pebble.position.y = wait
+                    if !pebble.hasLanded, now >= since, now - since >= CompletionEntryPhysics.heldLandingDelay {
+                        land(pebble, impactSpeed: 0, at: CGPoint(x: pebble.position.x, y: pebble.position.y - pebble.radius), finishingEntry: false)
+                    }
+                } else {
+                    // Room where it joins, or a gravity that no longer
+                    // leans the pile on a wall: it goes on down the neck
+                    // from where it waited, and joins at the collar.
+                    beginEntryRitual(for: pebble, phase: .throughMouth)
+                    body.velocity = .zero
+                }
             }
         }
+    }
+
+    /// Review S2: where a gem entering through the mouth at `x` must wait in
+    /// the neck (the scene y of its centre), or nil when it may go on. It
+    /// waits only while the gravity leans the pile on a wall (neither on
+    /// the floor nor toward the mouth, where the entry passes the pile,
+    /// `clearingPile`) and joining just under the collar
+    /// (`interiorRect.maxY − r`) would overlap a gem already in the jar; it
+    /// then rests on the highest of those gems, on the neck's line at `x`.
+    private func mouthWaitY(for pebble: PebbleNode, x: CGFloat) -> CGFloat? {
+        let gravity = appliedGravityVector
+        guard !JarGravityMapping.restsOnTheFloor(gravity),
+              !JarGravityMapping.pullsTowardTheMouth(gravity)
+        else { return nil }
+        let joinY = interiorRect.maxY - pebble.radius
+        let others = livePebbles.filter { other in
+            other.descriptor.id != pebble.descriptor.id
+                && other.physicsBody != nil
+                && enteringPhases[other.descriptor.id]?.isInTheNeck != true
+        }
+        var y = joinY
+        // Raise the gem past every gem it would overlap on that line, until
+        // it overlaps none (each pass clears at least one).
+        for _ in 0 ... others.count {
+            var raised = false
+            for other in others {
+                let reach = pebble.radius + other.radius - CompletionEntryPhysics.overlapTolerance
+                let dx = other.position.x - x
+                guard abs(dx) < reach else { continue }
+                let half = (reach * reach - dx * dx).squareRoot()
+                if y > other.position.y - half, y < other.position.y + half {
+                    y = other.position.y + half
+                    raised = true
+                }
+            }
+            if !raised { break }
+        }
+        guard y.isFinite, y > joinY + 0.5 else { return nil }
+        return min(y, size.height + pebble.radius)
     }
 
     /// Whether `pebble` overlaps another live body already in the jar
@@ -4213,7 +4449,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         return livePebbles.contains { other in
             guard other.descriptor.id != id,
                   other.physicsBody != nil,
-                  enteringPhases[other.descriptor.id] != .throughMouth
+                  enteringPhases[other.descriptor.id]?.isInTheNeck != true
             else { return false }
             let reach = pebble.radius + other.radius - CompletionEntryPhysics.overlapTolerance
             return hypot(other.position.x - pebble.position.x, other.position.y - pebble.position.y) < reach
@@ -4239,6 +4475,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         switch enteringPhases[id] {
         case .throughMouth: "throughMouth"
         case .clearingPile: "clearingPile"
+        case .heldAtMouth: "heldAtMouth"
         case nil: nil
         }
     }
@@ -4279,14 +4516,21 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
     /// Marks `pebble` landed and delivers its landing (sound, haptics,
     /// light and Home's landing callback), unless its landing is muted.
-    private func land(_ pebble: PebbleNode, impactSpeed: CGFloat, at point: CGPoint) {
+    /// A gem waiting at the mouth (`EntryPhase.heldAtMouth`) lands there
+    /// without `finishingEntry`: it keeps waiting until there is room.
+    private func land(
+        _ pebble: PebbleNode,
+        impactSpeed: CGFloat,
+        at point: CGPoint,
+        finishingEntry: Bool = true
+    ) {
         pebble.markLanded()
         if scheduledJarScale != nil {
             // Rescaling inside the contact callback would resize bodies
             // mid-step; the next update applies it.
             appliesScheduledJarScale = true
         }
-        finishEntryRitual(for: pebble)
+        if finishingEntry { finishEntryRitual(for: pebble) }
         aboveEntryPebbleIDs.remove(pebble.descriptor.id)
         slowNewGemSince[pebble.descriptor.id] = nil
         updateCompletionDropTrackingIfNeeded()
@@ -5176,7 +5420,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         guard size.width > 0 else { return }
         let binWidth = size.width / CGFloat(count)
         var profile = [CGFloat](repeating: 0, count: count)
-        var bounds = CGRect.null
+        var bodies: [JarHUDScrimPolicy.Body] = []
         for pebble in livePebbles where !pebble.isRemovedForBake {
             if let velocity = pebble.physicsBody?.velocity,
                hypot(velocity.dx, velocity.dy) > Self.pileProfileRestingSpeed {
@@ -5189,7 +5433,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             let bottom = min(max(0, pebble.position.y - pebble.radius), size.height)
             let left = min(max(pebble.position.x - pebble.radius, 0), size.width)
             let right = min(max(pebble.position.x + pebble.radius, 0), size.width)
-            bounds = bounds.union(CGRect(x: left, y: bottom, width: right - left, height: top - bottom))
+            bodies.append(JarHUDScrimPolicy.Body(
+                center: CGPoint(x: pebble.position.x.rounded(), y: pebble.position.y.rounded()),
+                radius: pebble.radius.rounded(.up)
+            ))
             let first = max(0, Int(left / binWidth))
             let last = min(count - 1, Int(right / binWidth))
             guard first <= last else { continue }
@@ -5197,16 +5444,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 profile[bin] = max(profile[bin], (top / 4).rounded(.up) * 4)
             }
         }
+        // Set before the published values, which SwiftUI reads it with.
+        settledPileStandsUpright = JarGravityMapping.standsUpright(pileGravityVector)
         if profile != settledPileProfile { settledPileProfile = profile }
-        var settledBounds: CGRect?
-        if !bounds.isNull {
-            let minX = (bounds.minX / 4).rounded(.down) * 4
-            let minY = (bounds.minY / 4).rounded(.down) * 4
-            let maxX = (bounds.maxX / 4).rounded(.up) * 4
-            let maxY = (bounds.maxY / 4).rounded(.up) * 4
-            settledBounds = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
-        }
-        if settledBounds != settledPileBounds { settledPileBounds = settledBounds }
+        if bodies != settledPileBodies { settledPileBodies = bodies }
     }
 
     /// Bakes gem bed textures off the main thread (tests may bake inline).
@@ -5658,16 +5899,20 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         // A settled pile over the core or the HUD steps down first: the jar
         // stays awake for the 0.5 s transition and settles anew after it.
         if enforcePileClearances() { return }
-        // F3: the pose this pile settled under. A turn away from it wakes
-        // the jar again (`setGravityReading`, `JarIdleTiltFilter`). Any
+        // F3: the pose this pile settled under: the slow pose average
+        // (review S1), not the reading at this instant, so a pile that
+        // stops in the middle of a hand's sway records the sway's centre,
+        // and the sway does not wake it again. A turn away from it wakes
+        // the jar again (`setGravityReading`, `JarIdleTiltFilter`). A
         // deliberate turn (past 15°) the pile has not followed yet reopened
-        // the interaction window (`followTurn`), so neither stop comes
-        // before the pile has had its settle time under that pose; a
-        // smaller turn late in a window may leave the pile partly moved,
-        // as any tilt did before F3.
-        settledReading = appliedReading ?? .flat
+        // the interaction window (`followTurn`), so the stop rarely comes
+        // before the pile has had its settle time under that pose; one
+        // that `Refollow` declined, or a smaller turn late in a window, may
+        // leave the pile partly moved, as any tilt did before F3 — the
+        // average then still moves on toward the new pose and wakes it.
+        settledReading = poseReading ?? appliedReading ?? .flat
         settledGravityVector = appliedGravityVector
-        followedReading = settledReading
+        refollow = JarGravityMapping.Refollow(wakePose: settledReading)
         // The settled gravity decides whether this pile rests on the floor.
         awakePileLeftTheFloor = false
         if !isIdlePaused {
@@ -5785,7 +6030,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 horizontalRange.upperBound
             )
             let previousY = pebble.position.y
-            let upperY = enteringPhases[pebble.descriptor.id] == .throughMouth
+            let upperY = enteringPhases[pebble.descriptor.id]?.isInTheNeck == true
                 ? size.height
                 : interiorRect.maxY - pebble.radius
             pebble.position.y = min(pebble.position.y, upperY)
@@ -5848,6 +6093,17 @@ struct JarInteractionMotionWindow: Equatable {
 
     func canSettle(at uptime: TimeInterval) -> Bool {
         uptime.isFinite && uptime >= settleAt
+    }
+
+    /// The same window, every deadline `gap` seconds later (time the scene
+    /// did not step, review B2).
+    func shifted(by gap: TimeInterval) -> JarInteractionMotionWindow {
+        guard gap.isFinite, gap > 0 else { return self }
+        return JarInteractionMotionWindow(
+            openedAt: openedAt + gap,
+            settleDelay: settleAt - openedAt,
+            hardStopDelay: hardStopAt - openedAt
+        )
     }
 
     func mustStop(at uptime: TimeInterval) -> Bool {
@@ -6384,7 +6640,7 @@ final class JarMotionObserver: ObservableObject {
         // Set first: the gravity catch-up below can itself raise the jar's
         // demand, which must find the full rate already running.
         rate = .full
-        let latestIdleReading = idleMonitor.disarm()
+        let latestIdleReadings = idleMonitor.disarm()
         let generation = updateGate.begin()
         shakeDetector.reset()
         source.start(
@@ -6402,8 +6658,12 @@ final class JarMotionObserver: ObservableObject {
         // woken by a tap never starts from a stale tilt, a tilt that woke
         // it moves the light at once, and a turn that woke it re-settles
         // the pile (F3; the scene makes the same check).
-        if appliesGravity, let latestIdleReading {
-            scene?.setGravityReading(latestIdleReading, smoothing: false)
+        if appliesGravity, let latestIdleReadings {
+            scene?.setGravityReading(
+                latestIdleReadings.reading,
+                smoothing: false,
+                pose: latestIdleReadings.poseReading
+            )
         }
     }
 
@@ -6415,6 +6675,7 @@ final class JarMotionObserver: ObservableObject {
         idleMonitor.arm(
             JarIdleTiltFilter(
                 reading: scene.appliedReading,
+                poseReading: scene.poseReading,
                 settledReading: scene.settledReading,
                 drawnLight: scene.opticalTiltFraction,
                 followsTilt: !scene.reduceMotion

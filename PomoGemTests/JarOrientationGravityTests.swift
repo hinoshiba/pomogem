@@ -474,12 +474,14 @@ final class JarOrientationGravityTests: XCTestCase {
 
     func testUnderDownwardGravityAGemEnteringIntoThePileJoinsItAtOnceAsBeforeF3() throws {
         // The pass-through is for a pile the gravity presses against the
-        // cap only: under the jar's own down (and held sideways) a new gem
-        // that spawns into a pile reaching the mouth joins it at once. A
-        // supported jar keeps more room under the mouth than a gem is wide
-        // (the §7.5 headroom), so the pile's highest body is held right
-        // under the mouth, where the gem enters, to stand for such a pile.
-        for pose in [Pose.portrait, .landscapeLeft] {
+        // cap only: under the jar's own down a new gem that spawns into a
+        // pile reaching the mouth joins it at once. A supported jar keeps
+        // more room under the mouth than a gem is wide (the §7.5 headroom),
+        // so the pile's highest body is held right under the mouth, where
+        // the gem enters, to stand for such a pile. Held sideways the gem
+        // waits in the neck instead (review S2,
+        // `testANewGemWaitsInTheNeckOverASidewaysPileAcrossTheMouthAndNeverThrowsAGemOut`).
+        for pose in [Pose.portrait] {
             let scene = makeCrowdedJar()
             let driver = try Driver(scene: scene)
             defer { driver.finish() }
@@ -589,7 +591,10 @@ final class JarOrientationGravityTests: XCTestCase {
 
             // Held there until the window's hard stop: the pile rests again
             // under the new pose.
-            for _ in 0 ..< 20 { source.deliver(sample(.landscapeLeft)) }
+            // The full-rate motion source supplies about 30 readings a
+            // second. Give the slow pose average the same five seconds as
+            // the interaction window before forcing its hard stop.
+            for _ in 0 ..< 150 { source.deliver(sample(.landscapeLeft)) }
             forceRest(scene, clock: clock)
             XCTAssertTrue(scene.isIdlePaused)
             XCTAssertEqual(observer.rate, .idle)
@@ -666,8 +671,9 @@ final class JarOrientationGravityTests: XCTestCase {
             XCTAssertTrue(scene.isIdlePaused, "\(pose)")
             XCTAssertFalse(scene.isInteractionMotionActive, "\(pose)")
         }
-        // Upside down: once the smoothed gravity points up, the pile goes.
-        for _ in 0 ..< 3 {
+        // Upside down: once the slow pose average points up (about 1.4 s at
+        // the idle rate, review S1), the pile goes.
+        for _ in 0 ..< 9 where scene.isIdlePaused {
             source.deliver(sample(.upsideDown))
             drainMainQueue()
         }
@@ -780,8 +786,10 @@ final class JarOrientationGravityTests: XCTestCase {
             case .landscapeRight: XCTAssertGreaterThan(after.x, before.x + 30, "Toward the right wall")
             default: XCTAssertGreaterThan(after.y, before.y + 60, "Toward the cap")
             }
-            XCTAssertEqual(scene.settledReading.x, turn.reading.x, accuracy: 1e-3, "\(turn)")
-            XCTAssertEqual(scene.settledReading.y, turn.reading.y, accuracy: 1e-3, "\(turn)")
+            // The settled pose is the slow pose average (review S1), a few
+            // hundredths short of the pose after the ≥ 5 s window.
+            XCTAssertEqual(scene.settledReading.x, turn.reading.x, accuracy: 0.08, "\(turn)")
+            XCTAssertEqual(scene.settledReading.y, turn.reading.y, accuracy: 0.08, "\(turn)")
             assertContainedWithRadius(scene, "turned \(turn), settled")
             for _ in 0 ..< 60 {
                 driver.step(frames: 2) { scene.setGravityReading(turn.reading) }
@@ -804,8 +812,11 @@ final class JarOrientationGravityTests: XCTestCase {
         XCTAssertTrue(scene.isIdlePaused)
         let upright = centroid(scene)
         let uprightTop = highestTop(scene)
-        // Turned onto its left edge and held until 0.7 s before the stop.
-        scene.setGravityReading(Pose.landscapeLeft.reading)
+        // Turned onto its left edge (the slow pose average wakes the pile
+        // within a few samples) and held until 0.7 s before the stop.
+        for _ in 0 ..< 8 where scene.isIdlePaused {
+            scene.setGravityReading(Pose.landscapeLeft.reading)
+        }
         XCTAssertFalse(scene.isIdlePaused)
         var frame = 0
         while let stop = scene.interactionHardStopForTesting, driver.now < stop - 0.7 {
@@ -825,7 +836,7 @@ final class JarOrientationGravityTests: XCTestCase {
         XCTAssertGreaterThan(driver.now, originalStop + 1, "The stop moved with the turn")
         XCTAssertEqual(centroid(scene).y, upright.y, accuracy: 20, "Back on the floor, not frozen in mid-flight")
         XCTAssertLessThanOrEqual(highestTop(scene), uprightTop + 30)
-        XCTAssertEqual(scene.settledReading.y, -1, accuracy: 1e-3)
+        XCTAssertEqual(scene.settledReading.y, -1, accuracy: 0.08, "The slow pose average, back upright")
         assertContainedWithRadius(scene, "late flip, settled")
         for _ in 0 ..< 30 {
             driver.step(frames: 2) { scene.setGravityReading(Pose.portrait.reading) }
@@ -840,10 +851,12 @@ final class JarOrientationGravityTests: XCTestCase {
         // jar measures a turn from the pose its pile last followed, so with
         // that same rule every swing would reopen the window and keep the
         // physics, the 60 fps loop and full-rate motion on forever. The
-        // awake window reopens only past 15° (`needsRefollow`): woken by a
-        // tap or by a turn, the swaying jar rests within the one hard stop
-        // it had, at 1 and 2 Hz.
-        for hertz in [1.0, 2.0] {
+        // awake window reopens only for a turn of the phone past 15°
+        // (`needsRefollow`, `Refollow`): woken by a tap or by a turn, the
+        // swaying jar rests within the one hard stop it had, at 0.25, 0.5,
+        // 1 and 2 Hz. Resting, it judges the slow pose average against the
+        // pose it settled under (review S1): the sway never wakes it.
+        for hertz in [0.25, 0.5, 1.0, 2.0] {
             for wake in ["tap", "turn"] {
                 let context = "\(wake), ±5° at \(hertz) Hz"
                 let scene = makeScene()
@@ -875,9 +888,9 @@ final class JarOrientationGravityTests: XCTestCase {
                 XCTAssertFalse(extended, "\(context): the sway never reopened the window")
                 XCTAssertTrue(scene.isIdlePaused, "\(context): rests")
                 XCTAssertLessThanOrEqual(driver.now, stop + 0.6, "\(context): within the hard stop it had")
-                // Swaying on, the resting jar wakes only where a swing
-                // reaches ~6° from the pose it rested in (measured, not
-                // bounded here: Docs/JarOrientationGravity.md, 実機で未確認).
+                // Swaying on, the resting jar never wakes: the pose it
+                // settled under is the slow pose average (near the sway's
+                // centre), and so is what it compares with it.
                 let restStart = driver.now
                 var wakes = 0
                 var awakeFrames = 0
@@ -894,12 +907,13 @@ final class JarOrientationGravityTests: XCTestCase {
                     wasResting = scene.isIdlePaused
                 }
                 print(String(
-                    format: "SWAY-AT-REST wake=%@ hertz=%.0f wakes=%d awake=%.1fs/30s",
+                    format: "SWAY-AT-REST wake=%@ hertz=%.2f wakes=%d awake=%.1fs/30s",
                     wake,
                     hertz,
                     wakes,
                     Double(awakeFrames) / 60
                 ))
+                XCTAssertEqual(wakes, 0, "\(context): the resting pile never wakes for the sway")
             }
         }
         // A deliberate turn while awake still reopens the window once per
@@ -923,7 +937,7 @@ final class JarOrientationGravityTests: XCTestCase {
         XCTAssertLessThanOrEqual(stops.count, 8, "About once per 15° of a 90° roll, not on every sample")
         settle(scene, driver, holding: rolled(90))
         XCTAssertTrue(scene.isIdlePaused)
-        XCTAssertEqual(scene.settledReading.x, 1, accuracy: 1e-3, "Rested on its side")
+        XCTAssertEqual(scene.settledReading.x, 1, accuracy: 0.08, "Rested on its side (the slow pose average)")
     }
 
     func testTheFormerIdleTiltNowReSettlesThePileThroughOneBoundedWindow() {
@@ -951,7 +965,10 @@ final class JarOrientationGravityTests: XCTestCase {
             rest(scene, clock: clock)
             XCTAssertEqual(observer.rate, .idle)
 
-            source.deliver(tilted(0.3))
+            // A 17° tilt is below the 30° immediate-wake threshold. At the
+            // idle rate, the slow pose average needs several readings to
+            // distinguish a held turn from hand sway.
+            for _ in 0 ..< 7 { source.deliver(tilted(0.3)) }
             drainMainQueue()
             XCTAssertEqual(observer.rate, .full, "Reduce Motion \(reduceMotion)")
             XCTAssertFalse(scene.isIdlePaused, "Reduce Motion \(reduceMotion): the physics wakes")
@@ -967,7 +984,7 @@ final class JarOrientationGravityTests: XCTestCase {
             } else {
                 XCTAssertGreaterThan(scene.opticalTiltFraction, 0.15)
             }
-            for _ in 0 ..< 20 { source.deliver(tilted(0.3)) }
+            for _ in 0 ..< 150 { source.deliver(tilted(0.3)) }
             forceRest(scene, clock: clock)
             XCTAssertTrue(scene.isIdlePaused)
             XCTAssertEqual(observer.rate, .idle)
@@ -987,12 +1004,11 @@ final class JarOrientationGravityTests: XCTestCase {
         // without Reduce Motion. Under Reduce Motion the physics is kept —
         // the pile still goes to the new wall or the cap — but the
         // re-settle is calm: for the window the resting pile's damping is
-        // raised (no bounce) and its friction taken away (no tumble: a
-        // round gem turns only through friction), and it adds no light or
-        // effect. Without Reduce Motion the same turn keeps the ordinary
-        // damping and friction, as before. After the window the pile rests
-        // with the resting damping and its friction back, and the next wake
-        // (a tap) is an ordinary one.
+        // raised (no bounce), and it adds no light or effect. Damping only
+        // (ruling 2026-09-29): the friction stays the ordinary one all
+        // along. Without Reduce Motion the same turn keeps the ordinary
+        // damping, as before. After the window the pile rests with the
+        // resting damping, and the next wake (a tap) is an ordinary one.
         //
         // The window's hard stop (5 s) freezes whatever still moves, and
         // the idle check (3 s of stillness) cannot end a window whose pile
@@ -1007,9 +1023,11 @@ final class JarOrientationGravityTests: XCTestCase {
         // pile as a whole (its mean depth) springing back against the new
         // gravity, the push-back any one gem moving back against it, and a
         // tumble a gem turning about itself (its node's rotation, as the
-        // eye sees it). While the frictionless calm pile levels, a gem can
-        // still be pushed back slowly by a neighbour sliding deeper (under
-        // the cap, up to about 57 pt/s); the pile itself never springs back.
+        // eye sees it). While the calm pile levels, a gem can still be
+        // pushed back slowly by a neighbour sliding deeper; the pile itself
+        // never springs back. Friction still rolls a gem sliding on the
+        // glass or on its neighbours (damping only), less than the
+        // ordinary pile's tumbling.
         struct Motion {
             var rebound: CGFloat = 0
             var bounce: CGFloat = 0
@@ -1061,7 +1079,7 @@ final class JarOrientationGravityTests: XCTestCase {
                         if reduceMotion {
                             XCTAssertEqual(body.linearDamping, Constants.Jar.calmResettleLinearDamping, accuracy: 1e-6, context)
                             XCTAssertEqual(body.angularDamping, Constants.Jar.calmResettleAngularDamping, accuracy: 1e-6, context)
-                            XCTAssertEqual(body.friction, Constants.Jar.calmResettleFriction, accuracy: 1e-6, "\(context): the calm pile slides without friction")
+                            XCTAssertEqual(body.friction, Constants.Jar.friction, accuracy: 1e-6, "\(context): damping only, the friction stays")
                         } else {
                             XCTAssertLessThanOrEqual(body.linearDamping, Constants.Jar.interactionSettlingDamping + 1e-6, context)
                             XCTAssertLessThanOrEqual(body.angularDamping, Constants.Jar.interactionSettlingDamping + 1e-6, context)
@@ -1158,19 +1176,91 @@ final class JarOrientationGravityTests: XCTestCase {
             }
             let calm = try XCTUnwrap(motions[true])
             let ordinary = try XCTUnwrap(motions[false])
-            // Measured (iPhone 17 Pro Simulator), per 0.1 s: calm rebound
-            // 0.04–0.34 pt, push-back 1.2–5.7 pt, tumble below 2e-6 rad;
+            // Measured (iPhone 17 Pro Simulator), per 0.1 s: CALM_MEASURED;
             // ordinary push-back 4.2–16 pt (the upside-down pile slams into
             // the cap and springs back) and tumble 0.77–1.4 rad.
             XCTAssertLessThan(calm.rebound, 1, "\(turn): no bounce")
             XCTAssertLessThan(calm.bounce, 7, "\(turn): no gem springs back")
             XCTAssertLessThan(calm.bounce, ordinary.bounce, "\(turn)")
-            XCTAssertLessThan(calm.tumble, 0.02, "\(turn): no tumble")
-            XCTAssertLessThan(calm.tumble, ordinary.tumble, "\(turn)")
-            // The calm pile piles up against the new boundary as tightly as
-            // the ordinary one: no gem hangs across the jar, held by its
-            // neighbours (a pile that can neither roll nor slip jams).
-            XCTAssertLessThanOrEqual(calm.depth, ordinary.depth + 40, "\(turn): piled at the boundary")
+            XCTAssertLessThan(calm.tumble, ordinary.tumble, "\(turn): less tumbling than the ordinary pile")
+            // The calm pile piles up against the new boundary: with the
+            // friction kept it may rest as an L in the floor–wall corner
+            // (as the ordinary pile sometimes does), a little less tightly,
+            // but no gem hangs across the jar.
+            XCTAssertLessThanOrEqual(calm.depth, ordinary.depth + 60, "\(turn): piled at the boundary")
+        }
+    }
+
+    func testZZCalmDampingSweep() throws {
+        defer { JarScene.calmTuningOverride = nil }
+        let window = 6
+        for tuning in [(CGFloat(3), CGFloat(60)), (2.5, 60), (3, 40), (3, 100), (2.5, 100), (3.5, 60), (4, 60), (2.5, 40), (0.3, 0.5)] {
+          for count in [9, 15] {
+            JarScene.calmTuningOverride = tuning
+            for turn in [Pose.upsideDown, .landscapeRight, .landscapeLeft] {
+                let scene = makeScene()
+                scene.reduceMotion = !(tuning.0 == 0.3)
+                scene.restore(pebbles: looseSeries(count))
+                let driver = try Driver(scene: scene)
+                defer { driver.finish() }
+                settle(scene, driver, holding: Pose.portrait.reading)
+                let finalGravity = JarGravityMapping.gravity(for: turn.reading)
+                let finalLength = max(hypot(finalGravity.dx, finalGravity.dy), 1e-9)
+                let down = CGVector(dx: finalGravity.dx / finalLength, dy: finalGravity.dy / finalLength)
+                var depths: [ObjectIdentifier: [CGFloat]] = [:]
+                var pileDepths: [CGFloat] = []
+                var turns: [ObjectIdentifier: [CGFloat]] = [:]
+                var rotations: [ObjectIdentifier: CGFloat] = [:]
+                var rebound: CGFloat = 0, bounce: CGFloat = 0, tumble: CGFloat = 0, last: CGFloat = 0
+                var reached: TimeInterval = -1
+                let start = driver.now
+                let took = settle(scene, driver, holding: turn.reading) {
+                    guard !scene.isIdlePaused else { return }
+                    let gravity = scene.physicsWorld.gravity
+                    let turned = (gravity.dx * down.dx + gravity.dy * down.dy) / max(hypot(gravity.dx, gravity.dy), 1e-9) > cos(5 * .pi / 180)
+                    var fastest: CGFloat = 0
+                    var pileDepth: CGFloat = 0
+                    var landed = 0
+                    for pebble in self.pebbles(scene) where pebble.hasLanded {
+                        guard let body = pebble.physicsBody else { continue }
+                        fastest = max(fastest, hypot(body.velocity.dx, body.velocity.dy))
+                        let id = ObjectIdentifier(pebble)
+                        let rotation = pebble.zRotation
+                        let step = rotations[id].map { abs((rotation - $0).remainder(dividingBy: 2 * .pi)) } ?? 0
+                        rotations[id] = rotation
+                        guard turned else { continue }
+                        let depth = pebble.position.x * down.dx + pebble.position.y * down.dy
+                        depths[id, default: []].append(depth)
+                        turns[id, default: []].append((turns[id]?.last ?? 0) + step)
+                        pileDepth += depth
+                        landed += 1
+                    }
+                    if landed > 0 { pileDepths.append(pileDepth / CGFloat(landed)) }
+                    last = fastest
+                    if reached < 0, fastest < JarScene.pileProfileRestingSpeed, turned, driver.now - start > 0.5 { reached = driver.now - start }
+                    if fastest >= JarScene.pileProfileRestingSpeed { reached = -1 }
+                }
+                for series in depths.values where series.count > window {
+                    for index in window ..< series.count { bounce = max(bounce, series[index - window] - series[index]) }
+                }
+                if pileDepths.count > window {
+                    for index in window ..< pileDepths.count { rebound = max(rebound, pileDepths[index - window] - pileDepths[index]) }
+                }
+                for series in turns.values where series.count > window {
+                    for index in window ..< series.count { tumble = max(tumble, series[index] - series[index - window]) }
+                }
+                let interior = JarScene.interiorRect(sceneSize: scene.size)
+                let bounds = scene.settledPileBounds ?? .zero
+                let gap: CGFloat
+                let depth: CGFloat
+                switch turn {
+                case .landscapeRight: gap = interior.maxX - bounds.maxX; depth = bounds.width
+                case .landscapeLeft: gap = bounds.minX - interior.minX; depth = bounds.width
+                default: gap = interior.maxY - bounds.maxY; depth = bounds.height
+                }
+                print(String(format: "SWEEP n=%d lin=%.1f ang=%.1f %@ rebound=%.2f bounce=%.2f tumble=%.3f last=%.1f depth=%.0f gap=%.1f still-from=%.2f took=%.2f", count, tuning.0, tuning.1, "\(turn)", rebound, bounce, tumble, last, depth, gap, reached, took))
+            }
+          }
         }
     }
 
@@ -1192,7 +1282,7 @@ final class JarOrientationGravityTests: XCTestCase {
         XCTAssertTrue(scene.isCalmResettleActive)
         XCTAssertTrue(pebbles(scene).allSatisfy {
             $0.physicsBody?.linearDamping == Constants.Jar.calmResettleLinearDamping
-                && $0.physicsBody?.friction == Constants.Jar.calmResettleFriction
+                && $0.physicsBody?.friction == Constants.Jar.friction
         })
         scene.reduceMotion = false
         XCTAssertFalse(scene.isCalmResettleActive)
@@ -1237,7 +1327,7 @@ final class JarOrientationGravityTests: XCTestCase {
             pebble.hasLanded && !flying.contains { $0 === pebble }
         }.allSatisfy {
             $0.physicsBody?.linearDamping == Constants.Jar.calmResettleLinearDamping
-                && $0.physicsBody?.friction == Constants.Jar.calmResettleFriction
+                && $0.physicsBody?.friction == Constants.Jar.friction
         })
         settle(scene, driver, holding: Pose.landscapeRight.reading) {
             self.assertContained(scene, "tap, then turn")
@@ -1316,9 +1406,10 @@ final class JarOrientationGravityTests: XCTestCase {
 
     func testTheSettledPileBoundsMeetTheHUDOnlyWhenThePileRestsAtTheCap() throws {
         // Home keeps its metric HUD on top and strengthens its ink scrim
-        // while the settled pile's bounds meet the HUD's measured frame
-        // (`JarHUDScrimPolicy`). Upright the pile rests on the floor, clear
-        // of the HUD; held upside down it rests against the cap, behind it.
+        // while a settled gem meets the HUD's measured frame
+        // (`JarHUDScrimPolicy`, gem by gem since review F2). Upright the pile
+        // rests on the floor, clear of the HUD; held upside down it rests
+        // against the cap, behind it.
         let scene = makeScene()
         scene.restore(pebbles: looseSeries(9))
         let driver = try Driver(scene: scene)
@@ -1337,7 +1428,7 @@ final class JarOrientationGravityTests: XCTestCase {
         XCTAssertEqual(upright.minY, JarScene.interiorRect(sceneSize: scene.size).minY, accuracy: 8, "On the floor")
         XCTAssertEqual(
             JarHUDScrimPolicy.strength(
-                pileBounds: JarHUDScrimPolicy.stageRect(ofScene: upright, stageFrame: stage),
+                pileBodies: JarHUDScrimPolicy.stageBodies(ofScene: scene.settledPileBodies, stageFrame: stage),
                 hudFrame: hud
             ),
             .standard
@@ -1356,9 +1447,10 @@ final class JarOrientationGravityTests: XCTestCase {
             )
             XCTAssertTrue(capped.insetBy(dx: -1, dy: -1).contains(body), "Bounds hold every resting body")
         }
+        XCTAssertEqual(scene.settledPileBodies.count, pebbles(scene).count, "Every resting body is published")
         XCTAssertEqual(
             JarHUDScrimPolicy.strength(
-                pileBounds: JarHUDScrimPolicy.stageRect(ofScene: capped, stageFrame: stage),
+                pileBodies: JarHUDScrimPolicy.stageBodies(ofScene: scene.settledPileBodies, stageFrame: stage),
                 hudFrame: hud
             ),
             .strengthened
@@ -1367,7 +1459,7 @@ final class JarOrientationGravityTests: XCTestCase {
         settle(scene, driver, holding: Pose.portrait.reading)
         XCTAssertEqual(
             JarHUDScrimPolicy.strength(
-                pileBounds: JarHUDScrimPolicy.stageRect(ofScene: scene.settledPileBounds, stageFrame: stage),
+                pileBodies: JarHUDScrimPolicy.stageBodies(ofScene: scene.settledPileBodies, stageFrame: stage),
                 hudFrame: hud
             ),
             .standard,
@@ -2224,6 +2316,512 @@ final class JarOrientationGravityTests: XCTestCase {
         }
     }
 
+    // MARK: Review fixes (2026-09-29)
+
+    func testASwayOfAPhoneLeanedBackNeverReopensTheWindowOrWakesTheRestingPile() throws {
+        // Review B1: the awake jar measured a turn on the jar's in-screen
+        // gravity, which a phone leaned back swings cot(elevation) times as
+        // far as the phone turns (1.7× at 30°), so an ordinary ±5° sway
+        // reopened the window every half-swing and the jar never rested.
+        // It now measures the phone's own turn (in 3D), and reopens only as
+        // far as the phone turns from the pose it woke under. Review S1:
+        // resting, the pile judges the slow pose average against the pose
+        // it settled under (that average too), so the sway never wakes it.
+        // Held 30°, 45° and 60° above horizontal, rolled ±5° and ±6° about
+        // the long axis at 0.25 and 0.5 Hz, woken by a tap or by a turn
+        // (to 20°, then swaying around it): the first hard stop is never
+        // extended, the jar rests within it, and 30 s more of the sway never
+        // wakes it.
+        for elevation in [30.0, 45.0, 60.0] {
+            for (amplitude, hertz) in [(5.0, 0.25), (5.0, 0.5), (6.0, 0.25), (6.0, 0.5)] {
+                for wake in ["tap", "turn"] {
+                    let context = "\(wake), leaned back \(elevation)°, ±\(amplitude)° at \(hertz) Hz"
+                    let center: Double = wake == "turn" ? 20 : 0
+                    func swayed(_ time: TimeInterval) -> JarGravityMapping.Reading {
+                        leanedBack(elevation, roll: center + amplitude * sin(2 * .pi * hertz * time))
+                    }
+                    let scene = makeScene()
+                    scene.restore(pebbles: looseSeries(9))
+                    let driver = try Driver(scene: scene)
+                    defer { driver.finish() }
+                    settle(scene, driver, holding: leanedBack(elevation))
+                    XCTAssertTrue(scene.isIdlePaused, context)
+                    if wake == "tap" {
+                        XCTAssertTrue(scene.bouncePebbles(), context)
+                    } else {
+                        scene.setGravityReading(leanedBack(elevation, roll: center), smoothing: false)
+                    }
+                    XCTAssertFalse(scene.isIdlePaused, "\(context): awake")
+                    let stop = try XCTUnwrap(scene.interactionHardStopForTesting, context)
+                    let start = driver.now
+                    var frame = 0
+                    var extended = false
+                    while !scene.isIdlePaused, driver.now < stop + 3 {
+                        if frame.isMultiple(of: 2) { scene.setGravityReading(swayed(driver.now - start)) }
+                        frame += 1
+                        driver.step(frames: 1) { self.assertContained(scene, context) }
+                        if let now = scene.interactionHardStopForTesting, now > stop + 0.001 { extended = true }
+                    }
+                    XCTAssertFalse(extended, "\(context): the sway never reopened the window")
+                    XCTAssertTrue(scene.isIdlePaused, "\(context): rests")
+                    XCTAssertLessThanOrEqual(driver.now, stop + 0.6, "\(context): within the hard stop it had")
+                    var wakes = 0
+                    var wasResting = true
+                    let restStart = driver.now
+                    while driver.now - restStart < 30 {
+                        if frame.isMultiple(of: 2) { scene.setGravityReading(swayed(driver.now - start)) }
+                        frame += 1
+                        driver.step(frames: 1)
+                        if wasResting, !scene.isIdlePaused { wakes += 1 }
+                        wasResting = scene.isIdlePaused
+                    }
+                    XCTAssertEqual(wakes, 0, "\(context): the resting pile never wakes for the sway")
+                }
+            }
+        }
+        // Upright, a wider ±8° twist in the screen's plane (0.25 and 0.5 Hz)
+        // never extends the tap's window either.
+        for hertz in [0.25, 0.5] {
+            let scene = makeScene()
+            scene.restore(pebbles: looseSeries(9))
+            let driver = try Driver(scene: scene)
+            defer { driver.finish() }
+            settle(scene, driver, holding: rolled(0))
+            XCTAssertTrue(scene.bouncePebbles())
+            let stop = try XCTUnwrap(scene.interactionHardStopForTesting)
+            let start = driver.now
+            var frame = 0
+            while !scene.isIdlePaused, driver.now < stop + 3 {
+                if frame.isMultiple(of: 2) { scene.setGravityReading(rolled(8 * sin(2 * .pi * hertz * (driver.now - start)))) }
+                frame += 1
+                driver.step(frames: 1)
+                XCTAssertLessThanOrEqual(scene.interactionHardStopForTesting ?? stop, stop + 0.001, "±8° at \(hertz) Hz")
+            }
+            XCTAssertTrue(scene.isIdlePaused, "±8° at \(hertz) Hz: rests at the hard stop it had")
+        }
+    }
+
+    func testARealRotationOfAPhoneLeanedBackStillReopensTheWindowAndThePileFollows() throws {
+        // Leaned back 45°, the phone turned in its own plane from upright to
+        // its right side over 2 s: the phone itself turns 60° (the jar's
+        // gravity 90°), so the window opens again about every 15° of that
+        // (three times after the tap), and the pile rests against the right
+        // wall under the new pose.
+        func twisted(_ degrees: Double) -> JarGravityMapping.Reading {
+            let e = 45.0 * .pi / 180
+            let t = degrees * .pi / 180
+            return JarGravityMapping.Reading(
+                deviceGravityX: sin(e) * sin(t),
+                deviceGravityY: -sin(e) * cos(t),
+                deviceGravityZ: -cos(e)
+            )!
+        }
+        let scene = makeScene()
+        scene.restore(pebbles: looseSeries(9))
+        let driver = try Driver(scene: scene)
+        defer { driver.finish() }
+        settle(scene, driver, holding: twisted(0))
+        let before = centroid(scene)
+        XCTAssertTrue(scene.bouncePebbles())
+        var stops: Set<Int> = []
+        let start = driver.now
+        var frame = 0
+        while driver.now - start < 2 {
+            if frame.isMultiple(of: 2) { scene.setGravityReading(twisted(90 * (driver.now - start) / 2)) }
+            frame += 1
+            driver.step(frames: 1)
+            if let stop = scene.interactionHardStopForTesting { stops.insert(Int((stop * 1_000).rounded())) }
+        }
+        XCTAssertGreaterThanOrEqual(stops.count, 4, "The tap's window and three reopenings")
+        XCTAssertLessThanOrEqual(stops.count, 6)
+        settle(scene, driver, holding: twisted(90)) { self.assertContained(scene, "twisted") }
+        XCTAssertTrue(scene.isIdlePaused)
+        XCTAssertGreaterThan(centroid(scene).x, before.x + 30, "Toward the right wall")
+        XCTAssertGreaterThan(scene.settledReading.x, 0.6, "Rested under the turned pose")
+        // Upright, a real turn still wakes a resting pile at once: rolled
+        // onto its side it is awake within 0.2 s.
+        settle(scene, driver, holding: rolled(0))
+        XCTAssertTrue(scene.isIdlePaused)
+        let turned = driver.now
+        while scene.isIdlePaused, driver.now - turned < 1 {
+            driver.step(frames: 2) { scene.setGravityReading(Pose.landscapeLeft.reading) }
+        }
+        XCTAssertFalse(scene.isIdlePaused)
+        XCTAssertLessThanOrEqual(driver.now - turned, 0.2, "A deliberate turn wakes the pile within 0.2 s")
+    }
+
+    func testTimeTheSceneDoesNotStepNeverExpiresTheWindowOfAPileInTransit() throws {
+        // Review B2: the interaction window runs on uptime and the idle
+        // observation on the frames' clock; both jump over time the scene
+        // does not step (the SKView pauses itself while the app is inactive
+        // or in the background; a view off screen; a stalled main thread).
+        // The first frame back must not find the hard stop long passed and
+        // freeze a pile halfway to the cap.
+        let scene = makeScene()
+        scene.restore(pebbles: looseSeries(9))
+        let driver = try Driver(scene: scene)
+        defer { driver.finish() }
+        settle(scene, driver, holding: Pose.portrait.reading)
+        let upright = centroid(scene)
+        var frame = 0
+        func hold(_ pose: Pose, frames: Int) {
+            driver.step(frames: frames) {
+                if frame.isMultiple(of: 2) { scene.setGravityReading(pose.reading) }
+                frame += 1
+            }
+        }
+        hold(.upsideDown, frames: 24)
+        XCTAssertFalse(scene.isIdlePaused)
+        let stop = try XCTUnwrap(scene.interactionHardStopForTesting)
+        XCTAssertLessThan(centroid(scene).y, upright.y + 60, "Still on its way to the cap")
+        driver.skip(seconds: 10)
+        hold(.upsideDown, frames: 1)
+        XCTAssertFalse(scene.isIdlePaused, "The first frame back does not freeze the pile")
+        let shifted = try XCTUnwrap(scene.interactionHardStopForTesting)
+        XCTAssertGreaterThanOrEqual(shifted, stop + 10 - 0.05, "The window's deadlines moved with the gap")
+        XCTAssertLessThanOrEqual(shifted, stop + 10 + 0.05)
+        settle(scene, driver, holding: Pose.upsideDown.reading) {
+            self.assertContained(scene, "after a gap")
+        }
+        XCTAssertTrue(scene.isIdlePaused)
+        let interior = JarScene.interiorRect(sceneSize: scene.size)
+        XCTAssertEqual(try XCTUnwrap(scene.settledPileBounds).maxY, interior.maxY, accuracy: 8, "It reached the cap")
+        XCTAssertGreaterThan(centroid(scene).y, upright.y + 60)
+        assertContainedWithRadius(scene, "after a gap, settled")
+    }
+
+    func testGoingInactiveMidMoveOpensNoWindowAndThePileFinishesItsMoveOnReturn() throws {
+        // Review B2: going inactive, `JarSpriteView` cancels the window, and
+        // stopping the motion resets the gravity. That reset used to open a
+        // new window on uptime while the SKView was not stepping, so the
+        // first frame back after more than 5 s froze the pile wherever it
+        // was. Inactive, no window opens; back, the pile finishes its move
+        // (the ordinary idle lifecycle, or a new window if the phone turned
+        // meanwhile), and the idle observation does not count the gap.
+        for back in [Pose.upsideDown, .portrait] {
+            let context = "back \(back)"
+            let scene = makeScene()
+            scene.restore(pebbles: looseSeries(9))
+            let driver = try Driver(scene: scene)
+            defer { driver.finish() }
+            settle(scene, driver, holding: Pose.portrait.reading)
+            let upright = centroid(scene)
+            var frame = 0
+            // Upside down: moving (0.4 s in), or already at the cap (3.5 s
+            // in, the idle observation rebased there).
+            let turnFrames = back == .upsideDown ? 24 : 210
+            driver.step(frames: turnFrames) {
+                if frame.isMultiple(of: 2) { scene.setGravityReading(Pose.upsideDown.reading) }
+                frame += 1
+            }
+            XCTAssertFalse(scene.isIdlePaused, context)
+            // Inactive: the window is cancelled, the motion stops (reset).
+            scene.hostIsActive = false
+            scene.cancelInteractionPresentation()
+            scene.resetGravity()
+            XCTAssertNil(scene.interactionHardStopForTesting, "\(context): no window opens while inactive")
+            XCTAssertFalse(scene.isInteractionMotionActive, context)
+            driver.skip(seconds: 10)
+            // Active again: the SKView steps before the first motion sample.
+            scene.hostIsActive = true
+            driver.step(frames: 1)
+            XCTAssertFalse(scene.isIdlePaused, "\(context): the first frame back does not freeze the pile")
+            settle(scene, driver, holding: back.reading) {
+                self.assertContained(scene, context)
+            }
+            XCTAssertTrue(scene.isIdlePaused, context)
+            let interior = JarScene.interiorRect(sceneSize: scene.size)
+            let bounds = try XCTUnwrap(scene.settledPileBounds, context)
+            if back == .upsideDown {
+                XCTAssertEqual(bounds.maxY, interior.maxY, accuracy: 8, "\(context): finished its move to the cap")
+                XCTAssertGreaterThan(scene.settledReading.y, 0.9, context)
+                XCTAssertFalse(scene.pileRestsOnTheFloor, context)
+            } else {
+                XCTAssertEqual(bounds.minY, interior.minY, accuracy: 8, "\(context): back on the floor")
+                XCTAssertEqual(centroid(scene).y, upright.y, accuracy: 20, context)
+                XCTAssertLessThan(scene.settledReading.y, -0.9, context)
+                XCTAssertTrue(scene.pileRestsOnTheFloor, context)
+            }
+            assertContainedWithRadius(scene, "\(context), settled")
+        }
+    }
+
+    func testANewGemWaitsInTheNeckOverASidewaysPileAcrossTheMouthAndNeverThrowsAGemOut() throws {
+        // Review S2: held sideways, the worst-case pile in the lowest jar
+        // (320 pt) lies against the lower wall and across the mouth. A gem
+        // that joined it there started 18–32 pt deep inside several gems,
+        // and the solver threw one of them past the cap (3 in 144 runs).
+        // Now the gem waits in the neck, resting on the gems under the
+        // mouth, until there is room where it joins; it lands there after
+        // 1.5 s (Home's receipt never starves). Completion drops (from the
+        // scene top), interior drops and Home's queued completion drops,
+        // held landscape-left and right: on every frame every body that is
+        // not entering lies inside the walls, floor and cap with its radius,
+        // the entering gem stays in the neck, nothing moves faster than a
+        // bounded speed, and turned upright the waiting gem joins the pile.
+        var held = 0
+        var fastest: CGFloat = 0
+        for pose in [Pose.landscapeLeft, .landscapeRight] {
+            for entry in ["completion", "interior", "queued"] {
+                for index in 0 ..< 3 {
+                    let context = "\(entry) drop \(index), \(pose)"
+                    let scene = makeCrowdedJar()
+                    let driver = try Driver(scene: scene)
+                    defer { driver.finish() }
+                    settle(scene, driver, holding: pose.reading)
+                    XCTAssertTrue(scene.isIdlePaused, context)
+                    assertContainedWithRadius(scene, "\(context): the sideways pile")
+                    var landings: [UUID] = []
+                    scene.onLanding = { landings.append($0.pebble.id) }
+                    scene.interiorDropHorizontalUnitForTesting = [-1, 0, 1][index]
+                    let drop = loose(930 + index, minutes: [25, 50, 120][index])
+                    switch entry {
+                    case "completion": scene.dropFromAbove(drop)
+                    case "interior": scene.drop(drop)
+                    default: scene.performCompletionDrop(drop)
+                    }
+                    var frame = 0
+                    var sawHeld = false
+                    func checkFrame() {
+                        self.assertContainedExceptEntering(scene, context)
+                        self.assertEntersThroughTheNeckOrWaits(scene, id: drop.id, context)
+                        if scene.entryPhaseNameForTesting(drop.id) == "heldAtMouth" { sawHeld = true }
+                        for pebble in self.pebbles(scene) {
+                            guard let body = pebble.physicsBody else { continue }
+                            fastest = max(fastest, hypot(body.velocity.dx, body.velocity.dy))
+                        }
+                    }
+                    driver.step(frames: 300) {
+                        if frame.isMultiple(of: 2) { scene.setGravityReading(pose.reading) }
+                        frame += 1
+                        checkFrame()
+                    }
+                    XCTAssertEqual(landings, [drop.id], "\(context): lands once")
+                    XCTAssertFalse(scene.hasCompletionDropInFlight, context)
+                    if sawHeld { held += 1 }
+                    // Turned upright, the pile falls away from the mouth and
+                    // a waiting gem goes on down the neck and joins it.
+                    settle(scene, driver, holding: Pose.portrait.reading) { checkFrame() }
+                    XCTAssertTrue(scene.isIdlePaused, context)
+                    XCTAssertNil(scene.entryPhaseNameForTesting(drop.id), "\(context): joined")
+                    XCTAssertEqual(landings, [drop.id], "\(context): no second landing")
+                    assertContainedWithRadius(scene, "\(context), upright")
+                }
+            }
+        }
+        print("F3 S2 entry into the sideways worst-case pile: \(held) of 18 drops waited at the mouth, fastest body \(fastest) pt/s")
+        XCTAssertGreaterThan(held, 0, "The pile lies across the mouth at least sometimes")
+        XCTAssertLessThan(fastest, 600, "No gem is flung")
+    }
+
+    func testTheHUDScrimAndTheCoreLabelsJudgeTheSettledGemsNotThePilesBox() throws {
+        // Review F2/F5: the scrim and the time core's labels judge the
+        // settled pile gem by gem. Upside down, the pile at the cap lies
+        // behind the HUD (the scrim strengthens) but not over the core's
+        // labels below it (they stay: its column tops are at the cap, which
+        // hid them before). Upright, the column profile decides, as before.
+        let scene = makeScene()
+        scene.restore(pebbles: looseSeries(12))
+        let driver = try Driver(scene: scene)
+        defer { driver.finish() }
+        let stage = CGRect(x: 4, y: 0, width: scene.size.width, height: scene.size.height)
+        let outer = JarScene.outerJarRect(sceneSize: scene.size)
+        let hudTop = 88 + max(0, scene.size.height - outer.maxY)
+        let hud = CGRect(x: stage.midX - 85, y: hudTop, width: 170, height: 100)
+        let midX = scene.size.width / 2
+
+        settle(scene, driver, holding: Pose.portrait.reading)
+        XCTAssertEqual(
+            scene.settledPileTop(minX: midX - 40, maxX: midX + 40, below: scene.size.height / 2),
+            scene.settledPileTop(minX: midX - 40, maxX: midX + 40),
+            "Upright: the column profile, whatever the ceiling"
+        )
+
+        settle(scene, driver, holding: Pose.upsideDown.reading)
+        XCTAssertTrue(scene.isIdlePaused)
+        let bodies = scene.settledPileBodies
+        let lowest = try XCTUnwrap(bodies.map { $0.center.y - $0.radius }.min())
+        XCTAssertGreaterThan(scene.settledPileTop(minX: midX - 40, maxX: midX + 40), lowest, "The column tops are at the cap")
+        XCTAssertEqual(
+            scene.settledPileTop(minX: midX - 40, maxX: midX + 40, below: lowest - 1),
+            0,
+            "Nothing reaches below the cap pile"
+        )
+        XCTAssertGreaterThan(
+            scene.settledPileTop(minX: 0, maxX: scene.size.width, below: lowest + 10),
+            lowest + 10,
+            "Labels reaching into the pile are still covered"
+        )
+        XCTAssertEqual(
+            JarHUDScrimPolicy.strength(
+                pileBodies: JarHUDScrimPolicy.stageBodies(ofScene: bodies, stageFrame: stage),
+                hudFrame: hud
+            ),
+            .strengthened
+        )
+
+        // Sideways under Reduce Motion (the calm pile ends in the floor–wall
+        // corner) and a heap settled 45° over: the scrim follows the gems
+        // behind the readout, never the pile's box.
+        for (pose, reduceMotion) in [(rolled(90), true), (rolled(45), false)] {
+            let scene = makeScene()
+            scene.reduceMotion = reduceMotion
+            scene.restore(pebbles: looseSeries(12))
+            let driver = try Driver(scene: scene)
+            defer { driver.finish() }
+            settle(scene, driver, holding: Pose.portrait.reading)
+            settle(scene, driver, holding: pose)
+            XCTAssertTrue(scene.isIdlePaused)
+            let bodies = JarHUDScrimPolicy.stageBodies(ofScene: scene.settledPileBodies, stageFrame: stage)
+            let behind = bodies.contains { body in
+                let nearestX = min(max(body.center.x, hud.minX), hud.maxX)
+                let nearestY = min(max(body.center.y, hud.minY), hud.maxY)
+                return hypot(body.center.x - nearestX, body.center.y - nearestY) < body.radius
+            }
+            let box = JarHUDScrimPolicy.stageRect(ofScene: scene.settledPileBounds, stageFrame: stage)
+            print("F3 F2 \(pose.x > 0.9 ? "sideways, Reduce Motion" : "45°"): box meets the HUD \(box.map { $0.intersects(hud) } ?? false), a gem behind it \(behind)")
+            XCTAssertEqual(
+                JarHUDScrimPolicy.strength(pileBodies: bodies, hudFrame: hud),
+                behind ? .strengthened : .standard
+            )
+        }
+    }
+
+    func testUpsideDownTheCyclePillStaysOnTopOfThePileWithTheStrengthenedInk() throws {
+        // Review F1 (ruling 2026-09-29): the 「N巡」 pill is part of the HUD.
+        // Upside down the settled pile rests against the cap, right over
+        // the pill under the neck: Home then draws it in front of the scene
+        // with the strengthened ink, where it always is (the same centre
+        // whatever the pile) and at its size. Upright, and sideways where no
+        // gem lies behind it, it stays where it always was, behind.
+        let stageSize = CGSize(width: 390, height: Constants.Jar.height)
+        let center = JarAccumulationPresenceBackdrop.cyclePillCenter(stageSize: stageSize, showsLifetimeCore: true)
+        // The pill's measured size at the default text size (「1巡 •」).
+        let pill = CGRect(x: center.x - 24, y: center.y - 11, width: 48, height: 22)
+        XCTAssertEqual(
+            JarAccumulationPresenceBackdrop.cyclePillCenter(stageSize: stageSize, showsLifetimeCore: true),
+            center,
+            "The pill never moves with the pile"
+        )
+        let scene = makeScene(size: stageSize)
+        scene.restore(pebbles: looseSeries(15))
+        let driver = try Driver(scene: scene)
+        defer { driver.finish() }
+        let stage = CGRect(origin: .zero, size: stageSize)
+        func lifted() -> Bool {
+            JarHUDScrimPolicy.liftsCyclePill(
+                pileBodies: JarHUDScrimPolicy.stageBodies(ofScene: scene.settledPileBodies, stageFrame: stage),
+                pillFrame: pill
+            )
+        }
+        settle(scene, driver, holding: Pose.portrait.reading)
+        XCTAssertFalse(lifted(), "Upright the pile rests far below the pill")
+        settle(scene, driver, holding: Pose.upsideDown.reading)
+        XCTAssertTrue(scene.isIdlePaused)
+        XCTAssertTrue(lifted(), "Upside down the cap pile lies behind the pill: it is drawn in front")
+        XCTAssertFalse(JarHUDScrimPolicy.liftsCyclePill(pileBodies: [], pillFrame: pill), "No pile, no lift")
+        XCTAssertFalse(
+            JarHUDScrimPolicy.liftsCyclePill(
+                pileBodies: JarHUDScrimPolicy.stageBodies(ofScene: scene.settledPileBodies, stageFrame: stage),
+                pillFrame: nil
+            ),
+            "Not yet measured: where it always was"
+        )
+        settle(scene, driver, holding: Pose.portrait.reading)
+        XCTAssertFalse(lifted(), "Back upright, behind again")
+    }
+
+    func testAMergedScreenTimeStoneFormsAlongTheGravityFramesUp() throws {
+        // Review F7: a decimal carry forms its new black root 12 pt from the
+        // fragments' centre along the gravity frame's up (its birth
+        // velocity's direction): above them upright as before, below them
+        // (away from the cap) upside down, toward the upper wall sideways.
+        for pose in [Pose.portrait, .upsideDown, .landscapeRight, .landscapeLeft] {
+            let scene = makeScene()
+            scene.reduceMotion = false
+            scene.setScreenTimeObstacles(totalUnits: 9)
+            let driver = try Driver(scene: scene)
+            defer { driver.finish() }
+            settle(scene, driver, holding: pose.reading)
+            let stones = pebbles(scene).filter(\.descriptor.isScreenTimeObstacle)
+            XCTAssertEqual(stones.count, 9, "\(pose)")
+            let count = CGFloat(stones.count)
+            let point = CGPoint(
+                x: stones.map(\.position.x).reduce(0, +) / count,
+                y: stones.map(\.position.y).reduce(0, +) / count
+            )
+            scene.updateScreenTimeObstacles(totalUnits: 10)
+            let rootID = try XCTUnwrap(ScreenTimeObstacleProjection.decimalRoots(totalUnits: 10).first?.id)
+            let root = try node(scene, rootID)
+            let up = JarGestureFrame(gravity: scene.appliedGravityVector).up
+            let offset = CGVector(dx: root.position.x - point.x, dy: root.position.y - point.y)
+            let along = offset.dx * up.dx + offset.dy * up.dy
+            let across = offset.dx * up.dy - offset.dy * up.dx
+            print("F3 F7 carry \(pose): offset along up \(along) pt, across \(across) pt")
+            // Formerly +12 pt on screen: upside down that is toward the cap
+            // (against up), sideways across it.
+            XCTAssertGreaterThan(along, 1, "\(pose): formed away from the surface the stones rest on")
+            XCTAssertEqual(across, 0, accuracy: 0.5, "\(pose)")
+            assertContained(scene, "carry \(pose)")
+        }
+    }
+
+    /// F4 evidence (review, 2026-09-29), not a check: skipped unless
+    /// `POMOGEM_F4_FRAMES=1` (`TEST_RUNNER_POMOGEM_F4_FRAMES=1` for
+    /// xcodebuild). Writes 0.1 s bursts (1.5 s) of the scene as drawn —
+    /// a completion drop and an interior drop entering a pile held upside
+    /// down, landscape-left and landscape-right — to the app's
+    /// tmp/f4 directory, on the frames' own clock (60 fps).
+    func testZZWriteEntryRitualFrameBursts() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["POMOGEM_F4_FRAMES"] == "1")
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("f4", isDirectory: true)
+        try? FileManager.default.removeItem(at: directory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let jars: [(String, () -> JarScene)] = [
+            ("home15", {
+                let scene = self.makeScene()
+                scene.restore(pebbles: self.looseSeries(15))
+                scene.setScreenTimeObstacles(totalUnits: 12)
+                return scene
+            }),
+            ("worstcase320", { self.makeCrowdedJar() })
+        ]
+        var index = 0
+        for (jar, make) in jars {
+            for pose in [Pose.upsideDown, .landscapeLeft, .landscapeRight] {
+                for kind in ["completion", "interior"] {
+                    index += 1
+                    let scene = make()
+                    scene.backgroundColor = UIColor(red: 0.05, green: 0.06, blue: 0.13, alpha: 1)
+                    scene.lightEdgeFade.isSuspended = true
+                    scene.interiorDropHorizontalUnitForTesting = 0.4
+                    let driver = try Driver(scene: scene)
+                    defer { driver.finish() }
+                    settle(scene, driver, holding: Pose.portrait.reading)
+                    settle(scene, driver, holding: pose.reading)
+                    let view = SKView(frame: CGRect(origin: .zero, size: scene.size))
+                    view.contentScaleFactor = 1.5
+                    let drop = loose(950 + index, minutes: 50)
+                    if kind == "completion" { scene.dropFromAbove(drop) } else { scene.drop(drop) }
+                    var frame = 0
+                    for step in 0 ... 90 {
+                        if step.isMultiple(of: 6), let texture = view.texture(from: scene, crop: CGRect(origin: .zero, size: scene.size)) {
+                            let image = UIImage(cgImage: texture.cgImage())
+                            let name = String(format: "%@-%@-%@-t%04d.png", jar, "\(pose)", kind, step * 1_000 / 60)
+                            try image.pngData()?.write(to: directory.appendingPathComponent(name))
+                        }
+                        driver.step(frames: 1) {
+                            if frame.isMultiple(of: 2) { scene.setGravityReading(pose.reading) }
+                            frame += 1
+                        }
+                    }
+                    print("F4 \(jar) \(pose) \(kind): phase after 1.5 s \(scene.entryPhaseNameForTesting(drop.id) ?? "joined"), landed \(scene.hasLandedPebble(withID: drop.id))")
+                }
+            }
+        }
+        print("F4 frames in \(directory.path)")
+    }
+
     func testThePoseScheduleParsesTheSimulatorPoses() {
         let schedule = JarGravitySchedule(parsing: "portrait,landscape-left@4,upside-down@12,flat@20")
         XCTAssertEqual(schedule?.pose(elapsed: 0), .portrait)
@@ -2316,6 +2914,13 @@ final class JarOrientationGravityTests: XCTestCase {
                 renderer.update(atTime: time)
                 each?()
             }
+        }
+
+        /// Lets `seconds` pass on both clocks without a frame, as while the
+        /// app is inactive or in the background (the SKView stops stepping
+        /// its scene) or the main thread stalls.
+        func skip(seconds: TimeInterval) {
+            time += seconds
         }
 
         func finish() {
@@ -2427,7 +3032,15 @@ final class JarOrientationGravityTests: XCTestCase {
                 return
             }
             if point.y > interior.maxY {
-                XCTAssertFalse(pebble.hasLanded, "\(context): only an entering gem is above the collar", file: file, line: line)
+                // A gem waiting at the mouth over a sideways pile (review
+                // S2) lands there after a while; any other body above the
+                // collar is a gem still entering.
+                XCTAssertTrue(
+                    !pebble.hasLanded || scene.entryPhaseNameForTesting(pebble.descriptor.id) == "heldAtMouth",
+                    "\(context): only an entering gem is above the collar",
+                    file: file,
+                    line: line
+                )
                 XCTAssertGreaterThanOrEqual(point.x, outer.minX + neckInset + Constants.Jar.wallInset - 1, "\(context): in the neck", file: file, line: line)
                 XCTAssertLessThanOrEqual(point.x, outer.maxX - neckInset - Constants.Jar.wallInset + 1, "\(context): in the neck", file: file, line: line)
                 XCTAssertLessThanOrEqual(point.y, scene.size.height + pebble.radius, "\(context): never back out above the stage", file: file, line: line)
@@ -2459,6 +3072,56 @@ final class JarOrientationGravityTests: XCTestCase {
                 line: line
             )
         }
+    }
+
+    /// Every body not in its entry ritual lies inside the walls, floor and
+    /// cap with its radius (the entering one is checked by
+    /// `assertEntersThroughTheNeckOrWaits`).
+    private func assertContainedExceptEntering(_ scene: JarScene, _ context: String, file: StaticString = #filePath, line: UInt = #line) {
+        let interior = JarScene.interiorRect(sceneSize: scene.size)
+        let tolerance: CGFloat = 3
+        for pebble in pebbles(scene) where scene.entryPhaseNameForTesting(pebble.descriptor.id) == nil {
+            let point = pebble.position
+            let radius = pebble.radius
+            XCTAssertTrue(
+                point.x >= interior.minX + radius - tolerance
+                    && point.x <= interior.maxX - radius + tolerance
+                    && point.y >= interior.minY + radius - tolerance
+                    && point.y <= interior.maxY - radius + tolerance,
+                "\(context): \(pebble.descriptor.id) at \(point) (r \(radius)) crosses the containment",
+                file: file,
+                line: line
+            )
+        }
+    }
+
+    /// A gem entering or waiting at the mouth stays in the neck, never
+    /// above the stage.
+    private func assertEntersThroughTheNeckOrWaits(_ scene: JarScene, id: UUID, _ context: String, file: StaticString = #filePath, line: UInt = #line) {
+        guard let pebble = scene.childNode(withName: "//pebble.\(id.uuidString)") as? PebbleNode,
+              scene.entryPhaseNameForTesting(id) != nil
+        else { return }
+        let interior = JarScene.interiorRect(sceneSize: scene.size)
+        guard pebble.position.y + pebble.radius > interior.maxY else { return }
+        let outer = JarScene.outerJarRect(sceneSize: scene.size)
+        let neckInset = JarScene.neckInset(jarWidth: outer.width)
+        let lower = outer.minX + neckInset + Constants.Jar.wallInset + pebble.radius
+        let upper = outer.maxX - neckInset - Constants.Jar.wallInset - pebble.radius
+        XCTAssertGreaterThanOrEqual(pebble.position.x, lower - 0.5, "\(context): through the mouth", file: file, line: line)
+        XCTAssertLessThanOrEqual(pebble.position.x, upper + 0.5, "\(context): through the mouth", file: file, line: line)
+        XCTAssertLessThanOrEqual(pebble.position.y, scene.size.height + pebble.radius, "\(context): never above the stage", file: file, line: line)
+    }
+
+    /// A phone leaned back `elevation`° above horizontal, rolled `roll`°
+    /// about its long axis (Core Motion's axes).
+    private func leanedBack(_ elevation: Double, roll: Double = 0) -> JarGravityMapping.Reading {
+        let e = elevation * .pi / 180
+        let r = roll * .pi / 180
+        return JarGravityMapping.Reading(
+            deviceGravityX: cos(e) * sin(r),
+            deviceGravityY: -sin(e),
+            deviceGravityZ: -cos(e) * cos(r)
+        )!
     }
 
     /// While `id` is still above the collar it is held in the neck.

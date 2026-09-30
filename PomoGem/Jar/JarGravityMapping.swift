@@ -42,9 +42,10 @@ import UIKit
 ///   (`wakeDelta`, about 6°, well above the light's `idleLightThreshold`)
 ///   and the jar's gravity changed direction, through the bounded
 ///   interaction window. An awake jar reopens that window only for a
-///   larger turn from the pose its pile has been following
-///   (`needsRefollow(from:to:)`, 15°), so a swaying hand cannot keep it
-///   awake.
+///   turn of the phone itself past 15° from the pose its pile has been
+///   following (`needsRefollow(from:to:)`, `phoneTurn`), and only as far
+///   as the phone turns from the pose it woke under (`Refollow`), so a
+///   swaying hand cannot keep it awake.
 /// - Taps and shakes throw along `launchDirection(for:)` of the applied
 ///   gravity.
 ///
@@ -87,23 +88,31 @@ enum JarGravityMapping {
         }
     }
 
-    /// The in-screen part of one finite Core Motion gravity reading, in g,
-    /// in the interface's axes, before any blending: what the sensor says.
-    /// A reading longer than 1 g is scaled back to unit length (Core
-    /// Motion's gravity is a unit vector; a synthetic source or rounding can
-    /// exceed it), so the jar never pulls harder than `strength`. A shorter
-    /// reading keeps its length: a missing z must not turn the noise of a
-    /// flat phone into full gravity. Only the length uses z, so the reading
-    /// keeps x and y, and |(x, y)| ≤ 1 always holds.
+    /// One finite Core Motion gravity reading, in g, in the interface's
+    /// axes, before any blending: what the sensor says. A reading longer
+    /// than 1 g is scaled back to unit length (Core Motion's gravity is a
+    /// unit vector; a synthetic source or rounding can exceed it), so the
+    /// jar never pulls harder than `strength`. A shorter reading keeps its
+    /// length: a missing z must not turn the noise of a flat phone into
+    /// full gravity. The jar's gravity uses the in-screen part (x, y), and
+    /// |(x, y)| ≤ 1 always holds; z (out of the screen) is kept so a turn of
+    /// the phone can be measured as the phone turned (`phoneTurn`), not as
+    /// the in-screen gravity's direction, which a phone leaned back swings
+    /// by up to cot(elevation) times the real turn.
     struct Reading: Equatable, Sendable {
         /// Toward the interface's right edge.
         let x: CGFloat
         /// Toward the interface's top edge.
         let y: CGFloat
+        /// Out of the screen (−1 for a phone lying face up). 0 for `flat`,
+        /// which stands for the jar's own default gravity and has no pose.
+        let z: CGFloat
 
-        /// A phone lying flat: no in-screen gravity. The jar keeps
-        /// `defaultGravity` and a level light, as with motion off.
-        static let flat = Reading(x: 0, y: 0)
+        /// The jar's default gravity (motion off, reset, or a gravity set
+        /// directly), and a phone whose reading has no in-screen gravity at
+        /// all: the jar keeps `defaultGravity` and a level light. It has no
+        /// pose of its own (`direction` is nil).
+        static let flat = Reading(x: 0, y: 0, z: 0)
 
         /// Nil when the reading is not finite (the sample is ignored).
         init?(
@@ -131,13 +140,24 @@ enum JarGravityMapping {
             let isLongerThanUnit = largest * scaledLength > 1
             let unitX = isLongerThanUnit ? sx / scaledLength : deviceGravityX
             let unitY = isLongerThanUnit ? sy / scaledLength : deviceGravityY
+            let unitZ = isLongerThanUnit ? sz / scaledLength : deviceGravityZ
             let inScreen = interfaceOrientation.interfaceVector(deviceX: CGFloat(unitX), deviceY: CGFloat(unitY))
-            self.init(x: inScreen.dx, y: inScreen.dy)
+            self.init(x: inScreen.dx, y: inScreen.dy, z: CGFloat(unitZ))
         }
 
-        private init(x: CGFloat, y: CGFloat) {
+        private init(x: CGFloat, y: CGFloat, z: CGFloat) {
             self.x = x
             self.y = y
+            self.z = z
+        }
+
+        /// The phone's pose: this reading's unit direction in 3D, or nil
+        /// when it is too short to have one (`flat`, the jar's default
+        /// gravity; Core Motion's own readings are unit vectors).
+        var direction: (x: CGFloat, y: CGFloat, z: CGFloat)? {
+            let length = (x * x + y * y + z * z).squareRoot()
+            guard length.isFinite, length >= 0.5 else { return nil }
+            return (x / length, y / length, z / length)
         }
 
         /// The share of gravity lying in the screen's plane (0 flat … 1
@@ -156,7 +176,8 @@ enum JarGravityMapping {
             let step = min(max(fraction, 0), 1)
             return Reading(
                 x: x * (1 - step) + target.x * step,
-                y: y * (1 - step) + target.y * step
+                y: y * (1 - step) + target.y * step,
+                z: z * (1 - step) + target.z * step
             )
         }
     }
@@ -393,17 +414,118 @@ enum JarGravityMapping {
         return gravityTurns(from: settled, to: current, past: JarTiltMath.reorientationMinimumTurn)
     }
 
-    /// F3: whether an awake pile that has been following the reading
-    /// `followed` must be given its interaction window again for `current`:
-    /// `needsResettle`, and the jar's gravity turned by more than
-    /// `JarTiltMath.refollowMinimumTurn` (15°). A hand swaying the phone a
-    /// few degrees each way never passes it, so motion alone cannot keep an
-    /// awake jar alive; a deliberate turn reopens the window about once per
-    /// 15° it turns. A followed gravity too weak to have a direction
-    /// reopens for any real one, as in `needsResettle`.
+    /// F3 (review S1): whether a resting pile that settled under the pose
+    /// `settled` must re-settle, judged on two averages of the sensed
+    /// reading. A turn of the phone past `JarTiltMath.immediateResettleTurn`
+    /// (30°, `phoneTurn`) on the reading the jar's gravity follows
+    /// (`current`, smoothed over about 0.19 s) wakes it at once: sideways
+    /// or upside down the pile goes without waiting. A smaller turn wakes it
+    /// only once the slow pose average (`pose`,
+    /// `JarTiltMath.poseTimeConstant`) has turned (`needsResettle`), so a
+    /// hand swaying a few degrees each way, which moves the average only a
+    /// fraction of its swing, never does. Both need the jar's gravity to
+    /// turn with the phone (`needsResettle`).
+    static func needsResettle(from settled: Reading, pose: Reading, current: Reading) -> Bool {
+        if phoneTurn(from: settled, to: current) > JarTiltMath.immediateResettleTurn,
+           needsResettle(from: settled, to: current) {
+            return true
+        }
+        return needsResettle(from: settled, to: pose)
+    }
+
+    /// F3: whether the turn from `followed` to `current` could give an
+    /// awake pile its interaction window again: `needsResettle` (the phone
+    /// turned and the jar's gravity turned with it), and the phone itself
+    /// turned by more than `JarTiltMath.refollowMinimumTurn` (15°,
+    /// `phoneTurn`). Measured on the phone, a ±5° hand sway is at most 10°
+    /// at every pose; the jar's in-screen gravity of a phone leaned back
+    /// swings cot(elevation) times as far (1.7× at 30°), which is why it is
+    /// not the measure. Whether the window really opens again is
+    /// `Refollow`'s: it also bounds the reopenings by how far the phone
+    /// turned from the pose the jar woke under.
     static func needsRefollow(from followed: Reading, to current: Reading) -> Bool {
         needsResettle(from: followed, to: current)
-            && gravityTurns(from: followed, to: current, past: JarTiltMath.refollowMinimumTurn)
+            && phoneTurn(from: followed, to: current) > JarTiltMath.refollowMinimumTurn
+    }
+
+    /// How far the phone's *observed gravity direction* turned from `old`
+    /// to `new` (radians, 0…π): the angle between the two readings in 3D.
+    /// A rotation about gravity itself is unobservable and moves nothing in
+    /// the jar. For a phone leaned back, a physical roll can also turn the
+    /// observed direction by less than the roll's angle. A reading without
+    /// a pose (`flat`: the jar's default
+    /// gravity) is measured by the jar's gravity instead: the angle between
+    /// the two gravities, or π when either is too weak to have a direction.
+    static func phoneTurn(from old: Reading, to new: Reading) -> CGFloat {
+        if let a = old.direction, let b = new.direction {
+            let cosine = a.x * b.x + a.y * b.y + a.z * b.z
+            return acos(min(max(cosine, -1), 1))
+        }
+        let oldGravity = gravity(for: old)
+        let newGravity = gravity(for: new)
+        let oldMagnitude = hypot(oldGravity.dx, oldGravity.dy)
+        let newMagnitude = hypot(newGravity.dx, newGravity.dy)
+        guard oldMagnitude >= weakGravityMagnitude, newMagnitude >= weakGravityMagnitude else { return .pi }
+        let cosine = (oldGravity.dx * newGravity.dx + oldGravity.dy * newGravity.dy) / (oldMagnitude * newMagnitude)
+        return acos(min(max(cosine, -1), 1))
+    }
+
+    /// F3 (review B1, 2026-09-29): when an awake jar gives its pile the
+    /// interaction window again for a turn of the phone. One value per
+    /// wake, from the pose the pile rested under when the jar woke.
+    ///
+    /// A turn reopens the window only if it is a real one
+    /// (`needsRefollow` from the pose last followed: past 15° of the
+    /// phone's own rotation, the jar's gravity turning too), and it either
+    /// - carries the phone further from the wake pose than any pose
+    ///   followed so far, by another 15° (`largestTurn`): a deliberate turn
+    ///   toward sideways or upside down reopens it about once per 15°; or
+    /// - is the first turn back since the largest turn last grew: a phone
+    ///   turned sideways and back upright late in a window lets its pile
+    ///   fall back instead of freezing it in mid-flight.
+    ///
+    /// Reopenings are monotone: however long a hand sways, the window
+    /// opens again at most about twice per 15° of the largest turn from
+    /// the wake pose (about two dozen times for a full flip), so motion
+    /// alone can never keep the jar awake; a sway whose swings stay within
+    /// 15° of the pose last followed never reopens it. A turn the rule declines still moves the pile
+    /// within the open window; if the window stops first, the pile rests
+    /// under the slow pose average (`JarTiltMath.poseTimeConstant`), which
+    /// then still moves toward the new pose and wakes the jar again.
+    struct Refollow: Equatable, Sendable {
+        /// The pose the pile rested under when the jar woke.
+        let wakePose: Reading
+        /// The pose the window was last (re)opened for.
+        private(set) var followed: Reading
+        /// The largest `phoneTurn` from `wakePose` a (re)opening followed.
+        private(set) var largestTurn: CGFloat
+        /// A turn back (not past `largestTurn`) has reopened the window
+        /// since `largestTurn` last grew.
+        private(set) var hasFollowedTurnBack = false
+
+        /// A jar that woke resting under `wakePose`, its window opened for
+        /// `followed` (the same pose for a tap; the turned pose for a turn).
+        init(wakePose: Reading, followed: Reading? = nil) {
+            self.wakePose = wakePose
+            self.followed = followed ?? wakePose
+            largestTurn = followed.map { JarGravityMapping.phoneTurn(from: wakePose, to: $0) } ?? 0
+        }
+
+        /// Whether `current` opens the window again; records it if so.
+        mutating func reopens(for current: Reading) -> Bool {
+            guard JarGravityMapping.needsRefollow(from: followed, to: current) else { return false }
+            let turn = JarGravityMapping.phoneTurn(from: wakePose, to: current)
+            if turn > largestTurn + JarTiltMath.refollowMinimumTurn {
+                largestTurn = turn
+                hasFollowedTurnBack = false
+            } else if hasFollowedTurnBack {
+                return false
+            } else {
+                hasFollowedTurnBack = true
+            }
+            followed = current
+            return true
+        }
     }
 
     /// Whether the jar's gravity for `new` points more than `angle` away

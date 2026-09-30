@@ -167,6 +167,11 @@ struct JarSpriteView: View {
     /// 演出の強さ (D17): device-local, read live from Settings.
     @AppStorage(JarEffectsIntensity.defaultsKey) private var effectsIntensity: JarEffectsIntensity = .standard
     @StateObject private var motionObserver: JarMotionObserver
+    /// The 「N巡」 pill's frame in `stageCoordinateSpace` (F3, review F1).
+    @State private var cyclePillFrame: CGRect?
+    /// The jar stage's own coordinate space (y down; the scene is its
+    /// size, y up).
+    static let stageCoordinateSpace = "jar.stage"
     /// Measured size of the time core's label block (shared by the core
     /// behind the scene and its labels in front, so both use one layout;
     /// the width tells which columns of the pile lie under the labels).
@@ -258,11 +263,27 @@ struct JarSpriteView: View {
                     )
                     : nil
 
+                // F3 (review F1): the 「N巡」 pill is part of the HUD. While a
+                // settled gem lies behind it (held upside down, the pile
+                // rests against the cap), it is drawn in front of the scene
+                // instead, with the strengthened ink, where it always is.
+                let stageBodies = JarHUDScrimPolicy.stageBodies(
+                    ofScene: scene.settledPileBodies,
+                    stageFrame: CGRect(origin: .zero, size: proxy.size)
+                )
+                let liftsCyclePill = JarHUDScrimPolicy.liftsCyclePill(
+                    pileBodies: stageBodies,
+                    pillFrame: cyclePillFrame
+                )
                 if accumulationPresence.isVisible {
                     JarAccumulationPresenceBackdrop(
                         state: accumulationPresence,
                         colorHex: lifetimeCoreColorHex,
-                        showsLifetimeCore: lifetimeCoreState != nil
+                        showsLifetimeCore: lifetimeCoreState != nil,
+                        cyclePill: .behindTheScene(lifted: liftsCyclePill),
+                        onCyclePillFrame: { frame in
+                            if cyclePillFrame != frame { cyclePillFrame = frame }
+                        }
                     )
                 }
 
@@ -273,17 +294,12 @@ struct JarSpriteView: View {
                     bed: gemBedState
                 )
                 let coreBottomLimit = bedTop - 6
-                let limits = JarLifetimeCoreLabelLimits.resolve(
+                let floorLabelLimit = JarLifetimeCoreLabelLimits.resolve(
                     stageHeight: proxy.size.height,
                     floorY: JarScene.interiorRect(sceneSize: proxy.size).minY,
                     bedTop: bedTop,
-                    pileTop: scene.settledPileTop(
-                        minX: (proxy.size.width - coreLabelMetrics.size.width) / 2,
-                        maxX: (proxy.size.width + coreLabelMetrics.size.width) / 2
-                    )
-                )
-                let floorLabelLimit = limits.floor
-                let abovePileLimit = limits.abovePile
+                    pileTop: 0
+                ).floor
                 // Round 12: the column is placed from the HUD, the bed and
                 // the floor row only, so the core never moves or shrinks
                 // with the pile (the pile scale keeps the pile below it,
@@ -304,6 +320,21 @@ struct JarSpriteView: View {
                         labelHeight: coreLabelHeight
                     )
                 }
+                // F3 (review F5): a pile resting against a wall or the cap
+                // hides the labels only where its gems reach below the
+                // block's top edge (`settledPileTop(minX:maxX:below:)`); an
+                // upright pile is judged by its column tops, as before.
+                let labelCeiling = coreLayout.map { proxy.size.height - $0.labelTop }
+                let abovePileLimit = JarLifetimeCoreLabelLimits.resolve(
+                    stageHeight: proxy.size.height,
+                    floorY: JarScene.interiorRect(sceneSize: proxy.size).minY,
+                    bedTop: bedTop,
+                    pileTop: scene.settledPileTop(
+                        minX: (proxy.size.width - coreLabelMetrics.size.width) / 2,
+                        maxX: (proxy.size.width + coreLabelMetrics.size.width) / 2,
+                        below: labelCeiling
+                    )
+                ).abovePile
                 let namePlateHalfWidth = coreLabelMetrics.namePlateWidth / 2 + JarLifetimeCoreLabelLimits.clearance
                 let nameAbovePileLimit = JarLifetimeCoreLabelLimits.resolve(
                     stageHeight: proxy.size.height,
@@ -311,7 +342,8 @@ struct JarSpriteView: View {
                     bedTop: bedTop,
                     pileTop: scene.settledPileTop(
                         minX: proxy.size.width / 2 - namePlateHalfWidth,
-                        maxX: proxy.size.width / 2 + namePlateHalfWidth
+                        maxX: proxy.size.width / 2 + namePlateHalfWidth,
+                        below: labelCeiling
                     )
                 ).abovePile
                 let coreLabelFit = coreLayout.map { layout in
@@ -337,8 +369,11 @@ struct JarSpriteView: View {
                 // 1.0, or a young one at the 2.0 floor) never buries the
                 // core: it steps in front of the settled gems instead.
                 let coreInFront = coreDisc.map { disc in
-                    scene.settledPileTop(minX: disc.center.x - disc.radius, maxX: disc.center.x + disc.radius)
-                        > proxy.size.height - disc.center.y - disc.radius * 0.8
+                    scene.settledPileTop(
+                        minX: disc.center.x - disc.radius,
+                        maxX: disc.center.x + disc.radius,
+                        below: proxy.size.height - disc.center.y + disc.radius
+                    ) > proxy.size.height - disc.center.y - disc.radius * 0.8
                 } ?? false
                 let pileClearances = Self.pileClearances(
                     stageSize: proxy.size,
@@ -515,6 +550,17 @@ struct JarSpriteView: View {
                     }
                 }
 
+                // F3 (review F1): the lifted 「N巡」 pill, in front of the
+                // settled gems behind it.
+                if accumulationPresence.isVisible, liftsCyclePill {
+                    JarAccumulationPresenceBackdrop(
+                        state: accumulationPresence,
+                        colorHex: lifetimeCoreColorHex,
+                        showsLifetimeCore: lifetimeCoreState != nil,
+                        cyclePill: .inFrontOfTheScene
+                    )
+                }
+
                 // The core's name plate and progress card sit in front of
                 // the scene (like the HUD): the bed can never hide them, and
                 // they may overlap its soft top edge. While ten gems fuse
@@ -533,6 +579,7 @@ struct JarSpriteView: View {
                     .animation(.easeInOut(duration: 0.18), value: scene.isFusionSpotlightActive)
                 }
             }
+            .coordinateSpace(.named(Self.stageCoordinateSpace))
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("瓶")
@@ -798,6 +845,9 @@ struct JarSpriteView: View {
     @MainActor
     private func updateMotionBehavior(reduceMotion: Bool) {
         scene.reduceMotion = reduceMotion
+        // F3 (review B2): the scene does not step while the app is not
+        // active, so stopping the motion there opens no window of its own.
+        scene.hostIsActive = scenePhase == .active
         if scenePhase != .active {
             scene.cancelInteractionPresentation()
         }

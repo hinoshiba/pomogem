@@ -762,6 +762,116 @@ final class JarGravityMappingTests: XCTestCase {
         XCTAssertFalse(JarGravityMapping.needsRefollow(from: upright, to: weak))
     }
 
+    func testAnAwakePileMeasuresATurnAsThePhoneTurnedAtEveryPose() {
+        // Review B1: leaned back, the jar's in-screen gravity swings
+        // cot(elevation) times as far as the phone turns. The review's worked
+        // example: 30° above horizontal, a ±5° roll about the long axis reads
+        // (±0.0755, −0.5, −0.863); the jar's gravity turns about 17° between
+        // the two, the phone about 8.7°.
+        let left = reading(0.0755, -0.5, -0.863)
+        let right = reading(-0.0755, -0.5, -0.863)
+        let a = JarGravityMapping.gravity(for: left)
+        let b = JarGravityMapping.gravity(for: right)
+        let gravityTurn = acos((a.dx * b.dx + a.dy * b.dy) / (hypot(a.dx, a.dy) * hypot(b.dx, b.dy))) * 180 / .pi
+        XCTAssertGreaterThan(gravityTurn, 15, "The in-screen gravity would have reopened the window")
+        XCTAssertEqual(JarGravityMapping.phoneTurn(from: left, to: right) * 180 / .pi, 8.67, accuracy: 0.1)
+        XCTAssertFalse(JarGravityMapping.needsRefollow(from: left, to: right))
+        // Swept: leaned back 30°, 45° and 60°, a roll of up to ±7° about the
+        // long axis never refollows. A larger roll does once the *observed
+        // gravity vector* turns past 15°. At 45° and 60° elevation, a 20°
+        // physical roll moves that vector by less than 15°.
+        func leaned(_ elevation: Double, roll: Double) -> JarGravityMapping.Reading {
+            let e = elevation * .pi / 180
+            let r = roll * .pi / 180
+            return reading(cos(e) * sin(r), -sin(e), -cos(e) * cos(r))
+        }
+        for (elevation, sufficientRoll) in [(30.0, 20.0), (45.0, 25.0), (60.0, 35.0)] {
+            for amplitude in [5.0, 6.0, 7.0] {
+                XCTAssertFalse(
+                    JarGravityMapping.needsRefollow(from: leaned(elevation, roll: -amplitude), to: leaned(elevation, roll: amplitude)),
+                    "\(elevation)°, ±\(amplitude)°"
+                )
+            }
+            let start = leaned(elevation, roll: 0)
+            let turn = leaned(elevation, roll: sufficientRoll)
+            XCTAssertGreaterThan(
+                JarGravityMapping.phoneTurn(from: start, to: turn),
+                JarTiltMath.refollowMinimumTurn,
+                "\(elevation)°, a \(sufficientRoll)° roll moves the sensed gravity far enough"
+            )
+            XCTAssertTrue(
+                JarGravityMapping.needsRefollow(from: start, to: turn),
+                "\(elevation)°, a \(sufficientRoll)° roll"
+            )
+        }
+        // Upright the phone's turn is the in-screen angle.
+        let upright = reading(0, -1, 0)
+        let turned = reading(sin(0.3), -cos(0.3), 0)
+        XCTAssertEqual(JarGravityMapping.phoneTurn(from: upright, to: turned), 0.3, accuracy: 1e-9)
+        // The jar's default gravity (`flat`: motion off, reset) has no pose:
+        // measured by the jar's gravity instead.
+        XCTAssertNil(JarGravityMapping.Reading.flat.direction)
+        XCTAssertEqual(JarGravityMapping.phoneTurn(from: .flat, to: upright), 0, accuracy: 1e-9)
+        XCTAssertEqual(JarGravityMapping.phoneTurn(from: .flat, to: reading(1, 0, 0)), .pi / 2, accuracy: 1e-9)
+        XCTAssertEqual(JarGravityMapping.phoneTurn(from: .flat, to: reading(0, 1, 0)), .pi, accuracy: 1e-9)
+        // z is kept (scaled with x and y for a reading longer than 1 g).
+        XCTAssertEqual(reading(0, -0.5, -0.866).z, -0.866, accuracy: 1e-12)
+        XCTAssertEqual(reading(0, 0, -2).z, -1, accuracy: 1e-12)
+    }
+
+    func testAnAwakeJarReopensAsFarAsThePhoneTurnsNeverAsLongAsItSways() {
+        // Review B1: reopenings are monotone. From the pose the jar woke
+        // under, a turn reopens the window when it carries the phone 15°
+        // further than any pose followed so far, or as the first turn back
+        // since then; a sway, however long and however wide, reopens it a
+        // bounded number of times.
+        func rolled(_ degrees: Double) -> JarGravityMapping.Reading {
+            let angle = degrees * .pi / 180
+            return reading(sin(angle), -cos(angle), 0)
+        }
+        // A ±20° sway around the wake pose for 100 swings.
+        var sway = JarGravityMapping.Refollow(wakePose: rolled(0))
+        var reopenings = 0
+        for step in 0 ..< 100 * 36 {
+            if sway.reopens(for: rolled(20 * sin(Double(step) / 36 * 2 * .pi))) { reopenings += 1 }
+        }
+        XCTAssertLessThanOrEqual(reopenings, 2, "±20°: at most one turn out and one back")
+        // ±7° never: it never turns 15° from the pose it followed.
+        var small = JarGravityMapping.Refollow(wakePose: rolled(0))
+        for step in 0 ..< 100 * 36 {
+            XCTAssertFalse(small.reopens(for: rolled(7 * sin(Double(step) / 36 * 2 * .pi))))
+        }
+        // A turn to the side reopens about every 15°, then the first turn
+        // back once; turning to the side again and back reopens nothing
+        // more (the phone turned no further than before).
+        var turn = JarGravityMapping.Refollow(wakePose: rolled(0))
+        let out = (0 ... 90).filter { turn.reopens(for: rolled(Double($0))) }
+        XCTAssertEqual(out.count, 5, "\(out)")
+        let back = (0 ... 90).reversed().filter { turn.reopens(for: rolled(Double($0))) }
+        XCTAssertEqual(back.count, 1, "The first turn back: \(back)")
+        let again = (0 ... 90).filter { turn.reopens(for: rolled(Double($0))) }
+            + (0 ... 90).reversed().filter { turn.reopens(for: rolled(Double($0))) }
+        XCTAssertEqual(again, [], "No further than before")
+        // Further than before: upside down reopens again.
+        let over = (90 ... 180).filter { turn.reopens(for: rolled(Double($0))) }
+        XCTAssertGreaterThanOrEqual(over.count, 5)
+        // Woken by a turn (followed past the wake pose), turning back to it
+        // is the first turn back: the pile falls back.
+        var woken = JarGravityMapping.Refollow(wakePose: rolled(0), followed: rolled(90))
+        XCTAssertEqual(woken.largestTurn, .pi / 2, accuracy: 1e-9)
+        XCTAssertTrue(woken.reopens(for: rolled(0)))
+        XCTAssertFalse(woken.reopens(for: rolled(90)))
+        // Never a turn the resting rule would not wake for (leaning back).
+        var leaning = JarGravityMapping.Refollow(wakePose: reading(0, -1, 0))
+        XCTAssertFalse(leaning.reopens(for: reading(0, -0.5, -0.866)))
+        XCTAssertFalse(leaning.reopens(for: reading(0, 0, -1)))
+        // After a reset (the jar's default gravity), upright is no turn,
+        // sideways is.
+        var reset = JarGravityMapping.Refollow(wakePose: .flat)
+        XCTAssertFalse(reset.reopens(for: reading(0, -1, 0)))
+        XCTAssertTrue(reset.reopens(for: reading(1, 0, 0)))
+    }
+
     func testOnlyAGravityAboveHorizontalPullsTheGemsTowardTheMouth() {
         XCTAssertTrue(JarGravityMapping.pullsTowardTheMouth(CGVector(dx: 0, dy: 7.2)))
         XCTAssertTrue(JarGravityMapping.pullsTowardTheMouth(CGVector(dx: 7.2 * cos(0.2), dy: 7.2 * sin(0.2))))

@@ -360,6 +360,36 @@ enum GemShowcaseUITestFixture {
         createdAt: Date(timeIntervalSince1970: 1_790_000_100)
     )
 
+    /// F3 (review F4, 2026-09-29): `POMOGEM_UI_TEST_ENTRY_DROPS=<kind>@<s>,…`
+    /// drops one new 50-minute gem per entry into a standalone showcase jar
+    /// that many seconds after it appears: `completion` from the scene top
+    /// down the neck (`JarScene.dropFromAbove`, the completion path),
+    /// `interior` just under the mouth (`JarScene.drop`, Home's other gems).
+    /// With `POMOGEM_UI_TEST_GRAVITY` and the synthetic motion source it
+    /// records the entry ritual held sideways or upside down.
+    static let entryDrops: [(kind: String, seconds: Double)] = {
+        guard let value = ProcessInfo.processInfo.environment["POMOGEM_UI_TEST_ENTRY_DROPS"] else { return [] }
+        return value.split(separator: ",").compactMap { entry in
+            let parts = entry.split(separator: "@")
+            guard parts.count == 2, let seconds = Double(parts[1]),
+                  parts[0] == "completion" || parts[0] == "interior"
+            else { return nil }
+            return (String(parts[0]), seconds)
+        }.sorted { $0.seconds < $1.seconds }
+    }()
+
+    static func entryDrop(_ index: Int) -> PebbleDescriptor {
+        PebbleDescriptor(
+            id: UUID(uuidString: String(format: "6E4D5348-4658-4658-4658-0000000E%04X", index))!,
+            subjectName: "英語",
+            colorHex: palette[(index + 2) % palette.count].hex,
+            source: .timer,
+            kind: .normal,
+            grams: 50 * Constants.Mass.gramsPerMinute,
+            createdAt: Date(timeIntervalSince1970: 1_790_001_000 + TimeInterval(index))
+        )
+    }
+
     /// A root crystal of `level` (×10, ×100, …) in two palette colours.
     private static func rootDescriptor(id: UUID, level: Int, paletteIndex index: Int, createdAt: Date) -> PebbleDescriptor {
         let pebbleCount = Int(pow(10, Double(level)))
@@ -680,6 +710,16 @@ struct GemShowcaseFixtureLaunchView: View {
                             .foregroundStyle(.white.opacity(0.85))
                     }
                 }
+                if JarFrameProbe.settleProbeCount != nil {
+                    // The settle probe's result for `JarHeadroomProbeUITests`
+                    // (§7.5's in-app headroom, read by a UI test).
+                    TimelineView(.periodic(from: .now, by: 1)) { _ in
+                        Text(verbatim: JarFrameProbe.shared?.settleProbeSummary ?? "settle running")
+                            .font(.system(size: 9).monospacedDigit())
+                            .foregroundStyle(.white.opacity(0.5))
+                            .accessibilityIdentifier("jar.settle-probe")
+                    }
+                }
             }
             .padding(.horizontal, 8)
         }
@@ -701,6 +741,22 @@ struct GemShowcaseFixtureLaunchView: View {
             try? await Task.sleep(for: .seconds(Self.effectDelay(default: 4)))
             Self.captureSequence(of: scene, prefix: "before", offsets: [0])
             scene.performCompletionDrop(GemShowcaseUITestFixture.fusionEffectDrop)
+        }
+        .task {
+            // F3 (review F4): scripted entry drops.
+            let started = Date()
+            for (index, drop) in GemShowcaseUITestFixture.entryDrops.enumerated() {
+                let wait = drop.seconds - Date().timeIntervalSince(started)
+                if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
+                guard !Task.isCancelled else { return }
+                let descriptor = GemShowcaseUITestFixture.entryDrop(index)
+                JarFrameProbe.shared?.note("entry drop \(drop.kind) \(index)")
+                if drop.kind == "completion" {
+                    scene.dropFromAbove(descriptor)
+                } else {
+                    scene.drop(descriptor)
+                }
+            }
         }
         .task {
             // Share/widget capture check: the same jar exported through

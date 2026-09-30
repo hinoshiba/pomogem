@@ -88,6 +88,13 @@ final class JarFrameProbe {
     private var settleMinimum = CGFloat.greatestFiniteMagnitude
     private var settleWaitStarted: CFTimeInterval?
     private var settleFinished = false
+    /// Settles so far whose pile did not rest on the floor.
+    private var settlesOffTheFloor = 0
+    /// F3 (review nit, 2026-09-29): the settle probe's state for a UI test
+    /// (`GemShowcaseFixtureLaunchView` shows it as `jar.settle-probe`):
+    /// `settle-min headroom=… settles=… offFloor=…` once finished, the
+    /// running minimum before.
+    private(set) var settleProbeSummary = "settle running"
     /// The pose `POMOGEM_UI_TEST_GRAVITY` holds now (logged when it changes).
     private var lastGravityPose: JarGravityPose?
 
@@ -150,6 +157,7 @@ final class JarFrameProbe {
         guard scene.isIdlePaused || timedOut else { return }
         let headroom = scene.pileHeadroomFraction
         settleMinimum = min(settleMinimum, headroom)
+        if !scene.pileRestsOnTheFloor { settlesOffTheFloor += 1 }
         let interior = JarScene.interiorRect(sceneSize: scene.size)
         append(String(
             format: "settle i=%d headroom=%.3f scale=%.3f bodies=%d interior=%.0fx%.0f floor=%d%@\n",
@@ -165,8 +173,15 @@ final class JarFrameProbe {
         guard settleIndex < total else {
             settleFinished = true
             append(String(format: "settle-min headroom=%.3f settles=%d\n", settleMinimum, settleIndex + 1))
+            settleProbeSummary = String(
+                format: "settle-min headroom=%.3f settles=%d offFloor=%d",
+                settleMinimum,
+                settleIndex + 1,
+                settlesOffTheFloor
+            )
             return
         }
+        settleProbeSummary = String(format: "settle running i=%d min=%.3f", settleIndex, settleMinimum)
         settleIndex += 1
         settleWaitStarted = now + 1
         _ = scene.shakePebbles(strength: 1, horizontal: settleIndex.isMultiple(of: 2) ? 1 : -1)

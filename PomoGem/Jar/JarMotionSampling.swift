@@ -102,18 +102,50 @@ enum JarTiltMath {
     /// the phone down, leaning it back) leaves the pile where it is.
     static let reorientationMinimumTurn: CGFloat = 3 * .pi / 180
 
-    /// F3: the smallest change of the jar's gravity direction (radians, 15°)
-    /// from the pose an awake pile has been following that opens its
-    /// interaction window again (`JarGravityMapping.needsRefollow`). A
-    /// resting pile measures a turn from the fixed pose it settled in; an
-    /// awake one would measure it from the last swing that reopened the
-    /// window, so a hand swaying a few degrees each way while reading (or
-    /// walking) would pass the ~6° wake on every swing and keep the physics
-    /// awake indefinitely. Past 15° a turn is deliberate (a lean, sideways,
-    /// upside down): reopenings are bounded by how far the phone turns.
-    /// Smaller turns while awake move the pile within the open window, as
-    /// any tilt did before F3.
+    /// F3: the smallest turn of the phone itself (radians, 15°; measured in
+    /// 3D, `JarGravityMapping.phoneTurn`) from the pose an awake pile has
+    /// been following that may open its interaction window again
+    /// (`JarGravityMapping.needsRefollow`), and the step by which a turn
+    /// from the pose the jar woke under must grow to reopen it
+    /// (`JarGravityMapping.Refollow`). A resting pile measures a turn from
+    /// the fixed pose it settled in; an awake one would measure it from the
+    /// last swing that reopened the window, so a hand swaying a few degrees
+    /// each way while reading (or walking) would pass the ~6° wake on
+    /// every swing and keep the physics awake indefinitely. Past 15° a turn
+    /// is deliberate (a lean, sideways, upside down), and reopenings are
+    /// bounded by how far the phone turns. Smaller turns while awake move
+    /// the pile within the open window, as any tilt did before F3.
     static let refollowMinimumTurn: CGFloat = 15 * .pi / 180
+
+    /// F3 (review S1, 2026-09-29): the time constant (seconds) of the slow
+    /// pose average a resting pile is judged by. The pose a pile settles
+    /// under is this average when it stops, and a resting pile wakes when
+    /// this average (not the 0.19 s gravity smoothing) turns from it
+    /// (`JarGravityMapping.needsResettle`). A hand swaying a few degrees
+    /// each way moves the average only a fraction of its swing (±5° at
+    /// 0.25 Hz: about ±2°; at 0.5 Hz: about ±1°), and the settled pose is
+    /// near the sway's centre rather than at whichever end the pile
+    /// happened to stop, so the sway stays under the ~6° wake. A turn past
+    /// `immediateResettleTurn` (to the side, upside down) wakes the jar at
+    /// once, on the gravity's own smoothing; a smaller deliberate one once
+    /// the average has moved ~6° (a 10° turn: within about 1.3 s). The jar's
+    /// gravity itself follows the faster smoothing, as before.
+    static let poseTimeConstant: TimeInterval = 1.5
+
+    /// F3 (review S1): a turn of the phone past this (radians, 30°; in 3D,
+    /// `JarGravityMapping.phoneTurn`) from the pose a resting pile settled
+    /// under wakes it on the gravity's own smoothing, without waiting for
+    /// the slow pose average (`JarGravityMapping.needsResettle(from:pose:current:)`):
+    /// a hand's sway never turns the phone that far from the sway's
+    /// centre, a turn to the side or upside down always does.
+    static let immediateResettleTurn: CGFloat = 30 * .pi / 180
+
+    /// The per-sample step of the slow pose average at `updatesPerSecond`
+    /// (the same time constant at the full and the idle rate).
+    static func poseFraction(updatesPerSecond: Double) -> CGFloat {
+        guard updatesPerSecond.isFinite, updatesPerSecond > 0 else { return 1 }
+        return CGFloat(1 - exp(-1 / (updatesPerSecond * poseTimeConstant)))
+    }
 
     /// The jar's gravity for one Core Motion gravity reading (F3,
     /// `JarGravityMapping`): toward the physically lowest screen edge,
@@ -210,13 +242,15 @@ enum JarMotionRate: Equatable, Sendable {
 }
 
 /// The resting jar's tilt check. It runs on Core Motion's background queue
-/// at the idle rate, keeps the smoothed reading the scene would keep (its
-/// smoothing rescaled to the idle rate) and asks the main actor to wake the
-/// jar only when
+/// at the idle rate, keeps the smoothed reading and the slow pose average
+/// the scene would keep (their smoothing rescaled to the idle rate) and
+/// asks the main actor to wake the jar only when
 /// - the phone turned from the pose the pile settled under and the jar's
-///   gravity turned with it (`JarGravityMapping.needsResettle`; F3: the
-///   pile re-settles under the new gravity; not gated by `followsTilt`, so
-///   Reduce Motion keeps the same physics), or
+///   gravity turned with it (`JarGravityMapping.needsResettle(from:pose:current:)`;
+///   F3: the pile re-settles under the new gravity; not gated by
+///   `followsTilt`, so Reduce Motion keeps the same physics; review S1: a
+///   turn past 30° at once, a smaller one only once the slow pose average
+///   has turned, so a swaying hand does not wake it), or
 /// - the smoothed tilt would move the drawn light by more than
 ///   `JarTiltMath.idleLightThreshold` (only while the light follows tilt),
 ///   or
@@ -238,7 +272,11 @@ struct JarIdleTiltFilter: Equatable, Sendable {
     /// toward an upright phone would pass through the blend band and fake
     /// a turn.
     private(set) var reading: JarGravityMapping.Reading?
-    /// The reading the resting pile settled under (`.flat` for the jar's
+    /// The slow pose average of the sensed reading
+    /// (`JarTiltMath.poseTimeConstant`), as the scene would hold it; nil
+    /// until the first finite sample when the scene had none.
+    private(set) var poseReading: JarGravityMapping.Reading?
+    /// The pose the resting pile settled under (`.flat` for the jar's
     /// default gravity).
     let settledReading: JarGravityMapping.Reading
     /// The light on screen (−1…1).
@@ -247,6 +285,7 @@ struct JarIdleTiltFilter: Equatable, Sendable {
     /// reading is still tracked, and a turn still re-settles the pile).
     var followsTilt: Bool
     let smoothing: CGFloat
+    let poseSmoothing: CGFloat
 
     /// The jar's gravity for the smoothed reading (its default gravity
     /// before any reading).
@@ -256,27 +295,31 @@ struct JarIdleTiltFilter: Equatable, Sendable {
 
     init(
         reading: JarGravityMapping.Reading?,
+        poseReading: JarGravityMapping.Reading? = nil,
         settledReading: JarGravityMapping.Reading = .flat,
         drawnLight: CGFloat,
         followsTilt: Bool,
         updatesPerSecond: Double = JarMotionRate.idleUpdatesPerSecond
     ) {
         self.reading = reading
+        self.poseReading = poseReading ?? reading
         self.settledReading = settledReading
         self.drawnLight = drawnLight.isFinite ? drawnLight : 0
         self.followsTilt = followsTilt
         smoothing = JarTiltMath.smoothingFraction(updatesPerSecond: updatesPerSecond)
+        poseSmoothing = JarTiltMath.poseFraction(updatesPerSecond: updatesPerSecond)
     }
 
     mutating func ingest(_ sample: JarMotionSample) -> Wake? {
         if let sensed = sample.gravityReading {
             reading = reading.map { $0.smoothed(toward: sensed, fraction: smoothing) } ?? sensed
+            poseReading = poseReading.map { $0.smoothed(toward: sensed, fraction: poseSmoothing) } ?? sensed
         }
         if sample.accelerationMagnitude >= Constants.Jar.deviceShakeThreshold {
             return .shake
         }
         guard let reading else { return nil }
-        if JarGravityMapping.needsResettle(from: settledReading, to: reading) {
+        if JarGravityMapping.needsResettle(from: settledReading, pose: poseReading ?? reading, current: reading) {
             return .reorient
         }
         guard followsTilt else { return nil }
@@ -290,7 +333,16 @@ struct JarIdleWake: Equatable, Sendable {
     let reason: JarIdleTiltFilter.Wake
     /// The smoothed reading when the wake was decided.
     let reading: JarGravityMapping.Reading?
+    /// The slow pose average then.
+    var poseReading: JarGravityMapping.Reading? = nil
     let sample: JarMotionSample
+}
+
+/// The idle check's latest smoothed reading and slow pose average, handed
+/// to the scene when the jar goes back to the full rate.
+struct JarIdleReadings: Equatable, Sendable {
+    let reading: JarGravityMapping.Reading
+    let poseReading: JarGravityMapping.Reading?
 }
 
 /// Thread-safe home of the idle tilt check: Core Motion's background queue
@@ -311,13 +363,16 @@ final class JarIdleTiltMonitor: Sendable {
         state.withLock { $0 = State(generation: generation, filter: filter) }
     }
 
-    /// Ends the run and returns its latest smoothed reading, if it had one.
+    /// Ends the run and returns its latest smoothed reading and slow pose
+    /// average, if it had a reading.
     @discardableResult
-    func disarm() -> JarGravityMapping.Reading? {
+    func disarm() -> JarIdleReadings? {
         state.withLock { state in
-            let reading = state.filter?.reading
+            let readings = state.filter.flatMap { filter in
+                filter.reading.map { JarIdleReadings(reading: $0, poseReading: filter.poseReading) }
+            }
             state = State()
-            return reading
+            return readings
         }
     }
 
@@ -338,7 +393,7 @@ final class JarIdleTiltMonitor: Sendable {
             state.filter = filter
             guard let reason, !state.isWakePending else { return nil }
             state.isWakePending = true
-            return JarIdleWake(reason: reason, reading: filter.reading, sample: sample)
+            return JarIdleWake(reason: reason, reading: filter.reading, poseReading: filter.poseReading, sample: sample)
         }
     }
 }
