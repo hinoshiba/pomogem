@@ -1572,9 +1572,16 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             waitForHittable(demoLauncherForVisualAudit, timeout: 6),
             "The demo launcher must be operable after the ninth Reward Bridge closes"
         )
-        let nineJarValue = (app.buttons["瓶"].value as? String) ?? ""
-        XCTAssertTrue(nineJarValue.contains("9粒"), nineJarValue)
-        XCTAssertFalse(nineJarValue.contains("まとまり粒"), nineJarValue)
+        // The jar counts a completed focus when its gem lands (dev-D7), a
+        // moment after the scene holds it; the probe's count includes the
+        // gem while it is still falling.
+        let jar = app.buttons["瓶"]
+        XCTAssertTrue(
+            waitForValue(of: jar, containing: "9粒", timeout: 6),
+            (jar.value as? String) ?? ""
+        )
+        let nineJarValue = (jar.value as? String) ?? ""
+        XCTAssertFalse(nineJarValue.contains("結晶1個"), nineJarValue)
         waitForUISettle()
         retainScreenshot(named: "Nine measured particles — pre-fusion Home rail")
 
@@ -1588,9 +1595,12 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         retainScreenshot(named: "Tenth Reward Bridge — exact completed orbit")
 
         dismissBridge.tap()
-        let celebration = app.staticTexts["10粒を、ひとつに整理した"]
+        let celebration = app.staticTexts["fusion.celebration.title"]
         XCTAssertTrue(celebration.waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["2.5kg"].waitForExistence(timeout: 4))
+        // The sheet's own mass line, not a match somewhere on Home behind it.
+        let celebrationMass = app.staticTexts["fusion.celebration.mass"]
+        XCTAssertTrue(celebrationMass.waitForExistence(timeout: 4))
+        XCTAssertEqual(celebrationMass.label, "重さはそのまま 2.50kg")
         waitForUISettle()
         retainScreenshot(named: "First decimal fusion — lossless celebration")
 
@@ -1598,8 +1608,12 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(closeCelebration.waitForExistence(timeout: 4))
         closeCelebration.tap()
         XCTAssertTrue(waitForHittable(demoLauncherForVisualAudit, timeout: 8))
-        let tenJarValue = (app.buttons["瓶"].value as? String) ?? ""
-        XCTAssertTrue(tenJarValue.contains("まとまり粒1個"), tenJarValue)
+        XCTAssertTrue(
+            waitForValue(of: jar, containing: "合計10粒分", timeout: 6),
+            (jar.value as? String) ?? ""
+        )
+        let tenJarValue = (jar.value as? String) ?? ""
+        XCTAssertTrue(tenJarValue.contains("結晶1個"), tenJarValue)
         XCTAssertTrue(tenJarValue.contains("合計10粒分"), tenJarValue)
         waitForUISettle()
         retainScreenshot(named: "First decimal crystal — Home lifetime core")
@@ -1800,6 +1814,16 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             waitForHittable(demoLauncherForVisualAudit, timeout: 6),
             "The demo launcher must be visible and operable before it is tapped"
         )
+        // Home enables the start button only once the last gem's landing has
+        // settled; a tap before that is ignored and no focus starts.
+        let enabled = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND isEnabled == true"),
+            object: demoLauncherForVisualAudit
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [enabled], timeout: 10), .completed,
+            "The start button must come back once the last gem has landed"
+        )
         demoLauncherForVisualAudit.tap()
 
         // A deliberately unselected migrated fixture may require the same
@@ -1891,14 +1915,15 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         (probe.value as? String) ?? probe.label
     }
 
-    /// The probe without `homeBodyEvaluations`. That field counts Home's
-    /// re-renders for HomeIdleRenderUITests, and closing a focus re-renders
-    /// Home, so comparing it made "the jar did not change" fail every time.
-    /// Every field about what the jar holds and shows is still compared.
+    /// The probe without Home's render counters (`homeBodyEvaluations`,
+    /// `homeLandings`, `homeBodyAtLanding`). They count Home's re-renders for
+    /// HomeIdleRenderUITests, and closing a focus re-renders Home, so
+    /// comparing them made "the jar did not change" fail every time. Every
+    /// field about what the jar holds and shows is still compared.
     private func jarPresentation(from probe: XCUIElement) -> String {
         presentationValue(from: probe)
             .split(separator: ";")
-            .filter { !$0.hasPrefix("homeBodyEvaluations=") }
+            .filter { !$0.hasPrefix("homeBody") && !$0.hasPrefix("homeLandings=") }
             .joined(separator: ";")
     }
 

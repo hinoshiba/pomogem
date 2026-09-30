@@ -63,7 +63,7 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
             "The post-mutation injected failure must reach Home's existing retry affordance"
         )
         XCTAssertFalse(
-            app.staticTexts["10粒を、ひとつに整理した"].exists,
+            app.staticTexts["fusion.celebration.title"].exists,
             "An uncommitted aggregate must never be celebrated"
         )
 
@@ -113,7 +113,7 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
         add(failureAttachment)
 
         retry.tap()
-        let celebration = app.staticTexts["10粒を、ひとつに整理した"]
+        let celebration = app.staticTexts["fusion.celebration.title"]
         XCTAssertTrue(
             celebration.waitForExistence(timeout: 12),
             "The explicit retry must persist before presenting the fusion celebration"
@@ -165,7 +165,7 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
             retry.waitForExistence(timeout: 2),
             "A committed deterministic aggregate must not be requested again after relaunch"
         )
-        XCTAssertFalse(app.staticTexts["10粒を、ひとつに整理した"].exists)
+        XCTAssertFalse(app.staticTexts["fusion.celebration.title"].exists)
 
         let relaunched = try waitForJarProbe(in: app, expectedCount: 1, timeout: 10)
         XCTAssertEqual(relaunched.records, persistedJarRecords)
@@ -250,6 +250,13 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
         }
         XCTAssertTrue(launcher.waitForExistence(timeout: 6))
         XCTAssertTrue(waitForHittable(launcher, timeout: 3))
+        // The jar probe counts a gem while it falls, and Home enables the
+        // start button only once the landing has settled; a tap before that
+        // is ignored and no focus starts.
+        XCTAssertTrue(
+            waitForEnabled(launcher, timeout: 10),
+            "The start button must come back once the last gem has landed"
+        )
         launcher.tap()
     }
 
@@ -361,6 +368,17 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
             return candidate.exists && candidate.isHittable
         }
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    private func waitForEnabled(
+        _ element: XCUIElement,
+        timeout: TimeInterval
+    ) -> Bool {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND isEnabled == true"),
+            object: element
+        )
         return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }
 

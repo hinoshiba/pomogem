@@ -190,7 +190,7 @@ struct FusionRewardBridgeState: Equatable, Sendable {
         if immediateHorizon.cascadingDestinationLevels.count > 1 {
             return "あと\(remaining)粒で\(immediateHorizon.cascadingDestinationLevels.count)段融合"
         }
-        return "次のまとまりまで、あと\(remaining)粒"
+        return String(localized: "次の結晶まで、あと\(remaining)粒", table: "Progress", comment: "Next step toward the next crystal; the argument is a gem count")
     }
 
     /// The first line always rewards the smallest current effort. A separate,
@@ -216,6 +216,11 @@ struct FusionRewardBridgeState: Equatable, Sendable {
 /// from 10/10 to 1/10. The just-finished effort remains certain, so the partial
 /// state celebrates only that particle until the hierarchy is exact again.
 struct FusionRewardBridgeDisplayState: Equatable, Sendable {
+    /// Not shown anywhere (「NEXT CRYSTAL」「CRYSTAL SYNC」): the completion
+    /// card lost its English eyebrow when it was rebuilt around this focus's
+    /// own gem (Docs/GemExperienceDesign.md, round 15), and nothing else reads
+    /// it. Left in place, and unlocalized, only because the card belongs to
+    /// the gem session and older branches still read it; drop it with them.
     let eyebrow: String
     let progressLabel: String
     let nextStepLabel: String
@@ -289,6 +294,8 @@ enum FusionRewardBridgePresentation {
 /// This lives beside the count-based bridge so a receipt written by an older
 /// build can still render its original, internally consistent payload.
 struct EffortProgressDisplayState: Equatable, Sendable {
+    /// Not shown anywhere (「TIME CORE」「TIME CORE SYNC」), for the same
+    /// reason as `FusionRewardBridgeDisplayState.eyebrow`.
     let eyebrow: String
     let progressLabel: String
     let nextStepLabel: String
@@ -366,7 +373,11 @@ enum EffortProgressPresentation {
     static func formattedDuration(grams rawGrams: Int) -> String {
         let grams = max(0, rawGrams)
         guard grams.isMultiple(of: Constants.Mass.gramsPerMinute) else {
-            return "\(grams.formatted(.number.grouping(.automatic)))g相当"
+            return String(
+                localized: "\(MassText.grams(value: grams))相当",
+                table: "Progress",
+                comment: "A focus time that is not a whole number of minutes, shown as its mass: %@ is the mass (1,234g)"
+            )
         }
         return DurationPresentation.focusLabel(grams: grams)
     }
@@ -386,15 +397,8 @@ enum EffortProgressPresentation {
 
     static func formattedMass(grams rawGrams: Int) -> String {
         let grams = max(0, rawGrams)
-        guard grams >= 1_000 else { return "\(grams)g" }
-        var kilograms = String(
-            format: "%.2f",
-            locale: Locale(identifier: "en_US_POSIX"),
-            Double(grams) / 1_000
-        )
-        while kilograms.hasSuffix("0") { kilograms.removeLast() }
-        if kilograms.hasSuffix(".") { kilograms.removeLast() }
-        return "\(kilograms)kg"
+        guard grams >= 1_000 else { return MassText.grams(value: grams) }
+        return MassText.kilograms(fromGrams: grams, fractionDigits: 0...2)
     }
 }
 
@@ -1074,6 +1078,21 @@ enum JarAccumulationPresenceLayoutPresentation {
             traceBandYFraction: showsLifetimeCore ? 0.075 : 0.86
         )
     }
+
+    /// Stage y (SwiftUI, y down) of the 「瓶N杯」 chip's centre: the light
+    /// field is the bottle's height less 28 pt, centred in the stage. Home's
+    /// metric HUD follows the bottle's mouth
+    /// (`HomeView.jarMetricHUDTopInset(stageHeight:)`), so with a core the
+    /// chip stays above 「積み上げた集中」 at every stage height
+    /// (walk-std-09; before the HUD followed the mouth, a stage taller than
+    /// the bottle put the chip on it).
+    static func cycleChipCenterY(stageHeight: CGFloat, showsLifetimeCore: Bool) -> CGFloat {
+        let bottleHeight = min(Constants.Jar.height, max(1, stageHeight))
+        let lightFieldHeight = max(1, bottleHeight - 28)
+        let lightFieldTop = (stageHeight - lightFieldHeight) / 2
+        return lightFieldTop
+            + lightFieldHeight * CGFloat(state(showsLifetimeCore: showsLifetimeCore).traceBandYFraction)
+    }
 }
 
 struct JarAccumulationLightFieldState: Equatable, Sendable {
@@ -1382,13 +1401,12 @@ struct JarAccumulationPresenceBackdrop: View {
 
     /// Where the 「N巡」 pill's centre is on a stage of `stageSize` (y down).
     static func cyclePillCenter(stageSize: CGSize, showsLifetimeCore: Bool) -> CGPoint {
-        let stageHeight = min(Constants.Jar.height, max(1, stageSize.height))
-        let lightFieldHeight = max(1, stageHeight - 28)
-        let lightFieldTop = (stageSize.height - lightFieldHeight) / 2
-        let layout = JarAccumulationPresenceLayoutPresentation.state(showsLifetimeCore: showsLifetimeCore)
         return CGPoint(
             x: stageSize.width / 2,
-            y: lightFieldTop + lightFieldHeight * CGFloat(layout.traceBandYFraction)
+            y: JarAccumulationPresenceLayoutPresentation.cycleChipCenterY(
+                stageHeight: stageSize.height,
+                showsLifetimeCore: showsLifetimeCore
+            )
         )
     }
 
@@ -1462,7 +1480,7 @@ struct JarAccumulationPresenceBackdrop: View {
                 }
 
                 if state.completedCycleCount > 0 {
-                    // "N巡" reads at a glance; the long-term milestone traces
+                    // 「瓶N杯」 reads at a glance; the long-term milestone traces
                     // moved to the engraved marks on the jar's copper collar.
                     HStack(spacing: 5) {
                         Text(compactCycleCount)
@@ -1511,6 +1529,8 @@ struct JarAccumulationPresenceBackdrop: View {
                 }
             }
         }
+        // VoiceOver reads the filled-jar count from the jar itself
+        // (HomeView's fusion description), not from this hidden chip.
         .accessibilityHidden(true)
         .allowsHitTesting(false)
         .onAppear {
@@ -1571,7 +1591,11 @@ struct JarAccumulationPresenceBackdrop: View {
 
     private var compactCycleCount: String {
         let count = AggregatePresentation.countLabel(state.completedCycleCount)
-        return "\(count.dropFirst())巡"
+        return String(
+            localized: "瓶\(String(count.dropFirst()))杯",
+            table: "Progress",
+            comment: "Jar chip: how many times the jar has filled (2.5 kg each); the argument is a compact count such as 3 or 1.2万"
+        )
     }
 }
 
@@ -2069,7 +2093,7 @@ struct JarLifetimeCoreLayout: Equatable {
     static let maximumTopSlack: CGFloat = 12
     /// Stone radius as a share of the core frame (the bake keeps a margin).
     static let stoneRadiusFactor: CGFloat = 0.46
-    /// Without an overlaid HUD the column starts below the neck and 巡 pill.
+    /// Without an overlaid HUD the column starts below the neck and 「瓶N杯」 pill.
     static let topFractionWithoutHUD: CGFloat = 0.16
     /// The stone shrinks to fit a band too short for it, down to this.
     static let minimumStoneScale: CGFloat = 0.65

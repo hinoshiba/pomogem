@@ -131,11 +131,11 @@ struct AccumulationTimelineBrowser: View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 SectionEyebrow(
-                    text: "TIME ARCHIVE",
+                    text: String(localized: "年月の瓶", table: "Overview", comment: "Eyebrow over 年月をたどる: the section's name, as the Home menu's 積み上がり row lists it"),
                     foreground: PomoGemTheme.text
                 )
                 Text("年月をたどる")
-                    .font(PomoGemTheme.brand(20))
+                    .pomogemSectionTitle()
             }
             Spacer(minLength: 8)
             Button {
@@ -470,17 +470,11 @@ struct AccumulationTimelineBrowser: View {
     }
 
     private func formattedMass(_ grams: Int64) -> String {
-        if grams >= 1_000_000 {
-            return String(format: "%.1ft", Double(grams) / 1_000_000)
-        }
-        if grams >= 1_000 {
-            return String(format: "%.1fkg", Double(grams) / 1_000)
-        }
-        return "\(grams)g"
+        HistoryMassText.text(grams)
     }
 
     private func spokenMass(_ grams: Int64) -> String {
-        "\(max(0, grams).formatted())グラム"
+        MassText.spoken(grams: Int(clamping: max(0, grams)))
     }
 
     private struct ExtentLoadKey: Hashable {
@@ -642,7 +636,7 @@ private struct AccumulationTimelineMonthSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("日ごとの記録", tableName: "Overview", comment: "Heading of a month's list of days")
-                    .font(PomoGemTheme.brand(20))
+                    .pomogemSectionTitle()
                 Text("日付を選ぶと、その日の記録を一件ずつ見られます。", tableName: "Overview")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
@@ -799,7 +793,7 @@ private struct AccumulationTimelineMonthSheet: View {
         VStack(alignment: .leading, spacing: 13) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("この月の代表瓶")
-                    .font(PomoGemTheme.brand(20))
+                    .pomogemSectionTitle()
                 Text(representativeDisclosure(detail))
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
@@ -860,17 +854,11 @@ private struct AccumulationTimelineMonthSheet: View {
     }
 
     private func formattedMass(_ grams: Int64) -> String {
-        if grams >= 1_000_000 {
-            return String(format: "%.1ft", Double(grams) / 1_000_000)
-        }
-        if grams >= 1_000 {
-            return String(format: "%.1fkg", Double(grams) / 1_000)
-        }
-        return "\(grams)g"
+        HistoryMassText.text(grams)
     }
 
     private func spokenMass(_ grams: Int64) -> String {
-        "\(max(0, grams).formatted())グラム"
+        MassText.spoken(grams: Int(clamping: max(0, grams)))
     }
 }
 

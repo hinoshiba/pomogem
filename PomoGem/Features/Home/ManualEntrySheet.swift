@@ -131,7 +131,7 @@ struct ManualEntrySheet: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            SectionEyebrow(text: "SELF-REPORTED")
+            SectionEyebrow(text: String(localized: "自己申告", table: "Home", comment: "Eyebrow over the manual-entry sheet title 手動で積む: the entry counts as self-reported"))
             Text("手動で積む")
                 .font(PomoGemTheme.brand(26))
                 .accessibilityAddTraits(.isHeader)
@@ -187,7 +187,7 @@ struct ManualEntrySheet: View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 4) {
-                    SectionEyebrow(text: "CONFIRM")
+                    SectionEyebrow(text: String(localized: "確認", table: "Home", comment: "Eyebrow over the manual-entry confirmation card"))
                     Text("この内容で積みますか？")
                         .font(PomoGemTheme.brand(21))
                         .accessibilityAddTraits(.isHeader)
@@ -197,7 +197,7 @@ struct ManualEntrySheet: View {
                 VStack(spacing: 10) {
                     confirmationRow(title: "テーマ", value: selectedSubject?.safeDisplayName ?? "未選択")
                     confirmationRow(title: "時間", value: durationTitle(duration))
-                    confirmationRow(title: "加算", value: "+\(duration.grams)g")
+                    confirmationRow(title: "加算", value: MassText.addedGrams(duration.grams))
                     confirmationRow(
                         title: "保存後",
                         value: "この端末で本日あと\(availability.remainingEntriesAfterSaving)回"
@@ -242,6 +242,11 @@ struct ManualEntrySheet: View {
                 "\(selectedSubject?.safeDisplayName ?? "テーマ")に\(durationTitle(duration))、\(duration.grams)グラムを積みます"
             )
             .accessibilityIdentifier("manual.confirm")
+            Text("積んだ直後は、ホームで数秒のあいだ取り消せます。", tableName: "Home", comment: "Manual entry: under the confirm button; the entry can be undone briefly on Home")
+                .font(.caption2)
+                .foregroundStyle(PomoGemTheme.muted)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 20)
         .padding(.top, 10)
@@ -319,6 +324,77 @@ struct ManualEntrySheet: View {
     }
 }
 
+/// A self-reported entry confirmed with 「確認して積む」 but not written yet
+/// (history-02). Nothing is saved for a short window while Home offers
+/// 「元に戻す」, so undoing never deletes a row. A synced `StudySession` is
+/// append-only: a physically deleted row invalidates the models that other
+/// screens and devices (including 1.0.2) still hold. Until it is committed
+/// the entry exists only in Home's memory: no total, jar body, export, share
+/// card or iCloud record sees it.
+struct PendingManualEntry: Identifiable, Equatable {
+    let id = UUID()
+    let subjectID: UUID
+    let subjectName: String
+    let colorHex: String
+    let duration: ManualDuration
+    /// When 「確認して積む」 was pressed: the saved session ends here and the
+    /// daily allowance is counted for this moment's day.
+    let confirmedAt: Date
+    /// The reset epoch the entry was confirmed in; a reset in between drops it.
+    let dataEpochID: UUID?
+    /// The account the entry was confirmed under; a change in between drops
+    /// it (`ManualEntryUndoPolicy.mayCommit`).
+    let accountScope: ManualEntryAccountScope
+}
+
+/// Which account's store local writes currently belong to, as
+/// `AccountScopedLocalState` records it.
+///
+/// Home also commits a pending entry from `onDisappear`. That teardown runs
+/// when `PomoGemApp.quiesceForPossibleAccountChange` (CKAccountChanged)
+/// closes the account boundary and retires the container, after which every
+/// late write from the old view hierarchy must be refused
+/// (Docs/OfflineCloudMode.md). Comparing this value at confirm and at commit
+/// time catches that closed boundary, as well as a different account or
+/// local namespace in between.
+struct ManualEntryAccountScope: Equatable {
+    let binding: ActiveAccountLocalBinding?
+    let namespace: AccountDataNamespace?
+    let boundaryIsClosed: Bool
+
+    static func current(defaults: UserDefaults = .standard) -> Self {
+        Self(
+            binding: AccountScopedLocalState.activeBinding(defaults: defaults),
+            namespace: AccountScopedLocalState.activeNamespace(defaults: defaults),
+            boundaryIsClosed: AccountScopedLocalState.isBoundaryClosed(defaults: defaults)
+        )
+    }
+}
+
+/// When a pending self-reported entry is written (history-02). The window is
+/// the only thing that waits: leaving the foreground, starting a timer,
+/// opening another screen or adding again all commit it at once.
+enum ManualEntryUndoPolicy {
+    static let window: Duration = .seconds(5)
+    /// VoiceOver and Switch Control users need time to reach the button after
+    /// the announcement.
+    static let assistiveWindow: Duration = .seconds(15)
+
+    static func window(assistiveTechnologyIsRunning: Bool) -> Duration {
+        assistiveTechnologyIsRunning ? assistiveWindow : window
+    }
+
+    /// Only into the account it was confirmed for, and never once that
+    /// account's boundary has closed. A dropped entry spent nothing: the
+    /// allowance is counted in the same write.
+    static func mayCommit(
+        confirmedUnder confirmed: ManualEntryAccountScope,
+        now current: ManualEntryAccountScope
+    ) -> Bool {
+        !current.boundaryIsClosed && current == confirmed
+    }
+}
+
 private struct ManualButton: View {
     let title: String
     let grams: Int
@@ -330,7 +406,7 @@ private struct ManualButton: View {
         Button(action: action) {
             VStack(spacing: 5) {
                 Text(title).font(.system(.headline, design: .rounded, weight: .bold))
-                Text("+\(grams)g")
+                Text(MassText.addedGrams(grams))
                     .font(.caption)
                     .foregroundStyle(
                         selected

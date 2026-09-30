@@ -109,7 +109,7 @@ struct AchievementEntrySheet: View {
     private var kindStep: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
-                SectionEyebrow(text: "MILESTONE")
+                SectionEyebrow(text: String(localized: "記念石", table: "Home", comment: "Eyebrow over the achievement sheet question どんな成果だった？"))
                 Text("どんな成果だった？")
                     .font(PomoGemTheme.brand(26))
                 Text(achievementIntroduction)
@@ -123,10 +123,13 @@ struct AchievementEntrySheet: View {
                     selectedKind = kind
                 } label: {
                     HStack(spacing: 14) {
+                        // Decorative: 試験合格's checkmark.seal would lend the
+                        // whole button a Selected trait before anything is chosen.
                         Image(systemName: kind.systemImage)
                             .font(.title2)
                             .foregroundStyle(PomoGemTheme.amber)
                             .frame(width: 36)
+                            .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(kind.title)
                                 .font(.system(.headline, design: .rounded, weight: .bold))
@@ -138,6 +141,7 @@ struct AchievementEntrySheet: View {
                         Image(systemName: "chevron.right")
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
+                            .accessibilityHidden(true)
                     }
                     .padding(16)
                     .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
@@ -158,6 +162,7 @@ struct AchievementEntrySheet: View {
                 Image(systemName: kind.systemImage)
                     .font(.title)
                     .foregroundStyle(PomoGemTheme.amber)
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(kind.title)
                         .font(PomoGemTheme.brand(24))
@@ -175,7 +180,7 @@ struct AchievementEntrySheet: View {
             )
 
             AchievementNoteField(
-                title: "成果名（任意）",
+                title: String(localized: "成果メモ（任意）", table: "Home", comment: "Achievement note field title; the same label as the edit sheet in 記録"),
                 placeholder: kind.notePlaceholder,
                 text: $note,
                 accessibilityIdentifier: "achievement.create.note",
@@ -191,10 +196,12 @@ struct AchievementEntrySheet: View {
             )
             .datePickerStyle(.compact)
 
-            Label(
-                "記念石は0gで、集中時間・質量・通常の粒数には加わりません。瓶では新しい12個が動き、前の石も記録棚にずっと残ります。",
-                systemImage: "checkmark.shield"
-            )
+            Label {
+                Text("記念石は0gで、集中時間・質量・通常の粒数には加わりません。瓶では新しい12個が動き、前の石も記録棚にずっと残ります。", tableName: "Home")
+            } icon: {
+                Image(systemName: "checkmark.shield")
+                    .accessibilityHidden(true)
+            }
             .font(.caption)
             .foregroundStyle(PomoGemTheme.muted)
             .fixedSize(horizontal: false, vertical: true)

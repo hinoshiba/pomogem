@@ -262,7 +262,7 @@ actor PomoGemDataExportWorker {
             try Self.write(",", to: openedHandle)
             let achievementCount = try writeCollection(
                 key: "achievementStones",
-                displayName: "成果の石",
+                displayName: String(localized: "記念石", table: "Settings", comment: "Export progress: the collection being written (achievement stones)"),
                 descriptor: FetchDescriptor<AchievementStone>(sortBy: [
                     SortDescriptor(\AchievementStone.createdAt),
                     SortDescriptor(\AchievementStone.id)
@@ -277,7 +277,7 @@ actor PomoGemDataExportWorker {
             try Self.write(",", to: openedHandle)
             let aggregateCount = try writeCollection(
                 key: "aggregatePebbles",
-                displayName: "まとまり粒",
+                displayName: String(localized: "結晶", table: "Settings", comment: "Export progress: the collection being written (crystals)"),
                 descriptor: FetchDescriptor<AggregatePebble>(sortBy: [
                     SortDescriptor(\AggregatePebble.createdAt),
                     SortDescriptor(\AggregatePebble.id)

@@ -375,10 +375,10 @@ private struct ValuePage: View {
 
     private var promise: some View {
         VStack(spacing: 14) {
-            // The English eyebrow is decoration; at AX sizes it would take
-            // the first lines of the first screen.
+            // The eyebrow is decoration; at AX sizes it would take the
+            // first lines of the first screen.
             if !dynamicTypeSize.isAccessibilitySize {
-                SectionEyebrow(text: "YOUR TIME, IN THE JAR")
+                SectionEyebrow(text: String(localized: "集中を瓶に", table: "Onboarding", comment: "Eyebrow of onboarding page 1 (集中を終えると、一粒。)"))
             }
             Text("集中を終えると、一粒。")
                 .font(PomoGemTheme.brand(30))
@@ -540,7 +540,9 @@ private struct OnboardingPebble: View {
 
 private struct TrialDropPage: View {
     @Binding var dropped: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    /// UI tests force Reduce Motion through this seam (as Home and the jar do).
+    @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -549,13 +551,19 @@ private struct TrialDropPage: View {
     @State private var activeDropID: UUID?
     @State private var showsRecoveryActions = false
 
+    private var reduceMotion: Bool { reduceMotionOverride ?? systemReduceMotion }
+
+    /// walk-std-12. The fall takes about a second, so a new person sees the
+    /// gem arrive (Home's completion drop takes about half that).
+    private static let trialFallDuration: TimeInterval = 1.0
+
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                // Decorative English; at AX sizes it would take the page's
+                // Decorative; at AX sizes it would take the page's
                 // first lines (walk-edge-04).
                 if !dynamicTypeSize.isAccessibilitySize {
-                    SectionEyebrow(text: "THE FIRST DROP")
+                    SectionEyebrow(text: String(localized: "はじめての一粒", table: "Onboarding", comment: "Eyebrow of the onboarding trial drop page"))
                 }
                 JarSpriteView(scene: scene, totalGrams: 0, pebbleCount: dropped ? 1 : 0)
                     .frame(width: 240, height: jarHeight)
@@ -599,25 +607,21 @@ private struct TrialDropPage: View {
                     }
 
                     if dropped {
-                        // walk-std-12. The proof moment names the promise:
-                        // what this drop stands for in a real focus. 「本番
-                        // では」 and 「この大きさ」 keep it from reading as
-                        // "real gems look like this grey pebble" or as a
-                        // contradiction of the 0g line below. The trial
-                        // gem's colour and glow belong to the gem-brilliance
-                        // branch (PebbleNode / GemArtwork), not this page.
-                        Text("本番では、25分の集中でこの大きさの一粒（250g）が瓶に残ります。",
-                             tableName: "Onboarding",
-                             comment: "Onboarding trial drop: shown after the trial gem lands")
+                        // walk-std-12. The proof moment names the promise
+                        // in one line: what this gem stands for in a real
+                        // focus. The gem itself is a full-size amber one,
+                        // as big as one gem is in a young jar.
+                        Text(Self.meaning)
                             .font(.callout.weight(.semibold))
                             .foregroundStyle(PomoGemTheme.amber)
                             .multilineTextAlignment(.center)
                             .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityLabel(Self.spokenMeaning)
                             .accessibilityIdentifier("onboarding.trial-meaning")
                             .transition(.opacity)
                     }
 
-                    Text("任意の体験です。0g・記録には入りません。「次へ」で省略できます。")
+                    Text(TrialDropPresentation.trialNote)
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
                         .multilineTextAlignment(.center)
@@ -632,13 +636,11 @@ private struct TrialDropPage: View {
         .scrollBounceBehavior(.basedOnSize)
         .onAppear {
             scene.onLanding = { event in
-                guard event.pebble.isTutorial,
-                      event.pebble.id == activeDropID
-                else { return }
+                guard event.pebble.id == activeDropID else { return }
                 completeDrop(announcement: String(
-                    localized: "一粒、着地しました。本番では、25分の集中でこの大きさの一粒（250グラム）が瓶に残ります。次へ進めます",
+                    localized: "一粒、着地しました。\(Self.spokenMeaning)。次へ進めます",
                     table: "Onboarding",
-                    comment: "VoiceOver announcement when the onboarding trial gem lands"))
+                    comment: "VoiceOver announcement when the onboarding trial gem lands; %@ is the spoken form of 「25分の集中 = この一粒（+250g）」"))
             }
             scene.configureBase(strata: [], bedrock: nil, showsMonthLabels: false)
         }
@@ -673,11 +675,23 @@ private struct TrialDropPage: View {
         activeDropID = pebble.id
         isDropping = true
         scene.restore(pebbles: [])
+        guard !reduceMotion else {
+            // Reduce Motion: a short fade at rest instead of the fall; the
+            // landing still sounds and taps.
+            scene.placeTrialGem(pebble, fadeDuration: 0.35) {
+                guard activeDropID == pebble.id else { return }
+                completeDrop(announcement: String(
+                    localized: "一粒、着地しました。\(Self.spokenMeaning)。次へ進めます",
+                    table: "Onboarding",
+                    comment: "VoiceOver announcement when the onboarding trial gem lands; %@ is the spoken form of 「25分の集中 = この一粒（+250g）」"))
+            }
+            return
+        }
         // walk-std-12. Enter through the neck and fall the jar's full
-        // height, the same path as Home's completion drop, instead of
-        // appearing near the floor and landing before anyone notices. The
-        // 2.5 s recovery below still covers the longer fall (under 1 s).
-        scene.dropFromAbove(pebble)
+        // height on a slow arc (about a second), the same path as Home's
+        // completion drop, instead of landing before anyone notices. The
+        // 2.5 s recovery below still covers it.
+        scene.dropTrialGem(pebble, fallDuration: Self.trialFallDuration)
     }
 
     private func completeWithoutAnimation() {
@@ -686,9 +700,9 @@ private struct TrialDropPage: View {
         activeDropID = pebble.id
         scene.restore(pebbles: [pebble])
         completeDrop(announcement: String(
-            localized: "演出を省略して一粒を積みました。本番では、25分の集中でこの大きさの一粒（250グラム）が瓶に残ります。次へ進めます",
+            localized: "演出を省略して一粒を積みました。\(Self.spokenMeaning)。次へ進めます",
             table: "Onboarding",
-            comment: "VoiceOver announcement when the onboarding trial gem is placed without animation"))
+            comment: "VoiceOver announcement when the onboarding trial gem is placed without animation; %@ is the spoken form of 「25分の集中 = この一粒（+250g）」"))
     }
 
     private func completeDrop(announcement: String) {
@@ -700,16 +714,22 @@ private struct TrialDropPage: View {
         UIAccessibility.post(notification: .announcement, argument: announcement)
     }
 
+    /// walk-std-12. A full-size gem in the default amber: the jar's own
+    /// loose cut at the size one 25-minute gem takes in a young jar, not the
+    /// small colourless tutorial pebble. It is never saved; the page's
+    /// promise stays 「0g・記録には入りません」.
     private func tutorialPebble() -> PebbleDescriptor {
         PebbleDescriptor(
             subjectName: "ためし積み",
-            colorHex: Constants.Color.glassEdge,
+            colorHex: Constants.Color.amberLamp,
             source: .timer,
             kind: .normal,
-            grams: 0,
-            isTutorial: true
+            grams: Constants.Mass.measuredPebbleGrams
         )
     }
+
+    private static var meaning: String { TrialDropPresentation.meaning }
+    private static var spokenMeaning: String { TrialDropPresentation.spokenMeaning }
 
     private var dropButtonTitle: String {
         if dropped { return "一粒、積もった" }
@@ -804,18 +824,12 @@ private struct SubjectSetupPage: View {
         return "あと\(SubjectNamePolicy.remainingCharacters(for: customSubjectName))文字入力できます"
     }
 
-    private var suggestionColumns: [GridItem] {
-        dynamicTypeSize.isAccessibilitySize
-            ? [GridItem(.flexible())]
-            : [GridItem(.flexible()), GridItem(.flexible())]
-    }
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 26) {
                 VStack(alignment: .leading, spacing: 10) {
                     if !dynamicTypeSize.isAccessibilitySize {
-                        SectionEyebrow(text: "YOUR BOTTLE")
+                        SectionEyebrow(text: String(localized: "あなたの瓶", table: "Onboarding", comment: "Eyebrow over 最初のテーマを選ぶ"))
                     }
                     Text("最初のテーマを選ぶ")
                         .font(PomoGemTheme.brand(30))
@@ -843,23 +857,35 @@ private struct SubjectSetupPage: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                LazyVGrid(columns: suggestionColumns, spacing: 10) {
+                // device-verify-2 P9: two columns only when every name fits
+                // on one line in half the width, otherwise one full-width
+                // column. The fixed two-column grid broke 「資料作成」 and
+                // 「顧客対応」 in the middle of the word at the default size
+                // on a 375 pt iPhone.
+                ThemeChoiceColumns(spacing: 10) {
                     ForEach(SubjectSuggestionCatalog.presets) { preset in
                         let isSelected = effectiveSelection.contains(preset.name)
                         Button {
                             choosePreset(preset)
                         } label: {
-                            HStack(spacing: 10) {
+                            HStack(spacing: 8) {
                                 Circle()
                                     .fill(Color(hex: preset.colorHex))
                                     .frame(width: 14, height: 14)
                                 Text(preset.name)
                                     .font(.system(.body, design: .rounded, weight: .bold))
-                                Spacer()
+                                    // A name is never split across lines; the
+                                    // one-column layout gives it the full
+                                    // width, and only a name wider than that
+                                    // shrinks a little.
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.7)
+                                    .layoutPriority(1)
+                                Spacer(minLength: 4)
                                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                                     .foregroundStyle(isSelected ? PomoGemTheme.amber : PomoGemTheme.muted)
                             }
-                            .padding(.horizontal, 14)
+                            .padding(.horizontal, 12)
                             .frame(minHeight: 50)
                             .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 13))
                         }
@@ -1068,6 +1094,62 @@ private struct SubjectSetupPage: View {
     }
 }
 
+/// Equal columns for the onboarding theme choices: two when the widest
+/// choice fits on one line in half the width, otherwise one (device-verify-2
+/// P9). Each choice is measured at its ideal (one-line) width, so the
+/// decision follows the text size and the screen instead of a fixed rule.
+private struct ThemeChoiceColumns: Layout {
+    var spacing: CGFloat
+
+    private struct Arrangement {
+        var size: CGSize
+        var frames: [CGRect]
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        arrange(width: proposal.width, subviews: subviews).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let arrangement = arrange(width: bounds.width, subviews: subviews)
+        for (subview, frame) in zip(subviews, arrangement.frames) {
+            subview.place(
+                at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                anchor: .topLeading,
+                proposal: ProposedViewSize(width: frame.width, height: frame.height)
+            )
+        }
+    }
+
+    private func arrange(width proposedWidth: CGFloat?, subviews: Subviews) -> Arrangement {
+        let widest = subviews.map { $0.sizeThatFits(.unspecified).width }.max() ?? 0
+        let width = proposedWidth ?? (widest * 2 + spacing)
+        let columns = widest * 2 + spacing <= width ? 2 : 1
+        let columnWidth = columns == 2 ? (width - spacing) / 2 : width
+        var frames: [CGRect] = []
+        var y: CGFloat = 0
+        for rowStart in stride(from: 0, to: subviews.count, by: columns) {
+            let row = rowStart..<min(rowStart + columns, subviews.count)
+            let height = row.map {
+                subviews[$0].sizeThatFits(ProposedViewSize(width: columnWidth, height: nil)).height
+            }.max() ?? 0
+            for (column, _) in row.enumerated() {
+                frames.append(CGRect(
+                    x: CGFloat(column) * (columnWidth + spacing),
+                    y: y,
+                    width: columnWidth,
+                    height: height
+                ))
+            }
+            y += height + spacing
+        }
+        return Arrangement(
+            size: CGSize(width: width, height: max(0, y - spacing)),
+            frames: frames
+        )
+    }
+}
+
 private struct RareRewardOnboardingPage: View {
     @Binding var selection: RareRewardMode?
 
@@ -1075,7 +1157,7 @@ private struct RareRewardOnboardingPage: View {
         ScrollView {
             RareRewardChoicePanel(
                 selection: $selection,
-                eyebrow: "OPTIONAL VARIATION",
+                eyebrow: String(localized: "任意の設定", table: "Onboarding", comment: "Eyebrow of the optional rare-gem choice page"),
                 title: "レア粒は、自分で選ぶ。",
                 introduction: "どれを選んでも、質量・粒の融合・結晶・成果・使える機能は同じです。ランダムな結果を使わない「抽選しない」が安全な基準です。"
             )
@@ -1219,6 +1301,38 @@ extension Color {
             green: Double((value >> 8) & 0xFF) / 255,
             blue: Double(value & 0xFF) / 255,
             opacity: 1
+        )
+    }
+}
+
+/// walk-std-12. The onboarding trial gem's words, kept apart from the view
+/// so the visible and spoken forms are pinned by unit tests.
+enum TrialDropPresentation {
+    /// 「25分の集中 = この一粒（+250g）」, one sentence.
+    static var meaning: String {
+        String(
+            localized: "\(DurationText.short(minutes: DurationPresentation.focusMinutes(grams: Constants.Mass.measuredPebbleGrams)))の集中 = この一粒（+\(MassText.grams(String(Constants.Mass.measuredPebbleGrams)))）",
+            table: "Onboarding",
+            comment: "Onboarding trial drop, shown after the trial gem lands: what one gem stands for. %1$@ is a focus time (25分), %2$@ its mass (250g). en: '%1$@ of focus = this gem (+%2$@)'"
+        )
+    }
+
+    /// VoiceOver form of `meaning`: 「25分の集中が、この一粒（250グラム）になります」.
+    static var spokenMeaning: String {
+        String(
+            localized: "\(DurationText.spoken(minutes: DurationPresentation.focusMinutes(grams: Constants.Mass.measuredPebbleGrams)))の集中が、この一粒（\(MassText.spoken(grams: Constants.Mass.measuredPebbleGrams))）になります",
+            table: "Onboarding",
+            comment: "VoiceOver: what the onboarding trial gem stands for. %1$@ is a spoken focus time, %2$@ a spoken mass"
+        )
+    }
+
+    /// The page's standing note. It names no weight of its own: 「0g」 right
+    /// under 「+250g」 read as a contradiction.
+    static var trialNote: String {
+        String(
+            localized: "これはお試しなので、記録には入りません。「次へ」で省略できます。",
+            table: "Onboarding",
+            comment: "Onboarding trial drop page: the trial gem is never recorded, and the page can be skipped"
         )
     }
 }

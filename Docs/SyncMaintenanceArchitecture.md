@@ -238,6 +238,23 @@ activeへ戻った場合はRoot・sheet・瓶を維持し、background中に識�
 quiescenceへ進み、通信・期限の失敗ではsessionを維持します。猶予後の再マウントでは、同じnamespaceの
 場合に限り直前のtab（瓶・記録・設定）を復元し、account changeやtransferで記憶を破棄します。
 
+猶予内の復帰では、Rootは同じforeground epochを続けます（`CloudForegroundEpoch`、2026-09-29、実機検証2の
+P2）。以前はRootが`.background`でtrustを取り消し、`.active`で新しいverification sweepを要求し、60秒の
+idle graceもやり直していました。猶予導入前は各復帰が再マウントだったため問題になりませんでしたが、
+猶予でRootが残るようになると、5〜10秒ほかのアプリを見ただけで約65秒の「iCloudを確認中」に戻って
+いました。現在は、`.background`から`CloudBackgroundGracePolicy.graceInterval`（15秒）以内に`.active`へ
+戻った場合、確認済みの表示、進行中のverification ticket、idle graceとrolling verificationの期限を
+そのまま保ちます。安全性の根拠は次の3点です。
+
+- 猶予中はbackground taskを保持するためprocessはsuspendされない
+- Rootのstore変更observerは不在中も有効なので、その間のremote importは通常経路でtrustを取り消し、
+  sweepを要求する
+- 識別の再確認でverdictが出た場合はsession全体を閉じる
+
+これより長い不在（CloudKitの通信を持たないRoot、つまり許可済みのoffline sessionだけがここまで残る）は、
+従来どおり新しいepochとして扱い、trustを取り消して60秒のidle grace後にsweepします。deletion fenceと
+entitlementの再確認は、どちらの場合も真正なbackground復帰ごとに行います。
+
 ### 3.3 起動時の読み取りは意図的に小さい
 
 `RootView` は最初の画面を守るため、次の上限付きsentinelだけを保持します。
@@ -455,7 +472,7 @@ sceneがinactiveまたはbackgroundになった場合は新しいsliceを開始�
 
 ### 6.5 foregroundのidle graceとpacing
 
-初回およびforeground復帰時のrolling verificationは、remote importの見落としがあり得るcloud modeだけが新規に要求し、first frameから60秒のcancellable idle grace後に開始します。local-only、in-memory、Simulatorのlocal storeにはremote blind spotがないため、初回の全範囲verificationを追加しませんが、既存checkpointと明示的なtyped reasonは失いません。drainは選択中tabに依存せず、sceneがactiveである限りSettings／Log／Overview／Shareを含む全画面の背後で継続します。さらにcloud modeのactive sceneは15分ごとにverification ticketを更新し、長時間同じ画面を開いたままでもrolling sweepを再要求します。fingerprintまたは通知が観測したimport reasonはverification markerより高いpriorityを保ちます。drain自体はbackground priorityで、成功したslice間に100msのcancellable pauseを置きます。350,640 sessionを128件pageだけで一巡する最悪ケースでは約2,740 sliceとなり、pauseだけで約274秒を追加しますが、cursorとgenerationが端末内checkpointへ保存されるため、1回のforegroundで完走させることより直接操作の応答性を優先し、終了・background後は同じ安全な境界から再開します。
+初回および新しいforeground epoch（§3.2。background猶予を超えた不在からの復帰）のrolling verificationは、remote importの見落としがあり得るcloud modeだけが新規に要求し、そのepochの最初の要求から60秒のcancellable idle grace後に開始します。idle graceとrolling verificationはどちらも期限で管理し、inactiveや猶予内の不在でtimerを止めても期限は保ちます。復帰のたびにやり直すと、sweepの開始が延び続け、短い不在を繰り返すだけで15分ごとの確認が行われなくなるためです。local-only、in-memory、Simulatorのlocal storeにはremote blind spotがないため、初回の全範囲verificationを追加しませんが、既存checkpointと明示的なtyped reasonは失いません。drainは選択中tabに依存せず、sceneがactiveである限りSettings／Log／Overview／Shareを含む全画面の背後で継続します。さらにcloud modeのactive sceneは、前回のrolling要求から15分ごとにverification ticketを更新し、長時間同じ画面を開いたままでもrolling sweepを再要求します。不在中に期限が来た場合は復帰時に要求します。fingerprintまたは通知が観測したimport reasonはverification markerより高いpriorityを保ちます。drain自体はbackground priorityで、成功したslice間に100msのcancellable pauseを置きます。350,640 sessionを128件pageだけで一巡する最悪ケースでは約2,740 sliceとなり、pauseだけで約274秒を追加しますが、cursorとgenerationが端末内checkpointへ保存されるため、1回のforegroundで完走させることより直接操作の応答性を優先し、終了・background後は同じ安全な境界から再開します。
 
 ## 7. `@ModelActor` slice worker契約
 
@@ -663,6 +680,35 @@ pendingの間Homeはaggregateを受け入れず、新しい128件のsessionし�
 完了で検証済みの値に置き換えます。Overviewはpendingの間、集計を表示しない「iCloudを確認中」の画面に
 なります（loaderが検証済みstampのpageしか使わないため）。
 
+Homeはsession pageを非同期に読むため、表示の世代が変わるたび（importや自分の保存によるtrustの取消、
+rolling確認、verification完了）に、新しいpageを読み終えるまで手元のpageを使いません。以前は瓶の
+見出し・個数・時間の核をこの空のpageから導いていたため、実機では復帰直後の約1秒、「再集計中」と
+「この端末で確認済み 0粒」が表示され、時間の核が消えていました（実機検証2のP2）。前世代のpageの
+「全sessionを含む」という判定を空のpageに適用し、0粒を正確な値として扱う経路もありました。現在は次の
+ように扱います（`LifetimeReadoutContinuityPolicy`）。
+
+- 前世代のpageで「端末の合計が全sessionを覆う」とは判定しない
+- 読み直しの間は、確定した入力から最後に表示した値をまとめて表示し続ける。瓶の中の粒が読み直しの間も
+  残るのと同じ規則。対象は見出し、瓶の個数、時間の核とその色、メニューの値に加え、瓶のVoiceOverが
+  読む結晶と金・虹の数、融合前のrailと時間の核の進み（大きい文字のカードを含む）。読み直し中のpageと
+  混ぜない
+- 保持した値は、確認中に記録したものか、現在確認中であれば「iCloudを確認中」と「この端末で確認済み
+  N粒」の表記で出す。verificationの完了で確認中の値が検証済みになるわけではなく、trustの取消後の
+  検証済みの値は、この端末で確認できた値にすぎないため
+- 一度も確定した値を表示していない間（起動直後と、background猶予を超えた不在の後の再マウント）は、
+  数値を出さない。「再集計中」も0粒も、空の瓶のメッセージも出さず、瓶のVoiceOverは「これまでの記録を
+  読み込み中」と読む。瓶にまだ粒がないのと同じ状態
+- 同じreset epochの間だけ保持し、記録のリセット後には持ち越さない
+- 読み取りが失敗したら保持をやめ、入力から言える値（「再集計中」または下限）に戻す。代わりの読み取りが
+  進行していないため、古い値を出し続けないようにする
+- 確定した入力だけを覚える。完全なpageを置き換える読み取りの間だけを「読み直し中」とし、もともと完全で
+  ないpageの読み直しは表示を変えないので、Homeのbody passを増やさない
+- 覚えるのは瓶が実際に表示した値で、Homeのpassの後に着地した粒も含む。粒の着地は瓶の表示部分だけを
+  描き直し（実機検証2のP4）、その部分が表示した値を覚える
+- 保持した値は保存・書き出し・共有に使わない。`VerifiedMassRecord`は確定した入力だけから作る。報酬
+  カードは保持した値を使わず、完走時の入力から凍結する。入力が確定していない間は、上の規則により
+  控えめな値（下限または「再集計中」）になる
+
 完走直後の報酬カードは、完走時に凍結した今週の値と、上の規則で表示できる生涯値から求めた時間の核の
 進みを「iCloudを確認中」付きで表示します。上の規則で「再集計中」になる場合は凍結値が下限なので、進みの
 割合を推定せず「今回の +250g は保存済みです。これまでの合計は確認が済むと表示します。」と表示し、
@@ -773,8 +819,9 @@ iOS 17にはSwiftData History APIがありません。次をfallbackとします
 
 - upgrade後の一回限りresumable verification
 - first frame後の小さいlaunch verification
-- genuine foreground returnごとのbounded rolling verification
-- active sceneが継続する間の15分ごとのbounded rolling verification
+- 新しいforeground epoch（background猶予を超えた不在からの復帰、§3.2）ごとのbounded rolling verification。
+  猶予内の復帰はepochを続け、その間もstore変更observerは有効
+- active sceneが継続する間の15分ごとのbounded rolling verification（期限は猶予内の不在をまたいで保持）
 - `ModelContext.didSave`から、main UIの`StudySession`／`ActivityResetMarker`変更だけを受理し、
   maintenance自己書込みと無関係なentityを除外するtyped hint
 - `NSPersistentStoreRemoteChange`のstore URLが、検証済みaccount namespaceのCloudKit source store URLと
@@ -785,7 +832,9 @@ iOS 17にはSwiftData History APIがありません。次をfallbackとします
 iOS 17 fallbackは、Rootのtop-N fingerprintまたは通知だけで「古い後着行を即時かつ完全に検知できる」とは
 主張しません。通知は1秒のcoalesce windowで重複を抑えますが、window内の後続通知も即座にtrustを取消し、
 durable `.sessions` generationを増やします。高コストなfull verification要求だけをwindow末尾へまとめます。
-正しさは初回、真正なforeground復帰、active継続中のrolling verificationで成立させます。
+正しさは初回、新しいforeground epoch、active継続中のrolling verificationで成立させます。background猶予内の
+不在は、processが動き続けobserverも有効なため、active継続中と同じ扱い（通知で即座にtrustを取消し、見落としは
+15分ごとのrolling verificationで補う）です。
 
 同一process内の通常UI saveは、source sessionまたはreset markerの識別子、もしくは明示的な
 invalidated-allだけをtyped reasonへ変換します。iOS 18以降はmaintenance authorを除外し、iOS 17では

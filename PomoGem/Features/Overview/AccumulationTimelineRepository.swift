@@ -180,7 +180,7 @@ struct AccumulationTimelineMonthSummary: Identifiable, Equatable, Sendable {
     var id: Date { monthStart }
 }
 
-/// One month of 記録's 「月ごとの瓶」: exact logical session count, focus
+/// One month of 記録's 「月の振り返り」: exact logical session count, focus
 /// seconds and mass for the months that have any record. The row shows the
 /// time the mass stands for (`DurationPresentation.focusMinutes(grams:)`),
 /// like every other history screen.
@@ -560,7 +560,7 @@ actor AccumulationTimelineRepository {
         return lastResult
     }
 
-    /// 記録's 「月ごとの瓶」 for this month and the eleven before it. One
+    /// 記録's 「月の振り返り」 for this month and the eleven before it. One
     /// bounded interval read (at most 366 days, inside the finite-interval
     /// guard) replaces the twelve month pages 記録 used to read on the main
     /// thread on every open, 今週／今月 toggle and foreground; 記録 calls it

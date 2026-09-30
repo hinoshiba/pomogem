@@ -79,10 +79,12 @@ enum JarAccessibilityPresentation {
             rawPrismPebbleCount
         )
         let aggregate = aggregateCount > 0
-            ? "、まとまり粒\(aggregateCount)個、合計\(representedPebbleCount)粒分"
+            ? String(localized: "、結晶\(aggregateCount)個、合計\(representedPebbleCount)粒分", table: "Jar",
+                     comment: "VoiceOver jar value fragment: crystal count, gems they hold")
             : ""
         let legacyAggregate = legacyAggregateCount > 0
-            ? "、旧形式のまとまり粒\(legacyAggregateCount)個（保存済み情報を確認できます）"
+            ? String(localized: "、旧形式の結晶\(legacyAggregateCount)個（保存済み情報を確認できます）", table: "Jar",
+                     comment: "VoiceOver jar value fragment: crystals saved in the old format")
             : ""
         let fusion = projectionIsUnverified
             ? ""
@@ -115,6 +117,14 @@ enum JarAccessibilityPresentation {
             massDescription = "記録した集中時間の質量：\(formattedMass(totalGrams))"
         }
         return "\(massDescription)。瓶の整理：\(pebbleCount)粒\(aggregate)\(legacyAggregate)\(rareSuffix)\(fusion)。記念石\(achievementCount)個"
+    }
+
+    /// device-verify-2 P2 (review of #56): before Home has read its records
+    /// it knows no total, and its readout shows none. Never 「0グラム」 or
+    /// 「瓶の整理：0粒」 for a jar that is only still loading.
+    static var loadingValue: String {
+        String(localized: "これまでの記録を読み込み中", table: "Jar",
+               comment: "VoiceOver, jar value before Home has read its focus records")
     }
 
     /// sync-03: the lifetime mass Home's headline shows while iCloud is
@@ -152,6 +162,8 @@ struct JarSpriteView: View {
     /// sync-03 (icloud-life): VoiceOver only; the jar's visuals are unchanged.
     let pendingMass: JarAccessibilityPresentation.PendingMass?
     let fusionProgressDescription: String?
+    /// device-verify-2 P2: Home has not read its records yet (VoiceOver only).
+    let isLoadingRecords: Bool
     let isMotionEnabled: Bool
     let inspectableAggregateID: UUID?
     let onJarTapAccepted: (() -> Void)?
@@ -205,6 +217,7 @@ struct JarSpriteView: View {
         projectionIsUnverified: Bool = false,
         pendingMass: JarAccessibilityPresentation.PendingMass? = nil,
         fusionProgressDescription: String? = nil,
+        isLoadingRecords: Bool = false,
         isMotionEnabled: Bool = true,
         inspectableAggregateID: UUID? = nil,
         onJarTapAccepted: (() -> Void)? = nil,
@@ -232,6 +245,7 @@ struct JarSpriteView: View {
         self.projectionIsUnverified = projectionIsUnverified
         self.pendingMass = pendingMass
         self.fusionProgressDescription = fusionProgressDescription
+        self.isLoadingRecords = isLoadingRecords
         self.isMotionEnabled = isMotionEnabled
         self.inspectableAggregateID = inspectableAggregateID
         self.onJarTapAccepted = onJarTapAccepted
@@ -578,10 +592,38 @@ struct JarSpriteView: View {
                     .opacity(scene.isFusionSpotlightActive ? 0 : 1)
                     .animation(.easeInOut(duration: 0.18), value: scene.isFusionSpotlightActive)
                 }
+#if DEBUG
+                // The core has no accessibility frame of its own (the jar is
+                // one element), so Home's jar (the only one with a measured
+                // HUD above its core) reports it for UI tests: the tapped
+                // crystal's card must stay clear of it.
+                if coreTopClearance != nil, let coreDisc {
+                    let labelBottom = coreLayout.map {
+                        $0.labelTop + (coreLabelsBuried ? 0 : coreLabelMetrics.size.height)
+                    } ?? 0
+                    let halfWidth = max(coreDisc.radius, coreLayout == nil ? 0 : coreLabelMetrics.size.width / 2)
+                    let top = coreDisc.center.y - coreDisc.radius
+                    let bottom = max(coreDisc.center.y + coreDisc.radius, labelBottom)
+                    Color.clear
+                        .frame(width: halfWidth * 2, height: max(0, bottom - top))
+                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: {
+                            HomeRenderDiagnostics.jarCoreWindowFrame = $0
+                        }
+                        .position(x: coreDisc.center.x, y: (top + bottom) / 2)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+#endif
             }
             .coordinateSpace(.named(Self.stageCoordinateSpace))
         }
         .accessibilityElement(children: .ignore)
+        // The element's frame is the stage. Without this it took in layers
+        // placed past the stage's lower edge (with a time core in a short
+        // stage, such as Home's 300 pt jar at accessibility sizes on an
+        // iPhone SE, it ran 40 pt below the jar over the row under it),
+        // which VoiceOver then treated as the jar. Merge of #47 into #50.
+        .contentShape(.accessibility, Rectangle())
         .accessibilityLabel("瓶")
         .accessibilityValue(accessibilityValue)
         .accessibilityHint(accessibilityHint)
@@ -793,21 +835,26 @@ struct JarSpriteView: View {
     }
 
     private var accessibilityValue: String {
-        let studyValue = JarAccessibilityPresentation.value(
-            totalGrams: totalGrams,
-            pebbleCount: pebbleCount,
-            achievementCount: achievementCount,
-            aggregateCount: aggregateCount,
-            legacyAggregateCount: legacyAggregateCount,
-            representedPebbleCount: representedPebbleCount,
-            goldPebbleCount: goldPebbleCount,
-            prismPebbleCount: prismPebbleCount,
-            fusionProgressDescription: fusionProgressDescription,
-            projectionIsLowerBound: projectionIsLowerBound,
-            projectionIsUnverified: projectionIsUnverified,
-            pendingMass: pendingMass,
-            isCloudOfflineSession: isCloudOfflineSession
-        )
+        let studyValue: String
+        if isLoadingRecords {
+            studyValue = JarAccessibilityPresentation.loadingValue
+        } else {
+            studyValue = JarAccessibilityPresentation.value(
+                totalGrams: totalGrams,
+                pebbleCount: pebbleCount,
+                achievementCount: achievementCount,
+                aggregateCount: aggregateCount,
+                legacyAggregateCount: legacyAggregateCount,
+                representedPebbleCount: representedPebbleCount,
+                goldPebbleCount: goldPebbleCount,
+                prismPebbleCount: prismPebbleCount,
+                fusionProgressDescription: fusionProgressDescription,
+                projectionIsLowerBound: projectionIsLowerBound,
+                projectionIsUnverified: projectionIsUnverified,
+                pendingMass: pendingMass,
+                isCloudOfflineSession: isCloudOfflineSession
+            )
+        }
         guard let obstacles = scene.screenTimeObstacleAccessibilityDescription else {
             return studyValue
         }
@@ -815,6 +862,8 @@ struct JarSpriteView: View {
     }
 
     private var accessibilityHint: String {
+        // Still loading, not empty: 「まだ粒はありません」 would say otherwise.
+        guard !isLoadingRecords else { return "" }
         guard hasPhysicalContent else {
             return "まだ粒はありません。集中を完走するか成果を積むと、瓶に粒が入ります"
         }
@@ -824,7 +873,11 @@ struct JarSpriteView: View {
         let base = "瓶をタップすると数秒だけ1粒が大きく跳ね、ぶつかった周囲の粒も自然に動いて止まります。その間はiPhoneを傾けたり、軽く振ったりして動かせます"
 #endif
         guard inspectableAggregateID != nil else { return base }
-        return "\(base)。「最新のまとまり粒の内訳を見る」アクションで、保存されている粒数や質量などを確認できます"
+        return String(
+            localized: "\(base)。「最新の結晶の内訳を見る」アクションで、保存されている粒数や質量などを確認できます",
+            table: "Jar",
+            comment: "VoiceOver jar hint: the tap/tilt hint, then the custom action that opens the newest crystal"
+        )
     }
 
     private func performSpatialTap(at point: CGPoint) {
@@ -1065,7 +1118,7 @@ private struct JarAggregateAccessibilityModifier: ViewModifier {
     func body(content: Content) -> some View {
         if let aggregateID, let onInspectAggregate {
             content
-                .accessibilityAction(named: "最新のまとまり粒の内訳を見る") {
+                .accessibilityAction(named: Text("最新の結晶の内訳を見る", tableName: "Jar", comment: "VoiceOver custom action on the jar")) {
                     onInspectAggregate(aggregateID)
                 }
         } else {

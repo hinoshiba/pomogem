@@ -173,7 +173,7 @@ struct DayHistorySheet: View {
     private func sessionList(_ sessions: [HistorySessionSummary]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("この日の記録", tableName: "Log", comment: "Heading of a day's record list")
-                .font(PomoGemTheme.brand(20))
+                .pomogemSectionTitle()
             VStack(spacing: 0) {
                 ForEach(sessions) { session in
                     HistorySessionRow(item: session, timeStyle: .timeRange)
@@ -261,7 +261,7 @@ struct HistoryThemeBreakdown: View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 12) {
                 Text(title)
-                    .font(PomoGemTheme.brand(20))
+                    .pomogemSectionTitle()
                 ForEach(themes) { theme in
                     Group {
                         if dynamicTypeSize.isAccessibilitySize {
@@ -360,14 +360,14 @@ struct HistoryMetricTile: View {
 
 enum HistoryMassText {
     static func text(_ grams: Int64) -> String {
-        let value = max(0, grams)
+        let value = Int(clamping: max(0, grams))
         if value >= 1_000_000 {
-            return String(format: "%.1ft", Double(value) / 1_000_000)
+            return MassText.tonnes(fromGrams: value, fractionDigits: 1)
         }
         if value >= 1_000 {
-            return String(format: "%.1fkg", Double(value) / 1_000)
+            return MassText.kilograms(fromGrams: value, fractionDigits: 1)
         }
-        return "\(value)g"
+        return MassText.grams(value: value)
     }
 }
 
@@ -420,9 +420,9 @@ struct HistorySessionRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Text(
-                    "+\(item.grams)g・\(item.source.displayName)",
+                    "\(MassText.addedGrams(item.grams))・\(item.source.displayName)",
                     tableName: "Log",
-                    comment: "History row at large text sizes: mass added, then how it was recorded"
+                    comment: "History row at large text sizes: mass added (+250g), then how it was recorded"
                 )
                     .font(.system(.subheadline, design: .rounded, weight: .bold))
                     .fixedSize(horizontal: false, vertical: true)
@@ -463,7 +463,7 @@ struct HistorySessionRow: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                Text("+\(item.grams)g", tableName: "Log", comment: "Grams one record added to the jar")
+                Text(MassText.addedGrams(item.grams))
                     .font(.system(.subheadline, design: .rounded, weight: .bold))
                 Text(item.source.displayName)
                     .font(.caption2)

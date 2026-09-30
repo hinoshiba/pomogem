@@ -28,6 +28,9 @@
     "iOS：%@" : {
       "comment" : "Support mail line; the argument is the iOS version, e.g. 26.5"
     },
+    "「抽選しない」を選択として保存" : {
+
+    },
     "「毎日のリマインダー」と「先月の瓶のお知らせ」は既定でオフです。赤いバッジや連続記録の警告は使いません。タイマー終了の通知だけは「即時通知」として送るため、iPhoneの集中モード（おやすみモードなど）で即時通知を許可していれば、その間も届きます。" : {
       "comment" : "Settings footer under the Notifications card. The default-off sentence names only this card's two switches, because the leave-pause notifications in the Focus card are on by default. Suggested English: Daily Reminder and Last Month's Jar are off by default. The app never uses red badges or streak warnings. Only timer-end alerts are sent as Time Sensitive, so they still arrive during a Focus such as Do Not Disturb if Time Sensitive notifications are allowed there."
     },
@@ -196,6 +199,9 @@
     "紅藤" : {
       "comment" : "Theme colour swatch (orchid)"
     },
+    "結晶" : {
+      "comment" : "Export progress: the collection being written (crystals)"
+    },
     "緑青" : {
       "comment" : "Theme colour swatch (verdigris green)"
     },
@@ -223,6 +229,9 @@
     "見出し書体" : {
       "comment" : "About page row: the heading typeface"
     },
+    "記念石" : {
+      "comment" : "Export progress: the collection being written (achievement stones)"
+    },
     "記録の書き出しとリセット" : {
       "comment" : "Settings section header: export and reset"
     },
@@ -249,6 +258,9 @@
     },
     "通知する時刻" : {
       "comment" : "Settings time picker label for reminders"
+    },
+    "集中" : {
+      "comment" : "Timer display preview: the phase shown in the ring (集中 · 35% 残り)"
     },
     "集中が切れたらお知らせ" : {
       "comment" : "Settings switch title: the notifications sent while a focus is paused because the person left the app. Suggested English: Notify Me When I Drift Away"

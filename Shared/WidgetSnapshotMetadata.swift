@@ -229,6 +229,17 @@ enum AccountScopedLocalState {
         return AccountDataNamespace(rawValue: rawValue)
     }
 
+    /// A cloud boundary is required but no account or local namespace is
+    /// active: `beginCloudBoundary` has run and nothing has been activated
+    /// since. Writes still arriving from the previous view hierarchy belong
+    /// to no mounted account and must be refused.
+    static func isBoundaryClosed(
+        defaults: UserDefaults = .standard
+    ) -> Bool {
+        defaults.bool(forKey: cloudBoundaryRequiredKey)
+            && activeNamespace(defaults: defaults) == nil
+    }
+
     static func hasPersistedCloudBindingHistory(
         defaults: UserDefaults = .standard
     ) -> Bool {

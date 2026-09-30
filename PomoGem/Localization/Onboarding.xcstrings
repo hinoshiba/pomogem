@@ -1,6 +1,28 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "%@の集中 = この一粒（+%@）" : {
+      "comment" : "Onboarding trial drop, shown after the trial gem lands: what one gem stands for. %1$@ is a focus time (25分), %2$@ its mass (250g). en: '%1$@ of focus = this gem (+%2$@)'",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@の集中 = この一粒（+%2$@）"
+          }
+        }
+      }
+    },
+    "%@の集中が、この一粒（%@）になります" : {
+      "comment" : "VoiceOver: what the onboarding trial gem stands for. %1$@ is a spoken focus time, %2$@ a spoken mass",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@の集中が、この一粒（%2$@）になります"
+          }
+        }
+      }
+    },
     "%lld件" : {
       "comment" : "Restore waiting screen: a received count"
     },
@@ -10,14 +32,23 @@
     "iCloudの記録は、届きしだいこのiPhoneにも表示されます。" : {
       "comment" : "Onboarding page 1 after choosing to start fresh over an iCloud restore"
     },
+    "あなたの瓶" : {
+      "comment" : "Eyebrow over 最初のテーマを選ぶ"
+    },
     "このApple Accountの以前の瓶を、iCloudから受け取っています。記録が届きはじめると自動で瓶がひらき、残りの記録もそのあと順に届きます。" : {
       "comment" : "Restore waiting screen: what is happening and what happens next"
     },
     "この画面を開いたままお待ちください。" : {
       "comment" : "Restore waiting screen: keep the app open while records arrive"
     },
+    "これはお試しなので、記録には入りません。「次へ」で省略できます。" : {
+      "comment" : "Onboarding trial drop page: the trial gem is never recorded, and the page can be skipped"
+    },
     "しばらく新しい記録が届いていません。通信状態を確認するか、待たずに「新しく始める」を選べます。" : {
       "comment" : "Restore waiting screen: shown when nothing new has arrived for a while"
+    },
+    "はじめての一粒" : {
+      "comment" : "Eyebrow of the onboarding trial drop page"
     },
     "テーマ" : {
       "comment" : "Restore waiting screen: count label for themes"
@@ -25,8 +56,11 @@
     "テーマと時間を選んで、集中をはじめる。\n完走すると、その時間が一粒になって瓶に残ります。" : {
       "comment" : "Onboarding page 1: how a focus becomes a gem in the jar"
     },
-    "一粒、着地しました。本番では、25分の集中でこの大きさの一粒（250グラム）が瓶に残ります。次へ進めます" : {
-      "comment" : "VoiceOver announcement when the onboarding trial gem lands"
+    "一粒、着地しました。%@。次へ進めます" : {
+      "comment" : "VoiceOver announcement when the onboarding trial gem lands; %@ is the spoken form of 「25分の集中 = この一粒（+250g）」"
+    },
+    "任意の設定" : {
+      "comment" : "Eyebrow of the optional rare-gem choice page"
     },
     "届いた記録" : {
       "comment" : "Restore waiting screen: heading above the received counts"
@@ -51,11 +85,8 @@
     "新しく始める" : {
       "comment" : "Restore waiting screen: confirm starting without waiting\nRestore waiting screen: start onboarding without waiting for iCloud"
     },
-    "本番では、25分の集中でこの大きさの一粒（250g）が瓶に残ります。" : {
-      "comment" : "Onboarding trial drop: shown after the trial gem lands"
-    },
-    "演出を省略して一粒を積みました。本番では、25分の集中でこの大きさの一粒（250グラム）が瓶に残ります。次へ進めます" : {
-      "comment" : "VoiceOver announcement when the onboarding trial gem is placed without animation"
+    "演出を省略して一粒を積みました。%@。次へ進めます" : {
+      "comment" : "VoiceOver announcement when the onboarding trial gem is placed without animation; %@ is the spoken form of 「25分の集中 = この一粒（+250g）」"
     },
     "経過 %@" : {
       "comment" : "Restore waiting screen: elapsed time, e.g. 経過 1:05"
@@ -65,6 +96,9 @@
     },
     "記録の到着を待たずに、最初のテーマ選びへ進みます。iCloudの記録は、届きしだいこのiPhoneにも表示されます。" : {
       "comment" : "Restore waiting screen: what starting without waiting means"
+    },
+    "集中を瓶に" : {
+      "comment" : "Eyebrow of onboarding page 1 (集中を終えると、一粒。)"
     }
   },
   "version" : "1.0"

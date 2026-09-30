@@ -50,6 +50,7 @@ struct HomeView: View {
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.displayScale) private var displayScale
     @Environment(\.isCloudOfflineSession) private var isCloudOfflineSession
     @Environment(\.aggregateProjectionPresentation)
@@ -80,6 +81,15 @@ struct HomeView: View {
     private var didSeeTapHint = false
     @AppStorage(AccountScopedLocalState.defaultsKey(base: "jar.voiceover-tap-hint-seen"))
     private var didSeeVoiceOverTapHint = false
+    /// home-11. Set once a crystal's detail has been opened. Until then a
+    /// tip under the jar says crystals can be tapped; afterwards the tip and
+    /// its 72 pt row go away and the jar keeps its full height.
+    @AppStorage(AccountScopedLocalState.defaultsKey(base: HomeView.aggregateDetailSeenStorageBase))
+    private var didSeeAggregateDetail = false
+    /// Also forgotten by a new UI test's first launch
+    /// (`UITestLocalStateIsolation`), so one test's opened detail does not
+    /// take the tip row away from the next test's jar.
+    static let aggregateDetailSeenStorageBase = "jar.aggregate-detail-seen"
     @AppStorage(AccountScopedLocalState.defaultsKey(base: HomeAtmosphere.storageKey))
     private var homeAtmosphereRawValue = HomeAtmosphere.aurora.rawValue
     @AppStorage(AccountScopedLocalState.defaultsKey(base: RecentCustomFocusDurations.storageKey))
@@ -100,12 +110,22 @@ struct HomeView: View {
     /// disabled and a queued fusion celebration waits until some unrelated
     /// state change (formerly the three-second Screen Time pass) re-renders.
     @State private var pendingRewardReceiptRevision = 0
+    /// Screen Time drops retired, manual gems still falling (dev-D7), timer
+    /// gems landed while Home still holds their receipt, and the stage's
+    /// measured geometry. Only the jar's stage observes it, so a landing no
+    /// longer re-renders all of Home (device-verify-2 P4).
+    @State private var jarStageState = JarStageState()
+    /// Home's own follow-up to a landing, run once the jar has settled.
+    @State private var landingSettle = LandingSettleScheduler()
     @State private var sceneInitialized = false
-    /// Measured HUD bottom and jar stage frame in the jar card's coordinate
-    /// space; the time core's orbit is laid out below the HUD, and the HUD's
-    /// scrim maps the jar's settled pile into this space (F3).
-    @State private var measuredJarHUDBottom: CGFloat?
+    /// The jar stage's frame in the card's coordinate space, used to map
+    /// settled gems behind the HUD's ink (F3).
     @State private var measuredJarStageFrame: CGRect = .zero
+    /// Room for a tapped crystal's card under the bottle
+    /// (`AggregateCardPlacementPolicy`), in the Home content's coordinates.
+    @State private var measuredPickerRowTop: CGFloat?
+    @State private var measuredLauncherTop: CGFloat?
+    @State private var measuredAggregateCardHeight: CGFloat?
     @State private var homeIsVisible = false
     @State private var rewardDropRevealIsPending = false
     @State private var rewardDropRevealRequestID: UUID?
@@ -123,6 +143,20 @@ struct HomeView: View {
     @State private var sessionBackfillTask: Task<Void, Never>?
     @State private var sessionBackfillIsComplete = false
     @State private var hasLoadedSceneSessionSnapshot = false
+    /// device-verify-2 P2. A read is retiring a complete page: until it lands,
+    /// the page on screen no longer proves its completeness, and the readout
+    /// derived from it would change for the read alone. A read of a page that
+    /// was not complete changes nothing before it lands and is not flagged,
+    /// which would cost Home a body pass on every refresh of a long history.
+    @State private var sessionPageIsRereading = false
+    /// device-verify-2 P2 (review). The latest read of the page failed and no
+    /// other has started: nothing in flight will replace a held readout.
+    @State private var sessionPageReadFailed = false
+    /// device-verify-2 P2. The lifetime readout this Home last presented from
+    /// settled inputs, kept on screen while it re-derives them
+    /// (`LifetimeReadoutContinuityPolicy`). A box, not observed state:
+    /// recording what is already on screen must not cost another body pass.
+    @State private var lastSettledLifetimeReadout = SettledLifetimeReadoutBox()
     @State private var appliedSceneSessionSnapshotGeneration:
         HomeSceneSessionSnapshotGeneration?
     @State private var resolvedAchievementStones: [AchievementStone] = []
@@ -152,6 +186,12 @@ struct HomeView: View {
     @State private var selectedAggregateDetail: AccumulationClusterSummary?
     @State private var aggregateInspectionTask: Task<Void, Never>?
     @State private var showManualEntry = false
+    /// history-02. Confirmed but not yet written; see `PendingManualEntry`.
+    @State private var pendingManualEntry: PendingManualEntry?
+    @State private var pendingManualCommitTask: Task<Void, Never>?
+    /// VoiceOver focus for the banner's 「元に戻す」, moved there once the
+    /// manual-entry sheet has gone (see `manualUndoBanner`).
+    @AccessibilityFocusState private var manualUndoHasFocus: Bool
     @State private var screenTimeArrivals = ScreenTimeArrivalAnnouncer()
     @State private var showAchievementEntry = false
     @State private var showCustomDuration = false
@@ -178,6 +218,34 @@ struct HomeView: View {
     @State private var breakConfiguration: BreakRecoveryEnvelope?
     @State private var purchase = PurchaseManager.shared
     @State private var announcedPostDropOfferID: UUID?
+    /// The completion card's 「しくみ」 is closed for every new card.
+    @State private var postDropMechanicsExpanded = false
+    /// The completion card's layout, measured so that opening 「しくみ」
+    /// scrolls inside the card instead of growing up over the jar's HUD:
+    /// Home's safe viewport, the whole bottom inset, and the card body's
+    /// visible, natural and collapsed heights.
+    @State private var homeViewportHeight: CGFloat = 0
+    @State private var postDropInsetHeight: CGFloat = 0
+    @State private var postDropBodyVisibleHeight: CGFloat = 0
+    @State private var postDropBodyNaturalHeight: CGFloat = 0
+    @State private var postDropCollapsedBodyHeight: CGFloat = 0
+    /// D18: the first completion's 「明日もこの時間に？」, for that card only.
+    @State private var reminderOffer: CompletionReminderOffer?
+    /// D18: the receipt whose offer was closed with ✕, so a relaunch that
+    /// restores the same card does not offer it again. Device-local only.
+    @AppStorage(AccountScopedLocalState.defaultsKey(base: "reward.reminder-offer.dismissed"))
+    private var dismissedReminderOfferID = ""
+    /// product-05: the card just acknowledged made the first ×10 and the
+    /// time core together, so that crystal's fusion sheet says so, once.
+    /// In memory only; it lasts until that sheet finishes.
+    @State private var coreBirthTeaching: CoreBirthTeachingPending?
+    /// Whether the fusion sheet on screen is the one that teaches.
+    @State private var presentedStratumTeachesCoreBirth = false
+    /// Read to keep 先月の瓶のお知らせ as it is when the card's reminder
+    /// offer books the daily reminder (Settings owns the switch), and to
+    /// leave its shared time alone.
+    @AppStorage(AccountScopedLocalState.defaultsKey(base: "notifications.wrapped"))
+    private var wrappedNotifications = false
     @State private var announcedPostDropShareOfferID: UUID?
     /// The short settle before an outside focus start (FocusStartEntryPolicy).
     @State private var focusStartEntryTask: Task<Void, Never>?
@@ -197,6 +265,11 @@ struct HomeView: View {
         _activityResetMarkers = Query(ActivityResetPolicy.currentMarkerDescriptor())
         _preferences = Query(PrefsConsumerPolicy.descriptor())
     }
+
+    private static let manualEntryLogger = Logger(
+        subsystem: "com.hinoshiba.pomogem",
+        category: "ManualEntry"
+    )
 
     private static let receiptLogger = Logger(
         subsystem: "com.hinoshiba.pomogem",
@@ -320,25 +393,30 @@ struct HomeView: View {
         .sorted { $0.endAt > $1.endAt }
     }
     private var looseSessions: [StudySession] {
+        looseSessions(from: queriedLooseSessions)
+    }
+    private func looseSessions(from candidates: [StudySession]) -> [StudySession] {
         let rewardIDs = Set(currentRewardSessionBackfill.map(\.id))
-        let candidates = queriedLooseSessions
         let rewards = candidates.filter { rewardIDs.contains($0.id) }
         let remaining = candidates.filter { !rewardIDs.contains($0.id) }
         return Array((rewards + remaining).prefix(HomeProjectionPolicy.looseSessionLimit))
             .sorted { $0.endAt > $1.endAt }
     }
     private var localProjectionNeedsMaintenance: Bool {
+        let candidates = queriedLooseSessions
+        return localProjectionNeedsMaintenance(
+            candidateCount: candidates.count,
+            presentedCount: looseSessions(from: candidates).count
+        )
+    }
+    private func localProjectionNeedsMaintenance(candidateCount: Int, presentedCount: Int) -> Bool {
         !rootProjectionIsComplete
             || aggregateProjectionNeedsMaintenance
             || !localMembershipProjectionIsComplete
             || !sessionBackfillIsComplete
             || acceptedAggregateRootIDs.count
                 != AggregatePebblePolicy.activeRoots(from: aggregates).count
-            || queriedLooseSessions.count != looseSessions.count
-    }
-    private var projectionNeedsMaintenance: Bool {
-        localProjectionNeedsMaintenance
-            || aggregateProjectionPresentation.isCloudVerificationPending
+            || candidateCount != presentedCount
     }
     /// Roots whose bounded recursive summary preflight succeeded. Membership
     /// conflicts are applied separately so the exact UUID scan can recover on
@@ -378,64 +456,232 @@ struct HomeView: View {
     private var totalPebbles: Int {
         projectionTotals.pebbleCount
     }
-    private var pendingMassSessions: [PendingMassPresentationPolicy.Session] {
-        looseSessions.map { .init(id: $0.id, endAt: $0.endAt, grams: $0.grams) }
+    /// Saved sessions whose gem has not landed in the jar yet because of a
+    /// timer completion: behind its card or falling (its receipt, or the
+    /// completion marker before the receipt exists). Queued Screen Time gems
+    /// and falling manual entries are added by the jar's stage from
+    /// `jarStageState` (`HomeProjectionPolicy.unlandedSessionIDs`).
+    private var receiptUnlandedSessionIDs: Set<UUID> {
+        _ = pendingRewardReceiptRevision
+        return HomeProjectionPolicy.unlandedSessionIDs(
+            rewardReceipts: PendingRewardReceiptStore.load(),
+            completionMarker: UserDefaults.standard.string(
+                forKey: FocusPersistence.localCompletionIDKey
+            ),
+            screenTimeDrops: [],
+            fallingManualEntries: []
+        )
     }
-    /// While pending no aggregate is accepted, so Home's own sum is the whole
-    /// lifetime only when its complete candidate page fits in the jar's cap.
-    private var pendingProjectionCoversEverySession: Bool {
-        sessionBackfillIsComplete
-            && localMembershipProjectionIsComplete
-            && acceptedAggregateRoots.isEmpty
-            && queriedLooseSessions.count == looseSessions.count
+    /// What the jar's readout, core and large-text card need to count a gem
+    /// when it lands, not when its session is saved (dev-D7,
+    /// `HomeProjectionPolicy.landedTotals`). Resolved on Home's own passes,
+    /// with the rest of the readout (`liveLifetimeReadout`);
+    /// `JarStageReader` applies `jarStageState` to it, so a landing re-runs
+    /// only the reader (device-verify-2 P4). Each read decodes the receipts,
+    /// so a pass reads it once.
+    private func landedTotalsInputs(
+        roots: [AggregatePebble],
+        looseSessions: [StudySession],
+        savedTotals: HomeProjectionPolicy.Totals
+    ) -> JarLandedTotalsInputs {
+        JarLandedTotalsInputs(
+            roots: roots,
+            looseSessions: looseSessions,
+            pendingOnHomePass: receiptUnlandedSessionIDs,
+            savedTotals: savedTotals
+        )
     }
     /// sync-03 after review. What the headline says while iCloud is checked.
     private var pendingMassHeadline: PendingMassPresentationPolicy.Headline {
+        let candidates = queriedLooseSessions
+        let loose = looseSessions(from: candidates)
+        let roots = acceptedAggregateRoots
+        return pendingMassHeadline(
+            looseSessions: loose,
+            candidateCount: candidates.count,
+            roots: roots,
+            totals: HomeProjectionPolicy.totals(roots: roots, looseSessions: loose)
+        )
+    }
+    private func pendingMassHeadline(
+        looseSessions loose: [StudySession],
+        candidateCount: Int,
+        roots: [AggregatePebble],
+        totals: HomeProjectionPolicy.Totals
+    ) -> PendingMassPresentationPolicy.Headline {
         PendingMassPresentationPolicy.headline(
             lastVerified: lastVerifiedMass,
             currentEpochID: currentActivityEpochID,
-            deviceSessions: pendingMassSessions,
-            deviceTotals: projectionTotals,
-            deviceCoversEverySession: pendingProjectionCoversEverySession
+            deviceSessions: loose.map { .init(id: $0.id, endAt: $0.endAt, grams: $0.grams) },
+            deviceTotals: totals,
+            // While pending no aggregate is accepted, so Home's own sum is the
+            // whole lifetime only when its complete candidate page fits in the
+            // jar's cap.
+            deviceCoversEverySession: PendingMassPresentationPolicy.deviceCoversEverySession(
+                pageIsCurrent: sceneSessionSnapshotIsCurrent,
+                pageIsComplete: sessionBackfillIsComplete,
+                membershipIsComplete: localMembershipProjectionIsComplete,
+                acceptedAggregateCount: roots.count,
+                candidateCount: candidateCount,
+                presentedCount: loose.count
+            )
         )
     }
-    /// The lifetime mass the headline, the menu and the jar's VoiceOver value
-    /// present; nil while pending with nothing this device can stand behind.
-    private var presentedLifetimeGrams: Int? {
-        aggregateProjectionPresentation.isCloudVerificationPending
-            ? pendingMassHeadline.grams
-            : totalGrams
+    /// device-verify-2 P2. Home's page belongs to the current presentation
+    /// generation and no read is retiring a complete one.
+    private var lifetimeInputsAreSettled: Bool {
+        sceneSessionSnapshotIsCurrent && !sessionPageIsRereading
     }
-    private var presentedLifetimePebbles: Int {
-        aggregateProjectionPresentation.isCloudVerificationPending
-            ? (pendingMassHeadline.pebbleCount ?? totalPebbles)
-            : totalPebbles
+    /// Where this pass takes the lifetime readout from
+    /// (`LifetimeReadoutContinuityPolicy`).
+    private var lifetimeReadoutSource: LifetimeReadoutContinuityPolicy.Source {
+        LifetimeReadoutContinuityPolicy.source(
+            inputsAreSettled: lifetimeInputsAreSettled,
+            lastReadFailed: sessionPageReadFailed,
+            lastSettled: lastSettledLifetimeReadout.value,
+            currentEpochID: currentActivityEpochID,
+            isCloudVerificationPending: aggregateProjectionPresentation.isCloudVerificationPending
+        )
     }
-    private var presentedLifetimeIsLowerBound: Bool {
-        aggregateProjectionPresentation.isCloudVerificationPending
-            ? pendingMassHeadline.isLowerBound
-            : localProjectionNeedsMaintenance
+    /// Everything the jar and the menu say about the lifetime total. A pass
+    /// derives it once and hands it down (`jarStageSnapshot`, the menu's
+    /// strip): an observer of the readout re-derived all of it on every pass
+    /// (review of #56).
+    private func presentedLifetimeReadout() -> LifetimeReadoutContinuityPolicy.Readout {
+        presentedLifetime().readout
+    }
+    /// The readout this pass presents, and for live inputs what the jar's
+    /// stage completes it with as gems land (device-verify-2 P4). A held or
+    /// loading readout stays as it is. A settled one is remembered by the
+    /// jar's stage, which presents it with the gems landed since this pass
+    /// (`JarStageReader`), so what is kept is what was on screen.
+    private func presentedLifetime() -> (
+        readout: LifetimeReadoutContinuityPolicy.Readout,
+        landing: JarLandedTotalsInputs?,
+        isSettled: Bool
+    ) {
+        switch lifetimeReadoutSource {
+        case let .held(readout):
+            return (readout, nil, false)
+        case .loading:
+            return (.loading(
+                isCloudVerificationPending: aggregateProjectionPresentation.isCloudVerificationPending,
+                coreColorHex: selectedSubject?.colorHex ?? Constants.Color.amberLamp
+            ), nil, false)
+        case .live:
+            let live = liveLifetimeReadout()
+            return (live.readout, live.landing, false)
+        case .settled:
+            let live = liveLifetimeReadout()
+            return (live.readout, live.landing, true)
+        }
+    }
+    /// The readout Home's inputs give now. The jar shows the pending headline
+    /// while iCloud is checked (sync-03); otherwise the landed totals
+    /// (dev-D7), so a completed focus joins when its gem lands. The menu
+    /// counts saved sessions at once, like widgets and share. Every input
+    /// below re-runs the page's canonicalisation, filters and sort, so each
+    /// is read once.
+    ///
+    /// The landed totals here are those Home's own pass knows (the timer
+    /// gems its receipts hold back); the jar's stage completes the readout
+    /// with the gems that have landed or started falling since
+    /// (`JarLandedTotalsInputs.completing`).
+    private func liveLifetimeReadout() -> (
+        readout: LifetimeReadoutContinuityPolicy.Readout,
+        landing: JarLandedTotalsInputs
+    ) {
+        let isPending = aggregateProjectionPresentation.isCloudVerificationPending
+        let candidates = queriedLooseSessions
+        let loose = looseSessions(from: candidates)
+        let roots = acceptedAggregateRoots
+        let totals = HomeProjectionPolicy.totals(roots: roots, looseSessions: loose)
+        let landing = landedTotalsInputs(roots: roots, looseSessions: loose, savedTotals: totals)
+        let landed = landing.landedTotalsOnHomePass
+        let weights = lifetimeCoreColorWeights(roots: roots, looseSessions: loose)
+        let jarGrams: Int?
+        let jarPebbles: Int
+        let menuGrams: Int?
+        let menuPebbles: Int
+        let isLowerBound: Bool
+        if isPending {
+            let headline = pendingMassHeadline(
+                looseSessions: loose, candidateCount: candidates.count, roots: roots, totals: totals
+            )
+            jarGrams = headline.grams
+            jarPebbles = headline.pebbleCount ?? totals.pebbleCount
+            menuGrams = jarGrams
+            menuPebbles = jarPebbles
+            isLowerBound = headline.isLowerBound
+        } else {
+            jarGrams = landed.grams
+            jarPebbles = landed.pebbleCount
+            menuGrams = totals.grams
+            menuPebbles = totals.pebbleCount
+            isLowerBound = localProjectionNeedsMaintenance(
+                candidateCount: candidates.count, presentedCount: loose.count
+            )
+        }
+        let readout = LifetimeReadoutContinuityPolicy.Readout(
+            isCloudVerificationPending: isPending,
+            jarGrams: jarGrams,
+            // The device's own sum draws the core while the headline says
+            // 「再集計中」.
+            jarCoreGrams: jarGrams ?? totals.grams,
+            jarPebbles: jarPebbles,
+            // The landed loose sessions (瓶の整理).
+            jarLoosePebbles: landing.landedLoosePebbleCount(landed),
+            menuGrams: menuGrams,
+            menuPebbles: menuPebbles,
+            isLowerBound: isLowerBound,
+            jarIsEmpty: isJarEmpty(roots: roots, looseSessions: loose),
+            coreColorHex: coreColorHex(weights),
+            coreColorShares: JarLifetimeCorePresentation.colorShares(weights: weights),
+            aggregateCount: roots.count,
+            legacyAggregateCount: activeLegacyStratumVisuals.count,
+            goldPebbleCount: visibleGoldPebbleCount(roots: roots, looseSessions: loose),
+            prismPebbleCount: visiblePrismPebbleCount(roots: roots, looseSessions: loose)
+        )
+        return (readout, landing)
+    }
+    /// The wording a readout is presented under: one recorded while iCloud
+    /// was checked keeps 「iCloudを確認中」 until the new page is read.
+    private func presentationContext(
+        for readout: LifetimeReadoutContinuityPolicy.Readout
+    ) -> AggregateProjectionPresentationContext {
+        var context = aggregateProjectionPresentation
+        if readout.isCloudVerificationPending { context.isVerified = false }
+        return context
     }
     /// What a verified Home leaves for the next pending phase. Only a total
-    /// that is actually on screen as verified is ever recorded.
+    /// that is actually on screen as verified is ever recorded. Observed on
+    /// every pass, so each input is read once.
     private var verifiedMassRecordCandidate: VerifiedMassRecord? {
         guard aggregateProjectionPresentation.usesCloudPersistence,
               !aggregateProjectionPresentation.isCloudVerificationPending,
               currentAggregatePresentationPage != nil,
-              sceneSessionSnapshotIsCurrent else { return nil }
+              lifetimeInputsAreSettled else { return nil }
+        let candidates = queriedLooseSessions
+        let loose = looseSessions(from: candidates)
+        let roots = acceptedAggregateRoots
+        let totals = HomeProjectionPolicy.totals(roots: roots, looseSessions: loose)
         return PendingMassPresentationPolicy.record(
-            grams: totalGrams,
-            pebbleCount: totalPebbles,
-            isLowerBound: localProjectionNeedsMaintenance,
+            grams: totals.grams,
+            pebbleCount: totals.pebbleCount,
+            isLowerBound: localProjectionNeedsMaintenance(
+                candidateCount: candidates.count, presentedCount: loose.count
+            ),
             epochID: currentActivityEpochID,
-            countedSessions: verifiedCountedSessions,
-            newestAggregatedEnd: acceptedAggregateRoots.map(\.periodEnd).max()
+            countedSessions: verifiedCountedSessions(looseSessions: loose),
+            newestAggregatedEnd: roots.map(\.periodEnd).max()
         )
     }
     /// The sessions a verified total counts: loose, or represented by an
     /// accepted aggregate. The newest of them anchors the record even when a
     /// decimal fusion has just folded it into an aggregate.
-    private var verifiedCountedSessions: [PendingMassPresentationPolicy.Session] {
+    private func verifiedCountedSessions(
+        looseSessions: [StudySession]
+    ) -> [PendingMassPresentationPolicy.Session] {
         let looseIDs = Set(looseSessions.map(\.id))
         return sessions
             .filter { looseIDs.contains($0.id) || representedSessionIDs.contains($0.id) }
@@ -470,22 +716,28 @@ struct HomeView: View {
         guard let aggregateInspectionID else { return nil }
         return inspectionSummary(for: aggregateInspectionID)
     }
-    private var visibleGoldPebbleCount: Int {
+    private func visibleGoldPebbleCount(
+        roots: [AggregatePebble],
+        looseSessions: [StudySession]
+    ) -> Int {
         guard RareRewardReleasePolicy.isEnabled else { return 0 }
         let loose = RareRewardCounts.total(looseSessions.map(\.rareRewardCounts))
         return HomeProjectionPolicy.saturatingNonnegativeSum([
             HomeProjectionPolicy.saturatingNonnegativeSum(
-                activeAggregateRoots.map(\.goldPebbleCount)
+                roots.map(\.goldPebbleCount)
             ),
             loose.goldCount
         ])
     }
-    private var visiblePrismPebbleCount: Int {
+    private func visiblePrismPebbleCount(
+        roots: [AggregatePebble],
+        looseSessions: [StudySession]
+    ) -> Int {
         guard RareRewardReleasePolicy.isEnabled else { return 0 }
         let loose = RareRewardCounts.total(looseSessions.map(\.rareRewardCounts))
         return HomeProjectionPolicy.saturatingNonnegativeSum([
             HomeProjectionPolicy.saturatingNonnegativeSum(
-                activeAggregateRoots.map(\.prismPebbleCount)
+                roots.map(\.prismPebbleCount)
             ),
             loose.prismCount
         ])
@@ -494,24 +746,23 @@ struct HomeView: View {
     /// than the currently selected subject. A long-lived person therefore sees
     /// the colour of their accumulated effort, while the launch button can
     /// still describe the next chosen theme independently.
-    private var lifetimeCoreColorHex: String {
-        lifetimeCoreColorWeights.sorted { lhs, rhs in
+    private func coreColorHex(_ weights: [String: Double]) -> String {
+        weights.sorted { lhs, rhs in
             if lhs.value == rhs.value { return lhs.key < rhs.key }
             return lhs.value > rhs.value
         }.first?.key ?? selectedSubject?.colorHex ?? Constants.Color.amberLamp
     }
 
-    /// Approximate theme shares of the lifetime core (root grams × colour
-    /// mix + loose grams). Aggregate mixes are count-weighted, so this is
-    /// called "おおよそ" and never a mass breakdown.
-    private var lifetimeCoreColorShares: [GemColorShare] {
-        JarLifetimeCorePresentation.colorShares(weights: lifetimeCoreColorWeights)
-    }
-
-    /// The same fan the Overview draws (`JarLifetimeCorePresentation`).
-    private var lifetimeCoreColorWeights: [String: Double] {
+    /// The same fan the Overview draws (`JarLifetimeCorePresentation`). Its
+    /// approximate theme shares (root grams × colour mix + loose grams) are
+    /// count-weighted for aggregates, so they are called "おおよそ" and never
+    /// a mass breakdown.
+    private func lifetimeCoreColorWeights(
+        roots: [AggregatePebble],
+        looseSessions: [StudySession]
+    ) -> [String: Double] {
         JarLifetimeCorePresentation.colorWeights(
-            activeAggregateRoots.map { aggregate in
+            roots.map { aggregate in
                 JarLifetimeCorePresentation.ColorContribution(
                     grams: aggregate.grams,
                     colorMix: aggregate.colorMix.isEmpty
@@ -535,10 +786,15 @@ struct HomeView: View {
     private var uniqueAchievementCount: Int {
         max(projectedAchievementCount, Set(achievementStones.map(\.id)).count)
     }
+    /// Whether the jar holds anything now, for the one-time hint; the jar
+    /// card reads its readout's (`presentedLifetimeReadout`).
     private var isJarEmpty: Bool {
+        isJarEmpty(roots: activeAggregateRoots, looseSessions: looseSessions)
+    }
+    private func isJarEmpty(roots: [AggregatePebble], looseSessions: [StudySession]) -> Bool {
         looseSessions.isEmpty
             && visibleAchievementStones.isEmpty
-            && activeAggregateRoots.isEmpty
+            && roots.isEmpty
             && activeLegacyStrata.isEmpty
     }
     private var sessionChangeTokens: [StudySessionSyncPolicy.ChangeToken] {
@@ -624,52 +880,127 @@ struct HomeView: View {
     }
 
     private var mainContent: some View {
-        GeometryReader { proxy in
-            ScrollViewReader { scrollProxy in
-            ScrollView {
-                VStack(spacing: 0) {
-                    jarCard(height: homeJarHeight(availableHeight: proxy.size.height))
-                        .id("home.jar")
-                    if latestInspectableAggregateID != nil {
-                        aggregateInspectionSlot
-                            .padding(.top, 8)
+        VStack(spacing: 0) {
+            GeometryReader { proxy in
+                let jarHeight = homeJarHeight(availableHeight: proxy.size.height)
+                let cardPlacement = aggregateCardPlacement(jarHeight: jarHeight)
+                // One readout for the jar and its large-text companion; both
+                // readers take their values from it.
+                let stage = jarStageSnapshot
+                ScrollViewReader { scrollProxy in
+                ScrollView {
+                    VStack(spacing: 0) {
+                        jarCard(height: jarHeight, cardPlacement: cardPlacement, stage: stage)
+                            .id("home.jar")
+                        if showsAggregateInspectionSlot(cardPlacement) {
+                            aggregateInspectionSlot
+                                .padding(.top, 8)
+                                .id(Self.aggregateInspectionSlotID)
+                        }
+                        if showsLargeTextFusionProgress(stage.readout) {
+                            // Counts a gem when it lands, like the readout it
+                            // repeats; a landing re-runs only this reader,
+                            // which reads nothing but the snapshot.
+                            JarStageReader(state: jarStageState, stage: stage) { readout in
+                                if let state = largeTextFusionProgressState(readout) {
+                                    Spacer(minLength: 12)
+                                    largeTextFusionProgressCard(state, colorHex: readout.coreColorHex)
+                                }
+                            }
+                        }
+                        Spacer(minLength: 14)
+                        if !activeSubjects.isEmpty {
+                            // The crystal's card under the bottle takes this
+                            // row for its few seconds when it reaches it
+                            // (`AggregateCardPlacementPolicy`).
+                            let givesWayToCard = aggregateInspectionSummary != nil
+                                && cardPlacement == .underBottle(hidesPickers: true)
+                            focusSelectionControls
+                                .onGeometryChange(for: CGFloat.self) { geometry in
+                                    geometry.frame(in: .named(Self.homeContentCoordinateSpace)).minY
+                                } action: { top in
+                                    recordAggregateCardRoom(pickerTop: top, placement: cardPlacement)
+                                }
+                                .onDisappear { measuredPickerRowTop = nil }
+                                .opacity(givesWayToCard ? 0 : 1)
+                                .allowsHitTesting(!givesWayToCard)
+                                .accessibilityHidden(givesWayToCard)
+                                .padding(.bottom, 10)
+                        }
+                        if !pinsFocusLauncher {
+                            // While a completion card is up, its start button is
+                            // disabled and sits behind the card; a shorter card left
+                            // it half showing above the reward, sliced mid-glyph.
+                            focusLauncher
+                                .onGeometryChange(for: CGFloat.self) { geometry in
+                                    geometry.frame(in: .named(Self.homeContentCoordinateSpace)).minY
+                                } action: { top in
+                                    recordAggregateCardRoom(launcherTop: top, placement: cardPlacement)
+                                }
+                                .opacity(breakOffer == nil ? 1 : 0)
+                                .allowsHitTesting(breakOffer == nil)
+                                .accessibilityHidden(breakOffer != nil)
+                        }
                     }
-                    if let state = largeTextFusionProgressState {
-                        Spacer(minLength: 12)
-                        largeTextFusionProgressCard(state)
+                    // home-11 (#50 follow-up): under the bottle, in front of
+                    // the rows below it; the jar card starts at this stack's top.
+                    .overlay(alignment: .top) {
+                        aggregateCardUnderBottle(jarHeight: jarHeight, placement: cardPlacement)
                     }
-                    Spacer(minLength: 14)
-                    if !activeSubjects.isEmpty {
-                        focusSelectionControls
-                            .padding(.bottom, 10)
-                    }
-                    focusLauncher
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-                .padding(.bottom, 20)
-                .frame(
-                    maxWidth: homeContentMaxWidth,
-                    minHeight: dynamicTypeSize.isAccessibilitySize ? nil : proxy.size.height,
-                    alignment: .top
-                )
+                    .coordinateSpace(.named(Self.homeContentCoordinateSpace))
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .padding(.bottom, 20)
+                    .frame(
+                        maxWidth: homeContentMaxWidth,
+                        minHeight: dynamicTypeSize.isAccessibilitySize ? nil : proxy.size.height,
+                        alignment: .top
+                    )
 #if targetEnvironment(macCatalyst)
-                .frame(maxWidth: .infinity, alignment: .top)
+                    .frame(maxWidth: .infinity, alignment: .top)
 #endif
-            }
-            .scrollBounceBehavior(.basedOnSize)
-            .onChange(of: rewardDropRevealRequestID) { _, requestID in
-                guard requestID != nil else { return }
-                withAnimation(
-                    reduceMotion ? nil : .easeOut(duration: 0.3),
-                    completionCriteria: .removed
-                ) {
-                    scrollProxy.scrollTo("home.jar", anchor: .top)
-                } completion: {
-                    rewardDropRevealIsPending = false
-                    syncScene()
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .onChange(of: rewardDropRevealRequestID) { _, requestID in
+                    guard requestID != nil else { return }
+                    withAnimation(
+                        reduceMotion ? nil : .easeOut(duration: 0.3),
+                        completionCriteria: .removed
+                    ) {
+                        scrollProxy.scrollTo("home.jar", anchor: .top)
+                    } completion: {
+                        rewardDropRevealIsPending = false
+                        syncScene()
+                    }
+                }
+                .onChange(of: aggregateInspectionID) { oldID, id in
+                    followAggregateInspectionCard(
+                        from: oldID,
+                        to: id,
+                        inRow: cardPlacement == .row,
+                        with: scrollProxy
+                    )
+                }
                 }
             }
+            // history-02. Over the scroll area only: at accessibility sizes
+            // the start button pinned below it stays uncovered.
+            .overlay(alignment: .top) {
+                if let pendingManualEntry {
+                    manualUndoBanner(pendingManualEntry)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
+                        .transition(
+                            reduceMotion
+                                ? .opacity
+                                : .move(edge: .top).combined(with: .opacity)
+                        )
+                }
+            }
+            // home-03. Below the scroll view, not over it: content never
+            // slides under the button, and the jar is sized to what is left.
+            if pinsFocusLauncher {
+                pinnedFocusLauncher
             }
         }
         .background {
@@ -699,6 +1030,9 @@ struct HomeView: View {
                         .scrollIndicators(.visible)
                     } else {
                         completionInsetContents
+                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+                                postDropInsetHeight = $0
+                            }
                     }
                 }
                 // Whatever scrolls behind the card's top edge (the theme and
@@ -725,6 +1059,15 @@ struct HomeView: View {
             reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.86),
             value: breakOffer?.id
         )
+        .animation(
+            reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.88),
+            value: pendingManualEntry?.id
+        )
+        // The whole safe viewport (the inset does not shrink it), for the
+        // completion card's height budget.
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+            homeViewportHeight = $0
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 homeMenu
@@ -893,6 +1236,7 @@ struct HomeView: View {
         }
         .onDisappear {
             homeIsVisible = false
+            commitPendingManualEntry()
             widgetRefreshTask?.cancel()
             celebrationRecoveryTask?.cancel()
             capacityCelebrationTask?.cancel()
@@ -912,15 +1256,29 @@ struct HomeView: View {
             capacityRemaining = nil
             clearSceneCallbacks()
         }
+        .onChange(of: scenePhase) { _, phase in
+            // Never keep an unsaved entry in memory while iOS may suspend or
+            // end the app.
+            if phase != .active { commitPendingManualEntry() }
+        }
         .onChange(of: router.focusPresentationIsActive) { _, isActive in
-            guard !isActive else { return }
+            guard !isActive else {
+                commitPendingManualEntry()
+                return
+            }
             configureScene()
             syncScene()
             continueRewardDropIfPossible()
             recoverPendingRewardReceipt()
         }
         .onChange(of: rewardDropSurfaceIsObscured) { _, isObscured in
-            guard !isObscured else { return }
+            guard !isObscured else {
+                // Another screen or sheet (the menu, 記録, a second manual
+                // add, share) must see the entry as saved, and 元に戻す is only
+                // offered here on Home.
+                commitPendingManualEntry()
+                return
+            }
             syncScene()
             continueRewardDropIfPossible()
             recoverPendingRewardReceipt()
@@ -1069,7 +1427,7 @@ struct HomeView: View {
     }
 
     private func stratumCelebrationSheet(_ request: PendingStratumCelebration) -> some View {
-        StratumCelebrationView(
+        let sheet = StratumCelebrationView(
             request: request,
             // The crystal's own colour mix, as the jar paints the same ×10
             // (the receipt keeps only its dominant colour).
@@ -1080,6 +1438,7 @@ struct HomeView: View {
                 )
             } ?? [],
             showsMonthLabel: purchase.isPro,
+            teachesCoreBirth: presentedStratumTeachesCoreBirth,
             onExplore: exploreCompletedStratum,
             onShare: { shareCompletedStratum(request) },
             onContinue: dismissCompletedStratum,
@@ -1106,36 +1465,86 @@ struct HomeView: View {
         // promise remain readable; study value advances separately by mass.
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+#if DEBUG && targetEnvironment(simulator)
+        // A sheet owns a separate presentation host: forward the pinned AX5
+        // UI-test value, as the Overview sheet does.
+        return sheet.forwardingUITestAccessibility5()
+#else
+        return sheet
+#endif
     }
 
-    private func jarCard(height: CGFloat) -> some View {
+    /// Everything the jar's stage shows, resolved once on Home's own pass
+    /// (device-verify-2 P4): the lifetime readout (`presentedLifetime`) and
+    /// the few other values the stage reads. The stage runs inside
+    /// `JarStageReader`, which re-runs it on a landing, so it reads these
+    /// values instead of Home's projections, each of which re-derives the
+    /// sessions when it is read.
+    private var jarStageSnapshot: JarStageSnapshot {
+        let lifetime = presentedLifetime()
+        return JarStageSnapshot(
+            readout: lifetime.readout,
+            landing: lifetime.landing,
+            settledRecord: lifetime.isSettled
+                ? .init(box: lastSettledLifetimeReadout, epochID: currentActivityEpochID)
+                : nil,
+            uniqueAchievementCount: uniqueAchievementCount,
+            accentHex: selectedSubject?.colorHex ?? Constants.Color.amberLamp,
+            inspectableAggregateID: latestInspectableAggregateID,
+            aggregateInspectionSummary: aggregateInspectionSummary
+        )
+    }
+
+    /// The reader completes Home's readout with the gems landed since its
+    /// pass, remembers a settled one, and re-runs only this stage when a gem
+    /// lands.
+    private func jarCard(
+        height: CGFloat,
+        cardPlacement: AggregateCardPlacementPolicy.Placement,
+        stage: JarStageSnapshot
+    ) -> some View {
+        JarStageReader(state: jarStageState, stage: stage, recordsSettledReadout: true) { readout in
+            jarStage(height: height, cardPlacement: cardPlacement, stage: stage, readout: readout)
+        }
+    }
+
+    private func jarStage(
+        height: CGFloat,
+        cardPlacement: AggregateCardPlacementPolicy.Placement,
+        stage: JarStageSnapshot,
+        readout: LifetimeReadoutContinuityPolicy.Readout
+    ) -> some View {
         ZStack {
             // sync-03 (review of PR #40). While iCloud is checked the jar's
             // lifetime core describes the same total as the headline above,
-            // not the newest sessions Home happens to hold.
+            // not the newest sessions Home happens to hold. dev-D7: otherwise
+            // its core, light and VoiceOver count a gem when it lands, like
+            // the readout above. device-verify-2 P2: all of it from one
+            // readout, so a held one is never mixed with the page Home is
+            // re-reading.
             JarSpriteView(
                 scene: scene,
-                totalGrams: presentedLifetimeGrams ?? totalGrams,
-                pebbleCount: looseSessions.count,
-                achievementCount: uniqueAchievementCount,
-                aggregateCount: activeAggregateRoots.count,
-                legacyAggregateCount: activeLegacyStratumVisuals.count,
-                representedPebbleCount: presentedLifetimePebbles,
-                goldPebbleCount: visibleGoldPebbleCount,
-                prismPebbleCount: visiblePrismPebbleCount,
-                accentHex: selectedSubject?.colorHex ?? Constants.Color.amberLamp,
-                lifetimeCoreColorHex: lifetimeCoreColorHex,
-                lifetimeCoreColorShares: lifetimeCoreColorShares,
-                coreTopClearance: Self.previewsHUDAboveJar ? nil : jarMetricHUDClearance,
-                projectionIsLowerBound: presentedLifetimeGrams == nil || presentedLifetimeIsLowerBound,
-                projectionIsUnverified:
-                    aggregateProjectionPresentation.isCloudVerificationPending,
-                pendingMass: presentedLifetimeGrams.map {
-                    .init(grams: $0, isLowerBound: presentedLifetimeIsLowerBound)
+                totalGrams: readout.jarCoreGrams,
+                pebbleCount: readout.jarLoosePebbles,
+                achievementCount: stage.uniqueAchievementCount,
+                aggregateCount: readout.aggregateCount,
+                legacyAggregateCount: readout.legacyAggregateCount,
+                representedPebbleCount: readout.jarPebbles,
+                goldPebbleCount: readout.goldPebbleCount,
+                prismPebbleCount: readout.prismPebbleCount,
+                accentHex: stage.accentHex,
+                lifetimeCoreColorHex: readout.coreColorHex,
+                lifetimeCoreColorShares: readout.coreColorShares,
+                coreTopClearance: Self.previewsHUDAboveJar ? nil : jarMetricHUDClearance(readout),
+                projectionIsLowerBound: readout.jarGrams == nil || readout.isLowerBound,
+                projectionIsUnverified: readout.isCloudVerificationPending,
+                pendingMass: readout.jarGrams.map {
+                    .init(grams: $0, isLowerBound: readout.isLowerBound)
                 },
-                fusionProgressDescription: fusionAccessibilityDescription,
+                fusionProgressDescription: fusionAccessibilityDescription(readout),
+                isLoadingRecords: readout.isLoading,
                 isMotionEnabled: homeJarMotionIsEnabled,
-                inspectableAggregateID: latestInspectableAggregateID,
+                inspectableAggregateID: stage.inspectableAggregateID,
                 onJarTapAccepted: invalidateAggregateInspectionCard,
                 onAggregateTapped: revealAggregateInspection,
                 onAggregateAccessibilityAction: presentAggregateDetail
@@ -1144,14 +1553,15 @@ struct HomeView: View {
                     geometry.frame(in: .named(Self.jarCardCoordinateSpace))
                 } action: { frame in
                     measuredJarStageFrame = frame
+                    jarStageState.measuredStageTop = frame.minY
                 }
                 .padding(.horizontal, 4)
                 .padding(.top, Self.previewsHUDAboveJar ? Self.hudAboveJarHeight : 0)
 
-            jarMetricHUD(stageHeight: height)
+            jarMetricHUD(stageHeight: height, readout: readout, stage: stage)
 
-            if isJarEmpty {
-                emptyJarMessage
+            if readout.jarIsEmpty, !showsEmptyJarMessageUnderReadout(readout) {
+                emptyJarMessage(readout)
                 .multilineTextAlignment(.center)
                 .padding(20)
                 .frame(maxWidth: 320)
@@ -1169,7 +1579,9 @@ struct HomeView: View {
                 // core).
                 HStack(spacing: 7) {
                     Image(systemName: "circle.grid.2x2.fill")
-                    Text(remaining == 0 ? "まとまり粒をつくっています" : "あと\(remaining)%で、下の粒がひとつにまとまる")
+                    Text(remaining == 0
+                        ? String(localized: "結晶をつくっています", table: "Home", comment: "Jar capsule while ten gems fuse")
+                        : String(localized: "あと\(remaining)%で、下の粒がひとつの結晶に", table: "Home", comment: "Jar capsule before a fusion; the argument is the remaining capacity percent"))
                 }
                 .font(.caption.weight(.bold))
                 .foregroundStyle(PomoGemTheme.text)
@@ -1180,6 +1592,9 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 // Placed by offset, so the card's layout never changes.
                 .offset(y: Self.capacityChipTopInset(stageHeight: height))
+                // A tapped crystal's card hangs in the same place for its
+                // few seconds; the chip steps aside meanwhile.
+                .opacity(stage.aggregateInspectionSummary != nil && cardPlacement != .row ? 0 : 1)
                 .transition(
                     reduceMotion
                         ? .opacity
@@ -1194,7 +1609,7 @@ struct HomeView: View {
                         Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
                             .foregroundStyle(PomoGemTheme.amber)
                             .accessibilityHidden(true)
-                        Text("まとまり粒は未保存です")
+                        Text("結晶は未保存です", tableName: "Home")
                             .font(.caption.weight(.bold))
                         Spacer(minLength: 4)
                         Button("保存を再試行") {
@@ -1248,12 +1663,19 @@ struct HomeView: View {
         .coordinateSpace(.named(Self.jarCardCoordinateSpace))
     }
 
-    /// The capacity chip hangs 6 pt under the bottle's base (the bottle is
-    /// centred in the stage and at most `Constants.Jar.height` tall), over
-    /// the 内訳 hint's row when the stage has no room below the bottle.
+    /// The capacity chip hangs 6 pt under the bottle's base, over the 内訳
+    /// hint's row when the stage has no room below the bottle.
     private static func capacityChipTopInset(stageHeight: CGFloat) -> CGFloat {
-        let outer = JarScene.outerJarRect(sceneSize: CGSize(width: 1, height: stageHeight))
-        return stageHeight - outer.minY + 6
+        bottleBaseInset(stageHeight: stageHeight) + 6
+    }
+
+    /// The bottle's base, from the top of the jar card: the bottle is centred
+    /// in the stage and at most `Constants.Jar.height` tall.
+    private static func bottleBaseInset(stageHeight: CGFloat) -> CGFloat {
+        let top: CGFloat = previewsHUDAboveJar ? hudAboveJarHeight : 0
+        let sceneHeight = max(0, stageHeight - top)
+        let outer = JarScene.outerJarRect(sceneSize: CGSize(width: 1, height: sceneHeight))
+        return top + sceneHeight - outer.minY
     }
 
     /// The chip above is showing (the 内訳 hint under the jar steps aside).
@@ -1305,33 +1727,49 @@ struct HomeView: View {
     /// measured from the laid-out HUD (every Dynamic Type size, the cloud
     /// status line and the pre-fusion rail included), so the time core's
     /// orbit is placed below what is actually drawn. Before the first
-    /// layout pass it falls back to the HUD's nominal rows.
-    private var jarMetricHUDClearance: CGFloat {
-        if let measuredJarHUDBottom {
-            return max(0, measuredJarHUDBottom - measuredJarStageFrame.minY)
+    /// layout pass it falls back to the HUD's nominal rows: the 39 pt value
+    /// (28 pt only for an empty jar at accessibility sizes, home-04) and
+    /// the two-line rail (walk-std-10).
+    private func jarMetricHUDClearance(_ readout: LifetimeReadoutContinuityPolicy.Readout) -> CGFloat {
+        if let measuredHUDBottom = jarStageState.measuredHUDBottom {
+            return max(0, measuredHUDBottom - jarStageState.measuredStageTop)
         }
-        let valueRow: CGFloat = dynamicTypeSize.isAccessibilitySize ? 36 : 47
-        let rail: CGFloat = showsPreFusionRail ? 34 : 0
+        let valueRow: CGFloat = dynamicTypeSize.isAccessibilitySize && readout.jarIsEmpty ? 36 : 47
+        let rail: CGFloat = showsPreFusionRail(readout) ? 52 : 0
         return 88 + 15 + 3 + valueRow + 3 + 24 + rail
     }
 
     /// The bottle is at most `Constants.Jar.height` tall and centred in a
     /// taller stage (accessibility sizes, large phones); the HUD follows its
     /// mouth instead of the stage top, so it never meets the neck or the
-    /// 巡 pill.
-    private func jarMetricHUDTopInset(stageHeight: CGFloat) -> CGFloat {
+    /// 「瓶N杯」 pill.
+    static func jarMetricHUDTopInset(stageHeight: CGFloat) -> CGFloat {
         let outer = JarScene.outerJarRect(sceneSize: CGSize(width: 1, height: stageHeight))
         return 88 + max(0, stageHeight - outer.maxY)
     }
 
-    private func jarMetricHUD(stageHeight: CGFloat) -> some View {
-        VStack(spacing: 14) {
-            jarMetricReadout
+    private func jarMetricHUD(
+        stageHeight: CGFloat,
+        readout: LifetimeReadoutContinuityPolicy.Readout,
+        stage: JarStageSnapshot
+    ) -> some View {
+        // At accessibility sizes the jar can be as short as 300 pt (the
+        // pinned start button takes the rest, home-03). There the one-time
+        // hint sits closer to the readout and is capped lower, and at
+        // accessibility sizes it is one short line (`jarInteractionHint`),
+        // so it still ends above the first gem resting on the floor.
+        let isShortJar = stageHeight < 380
+        return VStack(spacing: isShortJar ? 8 : 14) {
+            jarMetricReadout(readout, stage)
+            if readout.jarIsEmpty, showsEmptyJarMessageUnderReadout(readout) {
+                accessibilitySizeEmptyJarMessage
+            }
             // The one-time hint hangs under the readout, in the jar's empty
             // middle. On the floor it covered the first gem — the very
             // pebble it asks people to tap.
-            if aggregateInspectionSummary == nil, showsTiltHint, !isJarEmpty {
-                jarInteractionHint
+            if stage.aggregateInspectionSummary == nil, showsTiltHint, !readout.jarIsEmpty, !readout.isLoading {
+                jarInteractionHint(compact: isShortJar && dynamicTypeSize.isAccessibilitySize)
+                    .dynamicTypeSize(...(isShortJar ? DynamicTypeSize.xLarge : .xxxLarge))
                     // A short settle, not a slide from the edge: sliding in
                     // from above would pass over the readout.
                     .transition(
@@ -1343,14 +1781,19 @@ struct HomeView: View {
         }
         // Keep every glyph behind the mouth instead of straddling its bright
         // rim; the occlusion cue is what makes the glass depth believable.
-        .padding(.top, Self.previewsHUDAboveJar ? 0 : jarMetricHUDTopInset(stageHeight: stageHeight))
+        .padding(.top, Self.previewsHUDAboveJar ? 0 : Self.jarMetricHUDTopInset(stageHeight: stageHeight))
         .frame(maxHeight: .infinity, alignment: .top)
         .allowsHitTesting(false)
     }
 
-    private var jarInteractionHint: some View {
+    /// `compact`: a short jar at accessibility sizes. The hint is then one
+    /// line at the default text size. Since #47 a young jar's first gem is
+    /// about 57 pt across, and on an iPhone SE at AX5 the two-line hint
+    /// covered its top. The tilt half of the tip is left to the jar's
+    /// VoiceOver hint there; the tap is the one people need first.
+    private func jarInteractionHint(compact: Bool) -> some View {
         Label(
-            jarInteractionHintText,
+            compact ? jarInteractionShortHintText : jarInteractionHintText,
             systemImage: jarInteractionHintSymbol
         )
             .font(.caption.weight(.bold))
@@ -1358,11 +1801,13 @@ struct HomeView: View {
             // fixed canvas. At accessibility sizes it grew past the jar and
             // back over the gem; VoiceOver reads the same guidance from the
             // jar itself.
-            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+            .dynamicTypeSize(...(compact ? DynamicTypeSize.large : .xxxLarge))
             .foregroundStyle(PomoGemTheme.text)
             .multilineTextAlignment(.center)
+            .lineLimit(compact ? 1 : nil)
+            .minimumScaleFactor(compact ? 0.85 : 1)
             .padding(.horizontal, 13)
-            .padding(.vertical, 9)
+            .padding(.vertical, compact ? 7 : 9)
             .background(.ultraThinMaterial, in: Capsule())
             .overlay {
                 Capsule().stroke(PomoGemTheme.glassEdge.opacity(0.2), lineWidth: 1)
@@ -1380,35 +1825,46 @@ struct HomeView: View {
 #endif
     }
 
-    private var jarMetricReadout: some View {
-        VStack(spacing: 3) {
+    private func jarMetricReadout(
+        _ readout: LifetimeReadoutContinuityPolicy.Readout,
+        _ stage: JarStageSnapshot
+    ) -> some View {
+        // Before this Home's first settled readout the rows keep their place
+        // but show nothing: no 「再集計中」, no 0粒 (device-verify-2 P2).
+        let lifetimeGrams = readout.isLoading ? 0 : readout.jarGrams
+        return VStack(spacing: 3) {
             Text("積み上げた集中")
-                // This HUD is decorative and excluded from VoiceOver. Keep it
-                // inside the fixed SpriteKit canvas at accessibility sizes;
-                // the jar's accessibility value carries the same information.
-                .font(.system(size: 11, weight: .bold, design: .rounded))
+                // This HUD is excluded from VoiceOver; the jar's accessibility
+                // value carries the same information. Its captions follow
+                // Dynamic Type up to the readout's xxxLarge cap below, so they
+                // grow with the user's size but stay inside the jar's canvas;
+                // at accessibility sizes the scrollable card under the jar
+                // repeats the progress in full-size text (home-04).
+                .font(.system(.caption2, design: .rounded, weight: .bold))
                 .tracking(1.1)
                 .textCase(.uppercase)
-                .foregroundStyle(Color.white.opacity(0.68))
+                .foregroundStyle(Color.white.opacity(0.74))
 
             HStack(alignment: .lastTextBaseline, spacing: 4) {
-                Text(homeMassValue)
-                    .font(.system(size: dynamicTypeSize.isAccessibilitySize ? 28 : 39, weight: .black, design: .rounded))
+                Text(homeMassValue(lifetimeGrams))
+                    // Never smaller for a larger text size: the 28 pt value
+                    // only makes room for the empty jar's message.
+                    .font(.system(size: dynamicTypeSize.isAccessibilitySize && readout.jarIsEmpty ? 28 : 39, weight: .black, design: .rounded))
                     .monospacedDigit()
                     .contentTransition(.numericText())
-                Text(homeMassUnit)
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color.white.opacity(0.72))
+                Text(homeMassUnit(lifetimeGrams, readout: readout))
+                    .font(.system(.subheadline, design: .rounded, weight: .bold))
+                    .foregroundStyle(Color.white.opacity(0.76))
             }
 
             VStack(spacing: 4) {
-                jarMetricPill(jarMetricSummary)
+                jarMetricPill(jarMetricSummary(readout, stage: stage))
                 // sync-03. While iCloud is checked the mass above is one this
                 // device can stand behind (`PendingMassPresentationPolicy`);
                 // the caption says so. Hidden while the in-jar pending message
                 // says the same.
-                if !isJarEmpty, let caption = AggregateProjectionPresentationPolicy.verificationCaption(
-                    context: aggregateProjectionPresentation,
+                if !readout.jarIsEmpty, let caption = AggregateProjectionPresentationPolicy.verificationCaption(
+                    context: presentationContext(for: readout),
                     isCloudOfflineSession: isCloudOfflineSession
                 ) {
                     // The only visible qualifier of the number above: readable
@@ -1419,18 +1875,25 @@ struct HomeView: View {
                         .foregroundStyle(Color.white.opacity(0.78))
                         .accessibilityIdentifier("home.mass.verification-caption")
                 }
-                if showsPreFusionRail {
-                    preFusionRail
+                if showsPreFusionRail(readout) {
+                    preFusionRail(readout)
                 }
             }
         }
+        .opacity(readout.isLoading ? 0 : 1)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         // Only the readout counts: the one-time hint below it is transient,
         // and the core must not move when it comes and goes.
         .onGeometryChange(for: CGFloat.self) { geometry in
             geometry.frame(in: .named(Self.jarCardCoordinateSpace)).maxY
         } action: { bottom in
-            measuredJarHUDBottom = bottom
+            jarStageState.measuredHUDBottom = bottom
         }
+#if DEBUG
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: {
+            HomeRenderDiagnostics.jarHUDWindowFrame = $0
+        }
+#endif
         .shadow(color: .black.opacity(0.52), radius: 3, y: 1)
         // A soft ink scrim keeps the value legible over the brighter core,
         // orbit markers and glowing gems behind the glass. The text shadow
@@ -1460,56 +1923,59 @@ struct HomeView: View {
         return 11 * scale
     }
 
-    private var homeMassValue: String {
-        guard let grams = presentedLifetimeGrams else {
+    private func homeMassValue(_ lifetimeGrams: Int?) -> String {
+        guard let grams = lifetimeGrams else {
             return AggregateProjectionPresentationPolicy.homeMassValue(
                 deviceValue: nil,
                 context: aggregateProjectionPresentation
             )
         }
-        let value: String
-        if grams < 1_000 {
-            value = grams.formatted()
-        } else {
-            value = (Double(grams) / 1_000).formatted(
-                .number.precision(.fractionLength(1 ... 2))
-            )
-        }
         return AggregateProjectionPresentationPolicy.homeMassValue(
-            deviceValue: value,
+            deviceValue: HomeLifetimeMassText.readoutNumber(grams),
             context: aggregateProjectionPresentation
         )
     }
 
-    private var homeMassUnit: String {
-        guard let grams = presentedLifetimeGrams else { return "" }
+    private func homeMassUnit(
+        _ lifetimeGrams: Int?,
+        readout: LifetimeReadoutContinuityPolicy.Readout
+    ) -> String {
+        guard let grams = lifetimeGrams else { return "" }
         return AggregateProjectionPresentationPolicy.homeMassUnit(
             verifiedUnit: grams < 1_000 ? "g" : "kg",
-            hasLocalLowerBound: presentedLifetimeIsLowerBound,
-            context: aggregateProjectionPresentation
+            hasLocalLowerBound: readout.isLowerBound,
+            context: presentationContext(for: readout)
         )
     }
 
-    private var jarMetricSummary: String {
-        let milestones = uniqueAchievementCount > 0 ? " ・ 記念石 \(achievementCountLabel)" : ""
+    private func jarMetricSummary(
+        _ readout: LifetimeReadoutContinuityPolicy.Readout,
+        stage: JarStageSnapshot
+    ) -> String {
+        let milestones = stage.uniqueAchievementCount > 0
+            ? " ・ 記念石 \(achievementCountLabel(stage.uniqueAchievementCount))"
+            : ""
         return AggregateProjectionPresentationPolicy.homeCountSummary(
-            count: presentedLifetimePebbles,
+            count: readout.jarPebbles,
             milestoneSuffix: milestones,
-            hasLocalLowerBound: localProjectionNeedsMaintenance,
-            context: aggregateProjectionPresentation
+            hasLocalLowerBound: readout.isLowerBound,
+            context: presentationContext(for: readout)
         )
     }
 
-    private var presentedLifetimeMassLabel: String? {
-        presentedLifetimeGrams.map {
-            formattedMass($0) + (presentedLifetimeIsLowerBound ? "以上" : "")
+    /// The lifetime mass the menu presents, qualified like the headline; nil
+    /// while pending with nothing this device can stand behind.
+    private func presentedLifetimeMassLabel(_ readout: LifetimeReadoutContinuityPolicy.Readout) -> String? {
+        readout.menuGrams.map {
+            formattedMass($0) + (readout.isLowerBound ? "以上" : "")
         }
     }
 
-    private var homeMenuMassValue: String {
-        AggregateProjectionPresentationPolicy.menuMassValue(
-            formattedMass: presentedLifetimeMassLabel,
-            context: aggregateProjectionPresentation
+    private func homeMenuMassValue(_ readout: LifetimeReadoutContinuityPolicy.Readout) -> String {
+        guard !readout.isLoading else { return "—" }
+        return AggregateProjectionPresentationPolicy.menuMassValue(
+            formattedMass: presentedLifetimeMassLabel(readout),
+            context: presentationContext(for: readout)
         )
     }
 
@@ -1518,128 +1984,180 @@ struct HomeView: View {
     /// still being checked while iCloud is verified, and no mass at all only
     /// when Home itself shows 「再集計中」.
     private var accumulationPlanStart: AccumulationPlanStart {
-        .homeHeadline(
-            presentedGrams: presentedLifetimeGrams,
-            isLowerBound: presentedLifetimeIsLowerBound,
-            isBeingChecked: aggregateProjectionPresentation.isCloudVerificationPending
+        let readout = presentedLifetimeReadout()
+        return .homeHeadline(
+            presentedGrams: readout.menuGrams,
+            isLowerBound: readout.isLowerBound,
+            isBeingChecked: readout.isCloudVerificationPending
         )
     }
 
-    private var homeMenuCountValue: String {
-        guard aggregateProjectionPresentation.isCloudVerificationPending else {
-            return "\(totalPebbles)粒"
+    private func homeMenuCountValue(_ readout: LifetimeReadoutContinuityPolicy.Readout) -> String {
+        guard !readout.isLoading else { return "—" }
+        guard readout.isCloudVerificationPending else {
+            return "\(readout.menuPebbles)粒"
         }
         // 「再集計中」 beside a bare device count would read as the total.
-        return pendingMassHeadline == .hidden
-            ? "確認済み \(totalPebbles)粒"
-            : "\(presentedLifetimePebbles)粒"
+        return readout.menuGrams == nil
+            ? "確認済み \(readout.menuPebbles)粒"
+            : "\(readout.menuPebbles)粒"
     }
 
-    private var homeMenuAccessibilitySummary: String {
-        if aggregateProjectionPresentation.isCloudVerificationPending {
-            guard let mass = presentedLifetimeMassLabel else {
-                return String(localized: "\(projectionVerificationTitle)。累計は確認が済むと表示します。この端末で確認済みの集中\(totalPebbles)粒、成果\(achievementCountLabel)個",
-                              table: "Home",
-                              comment: "VoiceOver, menu metrics while iCloud is checked and no lifetime total can be shown: status, focus count, achievement count")
-            }
-            return String(localized: "\(projectionVerificationTitle)。累計\(mass)、集中\(presentedLifetimePebbles)粒、成果\(achievementCountLabel)個",
+    /// Says what the strip shows, held readouts included.
+    private func homeMenuAccessibilitySummary(_ readout: LifetimeReadoutContinuityPolicy.Readout) -> String {
+        if readout.isLoading {
+            return String(localized: "これまでの記録を読み込み中。記念石\(achievementCountLabel)個",
                           table: "Home",
-                          comment: "VoiceOver, menu metrics while iCloud is checked: status, lifetime mass, focus count, achievement count")
+                          comment: "VoiceOver, menu metrics before Home has read its records: achievement stone count")
         }
-        return "累計\(formattedMass(totalGrams))、集中\(totalPebbles)粒、成果\(achievementCountLabel)個"
+        let mass = presentedLifetimeMassLabel(readout)
+        if readout.isCloudVerificationPending {
+            guard let mass else {
+                return String(localized: "\(projectionVerificationTitle)。累計は確認が済むと表示します。この端末で確認済みの集中\(readout.menuPebbles)粒、記念石\(achievementCountLabel)個",
+                              table: "Home",
+                              comment: "VoiceOver, menu metrics while iCloud is checked and no lifetime total can be shown: status, focus count, achievement stone count")
+            }
+            return String(localized: "\(projectionVerificationTitle)。累計\(mass)、集中\(readout.menuPebbles)粒、記念石\(achievementCountLabel)個",
+                          table: "Home",
+                          comment: "VoiceOver, menu metrics while iCloud is checked: status, lifetime mass, focus count, achievement stone count")
+        }
+        return String(
+            localized: "累計\(mass ?? formattedMass(0))、集中\(readout.menuPebbles)粒、記念石\(achievementCountLabel)個",
+            table: "Home",
+            comment: "VoiceOver, menu metrics: lifetime mass, focus count, achievement stone count"
+        )
     }
 
     private var projectionVerificationTitle: String {
         isCloudOfflineSession ? "このiPhoneの集計を確認中" : "iCloudを確認中"
     }
 
-    private var effortProgressSnapshot: EffortProgressSnapshot {
-        EffortProgressPolicy.snapshot(totalGrams: totalGrams)
-    }
-
-    private var showsPreFusionRail: Bool {
-        !projectionNeedsMaintenance
-            && totalPebbles > 0
+    /// The small rail inside the jar. At accessibility sizes the card under
+    /// the jar shows the same progress in full-size text instead.
+    /// Only for an exact, verified readout: its landed totals
+    /// (`fusionProgressTotals`), held with the headline while Home re-reads.
+    private func showsPreFusionRail(_ readout: LifetimeReadoutContinuityPolicy.Readout) -> Bool {
+        guard let totals = readout.fusionProgressTotals else { return false }
+        return !readout.isLowerBound
+            && !dynamicTypeSize.isAccessibilitySize
+            && totals.pebbleCount > 0
             && !JarLifetimeCorePresentation.shouldShowCore(
-                totalPebbleCount: totalPebbles,
-                totalGrams: totalGrams
+                totalPebbleCount: totals.pebbleCount,
+                totalGrams: totals.grams
             )
     }
 
-    private var preFusionRail: some View {
-        let state = effortProgressSnapshot
-        return VStack(spacing: 5) {
+    /// Names what 「4時間10分」 leads to (walk-std-10): without a name the
+    /// target read like a daily quota. The explanation of 標準単位 and 10→1
+    /// lives in 積み上がり, not in the jar.
+    private func preFusionRail(_ readout: LifetimeReadoutContinuityPolicy.Readout) -> some View {
+        let state = EffortProgressPolicy.snapshot(totalGrams: readout.fusionProgressTotals?.grams ?? 0)
+        return VStack(spacing: 4) {
             ProgressView(value: state.progressFraction)
-                .tint(Color(hex: lifetimeCoreColorHex))
+                .tint(Color(hex: readout.coreColorHex))
                 .frame(width: 118)
             Text(
-                "時間 \(EffortProgressPresentation.formattedDuration(grams: state.displayedProgressGrams)) / \(EffortProgressPresentation.formattedDuration(grams: state.displayedTargetGrams))"
+                "\(EffortProgressPresentation.targetTitle(level: state.displayedTargetLevel))まで",
+                tableName: "Home",
+                comment: "Jar rail caption; the argument is 最初の時間の核 or 時間の核・N段目"
             )
-                .font(.system(size: 9, weight: .black, design: .rounded))
+                .font(.system(.caption2, design: .rounded, weight: .bold))
+                .foregroundStyle(Color.white.opacity(0.78))
+            Text(
+                "\(EffortProgressPresentation.formattedDuration(grams: state.displayedProgressGrams)) / \(EffortProgressPresentation.formattedDuration(grams: state.displayedTargetGrams))",
+                tableName: "Home",
+                comment: "Jar rail: focus time so far / time the next time core needs"
+            )
+                .font(.system(.caption2, design: .rounded, weight: .black))
                 .monospacedDigit()
-                .foregroundStyle(Color.white.opacity(0.72))
-            Text("25分 = 1.0標準単位")
-                .font(.system(size: 8, weight: .bold, design: .rounded))
-                .foregroundStyle(Color.white.opacity(0.58))
+                .foregroundStyle(Color.white.opacity(0.92))
         }
-        .padding(.horizontal, 10)
+        .lineLimit(1)
+        .minimumScaleFactor(0.85)
+        .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .background(PomoGemTheme.raised.opacity(0.62), in: Capsule())
+        .background(PomoGemTheme.raised.opacity(0.72), in: Capsule())
         .overlay {
-            Capsule().stroke(Color.white.opacity(0.10), lineWidth: 0.7)
+            Capsule().stroke(Color.white.opacity(0.12), lineWidth: 0.7)
         }
         .accessibilityHidden(true)
     }
 
-    private var fusionAccessibilityDescription: String? {
-        guard !aggregateProjectionPresentation.isCloudVerificationPending,
-              totalPebbles > 0 || localProjectionNeedsMaintenance
+    /// The time core's progress for the jar's VoiceOver value, from the same
+    /// snapshot as its headline (`fusionProgressTotals`).
+    private func fusionAccessibilityDescription(_ readout: LifetimeReadoutContinuityPolicy.Readout) -> String? {
+        guard let totals = readout.fusionProgressTotals,
+              totals.pebbleCount > 0 || readout.isLowerBound
         else { return nil }
         guard let state = JarLifetimeCorePresentation.state(
-            totalPebbleCount: totalPebbles,
-            totalGrams: totalGrams,
-            projectionIsLowerBound: localProjectionNeedsMaintenance
+            totalPebbleCount: totals.pebbleCount,
+            totalGrams: totals.grams,
+            projectionIsLowerBound: readout.isLowerBound
         ) else { return nil }
         var components = [state.progressLabel, state.nextFusionLabel]
             .compactMap { $0 }
         if let physicalState = JarLifetimeCorePresentation.state(
-            totalPebbleCount: totalPebbles,
-            projectionIsLowerBound: localProjectionNeedsMaintenance
+            totalPebbleCount: totals.pebbleCount,
+            projectionIsLowerBound: readout.isLowerBound
         ) {
-            let physical = [physicalState.progressLabel, physicalState.nextFusionLabel]
-                .compactMap { $0 }
-                .joined(separator: "、")
-            components.append("瓶の物理整理：\(physical)")
+            // The count toward the next crystal, after the time value. It was
+            // prefixed 「瓶の物理整理：」, an accounting term.
+            components.append(contentsOf: [physicalState.progressLabel, physicalState.nextFusionLabel]
+                .compactMap { $0 })
+        }
+        let filledJarCount = JarAccumulationPresencePresentation
+            .state(totalGrams: totals.grams).completedCycleCount
+        if filledJarCount > 0 {
+            // The 「瓶N杯」 chip behind the glass is hidden from VoiceOver.
+            components.append(String(
+                localized: "瓶\(filledJarCount)杯ぶん満ちました",
+                table: "Home",
+                comment: "VoiceOver, jar value: how many times the jar has filled (2.5 kg each)"
+            ))
         }
         return components.joined(separator: "、")
     }
 
-    private var largeTextFusionProgressState: JarLifetimeCoreState? {
+    /// The documented large-text companion of the jar's fixed HUD
+    /// (EngagementArchitecture 大きい文字). It used to wait for the first
+    /// time core (2.5 kg), so the first ~10 focuses, when the rail is the only
+    /// progress on Home, had no readable version at accessibility sizes.
+    ///
+    /// Home places the card's reader from its own pass: a landing changes a
+    /// readout's count, never whether it is verified or loaded.
+    private func showsLargeTextFusionProgress(_ readout: LifetimeReadoutContinuityPolicy.Readout) -> Bool {
+        dynamicTypeSize.isAccessibilitySize && readout.fusionProgressTotals != nil
+    }
+
+    private func largeTextFusionProgressState(
+        _ readout: LifetimeReadoutContinuityPolicy.Readout
+    ) -> JarLifetimeCoreState? {
         guard dynamicTypeSize.isAccessibilitySize,
-              !aggregateProjectionPresentation.isCloudVerificationPending,
-              JarLifetimeCorePresentation.shouldShowCore(
-                totalPebbleCount: totalPebbles,
-                totalGrams: totalGrams
-              )
+              let totals = readout.fusionProgressTotals,
+              totals.pebbleCount > 0
         else { return nil }
         return JarLifetimeCorePresentation.state(
-            totalPebbleCount: totalPebbles,
-            totalGrams: totalGrams,
-            projectionIsLowerBound: localProjectionNeedsMaintenance
+            totalPebbleCount: totals.pebbleCount,
+            totalGrams: totals.grams,
+            projectionIsLowerBound: readout.isLowerBound
         )
     }
 
+    /// Runs inside `JarStageReader`, so its colour comes from the readout
+    /// Home resolved on its own pass, not from Home's projections, which
+    /// re-derive the sessions on each read.
     private func largeTextFusionProgressCard(
-        _ state: JarLifetimeCoreState
+        _ state: JarLifetimeCoreState,
+        colorHex: String
     ) -> some View {
         PomoGemCard {
             HStack(alignment: .top, spacing: 13) {
                 Image(systemName: "hourglass.bottomhalf.filled")
                     .font(.title2.weight(.black))
-                    .foregroundStyle(Color(hex: lifetimeCoreColorHex))
+                    .foregroundStyle(Color(hex: colorHex))
                     .frame(width: 44, height: 44)
                     .background(
-                        Color(hex: lifetimeCoreColorHex).opacity(0.13),
+                        Color(hex: colorHex).opacity(0.13),
                         in: Circle()
                     )
                     .accessibilityHidden(true)
@@ -1673,10 +2191,12 @@ struct HomeView: View {
 
     private func jarMetricPill(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11, weight: .semibold, design: .rounded))
-            .foregroundStyle(PomoGemTheme.text.opacity(0.86))
+            // Scales with the readout's Dynamic Type cap instead of a fixed
+            // 11 pt that could shrink to 8 pt.
+            .font(.system(.caption2, design: .rounded, weight: .semibold))
+            .foregroundStyle(PomoGemTheme.text.opacity(0.9))
             .lineLimit(1)
-            .minimumScaleFactor(0.72)
+            .minimumScaleFactor(0.85)
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
             .background(PomoGemTheme.raised.opacity(0.72), in: Capsule())
@@ -1686,12 +2206,16 @@ struct HomeView: View {
     }
 
     private var achievementCountLabel: String {
-        "\(uniqueAchievementCount)\(achievementCountIsLowerBound ? "+" : "")"
+        achievementCountLabel(uniqueAchievementCount)
+    }
+
+    private func achievementCountLabel(_ count: Int) -> String {
+        "\(count)\(achievementCountIsLowerBound ? "+" : "")"
     }
 
     @ViewBuilder
-    private var emptyJarMessage: some View {
-        if aggregateProjectionPresentation.isCloudVerificationPending {
+    private func emptyJarMessage(_ readout: LifetimeReadoutContinuityPolicy.Readout) -> some View {
+        if readout.isCloudVerificationPending {
             VStack(spacing: 8) {
                 ProgressView()
                     .tint(PomoGemTheme.amber)
@@ -1710,26 +2234,6 @@ struct HomeView: View {
             .accessibilityLabel(
                 "\(projectionVerificationTitle)。この端末で確認できた記録だけを表示しています"
             )
-        } else if dynamicTypeSize.isAccessibilitySize {
-            // The bottle is a fixed visual canvas. At accessibility text sizes,
-            // keep its message short and move the actionable detail to the
-            // scrollable launcher immediately below it.
-            VStack(spacing: 10) {
-                Text("まだ空っぽ")
-                    .font(.title3.weight(.bold))
-                Image(systemName: "arrow.down")
-                    .font(.title3.weight(.bold))
-                    .accessibilityHidden(true)
-                Text("下のボタンへ")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(PomoGemTheme.amber)
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(
-                selectedSubject == nil
-                    ? "瓶はまだ空です。下のボタンからテーマを追加できます"
-                    : "瓶はまだ空です。下のボタンから最初の集中を始められます"
-            )
         } else {
             VStack(spacing: 7) {
                 Text(Constants.UIStrings.jarEmptyTitle)
@@ -1745,14 +2249,195 @@ struct HomeView: View {
         }
     }
 
+    /// At accessibility sizes the empty jar's message hangs under the
+    /// readout instead of being centred in the jar. The jar now shrinks to
+    /// what the pinned start button leaves (home-03, as little as 300 pt),
+    /// and centred there the message covered 「0g」 and ran off the jar's
+    /// lower edge on an iPhone SE.
+    private func showsEmptyJarMessageUnderReadout(_ readout: LifetimeReadoutContinuityPolicy.Readout) -> Bool {
+        dynamicTypeSize.isAccessibilitySize
+            && !readout.isCloudVerificationPending
+    }
+
+    /// The bottle is a fixed visual canvas. At accessibility text sizes its
+    /// message stays short, and the start button it points to is pinned
+    /// below in full-size text. Like the readout above, the message is
+    /// capped (here at the first accessibility size) so it fits the room
+    /// left under the readout in the shortest jar; VoiceOver reads the
+    /// label below.
+    private var accessibilitySizeEmptyJarMessage: some View {
+        VStack(spacing: 6) {
+            Text("まだ空っぽ", tableName: "Home", comment: "Empty jar at accessibility text sizes: title")
+                .font(.title3.weight(.bold))
+            Label {
+                Text("下のボタンへ", tableName: "Home", comment: "Empty jar at accessibility text sizes: points to the start button below")
+            } icon: {
+                Image(systemName: "arrow.down")
+                    .accessibilityHidden(true)
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(PomoGemTheme.amber)
+        }
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+        .multilineTextAlignment(.center)
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+        .padding(.horizontal, 20)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            selectedSubject == nil
+                ? String(localized: "瓶はまだ空です。下のボタンからテーマを追加できます", table: "Home",
+                         comment: "VoiceOver, empty jar at accessibility text sizes, no theme yet")
+                : String(localized: "瓶はまだ空です。下のボタンから最初の集中を始められます", table: "Home",
+                         comment: "VoiceOver, empty jar at accessibility text sizes")
+        )
+    }
+
     private func homeJarHeight(availableHeight: CGFloat) -> CGFloat {
         if dynamicTypeSize.isAccessibilitySize {
-            return 520
+            // home-03. The launcher sits below the scroll view
+            // (`pinnedFocusLauncher`), so this height already excludes it.
+            // Leave the top of the theme picker in view so the scrollable
+            // controls are discoverable; 300 pt still holds the HUD and the
+            // short empty message without overlap.
+            return min(520, max(300, availableHeight - 72))
         }
         // Reserve room for the visible theme/time controls and start button,
-        // including on compact iPhones. Larger text keeps a scrollable canvas.
-        let inspectionHeight: CGFloat = latestInspectableAggregateID == nil ? 0 : 72
-        return min(520, max(320, availableHeight - 216 - inspectionHeight))
+        // including on compact iPhones, and for the crystal tip's row while
+        // it shows. A tapped crystal's card never resizes the jar.
+        let tipRowHeight: CGFloat = showsAggregateTipRow ? 72 : 0
+        return min(520, max(320, availableHeight - 216 - tipRowHeight))
+    }
+
+    /// home-11. Until the first crystal detail has been opened, the row
+    /// under the jar holds a tip that crystals can be tapped, and a tapped
+    /// crystal's card in its place. Afterwards the tip's 72 pt row goes away
+    /// and the jar keeps its full height.
+    private var showsAggregateTipRow: Bool {
+        latestInspectableAggregateID != nil && !didSeeAggregateDetail
+    }
+
+    /// The row under the jar: the tip's, or a tapped crystal's card that
+    /// `AggregateCardPlacementPolicy` puts in a row of its own. That row is
+    /// inserted only while the card is up (`followAggregateInspectionCard`).
+    private func showsAggregateInspectionSlot(
+        _ placement: AggregateCardPlacementPolicy.Placement
+    ) -> Bool {
+        showsAggregateTipRow
+            || (placement == .row
+                && latestInspectableAggregateID != nil
+                && aggregateInspectionSummary != nil)
+    }
+
+    /// Where a tapped crystal's card shows over a jar `jarHeight` tall. The
+    /// tip's row holds it while that row is there.
+    private func aggregateCardPlacement(
+        jarHeight: CGFloat
+    ) -> AggregateCardPlacementPolicy.Placement {
+        guard !showsAggregateTipRow else { return .row }
+        return AggregateCardPlacementPolicy.placement(
+            isAccessibilitySize: dynamicTypeSize.isAccessibilitySize,
+            bottleBase: Self.bottleBaseInset(stageHeight: jarHeight),
+            cardHeight: measuredAggregateCardHeight ?? AggregateCardPlacementPolicy.estimatedCardHeight,
+            // Controls not measured yet count as right under the jar.
+            pickerTop: activeSubjects.isEmpty ? nil : (measuredPickerRowTop ?? 0),
+            launcherTop: pinsFocusLauncher ? nil : measuredLauncherTop
+        )
+    }
+
+    /// The controls' tops in the Home content, for the card's room. Not
+    /// while the card's own row is inserted: it pushes them down, and
+    /// measured then the room would look big enough to take the card back
+    /// under the bottle, so the row would come and go.
+    private func recordAggregateCardRoom(
+        pickerTop: CGFloat? = nil,
+        launcherTop: CGFloat? = nil,
+        placement: AggregateCardPlacementPolicy.Placement
+    ) {
+        guard !(placement == .row && !showsAggregateTipRow && aggregateInspectionSummary != nil)
+        else { return }
+        if let pickerTop { measuredPickerRowTop = pickerTop }
+        if let launcherTop { measuredLauncherTop = launcherTop }
+    }
+
+    /// home-11 (#50 follow-up). At default sizes, once the tip's row has
+    /// gone, a tapped crystal's card hangs under the bottle's base, like the
+    /// capacity chip: in the room above the start button, never over the
+    /// readout, the time core or the pile, and nothing on the screen moves.
+    /// Over the upper jar (#47's lower, mouth-following readout, the time
+    /// core under it and a taller pile) it covered the core and the gems.
+    /// The card stays laid out, hidden, while a crystal can be tapped, so its
+    /// measured height places it before it first shows.
+    @ViewBuilder
+    private func aggregateCardUnderBottle(
+        jarHeight: CGFloat,
+        placement: AggregateCardPlacementPolicy.Placement
+    ) -> some View {
+        if !dynamicTypeSize.isAccessibilitySize, !showsAggregateTipRow,
+           let aggregateID = latestInspectableAggregateID,
+           let restingSummary = inspectionSummary(for: aggregateID) {
+            let isPresented = aggregateInspectionSummary != nil && placement != .row
+            aggregateInspectionButton(aggregateInspectionSummary ?? restingSummary)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                    measuredAggregateCardHeight = height
+                }
+                .opacity(isPresented ? 1 : 0)
+                .allowsHitTesting(isPresented)
+                .accessibilityHidden(!isPresented)
+                .frame(maxWidth: .infinity)
+                .padding(.top, Self.bottleBaseInset(stageHeight: jarHeight) + AggregateCardPlacementPolicy.gap)
+        }
+    }
+
+    private static let aggregateInspectionSlotID = "home.aggregate-inspection"
+    private static let homeContentCoordinateSpace = "home.content"
+
+    /// When the card is in a row of its own (at accessibility sizes, or at
+    /// default sizes on a screen without room above the start button), that
+    /// row is under the jar, mostly below the first screen, so a tap brings
+    /// the whole card into view. On a 4.7-inch phone that moves the jar up
+    /// out of sight, so once the card closes (after six seconds, on another
+    /// jar tap or for its detail) Home scrolls back to the jar.
+    private func followAggregateInspectionCard(
+        from oldID: UUID?,
+        to id: UUID?,
+        inRow: Bool,
+        with scrollProxy: ScrollViewProxy
+    ) {
+        guard dynamicTypeSize.isAccessibilitySize || (inRow && !showsAggregateTipRow) else { return }
+        let animation: Animation? = reduceMotion ? nil : .easeOut(duration: 0.3)
+        if id != nil {
+            // The row is inserted in this same update; scroll once it is
+            // laid out.
+            DispatchQueue.main.async {
+                guard aggregateInspectionID != nil else { return }
+                withAnimation(animation) {
+                    scrollProxy.scrollTo(Self.aggregateInspectionSlotID, anchor: .bottom)
+                }
+            }
+        } else if oldID != nil {
+            withAnimation(animation) {
+                scrollProxy.scrollTo("home.jar", anchor: .top)
+            }
+        }
+    }
+
+    /// home-03. At accessibility sizes the start button stays in the first
+    /// viewport on every iPhone instead of below a 520 pt jar and two
+    /// stacked pickers. The completion card takes this place while it is up
+    /// (the button is disabled then anyway).
+    private var pinsFocusLauncher: Bool {
+        dynamicTypeSize.isAccessibilitySize
+            && breakOffer == nil
+            && router.deferredFocusRecovery == nil
+    }
+
+    private var pinnedFocusLauncher: some View {
+        focusLauncher
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .frame(maxWidth: homeContentMaxWidth)
+            .frame(maxWidth: .infinity)
     }
 
     private var homeContentMaxWidth: CGFloat {
@@ -1886,17 +2571,22 @@ struct HomeView: View {
             }
         } label: {
             HStack(spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(.white.opacity(0.22))
-                    Circle()
-                        .stroke(.white.opacity(0.28), lineWidth: 1)
-                    Image(systemName: selectedSubject == nil ? "plus" : "play.fill")
-                        .font(.system(size: 18, weight: .black))
-                        .offset(x: selectedSubject == nil ? 0 : 1)
+                // At accessibility sizes the title and subtitle get the full
+                // width instead (home-03): with the 48 pt circle they wrapped
+                // to four lines and the pinned button grew to ~240 pt.
+                if !dynamicTypeSize.isAccessibilitySize {
+                    ZStack {
+                        Circle()
+                            .fill(.white.opacity(0.22))
+                        Circle()
+                            .stroke(.white.opacity(0.28), lineWidth: 1)
+                        Image(systemName: selectedSubject == nil ? "plus" : "play.fill")
+                            .font(.system(size: 18, weight: .black))
+                            .offset(x: selectedSubject == nil ? 0 : 1)
+                    }
+                    .frame(width: 48, height: 48)
+                    .accessibilityHidden(true)
                 }
-                .frame(width: 48, height: 48)
-                .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(selectedSubject == nil ? "テーマを選んではじめる" : "\(focusDurationLabel)、集中する")
@@ -1905,7 +2595,7 @@ struct HomeView: View {
                     Text(
                         selectedSubject == nil
                             ? "勉強も仕事も、同じ一覧で"
-                            : "\(selectedSubject?.safeDisplayName ?? "選択中のテーマ") ・ 完走で+\(selectedDuration.grams)g"
+                            : "\(selectedSubject?.safeDisplayName ?? "選択中のテーマ") ・ 完走で\(MassText.addedGrams(selectedDuration.grams))"
                     )
                     .font(.system(.caption, design: .rounded, weight: .bold))
                     .lineLimit(2)
@@ -2040,9 +2730,9 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 13) {
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 3) {
-                        SectionEyebrow(text: "SPACE")
+                        SectionEyebrow(text: String(localized: "背景", table: "Home", comment: "Eyebrow over the menu card 集中する空間 (Home background)"))
                         Text("集中する空間")
-                            .font(PomoGemTheme.brand(21))
+                            .pomogemSectionTitle(size: 21)
                     }
                     Spacer()
                 }
@@ -2291,26 +2981,28 @@ struct HomeView: View {
     }
 
     private var menuMetricsStrip: some View {
-        VStack(spacing: 8) {
+        // The jar's own readout, held or live, derived once for the strip.
+        let readout = presentedLifetimeReadout()
+        return VStack(spacing: 8) {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(spacing: 12) {
-                    menuMetric(value: homeMenuMassValue, label: "累計")
-                    menuMetric(value: homeMenuCountValue, label: "集中")
-                    menuMetric(value: "\(achievementCountLabel)個", label: "成果")
+                    menuMetric(value: homeMenuMassValue(readout), label: "累計")
+                    menuMetric(value: homeMenuCountValue(readout), label: "集中")
+                    menuMetric(value: "\(achievementCountLabel)個", label: String(localized: "記念石", table: "Home", comment: "Home menu metric caption: achievement stone count"))
                 }
             } else {
                 HStack(spacing: 0) {
-                    menuMetric(value: homeMenuMassValue, label: "累計")
+                    menuMetric(value: homeMenuMassValue(readout), label: "累計")
                     Divider().frame(height: 34)
-                    menuMetric(value: homeMenuCountValue, label: "集中")
+                    menuMetric(value: homeMenuCountValue(readout), label: "集中")
                     Divider().frame(height: 34)
-                    menuMetric(value: "\(achievementCountLabel)個", label: "成果")
+                    menuMetric(value: "\(achievementCountLabel)個", label: String(localized: "記念石", table: "Home", comment: "Home menu metric caption: achievement stone count"))
                 }
             }
             // sync-03. The same caption as the jar's headline, instead of a
             // 「確認済み」 prefix that read as a verified lifetime total.
             if let caption = AggregateProjectionPresentationPolicy.verificationCaption(
-                context: aggregateProjectionPresentation,
+                context: presentationContext(for: readout),
                 isCloudOfflineSession: isCloudOfflineSession
             ) {
                 Label(caption, systemImage: isCloudOfflineSession ? "checklist" : "icloud")
@@ -2321,18 +3013,25 @@ struct HomeView: View {
         .padding(.vertical, 12)
         .background(PomoGemTheme.card)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(homeMenuAccessibilitySummary)
+        .accessibilityLabel(homeMenuAccessibilitySummary(readout))
     }
 
     private var menuDestinationActions: some View {
         VStack(spacing: 2) {
-            menuActionButton(title: "記録を見る", detail: "推移・内訳・履歴", symbol: "chart.bar.fill") {
+            // The two subtitles name what only that screen holds (history-11):
+            // 記録 is where records and 記念石 are read and corrected;
+            // 積み上がり is the zoomable view of the jar.
+            menuActionButton(
+                title: "記録を見る",
+                detail: String(localized: "推移・履歴・記念石・月の振り返り", table: "Home", comment: "Home menu row detail: what 記録 holds"),
+                symbol: "chart.bar.fill"
+            ) {
                 showHomeMenu = false
                 router.selectedTab = .log
             }
             menuActionButton(
                 title: "積み上がりを見る",
-                detail: "まとまり粒・生涯の瓶・月ごとの瓶",
+                detail: String(localized: "今週・時間の核・結晶・年月の瓶", table: "Home", comment: "Home menu row detail: what 積み上がり holds"),
                 symbol: "circle.hexagongrid.fill"
             ) {
                 showHomeMenu = false
@@ -2400,6 +3099,12 @@ struct HomeView: View {
             HStack(spacing: 13) {
                 Image(systemName: symbol)
                     .font(.body.weight(.semibold))
+                    // The symbol sits in a fixed 28 pt column so the titles
+                    // line up. At accessibility sizes it grew past that
+                    // column and the row's rounded clip cut its left side
+                    // off (the ▶ and ⚙ glyphs on an iPhone SE at AX5); the
+                    // title and detail beside it keep growing.
+                    .dynamicTypeSize(...DynamicTypeSize.xLarge)
                     .foregroundStyle(PomoGemTheme.amber)
                     .frame(width: 28)
                 VStack(alignment: .leading, spacing: 2) {
@@ -2424,29 +3129,136 @@ struct HomeView: View {
         .buttonStyle(PomoGemRowButtonStyle(cornerRadius: 16))
     }
 
+    /// The completion card (Docs/GemExperienceDesign.md §8.3): this focus's
+    /// own gem, 「集中を記録しました」, one line with the time first and the
+    /// grams second, this week's honest figure, and the mechanics behind
+    /// 「しくみ」. [5分休憩] is primary and [閉じる] secondary. At
+    /// accessibility sizes the actions come right after the two lines, before
+    /// the gem and 「しくみ」, so every safe exit is in the first viewport.
+    /// Otherwise the actions stay pinned under a body that, with 「しくみ」
+    /// open, scrolls inside the card rather than growing over the HUD.
     private func postDropCard(_ offer: BreakOffer) -> some View {
-        PomoGemCard {
-            VStack(alignment: .leading, spacing: 12) {
-                postDropHeading(presentedOffer(offer))
-                if offer.isAwaitingDrop {
-                    Text("閉じると、一粒が瓶に落ちます。")
-                        .font(.caption)
-                        .foregroundStyle(PomoGemTheme.muted)
-                }
-                if dynamicTypeSize.isAccessibilitySize {
-                    // Keep every safe exit in the initial viewport at the
-                    // largest text sizes. The detailed crystal evidence stays
-                    // available immediately below the action group.
+        let shown = presentedOffer(offer)
+        return PomoGemCard {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 12) {
+                    postDropHeading(shown)
                     postDropActions(offer)
-                    postDropFusionProgress(offer)
-                } else {
-                    postDropFusionProgress(offer)
+                    postDropCoreBirthLine(shown)
+                    postDropAwaitingDropNote(offer)
+                    HStack(alignment: .center, spacing: 12) {
+                        CompletionCardHero(
+                            sessionID: offer.id,
+                            colorHex: offer.heroColorHex(for: rareRewardMode)
+                        )
+                        .frame(width: 56, height: 56)
+                        VStack(alignment: .leading, spacing: 5) {
+                            postDropWeekLine(shown)
+                            postDropRareLine(shown)
+                        }
+                    }
+                    postDropReminderOffer(shown)
+                    postDropMechanics(offer)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    postDropScrollingBody(offer, shown: shown)
                     postDropActions(offer)
                 }
             }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("reward.bridge")
+    }
+
+    private static let postDropMechanicsScrollID = "reward.mechanics.scroll"
+
+    /// Everything above the actions. Collapsed, it takes its own height, as
+    /// before. With 「しくみ」 open it may grow only until the card's top (and
+    /// its 30 pt fade) would reach the jar's HUD; past that the body scrolls,
+    /// and it scrolls to the opened mechanics. It never shrinks below its
+    /// collapsed height, so a card that already fills the room keeps its
+    /// size and scrolls.
+    private func postDropScrollingBody(_ offer: BreakOffer, shown: BreakOffer) -> some View {
+        let limit = postDropBodyLimit
+        return ScrollViewReader { reader in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .center, spacing: 14) {
+                        CompletionCardHero(
+                            sessionID: offer.id,
+                            colorHex: offer.heroColorHex(for: rareRewardMode)
+                        )
+                        .frame(width: 96, height: 96)
+                        VStack(alignment: .leading, spacing: 5) {
+                            postDropHeading(shown)
+                            postDropWeekLine(shown)
+                            postDropRareLine(shown)
+                        }
+                        .layoutPriority(1)
+                    }
+                    postDropCoreBirthLine(shown)
+                    postDropAwaitingDropNote(offer)
+                    postDropReminderOffer(shown)
+                    postDropMechanics(offer)
+                        .id(Self.postDropMechanicsScrollID)
+                }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                    postDropBodyNaturalHeight = height
+                    if !postDropMechanicsExpanded {
+                        postDropCollapsedBodyHeight = height
+                    }
+                }
+            }
+            .scrollDisabled(limit == nil)
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollIndicators(limit == nil ? .hidden : .automatic)
+            .frame(height: limit)
+            .fixedSize(horizontal: false, vertical: limit == nil)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+                postDropBodyVisibleHeight = $0
+            }
+            .onChange(of: limit) { _, newLimit in
+                guard newLimit != nil, postDropMechanicsExpanded else { return }
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
+                    reader.scrollTo(Self.postDropMechanicsScrollID, anchor: .bottom)
+                }
+            }
+        }
+    }
+
+    /// The body's height while 「しくみ」 is open and the body would reach
+    /// the HUD; nil sizes it to its content.
+    private var postDropBodyLimit: CGFloat? {
+        guard !dynamicTypeSize.isAccessibilitySize,
+              postDropMechanicsExpanded,
+              homeViewportHeight > 0,
+              postDropBodyNaturalHeight > 0
+        else { return nil }
+        // The actions, the card's padding and anything else in the inset.
+        let chrome = max(0, postDropInsetHeight - postDropBodyVisibleHeight)
+        // The HUD's bottom in the viewport: the jar card starts 8 pt down.
+        // The measured geometry lives in `jarStageState` (device-verify-2
+        // P4); reading it here subscribes Home to it only while 「しくみ」 is
+        // open. Before the HUD's first layout, estimate it as the stage does.
+        let hudBottom = 8 + (jarStageState.measuredHUDBottom ?? {
+            let readout = jarStageSnapshot.presentedReadout(with: jarStageState)
+            return jarStageState.measuredStageTop + jarMetricHUDClearance(readout)
+        }())
+        // The card's 30 pt top fade and a little air stay clear of it.
+        let room = (homeViewportHeight - hudBottom - 34 - chrome).rounded(.down)
+        let limit = max(postDropCollapsedBodyHeight, room)
+        return postDropBodyNaturalHeight > limit + 0.5 ? limit : nil
+    }
+
+    @ViewBuilder
+    private func postDropAwaitingDropNote(_ offer: BreakOffer) -> some View {
+        if offer.isAwaitingDrop {
+            Text("閉じると、一粒が瓶に落ちます。")
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private var completionInsetContents: some View {
@@ -2464,15 +3276,18 @@ struct HomeView: View {
     @ViewBuilder
     private func postDropActions(_ offer: BreakOffer) -> some View {
         if dynamicTypeSize.isAccessibilitySize {
+            // The primary break is as wide as 閉じる. The share button comes
+            // last and only once it is offered: a reserved slot left a blank
+            // gap between the two exits, and inserting it between them later
+            // would move 閉じる under a finger.
             VStack(spacing: 8) {
-                startBreakButton(offer)
-                    .frame(maxWidth: .infinity)
-                postDropShareButton
-                    .frame(maxWidth: .infinity)
-                    .opacity(showShareChip ? 1 : 0)
-                    .allowsHitTesting(showShareChip)
-                    .accessibilityHidden(!showShareChip)
+                startBreakButton(offer, fillsWidth: true)
                 dismissBreakOfferButton(offer, showsText: true)
+                if showShareChip {
+                    postDropShareButton
+                        .frame(maxWidth: .infinity)
+                        .transition(.opacity)
+                }
             }
         } else {
             HStack(spacing: 10) {
@@ -2517,62 +3332,407 @@ struct HomeView: View {
         .accessibilityElement(children: .contain)
     }
 
+    /// 「集中を記録しました」 and the one main line, time first and grams
+    /// second (「英語 25分 → +250gの一粒」). VoiceOver reads the same two
+    /// lines, this week's figure, a rare or multi-draw outcome and the break
+    /// that is available.
     private func postDropHeading(_ offer: BreakOffer) -> some View {
-        // sync-03. The weekly figures were frozen from this device's records
-        // at completion; while iCloud is checked the progress block below
-        // carries the 「iCloudを確認中」 caption for the whole card, and once
-        // verification completes they are re-derived with the progress
-        // (`presentedOffer`).
-        let historyTitle = offer.weeklyTitle
-        let historySpokenTitle = offer.weeklySpokenTitle
-        return HStack(spacing: 11) {
-            // The earned gem itself (round 12), in the jar's own art and
-            // with its light, rather than a check mark: the reward's card
-            // shows the reward.
-            GemArtworkStone(
-                spec: GemArtworkStone.looseSpec(hex: offer.heroColorHex(for: rareRewardMode)),
-                glowHex: offer.heroColorHex(for: rareRewardMode),
-                glowOpacity: 0.5
-            )
-            .frame(width: 44, height: 44)
-            .frame(width: 48, height: 48)
-            .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(offer.dropTitle(for: rareRewardMode))
-                    .font(.system(.headline, design: .rounded, weight: .black))
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(
-                    "\(offer.subjectName) +\(offer.grams)g（\(EffortProgressPresentation.formattedStandardUnits(grams: offer.grams))） ・ \(historyTitle)\(offer.rareRewardCounts.multiDrawSummary.map { " ・ \($0)" } ?? "")"
-                )
-                    .font(.caption)
+        VStack(alignment: .leading, spacing: 3) {
+            // The "you did it" beat, in the lamp's amber; the main line
+            // below stays the largest text.
+            Text("集中を記録しました", tableName: "Home",
+                 comment: "Completion card headline, shown after every finished focus. en: 'Focus recorded'")
+                .font(.system(.subheadline, design: .rounded, weight: .bold))
+                .foregroundStyle(PomoGemTheme.amber)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(CompletionCardPresentation.mainLine(subjectName: offer.subjectName, grams: offer.grams))
+                .font(.system(.title3, design: .rounded, weight: .black))
+                .foregroundStyle(PomoGemTheme.text)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityIdentifier("reward.heading")
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityLabel(Text("集中を記録しました", tableName: "Home",
+                                 comment: "Completion card headline, shown after every finished focus. en: 'Focus recorded'"))
+        .accessibilityValue(SentenceText.join([
+            CompletionCardPresentation.spokenMainLine(subjectName: offer.subjectName, grams: offer.grams),
+            offer.weeklySpokenTitle,
+            CompletionCardPresentation.spokenRareLine(kind: offer.kind, counts: offer.rareRewardCounts),
+            CompletionCardPresentation.spokenBreakAvailability(minutes: offer.minutes)
+        ].compactMap { $0 }))
+        .accessibilityHint(
+            showShareChip
+                ? String(localized: "休憩、共有、または閉じるを選べます。しくみで時間の核と結晶の進みを確認できます", table: "Home",
+                         comment: "VoiceOver hint on the completion card heading while the share button shows")
+                : String(localized: "休憩または閉じるを選べます。しくみで時間の核と結晶の進みを確認できます", table: "Home",
+                         comment: "VoiceOver hint on the completion card heading")
+        )
+    }
+
+    /// walk-std-07. 「今週の実測 1時間15分」, with 「・自己申告 30分」 in the same
+    /// sentence when the week has self-reported focus: the calendar week and
+    /// query that Overview and 記録 use (`WeeklyProgressPolicy.week`).
+    @ViewBuilder
+    private func postDropWeekLine(_ offer: BreakOffer) -> some View {
+        if let line = offer.weeklyTitle {
+            Text(line)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(PomoGemTheme.muted)
+                .monospacedDigit()
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("reward.week")
+                // The heading already reads it.
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// A gold or rainbow gem, or a focus long enough for more than one
+    /// 250 g draw, said in words (quiet mode paints the theme colour, and
+    /// VoiceOver cannot see a colour). Nothing for an ordinary single gem.
+    @ViewBuilder
+    private func postDropRareLine(_ offer: BreakOffer) -> some View {
+        if let line = CompletionCardPresentation.rareLine(kind: offer.kind, counts: offer.rareRewardCounts) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                if offer.kind != .normal, rareRewardMode.usesEnhancedPresentation {
+                    Image(systemName: "sparkles")
+                        .foregroundStyle(
+                            offer.kind == .gold
+                                ? Color(hex: Constants.Color.pebbleGold)
+                                : Color(hex: Constants.Color.auroraViolet)
+                        )
+                }
+                Text(line)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .fixedSize(horizontal: false, vertical: true)
-            .layoutPriority(1)
-            Spacer(minLength: 4)
-            if offer.kind != .normal, rareRewardMode.usesEnhancedPresentation {
-                Image(systemName: "sparkles")
-                    .font(.title3.weight(.black))
-                    .foregroundStyle(
-                        offer.kind == .gold
-                            ? Color(hex: Constants.Color.pebbleGold)
-                            : Color(hex: Constants.Color.auroraViolet)
-                    )
+            .font(.caption.weight(.semibold))
+            .monospacedDigit()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityIdentifier("reward.rare")
+            // The heading reads it.
+            .accessibilityHidden(true)
+        }
+    }
+
+    /// product-05. The time core arrived with this focus but not with the
+    /// first ×10 (a 50-minute fifth gem, a 15-minute seventeenth): the card
+    /// says it once, on its face. When the two coincide the fusion sheet
+    /// says it instead (`CompletionCardPresentation.coreBirthMoment`).
+    @ViewBuilder
+    private func postDropCoreBirthLine(_ offer: BreakOffer) -> some View {
+        if CompletionCardPresentation.coreBirthMoment(
+            effortProgress: offer.effortProgress,
+            fusionState: offer.fusionState,
+            projectionIsLowerBound: offer.projectionIsLowerBound
+        ) == .card {
+            Text(CompletionCardPresentation.coreBirthOnCard)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(PomoGemTheme.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(
+                    Color(hex: offer.colorHex).opacity(0.10),
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color(hex: offer.colorHex).opacity(0.26), lineWidth: 0.8)
+                }
+                .accessibilityIdentifier("reward.core-birth")
+        }
+    }
+
+    /// The daily reminder or 先月の瓶のお知らせ is on: the person has already
+    /// chosen a notification time, which both share.
+    private var reminderTimeIsChosen: Bool {
+        (resolvedPreferences?.reminderEnabled ?? false) || wrappedNotifications
+    }
+
+    /// D18. Only on the very first completion, and only while no reminder
+    /// time has been chosen: one quiet, dismissible row. A tap writes the
+    /// existing daily reminder (at this completion's local time) and asks
+    /// for notification permission only then; when iOS has already said no
+    /// it points to Settings instead of asking. It never turns anything on
+    /// by itself and says nothing about streaks.
+    @ViewBuilder
+    private func postDropReminderOffer(_ offer: BreakOffer) -> some View {
+        let time = CompletionCardPresentation.reminderTimeLabel(offer.createdAt)
+        let recorded = reminderOffer?.offerID == offer.id ? reminderOffer?.phase : nil
+        let offered = CompletionCardPresentation.offersReminder(
+            fusionState: offer.fusionState,
+            projectionIsLowerBound: offer.projectionIsLowerBound,
+            reminderTimeIsChosen: reminderTimeIsChosen
+        ) && dismissedReminderOfferID != offer.id.uuidString
+        let phase: CompletionReminderOffer.Phase? = switch recorded {
+        case nil, .offered?: offered ? .offered : nil
+        case .dismissed?: nil
+        case let other?: other
+        }
+        if let phase {
+            reminderOfferRow(offer, phase: phase, time: time)
+                .padding(.leading, 11)
+                .padding(.trailing, 2)
+                .background(PomoGemTheme.raised.opacity(0.62), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+    }
+
+    @ViewBuilder
+    private func reminderOfferRow(
+        _ offer: BreakOffer,
+        phase: CompletionReminderOffer.Phase,
+        time: String
+    ) -> some View {
+        switch phase {
+        case .offered, .working:
+            HStack(alignment: .center, spacing: 6) {
+                Button {
+                    acceptReminderOffer(offer)
+                } label: {
+                    reminderOfferLabel(phase: phase, time: time)
+                }
+                .buttonStyle(PomoGemBareButtonStyle())
+                .disabled(phase == .working)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text("明日もこの時間に？", tableName: "Home",
+                                         comment: "First completion card: optional offer of a daily reminder at this time. en: 'Same time tomorrow?'"))
+                .accessibilityValue(CompletionCardPresentation.spokenReminderOfferDetail(time: time))
+                .accessibilityHint(Text("タップすると、毎日のリマインダーをこの時刻でオンにします。通知の許可を求めることがあります", tableName: "Home",
+                                        comment: "VoiceOver hint on the first completion card's reminder offer"))
+                .accessibilityAddTraits(.isButton)
+                .accessibilityIdentifier("reward.reminder-offer")
+                reminderOfferDismissButton(offer)
+            }
+        case .scheduled:
+            HStack(alignment: .center, spacing: 9) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(PomoGemTheme.amber)
                     .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("オンにしました", tableName: "Home",
+                         comment: "First completion card: the daily reminder was just turned on. en: 'Turned on'")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(PomoGemTheme.text)
+                    Text(CompletionCardPresentation.reminderScheduled(time: time))
+                        .font(.caption)
+                        .foregroundStyle(PomoGemTheme.muted)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .padding(.vertical, 6)
+            .padding(.trailing, 9)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("reward.reminder-offer.scheduled")
+        case .needsSettings:
+            HStack(alignment: .center, spacing: 6) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(CompletionCardPresentation.reminderNeedsPermission)
+                        .font(.caption)
+                        .foregroundStyle(PomoGemTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button(String(localized: "設定を開く", table: "Home",
+                                  comment: "Opens the iOS notification settings for PomoGem. en: 'Open Settings'")) {
+                        guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return }
+                        UIApplication.shared.open(url)
+                    }
+                    .buttonStyle(PomoGemCompactButtonStyle(
+                        tint: PomoGemTheme.text,
+                        foreground: PomoGemTheme.background,
+                        isProminent: false
+                    ))
+                    .accessibilityIdentifier("reward.reminder-offer.settings")
+                }
+                .padding(.vertical, 10)
+                reminderOfferDismissButton(offer)
+            }
+            // Back from Settings with notifications allowed, the offer is
+            // there again; the person taps it once more (nothing is turned
+            // on for them).
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                reofferReminderIfAllowed(offer)
+            }
+        case .alreadyOn, .scheduleFailed, .failed:
+            HStack(alignment: .center, spacing: 6) {
+                Text(CompletionCardPresentation.reminderOutcome(phase))
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .padding(.vertical, 6)
+                reminderOfferDismissButton(offer)
+            }
+            .accessibilityIdentifier("reward.reminder-offer.outcome")
+        case .dismissed:
+            EmptyView()
+        }
+    }
+
+    /// 「明日もこの時間に？」 over 「毎日 10:22 のリマインダー」, with a
+    /// trailing 「オンにする」 so the row reads as a choice, not as a
+    /// reminder already set. At accessibility sizes the pill goes below.
+    private func reminderOfferLabel(phase: CompletionReminderOffer.Phase, time: String) -> some View {
+        let texts = VStack(alignment: .leading, spacing: 1) {
+            Text("明日もこの時間に？", tableName: "Home",
+                 comment: "First completion card: optional offer of a daily reminder at this time. en: 'Same time tomorrow?'")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(PomoGemTheme.text)
+            Text(CompletionCardPresentation.reminderOfferDetail(time: time))
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+                .monospacedDigit()
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        let pill = Group {
+            if phase == .working {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(PomoGemTheme.amber)
+                    .frame(minWidth: 44)
+            } else {
+                Text("オンにする", tableName: "Home",
+                     comment: "First completion card: the pill that turns the offered daily reminder on. en: 'Turn on'")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(PomoGemTheme.background)
+                    .lineLimit(1)
+                    .padding(.horizontal, 11)
+                    .frame(minHeight: 30)
+                    .background(PomoGemTheme.amber, in: Capsule())
             }
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityIdentifier("reward.heading")
-        .accessibilityLabel(offer.dropTitle(for: rareRewardMode))
-        .accessibilityValue(
-            "テーマは\(offer.subjectName)です。今回は\(offer.grams)グラム、標準換算は\(EffortProgressPresentation.formattedStandardUnits(grams: offer.grams))です。\(historySpokenTitle)。\(offer.rareRewardCounts.multiDrawSummary.map { "\($0)。" } ?? "")\(offer.minutes)分休憩を利用できます"
-        )
-        .accessibilityHint(
-            showShareChip
-                ? "結晶の進みを確認し、休憩、共有、または閉じるを選べます"
-                : "結晶の進みを確認し、休憩または閉じるを選べます"
-        )
+        return Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) {
+                    texts
+                    pill
+                }
+                .padding(.vertical, 10)
+            } else {
+                HStack(spacing: 8) {
+                    Image(systemName: "bell")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(PomoGemTheme.amber)
+                        .accessibilityHidden(true)
+                    texts
+                    Spacer(minLength: 0)
+                    pill
+                }
+                .padding(.vertical, 6)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    private func reminderOfferDismissButton(_ offer: BreakOffer) -> some View {
+        Button {
+            reminderOffer = .init(offerID: offer.id, phase: .dismissed)
+            dismissedReminderOfferID = offer.id.uuidString
+        } label: {
+            Image(systemName: "xmark")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(PomoGemTheme.muted)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(PomoGemBareButtonStyle())
+        .accessibilityLabel(Text("リマインダーの提案を閉じる", tableName: "Home",
+                                 comment: "VoiceOver: dismisses the first completion card's reminder offer"))
+        .accessibilityIdentifier("reward.reminder-offer.dismiss")
+    }
+
+    private func reofferReminderIfAllowed(_ offer: BreakOffer) {
+        Task { @MainActor in
+            let status = await NotificationManager.shared.refreshAuthorizationStatus()
+            guard reminderOffer?.offerID == offer.id,
+                  reminderOffer?.phase == .needsSettings
+            else { return }
+            switch status {
+            case .authorized, .provisional, .ephemeral:
+                reminderOffer = .init(offerID: offer.id, phase: .offered)
+            default:
+                break
+            }
+        }
+    }
+
+    private func acceptReminderOffer(_ offer: BreakOffer) {
+        guard reminderOffer?.offerID != offer.id || reminderOffer?.phase == .offered else { return }
+        // Turned on meanwhile (Settings, another device): leave its time.
+        guard !reminderTimeIsChosen else {
+            reminderOffer = .init(offerID: offer.id, phase: .alreadyOn)
+            return
+        }
+        reminderOffer = .init(offerID: offer.id, phase: .working)
+        let components = Calendar.autoupdatingCurrent.dateComponents([.hour, .minute], from: offer.createdAt)
+        let hour = components.hour ?? Constants.Notification.defaultReminderHour
+        let minute = components.minute ?? Constants.Notification.defaultReminderMinute
+        Task { @MainActor in
+            let manager = NotificationManager.shared
+            let status = await manager.refreshAuthorizationStatus()
+            guard reminderOffer?.offerID == offer.id else { return }
+            switch status {
+            case .denied:
+                // Asked before: iOS will not ask again, so point to Settings.
+                reminderOffer = .init(offerID: offer.id, phase: .needsSettings)
+                return
+            case .notDetermined:
+                let granted = await manager.requestAuthorization()
+                guard reminderOffer?.offerID == offer.id else { return }
+                guard granted else {
+                    reminderOffer = .init(offerID: offer.id, phase: .needsSettings)
+                    return
+                }
+            default:
+                break
+            }
+            guard !reminderTimeIsChosen else {
+                reminderOffer = .init(offerID: offer.id, phase: .alreadyOn)
+                return
+            }
+            // The existing daily reminder (a synced preference) at this
+            // completion's local time; no new field.
+            do {
+                try PrefsConsumerPolicy.mutate(.reminderEnabled, context: modelContext, markers: resetSnapshots) {
+                    $0.reminderEnabled = true
+                }
+                try PrefsConsumerPolicy.mutate(.reminderTime, context: modelContext, markers: resetSnapshots) {
+                    $0.reminderHour = hour
+                    $0.reminderMinute = minute
+                }
+                try modelContext.save()
+            } catch {
+                modelContext.rollback()
+                reminderOffer = .init(offerID: offer.id, phase: .failed)
+                return
+            }
+            let activity = PassiveReminderActivityReader.read(context: modelContext, markers: resetSnapshots)
+            do {
+                try await manager.synchronizePassiveNotifications(
+                    dailyReminderEnabled: manager.isAuthorized,
+                    wrappedEnabled: wrappedNotifications && manager.isAuthorized,
+                    hour: hour,
+                    minute: minute,
+                    playsSound: resolvedPreferences?.soundOn ?? false,
+                    activity: activity
+                )
+            } catch {
+                // The switch is on (the app's next notification refresh retries
+                // the booking); the card does not claim it is booked.
+                guard reminderOffer?.offerID == offer.id else { return }
+                reminderOffer = .init(offerID: offer.id, phase: .scheduleFailed)
+                return
+            }
+            guard reminderOffer?.offerID == offer.id else { return }
+            reminderOffer = .init(offerID: offer.id, phase: .scheduled)
+        }
     }
 
     /// sync-03. Which projection this card shows (`PostDropProjectionPolicy`).
@@ -2627,7 +3787,8 @@ struct HomeView: View {
             // A failed bounded read keeps the frozen week; the progress still
             // re-stamps rather than waiting forever.
             restampedWeekly = .init(request: request, completionCount: offer.weeklyCompletionCount,
-                                    studyGrams: offer.weeklyStudyGrams)
+                                    studyGrams: offer.weeklyStudyGrams,
+                                    selfReportedGrams: offer.weeklySelfReportedGrams)
             return
         }
         var dates = metrics.weeklyTimerCompletionDates
@@ -2635,13 +3796,15 @@ struct HomeView: View {
             dates.append(offer.createdAt)
         }
         var grams = metrics.weeklyMeasuredGrams
-        if !metrics.weeklyMeasuredSessionIDs.contains(offer.id) {
+        if !metrics.weeklyMeasuredSessionIDs.contains(offer.id),
+           !metrics.weeklySelfReportedSessionIDs.contains(offer.id) {
             grams = HomeProjectionPolicy.saturatingNonnegativeSum([grams, offer.grams])
         }
         restampedWeekly = .init(
             request: request,
             completionCount: max(1, WeeklyProgressPolicy.completionCount(dates: dates, at: offer.createdAt)),
-            studyGrams: grams
+            studyGrams: grams,
+            selfReportedGrams: metrics.weeklySelfReportedGrams
         )
     }
 
@@ -2658,30 +3821,77 @@ struct HomeView: View {
         )
     }
 
+    /// The card's mechanics, collapsed behind 「しくみ」 (walk-std-08,
+    /// product-05): how far the time core is, what a standard unit is, the
+    /// jar's 10→1 and this week's timer count. VoiceOver keeps the card's
+    /// full accounting on this one element whether it is open or not. While
+    /// iCloud is checked the caption (or the pending note) stays visible.
     @ViewBuilder
-    private func postDropFusionProgress(_ offer: BreakOffer) -> some View {
+    private func postDropMechanics(_ offer: BreakOffer) -> some View {
         switch postDropSource(offer) {
         case .receipt, .verifiedProjection:
-            let shown = presentedOffer(offer)
-            if let effortProgress = shown.effortProgress {
-                postDropEffortProgress(effortProgress, offer: shown)
-            } else {
-                postDropLegacyFusionProgress(shown)
-            }
+            postDropMechanicsDisclosure(presentedOffer(offer))
         case .receiptWhileVerifying:
             // Only a receipt that froze a total this device can stand behind
             // (`PendingMassPresentationPolicy`) shows a position. A lower
-            // bound would only draw 「時間の核を整理中」 with a spinner next to
-            // the cloud caption — two waiting indicators and no progress.
-            if let effortProgress = offer.effortProgress, !offer.projectionIsLowerBound {
+            // bound would only say 「時間の核を整理中」 next to the cloud
+            // caption — two waiting indicators and no progress.
+            if offer.effortProgress != nil, !offer.projectionIsLowerBound {
                 VStack(alignment: .leading, spacing: 8) {
-                    postDropEffortProgress(effortProgress, offer: offer)
                     postDropVerificationCaption
+                    postDropMechanicsDisclosure(offer)
                 }
             } else {
                 postDropCloudVerificationPending(offer)
             }
         }
+    }
+
+    private func postDropMechanicsDisclosure(_ offer: BreakOffer) -> some View {
+        let mechanics = CompletionCardPresentation.mechanics(
+            effortProgress: offer.effortProgress,
+            fusionState: offer.fusionState,
+            projectionIsLowerBound: offer.projectionIsLowerBound,
+            grams: offer.grams,
+            weeklyTimerCompletionCount: offer.weeklyCompletionCount
+        )
+        return MechanicsDisclosure(
+            isExpanded: $postDropMechanicsExpanded,
+            accessibilityAccounting: SentenceText.join([
+                CompletionCardPresentation.sentence(PostDropProgressAccessibilityPresentation.description(
+                    effortProgress: offer.effortProgress,
+                    fusionState: offer.fusionState,
+                    projectionIsLowerBound: offer.projectionIsLowerBound
+                )),
+                mechanics.unitLine,
+                mechanics.weekCountLine
+            ].compactMap { $0 }),
+            accentHex: offer.colorHex
+        ) {
+            if let coreLine = mechanics.coreLine {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(coreLine)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(PomoGemTheme.text)
+                        .monospacedDigit()
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let fraction = mechanics.coreFraction {
+                        ProgressView(value: fraction)
+                            .tint(Color(hex: offer.colorHex))
+                    }
+                }
+            }
+            // The weekly timer count stays in VoiceOver's accounting only:
+            // on the card's face it read as the count the card no longer shows.
+            ForEach([mechanics.unitLine, mechanics.jarLine].compactMap { $0 }, id: \.self) { line in
+                Text(line)
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .monospacedDigit()
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityIdentifier("reward.fusion-progress")
     }
 
     /// One line under the frozen, device-confirmed progress while iCloud is
@@ -2707,7 +3917,11 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(projectionVerificationTitle)
                     .font(.headline.weight(.black))
-                Text("今回の +\(offer.grams)g は保存済みです。これまでの合計は確認が済むと表示します。")
+                Text(
+                    "今回の \(MassText.addedGrams(offer.grams)) は保存済みです。これまでの合計は確認が済むと表示します。",
+                    tableName: "Home",
+                    comment: "Completion card for an old receipt while iCloud is checked: %@ is the mass this focus added (+250g)"
+                )
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(PomoGemTheme.muted)
             }
@@ -2725,215 +3939,8 @@ struct HomeView: View {
         )
     }
 
-    private func postDropEffortProgress(
-        _ state: EffortProgressSnapshot,
-        offer: BreakOffer
-    ) -> some View {
-        let display = EffortProgressPresentation.display(
-            snapshot: state,
-            projectionIsLowerBound: offer.projectionIsLowerBound
-        )
-        // Keep the exact physical-compaction statement in accessibility. It is
-        // explicitly secondary to time value, but preserves the meaning of a
-        // recovered flow and existing UI automation while count aggregation
-        // continues to protect jar capacity.
-        let physicalDisplay = FusionRewardBridgePresentation.display(
-            state: offer.fusionState,
-            projectionIsLowerBound: offer.projectionIsLowerBound
-        )
-
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: "hourglass.bottomhalf.filled")
-                    .font(.headline.weight(.black))
-                    .foregroundStyle(Color(hex: offer.colorHex))
-                    .frame(width: 32, height: 32)
-                    .background(Color(hex: offer.colorHex).opacity(0.13), in: Circle())
-                    .accessibilityHidden(true)
-                Text(display.eyebrow)
-                    .font(.caption2.weight(.black))
-                    .tracking(1.05)
-                    .foregroundStyle(PomoGemTheme.amber)
-            }
-
-            if let progressFraction = display.progressFraction {
-                ProgressView(value: progressFraction)
-                    .tint(Color(hex: offer.colorHex))
-                    .accessibilityHidden(true)
-            } else {
-                ProgressView()
-                    .controlSize(.small)
-                    .tint(PomoGemTheme.amber)
-                    .accessibilityHidden(true)
-            }
-
-            Text(display.progressLabel)
-                .font(.system(.headline, design: .rounded, weight: .black))
-                .monospacedDigit()
-                .foregroundStyle(PomoGemTheme.text)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Text(display.nextStepLabel)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(PomoGemTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if let context = display.longTermContextLabel {
-                Text(context)
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(PomoGemTheme.amber.opacity(0.9))
-                    .monospacedDigit()
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Text("25分 = 1.0標準単位 ・ 粒の10→1は瓶の整理")
-                .font(.system(size: 10, weight: .black, design: .rounded))
-                .tracking(0.15)
-                .foregroundStyle(PomoGemTheme.text.opacity(0.82))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .background(PomoGemTheme.card.opacity(0.72), in: Capsule())
-        }
-        // sync-03: the frozen lower-bound receipt (shown on every card while
-        // iCloud is checked) has no bar to stretch the box; keep its width.
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 11)
-        .padding(.vertical, 10)
-        .background(
-            LinearGradient(
-                colors: [
-                    Color(hex: offer.colorHex).opacity(0.12),
-                    PomoGemTheme.raised.opacity(0.78)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color(hex: offer.colorHex).opacity(0.24), lineWidth: 0.8)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityIdentifier("reward.fusion-progress")
-        .accessibilityLabel(
-            "\(display.accessibilityLabel)。瓶の物理整理：\(physicalDisplay.accessibilityLabel)"
-        )
-    }
-
-    private func postDropLegacyFusionProgress(_ offer: BreakOffer) -> some View {
-        let state = offer.fusionState
-        let display = FusionRewardBridgePresentation.display(
-            state: state,
-            projectionIsLowerBound: offer.projectionIsLowerBound
-        )
-        let orbitState = FusionOrbitStagePresentation.bridge(
-            state: state,
-            projectionIsLowerBound: offer.projectionIsLowerBound
-        )
-
-        return Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 12) {
-                    FusionOrbitStage(
-                        state: orbitState,
-                        colorHex: offer.colorHex,
-                        scale: .compact
-                    )
-                    .frame(width: 88, height: 88)
-                    .frame(maxWidth: .infinity)
-                    postDropFusionCopy(display, isSyncing: display.litSlotCount == nil)
-                }
-            } else {
-                HStack(spacing: 13) {
-                    FusionOrbitStage(
-                        state: orbitState,
-                        colorHex: offer.colorHex,
-                        scale: .compact
-                    )
-                    .frame(width: 108, height: 108)
-                    postDropFusionCopy(display, isSyncing: display.litSlotCount == nil)
-                }
-            }
-        }
-        .padding(.horizontal, 11)
-        .padding(.vertical, 10)
-        .background(
-            LinearGradient(
-                colors: [
-                    Color(hex: offer.colorHex).opacity(0.12),
-                    PomoGemTheme.raised.opacity(0.78)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color(hex: offer.colorHex).opacity(0.24), lineWidth: 0.8)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityIdentifier("reward.fusion-progress")
-        .accessibilityLabel(display.accessibilityLabel)
-    }
-
-    private func postDropFusionCopy(
-        _ display: FusionRewardBridgeDisplayState,
-        isSyncing: Bool
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text(display.eyebrow)
-                .font(.caption2.weight(.black))
-                .tracking(1.05)
-                .foregroundStyle(PomoGemTheme.amber)
-
-            Text(display.progressLabel)
-                .font(.system(.headline, design: .rounded, weight: .black))
-                .monospacedDigit()
-                .foregroundStyle(PomoGemTheme.text)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if isSyncing {
-                HStack(spacing: 7) {
-                    ProgressView()
-                        .controlSize(.small)
-                        .tint(PomoGemTheme.amber)
-                    Text(display.nextStepLabel)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(PomoGemTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .layoutPriority(1)
-                }
-            } else {
-                Text(display.nextStepLabel)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(PomoGemTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if let context = display.longTermContextLabel {
-                Text(context)
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(PomoGemTheme.amber.opacity(0.9))
-                    .monospacedDigit()
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Text("10 → 1 ・記録と質量は保持")
-                .font(.system(size: 10, weight: .black, design: .rounded))
-                .tracking(0.25)
-                .foregroundStyle(PomoGemTheme.text.opacity(0.82))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .background(PomoGemTheme.card.opacity(0.72), in: Capsule())
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private func startBreakButton(_ offer: BreakOffer) -> some View {
-        Button("\(offer.minutes)分休憩") {
+    private func startBreakButton(_ offer: BreakOffer, fillsWidth: Bool = false) -> some View {
+        Button {
             guard !rewardDropRevealIsPending, rewardDropDestination == nil else { return }
             guard let recovery = FocusPersistence.beginRewardBreak(sessionID: offer.id) else {
                 router.showToast("休憩を開始できませんでした。もう一度お試しください", symbol: "arrow.clockwise")
@@ -2945,6 +3952,10 @@ struct HomeView: View {
                 completionSound: sensoryPreferences.timerCompletionSound
             )
             acknowledgeRewardOffer(offer, destination: .rest(recovery))
+        } label: {
+            Text("\(offer.minutes)分休憩", tableName: "Home",
+                 comment: "Completion card: the primary action that starts the break. %lld is minutes. en: '%lld-min break'")
+                .frame(maxWidth: fillsWidth ? .infinity : nil)
         }
         .buttonStyle(PomoGemCompactButtonStyle())
         // One line: at xxxL on a 12 mini the third of the row is narrower
@@ -3021,6 +4032,18 @@ struct HomeView: View {
         }
         TimerCompletionAlertAcknowledgementStore.mark(sessionID: offer.id)
         TimerCompletionAlertController.shared.stop(sessionID: offer.id)
+        let shown = presentedOffer(offer)
+        if CompletionCardPresentation.coreBirthMoment(
+            effortProgress: shown.effortProgress,
+            fusionState: shown.fusionState,
+            projectionIsLowerBound: shown.projectionIsLowerBound
+        ) == .fusionSheet {
+            coreBirthTeaching = CoreBirthTeachingPending(
+                receiptID: offer.id,
+                acknowledgedAt: .now,
+                epochID: currentActivityEpochID
+            )
+        }
         breakOfferTask?.cancel()
         breakOfferTask = nil
         shareChipTask?.cancel()
@@ -3125,9 +4148,14 @@ struct HomeView: View {
             Task { @MainActor in handleCapacity(event) }
         }
         scene.onLanding = { event in
+#if DEBUG
+            HomeRenderDiagnostics.recordLanding()
+#endif
             Task { @MainActor in
-                publishWidgetSnapshot()
                 handleLanding(event)
+                // Off the landing's frames (device-verify-2 P4): the
+                // snapshot follows the settled jar a moment later.
+                scheduleWidgetSnapshot()
             }
         }
         applySensoryPreferences()
@@ -3190,6 +4218,7 @@ struct HomeView: View {
         for id in ScreenTimeGemDropStore.load()
         where scene.hasLandedPebble(withID: id) || representedSessionIDs.contains(id) {
             ScreenTimeGemDropStore.remove(id)
+            jarStageState.screenTimeDropRevision &+= 1
         }
         let awaitingDropIDs = Set(pendingReceipts.filter {
             $0.dropPhase == .awaitingLanding
@@ -3295,6 +4324,7 @@ struct HomeView: View {
                     resolved.append(session)
                 } else {
                     ScreenTimeGemDropStore.remove(id)
+                    jarStageState.screenTimeDropRevision &+= 1
                 }
             }
             let resolvedIDs = Set(resolved.map(\.id))
@@ -3366,7 +4396,11 @@ struct HomeView: View {
 
     private func refreshSupportedSessionBackfill() {
         sessionBackfillTask?.cancel()
+        // Only retiring a complete page changes what Home shows before the
+        // read lands (`sessionPageIsRereading`); a cancelled read's flag stays.
+        sessionPageIsRereading = sessionPageIsRereading || sessionBackfillIsComplete
         sessionBackfillIsComplete = false
+        sessionPageReadFailed = false
         let markers = resetSnapshots
         let cacheStamp = aggregateProjectionPresentation.currentCacheStamp
         let verifiedCacheStamp = aggregateProjectionPresentation.verifiedCacheStamp
@@ -3381,6 +4415,14 @@ struct HomeView: View {
         )
         sessionBackfillTask = Task { @MainActor in
             await Task.yield()
+#if DEBUG
+            // sync-03 UI fixture only: a slower read, like the phone's right
+            // after a return to the app (device-verify-2 P2).
+            if let delay = CloudVerificationUITestFixture.sessionRereadDelay {
+                try? await Task.sleep(for: .seconds(delay))
+                guard !Task.isCancelled else { return }
+            }
+#endif
             do {
                 let page = try HomeProjectionPolicy.supportedLooseSessionPage(
                     context: modelContext,
@@ -3389,12 +4431,17 @@ struct HomeView: View {
                 )
                 try Task.checkCancellation()
                 guard aggregateProjectionPresentation
-                    .acceptsCurrentGenerationCache(cacheStamp) else { return }
+                    .acceptsCurrentGenerationCache(cacheStamp) else {
+                    // The presentation has moved on and reads again for it.
+                    sessionPageIsRereading = false
+                    return
+                }
                 supportedSessionBackfill = page.sessions
                 supportedSessionBackfillStamp = cacheStamp
                 supportedSessionBackfillVerifiedStamp = verifiedCacheStamp
                 sessionBackfillIsComplete = page.isCompleteForHomeCandidates
                 hasLoadedSceneSessionSnapshot = true
+                sessionPageIsRereading = false
                 // An empty successful page does not change sessionChangeTokens,
                 // so complete the initial scene sync explicitly as part of the
                 // same accepted snapshot.
@@ -3410,7 +4457,13 @@ struct HomeView: View {
                 return
             } catch {
                 // Keep the already loaded bounded page. A later store change,
-                // foreground transition, or relaunch retries the scan.
+                // foreground transition, or relaunch retries the scan. Until
+                // then nothing will replace a held readout, so Home presents
+                // what its inputs prove: a lower bound for a current page
+                // whose completeness is now unproven, 「再集計中」 or a lower
+                // bound for one of an earlier generation.
+                sessionPageIsRereading = false
+                sessionPageReadFailed = true
             }
         }
     }
@@ -3570,6 +4623,7 @@ struct HomeView: View {
     }
 
     private func startFocus(duration: PomodoroDuration) {
+        commitPendingManualEntry()
         guard let subject = selectedSubject else {
             router.selectedTab = .settings
             return
@@ -3760,6 +4814,7 @@ struct HomeView: View {
               !stratumCelebrationQueue.contains(where: { $0.id == request.id })
         else { return }
         if completedStratum == nil, canPresentStratumCelebration {
+            presentedStratumTeachesCoreBirth = stratumTeachesCoreBirth(request)
             completedStratum = request
             presentedStratumID = request.id
         } else {
@@ -3779,8 +4834,25 @@ struct HomeView: View {
               canPresentStratumCelebration,
               !stratumCelebrationQueue.isEmpty
         else { return }
-        completedStratum = stratumCelebrationQueue.removeFirst()
-        presentedStratumID = completedStratum?.id
+        let next = stratumCelebrationQueue.removeFirst()
+        presentedStratumTeachesCoreBirth = stratumTeachesCoreBirth(next)
+        completedStratum = next
+        presentedStratumID = next.id
+    }
+
+    /// product-05. The crystal the acknowledged card made: its ten sources
+    /// include that card's session. A crystal already carried into a ×100
+    /// is no root any more; then it is the first ten-gem crystal baked
+    /// after that acknowledgement.
+    private func stratumTeachesCoreBirth(_ request: PendingStratumCelebration) -> Bool {
+        guard let pending = coreBirthTeaching,
+              pending.epochID == currentActivityEpochID,
+              StratumCelebrationTeaching.isTenGemCrystal(request)
+        else { return false }
+        if let root = storedAggregates.first(where: { $0.id == request.id }) {
+            return root.sessionIDs.contains(pending.receiptID)
+        }
+        return request.createdAt >= pending.acknowledgedAt.addingTimeInterval(-1)
     }
 
     private func finishPresentedStratumCelebration() {
@@ -3793,6 +4865,11 @@ struct HomeView: View {
         if let presentedStratumID {
             PendingStratumCelebrationStore.remove(id: presentedStratumID)
             self.presentedStratumID = nil
+        }
+        // The teaching line belongs to that crystal's sheet alone.
+        if presentedStratumTeachesCoreBirth {
+            coreBirthTeaching = nil
+            presentedStratumTeachesCoreBirth = false
         }
         presentNextStratumCelebrationIfNeeded()
     }
@@ -3898,12 +4975,16 @@ struct HomeView: View {
         }
     }
 
-    /// Saves to the theme chosen in the sheet. Home's own selection is left
-    /// alone: back-filling time for another theme must not change what the
-    /// next timer starts with. Returns nil once saved, otherwise the reason,
-    /// which the still-open sheet shows beside its button (a toast would sit
-    /// behind the full-height sheet).
+    /// Accepts the entry chosen in the sheet (history-02). Home's own
+    /// selection is left alone: back-filling time for another theme must not
+    /// change what the next timer starts with. Nothing is written yet: the
+    /// entry waits a few seconds (`ManualEntryUndoPolicy`) under a 「元に戻す」
+    /// banner and is then saved by `commitPendingManualEntry`. Returns nil
+    /// once accepted, otherwise the reason, which the still-open sheet shows
+    /// beside its button (a toast would sit behind the full-height sheet).
     private func addManualEntry(_ subject: Subject, _ duration: ManualDuration) -> String? {
+        // A second add never stacks two unsaved entries.
+        commitPendingManualEntry()
         guard let resolvedPreferences else {
             return "設定情報を読み込めませんでした。もう一度お試しください。"
         }
@@ -3930,8 +5011,125 @@ struct HomeView: View {
             return "\(Constants.UIStrings.manualCapToast)です。"
         }
 
-        // Apply the quota and session in the same SwiftData transaction. Merely
-        // selecting a duration in the confirmation sheet never mutates Prefs.
+        let pending = PendingManualEntry(
+            subjectID: subject.id,
+            subjectName: subject.safeDisplayName,
+            colorHex: subject.colorHex,
+            duration: duration,
+            confirmedAt: now,
+            dataEpochID: currentActivityEpochID,
+            accountScope: .current()
+        )
+        pendingManualEntry = pending
+        showManualEntry = false
+        schedulePendingManualCommit(pending)
+        // VoiceOver hears about the entry from the banner once the sheet has
+        // gone (`announcePendingManualEntry`): an announcement posted while
+        // the sheet is dismissing is often dropped.
+        return nil
+    }
+
+    /// VoiceOver only. The banner is an overlay read after the jar, the
+    /// pickers and the start button, so focus moves to its 「元に戻す」 once
+    /// the sheet has dismissed, and a queued announcement says what waits.
+    private func announcePendingManualEntry(_ pending: PendingManualEntry) async {
+        guard UIAccessibility.isVoiceOverRunning else { return }
+        try? await Task.sleep(for: .milliseconds(700))
+        guard !Task.isCancelled, pendingManualEntry?.id == pending.id else { return }
+        manualUndoHasFocus = true
+        let message = String(
+            localized: "\(pending.subjectName)に\(DurationText.spoken(minutes: pending.duration.minutes))、\(MassText.spoken(grams: pending.duration.grams))を積みます。「元に戻す」で取り消せます",
+            table: "Home",
+            comment: "VoiceOver, once the Undo banner of a manual entry has focus: theme, duration, grams"
+        )
+        // Queued, so it follows the focused button's own label instead of
+        // cutting it off.
+        UIAccessibility.post(
+            notification: .announcement,
+            argument: NSAttributedString(
+                string: message,
+                attributes: [.accessibilitySpeechQueueAnnouncement: true]
+            )
+        )
+    }
+
+    private func schedulePendingManualCommit(_ pending: PendingManualEntry) {
+        pendingManualCommitTask?.cancel()
+        let window = ManualEntryUndoPolicy.window(
+            assistiveTechnologyIsRunning: UIAccessibility.isVoiceOverRunning
+                || UIAccessibility.isSwitchControlRunning
+        )
+        pendingManualCommitTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: window)
+            } catch {
+                return
+            }
+            guard pendingManualEntry?.id == pending.id else { return }
+            commitPendingManualEntry()
+        }
+    }
+
+    /// 「元に戻す」: nothing was written, so nothing is deleted.
+    private func undoPendingManualEntry() {
+        guard pendingManualEntry != nil else { return }
+        pendingManualCommitTask?.cancel()
+        pendingManualCommitTask = nil
+        pendingManualEntry = nil
+        router.showToast(
+            String(localized: "取り消しました。瓶には積んでいません", table: "Home", comment: "Toast after undoing a manual entry"),
+            symbol: "arrow.uturn.backward"
+        )
+    }
+
+    /// Writes the pending entry: the allowance and the session in one
+    /// SwiftData transaction, exactly as a direct save did before. Called when
+    /// the window ends, and at once when Home stops being the frontmost,
+    /// undisturbed surface (another sheet or screen, a timer, the app leaving
+    /// the foreground, a second add).
+    private func commitPendingManualEntry() {
+        guard let pending = pendingManualEntry else { return }
+        pendingManualCommitTask?.cancel()
+        pendingManualCommitTask = nil
+        pendingManualEntry = nil
+
+        let failure = String(
+            localized: "\(pending.subjectName)の自己申告を保存できませんでした。もう一度積んでください",
+            table: "Home",
+            comment: "Toast when a confirmed manual entry could not be saved; the argument is the theme"
+        )
+        // The account boundary may have closed since confirming: Home's
+        // teardown commits too (`onDisappear`), and an account change tears
+        // Home down after closing it. Nothing may reach a retiring store.
+        guard ManualEntryUndoPolicy.mayCommit(
+            confirmedUnder: pending.accountScope,
+            now: .current()
+        ) else {
+            Self.manualEntryLogger.notice(
+                "Dropped a pending manual entry: the account boundary changed before it was saved"
+            )
+            router.showToast(failure, symbol: "exclamationmark.triangle")
+            return
+        }
+        // A reset or a removed theme in the few seconds since confirming
+        // leaves nothing to attach the entry to.
+        guard pending.dataEpochID == currentActivityEpochID,
+              let subject = activeSubjects.first(where: { $0.id == pending.subjectID }),
+              let resolvedPreferences else {
+            router.showToast(failure, symbol: "exclamationmark.triangle")
+            return
+        }
+        let decision = FairnessPolicy.consumeManualEntry(
+            state: ManualCounterState(
+                dayKey: resolvedPreferences.manualDayKey,
+                usedToday: resolvedPreferences.manualUsedToday
+            ),
+            at: pending.confirmedAt
+        )
+        guard decision.isAllowed else {
+            router.showToast(Constants.UIStrings.manualCapToast, symbol: "clock.badge.xmark")
+            return
+        }
         let writer: Prefs
         do {
             writer = try PrefsSyncPolicy.ensureWriterRow(
@@ -3940,33 +5138,152 @@ struct HomeView: View {
             )
         } catch {
             modelContext.rollback()
-            return "設定情報を安全に保存できませんでした。もう一度お試しください。"
+            router.showToast(failure, symbol: "exclamationmark.triangle")
+            return
         }
         writer.manualDayKey = decision.state.dayKey
         writer.manualUsedToday = decision.state.usedToday
         let session = StudySession(
             subject: subject,
-            startAt: now.addingTimeInterval(-TimeInterval(duration.seconds)),
-            endAt: now,
-            seconds: duration.seconds,
+            startAt: pending.confirmedAt.addingTimeInterval(-TimeInterval(pending.duration.seconds)),
+            endAt: pending.confirmedAt,
+            seconds: pending.duration.seconds,
             source: .manual,
-            grams: duration.grams,
-            deviceDayKey: FairnessPolicy.deviceDayKey(for: now),
+            grams: pending.duration.grams,
+            deviceDayKey: FairnessPolicy.deviceDayKey(for: pending.confirmedAt),
             dataEpochID: currentActivityEpochID
         )
         modelContext.insert(session)
+        // Counted by the jar's readout when its gem lands (dev-D7). Only
+        // while Home is on screen: otherwise the gem falls whenever Home
+        // returns, and nothing reports its landing to this view.
+        if homeIsVisible {
+            noteFallingManualEntry(session.id)
+        }
         do {
             try modelContext.save()
-            showManualEntry = false
-            router.showToast(
-                Constants.UIStrings.manualToast(subject: subject.safeDisplayName, grams: duration.grams),
-                symbol: "plus.circle.fill"
-            )
-            return nil
         } catch {
             modelContext.rollback()
-            return "保存できませんでした。もう一度お試しください。"
+            jarStageState.fallingManualSessionIDs.remove(session.id)
+            router.showToast(failure, symbol: "exclamationmark.triangle")
         }
+    }
+
+    /// How long a just-written manual gem may stay out of the readout if its
+    /// landing is never reported (for example when the jar is restored
+    /// instead of dropping it). A fall takes about a second.
+    private static let manualLandingGrace: Duration = .seconds(4)
+
+    private func noteFallingManualEntry(_ sessionID: UUID) {
+        jarStageState.fallingManualSessionIDs.insert(sessionID)
+        Task { @MainActor in
+            try? await Task.sleep(for: Self.manualLandingGrace)
+            if jarStageState.fallingManualSessionIDs.contains(sessionID) {
+                jarStageState.fallingManualSessionIDs.remove(sessionID)
+            }
+        }
+    }
+
+    /// history-02. A short strip over the top of the scroll area, never
+    /// over the start button pinned below it at accessibility sizes (home-03).
+    /// There the undo button moves under the text and the text is capped at
+    /// the first accessibility size: side by side at AX5 the text column was
+    /// ~150 pt wide, broke every three or four characters and made the banner
+    /// 456 pt tall, over the whole jar and half the start button for the
+    /// entire Undo window.
+    @ViewBuilder
+    private func manualUndoBanner(_ pending: PendingManualEntry) -> some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        manualUndoDot(pending)
+                        manualUndoText(pending, titleLineLimit: 3, subtitleLineLimit: 2)
+                    }
+                    manualUndoButton(fillsWidth: true)
+                }
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                .padding(12)
+            } else {
+                HStack(spacing: 12) {
+                    manualUndoDot(pending)
+                    manualUndoText(pending, titleLineLimit: nil, subtitleLineLimit: nil)
+                    manualUndoButton(fillsWidth: false)
+                }
+                .padding(.leading, 14)
+                .padding(.trailing, 8)
+                .padding(.vertical, 8)
+            }
+        }
+        .background(PomoGemTheme.raised.opacity(0.97), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(PomoGemTheme.amber.opacity(0.34), lineWidth: 1)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("manual.pending")
+        .task(id: pending.id) {
+            await announcePendingManualEntry(pending)
+        }
+    }
+
+    private func manualUndoDot(_ pending: PendingManualEntry) -> some View {
+        Circle()
+            .fill(Color(hex: pending.colorHex))
+            .frame(width: 12, height: 12)
+            .overlay { Circle().stroke(.white.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [2, 2])) }
+            .accessibilityHidden(true)
+    }
+
+    private func manualUndoText(
+        _ pending: PendingManualEntry,
+        titleLineLimit: Int?,
+        subtitleLineLimit: Int?
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            // Time first, like every other record; the grams follow.
+            Text(
+                "\(pending.subjectName)に\(DurationText.short(minutes: pending.duration.minutes))を積みます",
+                tableName: "Home",
+                comment: "Undo banner after a manual entry: theme, then the self-reported time about to be added"
+            )
+                .font(.subheadline.weight(.bold))
+                .lineLimit(titleLineLimit)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(
+                "\(MassText.addedGrams(pending.duration.grams)) ・ まもなく瓶に入ります",
+                tableName: "Home",
+                comment: "Undo banner subtitle: the mass added (+300g), and that the entry is saved shortly"
+            )
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+                .lineLimit(subtitleLineLimit)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Full width under the text at accessibility sizes, so the whole row
+    /// is the target.
+    private func manualUndoButton(fillsWidth: Bool) -> some View {
+        Button {
+            undoPendingManualEntry()
+        } label: {
+            Text(String(localized: "元に戻す", table: "Home", comment: "Undo button for a manual entry that is not saved yet"))
+                .frame(minWidth: 44, maxWidth: fillsWidth ? .infinity : nil, minHeight: 44)
+                .background {
+                    if fillsWidth {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(PomoGemTheme.amber.opacity(0.14))
+                    }
+                }
+        }
+        .font(.subheadline.weight(.bold))
+        .foregroundStyle(PomoGemTheme.amber)
+        .contentShape(Rectangle())
+        .buttonStyle(PomoGemRowButtonStyle())
+        .accessibilityFocused($manualUndoHasFocus)
+        .accessibilityIdentifier("manual.undo")
     }
 
     /// Returns nil once saved, otherwise the reason for the open sheet.
@@ -4030,7 +5347,7 @@ struct HomeView: View {
             scene.restore(pebbles: restored)
             knownLooseIDs = Set(restored.map(\.id))
             sceneInitialized = true
-            router.showToast("まとまり粒は未保存です。再試行してください", symbol: "exclamationmark.triangle")
+            router.showToast(String(localized: "結晶は未保存です。再試行してください", table: "Home"), symbol: "exclamationmark.triangle")
         }
     }
 
@@ -4045,7 +5362,7 @@ struct HomeView: View {
             router.showToast("再試行の準備ができませんでした", symbol: "exclamationmark.triangle")
             return
         }
-        router.showToast("まとまり粒の保存を再試行します", symbol: "arrow.clockwise")
+        router.showToast(String(localized: "結晶の保存を再試行します", table: "Home"), symbol: "arrow.clockwise")
     }
 
     private func handleCapacity(_ event: JarCapacityEvent) {
@@ -4110,9 +5427,16 @@ struct HomeView: View {
                 .forEach { PendingStratumCelebrationStore.remove(id: $0.id) }
             pendingCapacityCelebrations.removeAll()
             enqueueStratumCelebration(finalCelebration)
+            // The fusion sheet is the celebration. The toast is only the
+            // immediate notice when the sheet had to wait (rest, share, a
+            // sheet already up); fired together, the sheet covered it and
+            // VoiceOver announced both.
+            guard completedStratum?.id != finalCelebration.id else { return }
             let message = completedSteps > 1
-                ? "小さな粒が\(completedSteps)段階でまとまり、瓶に余白ができた"
-                : "\(finalCelebration.pebbleCount)粒が、ひとつのまとまり粒になった"
+                ? String(localized: "小さな粒が\(completedSteps)段階で結晶になり、瓶に余白ができた", table: "Home",
+                         comment: "Toast after a cascade of fusions; the argument is how many levels formed")
+                : String(localized: "\(finalCelebration.pebbleCount)粒が、ひとつの結晶になった", table: "Home",
+                         comment: "Toast after ten gems fuse; the argument is the gem count")
             router.showToast(message, symbol: "circle.grid.2x2.fill")
         }
     }
@@ -4129,6 +5453,10 @@ struct HomeView: View {
 
     private func handleLanding(_ event: JarLandingEvent) {
         let descriptor = event.pebble
+        if jarStageState.fallingManualSessionIDs.contains(descriptor.id) {
+            // Now in the jar: the readout counts it (dev-D7).
+            jarStageState.fallingManualSessionIDs.remove(descriptor.id)
+        }
         if let achievementKind = descriptor.achievementKind {
             let suffix = uniqueAchievementCount > Constants.Jar.maximumVisibleAchievementStones
                 ? "。前の記念石も成果の記録に残っています"
@@ -4150,7 +5478,8 @@ struct HomeView: View {
                 router.showToast(text, symbol: symbol)
             }
             ScreenTimeGemDropStore.remove(descriptor.id)
-            syncScene()
+            jarStageState.screenTimeDropRevision &+= 1
+            scheduleLandingSettle()
             return
         }
         var message: String
@@ -4159,15 +5488,15 @@ struct HomeView: View {
         case .gold:
             message = rareRewardMode.usesEnhancedPresentation
                 ? Constants.UIStrings.goldToast(grams: descriptor.grams)
-                : "\(descriptor.subjectName) 金の粒 +\(descriptor.grams)g"
+                : "\(descriptor.subjectName) 金の粒 \(MassText.addedGrams(descriptor.grams))"
         case .prism:
             message = rareRewardMode.usesEnhancedPresentation
                 ? Constants.UIStrings.prismToast(grams: descriptor.grams)
-                : "\(descriptor.subjectName) 虹の粒 +\(descriptor.grams)g"
+                : "\(descriptor.subjectName) 虹の粒 \(MassText.addedGrams(descriptor.grams))"
         case .normal:
             message = descriptor.grams == Constants.Mass.measuredPebbleGrams
                 ? Constants.UIStrings.dropToast(subject: descriptor.subjectName)
-                : "\(descriptor.subjectName) +\(descriptor.grams)g 積んだ"
+                : "\(descriptor.subjectName) \(MassText.addedGrams(descriptor.grams)) 積んだ"
         }
         if let batch = descriptor.presentationRewardBatchSummary {
             message += " ・ \(batch)"
@@ -4179,8 +5508,12 @@ struct HomeView: View {
         if PendingRewardReceiptStore.load().contains(where: {
             $0.id == descriptor.id && $0.dropPhase == .awaitingLanding
         }) {
-            finishRewardDrop(sessionID: descriptor.id)
-            syncScene()
+            // In the readout at once. The receipt is released once the
+            // landing has settled: removing it writes UserDefaults, and any
+            // UserDefaults write re-renders Home through its `@AppStorage`
+            // properties (`_printChanges` lists them all as changed).
+            jarStageState.landedReceiptIDs.insert(descriptor.id)
+            scheduleLandingSettle()
             return
         }
         guard descriptor.source != .manual,
@@ -4189,6 +5522,49 @@ struct HomeView: View {
         if let receipt = prepareRewardReceipt(for: descriptor, dropPhase: nil) {
             scheduleRewardReceipt(receipt, delay: .milliseconds(1_650))
         }
+    }
+
+    /// device-verify-2 P4, after review. What a landing sets off in Home
+    /// itself re-renders all of Home and re-derives its sessions: releasing
+    /// a timer gem's receipt enables the start button and continues to Home,
+    /// rest or share, and `syncScene` re-reads the jar's page. Run inside
+    /// the landing callback, that is the full Home pass the device trace
+    /// caught as a 33 ms hitch on an iPhone 12 mini (there on a manual gem),
+    /// at the moment every completed focus ends on. The readout already
+    /// counts the gem (`JarStageState`); the rest waits until the landing has
+    /// settled, and a run of landings (a Screen Time import) settles once,
+    /// after the last. A process that ends within that moment keeps the
+    /// receipt, and the next launch drops the gem again, as it does for one
+    /// that ends during the fall.
+    /// Long enough for the landing's quick motion to be over (its camera
+    /// shake has decayed to about 5 % and its sparks have travelled most of
+    /// their way, `JarEffectsIntensity.landing`), short enough that the start
+    /// button and the card's rest or share follow without a felt pause.
+    private static let landingSettleDelay: Duration = .milliseconds(300)
+
+    private func scheduleLandingSettle() {
+        landingSettle.schedule(after: Self.landingSettleDelay) {
+            settleLandings()
+        }
+    }
+
+    private func settleLandings() {
+#if DEBUG
+        HomeRenderDiagnostics.recordLandingSettle()
+#endif
+        let receipts = PendingRewardReceiptStore.load()
+        // Released on an earlier settle (or by `syncScene`), and Home has
+        // re-read the receipts since: the readout no longer needs them.
+        let held = Set(receipts.map(\.id))
+        if !jarStageState.landedReceiptIDs.isSubset(of: held) {
+            jarStageState.landedReceiptIDs.formIntersection(held)
+        }
+        for receipt in receipts
+        where receipt.dropPhase == .awaitingLanding
+            && jarStageState.landedReceiptIDs.contains(receipt.id) {
+            finishRewardDrop(sessionID: receipt.id)
+        }
+        syncScene()
     }
 
     @discardableResult
@@ -4335,11 +5711,35 @@ struct HomeView: View {
                 breakOfferTask = nil
                 return
             }
+            // The teaching moment waits for its own crystal's sheet, which
+            // is held while receipts drain (EngagementArchitecture §3.1),
+            // so a newer card leaves it alone.
+            postDropMechanicsExpanded = false
             withAnimation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.86)) {
-                breakOffer = BreakOffer(receipt: receipt)
+                breakOffer = withWeeklySelfReport(BreakOffer(receipt: receipt))
             }
             breakOfferTask = nil
         }
+    }
+
+    /// walk-std-07. The receipt froze the week's measured figure; the card
+    /// adds the same week's self-reported focus, read from the same query
+    /// (`HomeProjectionPolicy.completionMetrics`). A failed read shows the
+    /// measured figure alone.
+    private func withWeeklySelfReport(_ offer: BreakOffer) -> BreakOffer {
+        guard let metrics = try? HomeProjectionPolicy.completionMetrics(
+            context: modelContext,
+            resetMarkers: resetSnapshots,
+            roots: acceptedAggregateRoots,
+            looseSessions: looseSessions,
+            at: offer.createdAt
+        ) else { return offer }
+        var copy = offer
+        copy.applyWeeklySelfReport(
+            grams: metrics.weeklySelfReportedGrams,
+            includesThisCompletion: metrics.weeklySelfReportedSessionIDs.contains(offer.id)
+        )
+        return copy
     }
 
     private func hasLocalCompletionMarker(_ sessionID: UUID) -> Bool {
@@ -4459,6 +5859,11 @@ struct HomeView: View {
     }
 
     private func publishWidgetSnapshot() {
+        // Widgets are account-neutral in this release (PRIVACY.md) and
+        // `JarSnapshotter` publishes nothing, so do not build the metadata:
+        // it re-derived every session on the main thread after each landing
+        // and store change for nothing (device-verify-2 P4).
+        guard ReleaseExternalSurfacePolicy.showsAccountDataInWidgets else { return }
         let acceptedRoots = activeAggregateRoots
         let fullyMeasuredRoots = acceptedRoots.filter {
             $0.manualPebbleCount == 0
@@ -4536,9 +5941,12 @@ struct HomeView: View {
         tiltHintTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(700))
             guard !Task.isCancelled else { return }
-            // One message at a time: the first gem's toast goes first.
+            // One message at a time: the first gem's toast goes first. A
+            // manual entry is saved when its Undo window ends and its toast
+            // comes when the gem lands, so wait for the landing too; before
+            // it, there is no toast yet to wait for (history-02).
             var waitedForToast = 0
-            while router.toast != nil, waitedForToast < 40 {
+            while router.toast != nil || newestGemIsStillFalling, waitedForToast < 40 {
                 try? await Task.sleep(for: .milliseconds(250))
                 guard !Task.isCancelled else { return }
                 waitedForToast += 1
@@ -4560,6 +5968,15 @@ struct HomeView: View {
         }
     }
 
+    /// The newest gem is still queued or falling. Its landing brings the drop
+    /// toast, which the one-time jar hint must not talk over. The hint's
+    /// wait is bounded, so a gem that never shows in the scene only delays it.
+    private var newestGemIsStillFalling: Bool {
+        if scene.queuedDropCount > 0 { return true }
+        guard let newest = looseSessions.first else { return false }
+        return !scene.hasLandedPebble(withID: newest.id)
+    }
+
     private var jarInteractionHintText: String {
         if voiceOverEnabled {
             return "瓶をダブルタップすると粒が跳ねます。VoiceOverのカスタムアクションで左右にも動かせます"
@@ -4569,6 +5986,14 @@ struct HomeView: View {
 #else
         return "瓶をタップすると粒が跳ね、iPhoneを傾けると転がります"
 #endif
+    }
+
+    private var jarInteractionShortHintText: String {
+        voiceOverEnabled
+            ? String(localized: "瓶をダブルタップすると粒が跳ねます", table: "Home",
+                     comment: "One-line jar tip in a short jar at accessibility text sizes, with VoiceOver on")
+            : String(localized: "瓶をタップすると粒が跳ねます", table: "Home",
+                     comment: "One-line jar tip in a short jar at accessibility text sizes")
     }
 
     private var jarInteractionHintSymbol: String {
@@ -4599,6 +6024,8 @@ struct HomeView: View {
     }
 
     private func presentAggregateDetail(_ summary: AccumulationClusterSummary) {
+        // Covers the card button and the jar's VoiceOver custom action.
+        didSeeAggregateDetail = true
         cancelTiltHintPresentation()
         aggregateInspectionTask?.cancel()
         aggregateInspectionTask = nil
@@ -4680,7 +6107,11 @@ struct HomeView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(
-            "\(summary.pebbleCount.formatted())粒のまとまり、\(aggregateInspectionSubtitle(summary))"
+            String(
+                localized: "\(summary.pebbleCount)粒の結晶、\(aggregateInspectionSubtitle(summary))",
+                table: "Home",
+                comment: "VoiceOver, crystal inspection card: gems inside, then what its detail shows"
+            )
         )
         .accessibilityHint(
             summary.hasStrongPreservationEvidence
@@ -4708,17 +6139,21 @@ struct HomeView: View {
                     .allowsHitTesting(isPresented)
                     .accessibilityHidden(!isPresented)
 
-                Label(
-                    "まとまり粒をタップすると、内訳を見られます",
-                    systemImage: "hand.tap"
-                )
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(PomoGemTheme.muted)
-                .multilineTextAlignment(.center)
-                // The capacity chip takes this row while a fusion nears.
-                .opacity(isPresented || showsCapacityChip ? 0 : 1)
-                .accessibilityHidden(true)
-                .allowsHitTesting(false)
+                // Once a detail has been opened the row holds only the card
+                // (`showsAggregateInspectionSlot`).
+                if !didSeeAggregateDetail {
+                    Label(
+                        String(localized: "結晶をタップすると、内訳を見られます", table: "Home", comment: "Hint under the jar until a crystal's detail has been opened once"),
+                        systemImage: "hand.tap"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .multilineTextAlignment(.center)
+                    // The capacity chip takes this row while a fusion nears.
+                    .opacity(isPresented || showsCapacityChip ? 0 : 1)
+                    .accessibilityHidden(true)
+                    .allowsHitTesting(false)
+                }
             }
             .frame(maxWidth: .infinity)
         }
@@ -4730,7 +6165,7 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 9) {
                     aggregateInspectionIcon
-                    Text("まとまり粒を見つけました")
+                    Text("結晶を見つけました", tableName: "Home")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(PomoGemTheme.text)
                 }
@@ -4751,7 +6186,7 @@ struct HomeView: View {
             HStack(spacing: 11) {
                 aggregateInspectionIcon
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("まとまり粒を見つけました")
+                    Text("結晶を見つけました", tableName: "Home")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(PomoGemTheme.text)
                     Text("保存されている粒数・質量などの内訳")
@@ -4775,6 +6210,9 @@ struct HomeView: View {
     private var aggregateInspectionIcon: some View {
         Image(systemName: "circle.grid.3x3.fill")
             .font(.title3.weight(.bold))
+            // Decorative, in a fixed 32 pt circle: past xxxLarge the glyph
+            // outgrew it and ran into the card's title.
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             .foregroundStyle(PomoGemTheme.amber)
             .frame(width: 32, height: 32)
             .background(
@@ -4830,24 +6268,38 @@ struct HomeView: View {
         let shown = presentedOffer(offer)
         let progressMessage: String
         if source == .receiptWhileVerifying, offer.effortProgress == nil || offer.projectionIsLowerBound {
-            progressMessage = "\(projectionVerificationTitle)。今回の記録は保存済みです。これまでの合計は確認が済むと表示します"
+            progressMessage = SentenceText.join([
+                CompletionCardPresentation.sentence(projectionVerificationTitle),
+                String(localized: "今回の記録は保存済みです。これまでの合計は確認が済むと表示します。", table: "Home",
+                       comment: "VoiceOver announcement while iCloud is checked: this focus is saved; the totals follow")
+            ])
         } else {
-            let progress = PostDropProgressAccessibilityPresentation.description(
+            let progress = CompletionCardPresentation.sentence(PostDropProgressAccessibilityPresentation.description(
                 effortProgress: shown.effortProgress,
                 fusionState: shown.fusionState,
                 projectionIsLowerBound: shown.projectionIsLowerBound
-            )
+            ))
             progressMessage = source == .receiptWhileVerifying
-                ? "\(progress)。\(projectionVerificationTitle)"
+                ? SentenceText.join([progress, CompletionCardPresentation.sentence(projectionVerificationTitle)])
                 : progress
         }
-        let historyMessage = shown.weeklySpokenTitle
-        var message = "\(offer.dropTitle(for: rareRewardMode))\(offer.subjectName)、\(offer.grams)グラム、\(EffortProgressPresentation.formattedStandardUnits(grams: offer.grams))。\(historyMessage)。\(offer.rareRewardCounts.multiDrawSummary.map { "\($0)。" } ?? "")\(progressMessage)。\(offer.minutes)分休憩できます"
+        // The card's own order: the headline, time then grams, the week, a
+        // rare outcome, then the full accounting that 「しくみ」 holds.
+        var sentences: [String?] = [
+            String(localized: "集中を記録しました。", table: "Home",
+                   comment: "VoiceOver announcement: the completion card's headline, as a sentence"),
+            CompletionCardPresentation.spokenMainLine(subjectName: offer.subjectName, grams: offer.grams),
+            shown.weeklySpokenTitle,
+            CompletionCardPresentation.spokenRareLine(kind: offer.kind, counts: offer.rareRewardCounts),
+            progressMessage,
+            CompletionCardPresentation.spokenBreakAvailability(minutes: offer.minutes)
+        ]
         if showShareChip {
-            message += "。今の瓶をカードにして共有できます"
+            sentences.append(String(localized: "今の瓶をカードにして共有できます。", table: "Home",
+                                    comment: "VoiceOver announcement: the completion card's share button is available"))
             announcedPostDropShareOfferID = offer.id
         }
-        postLowPriorityAccessibilityAnnouncement(message)
+        postLowPriorityAccessibilityAnnouncement(SentenceText.join(sentences.compactMap { $0 }))
     }
 
     private func announcePostDropShareIfNeeded(for offer: BreakOffer) {
@@ -4872,12 +6324,10 @@ struct HomeView: View {
         router.showToast(Constants.UIStrings.processTerminatedNote, symbol: "exclamationmark.circle")
     }
 
+    /// The menu's lifetime mass, as the jar's readout shows it
+    /// (`HomeLifetimeMassText`).
     private func formattedMass(_ grams: Int) -> String {
-        guard grams >= 1_000 else { return "\(grams) g" }
-        let value = Double(grams) / 1_000
-        return grams.isMultiple(of: 1_000)
-            ? "\(grams / 1_000) kg"
-            : String(format: "%.2f kg", value)
+        HomeLifetimeMassText.text(grams)
     }
 }
 
@@ -4896,6 +6346,220 @@ private extension PendingStratumCelebration {
             level: request.outputLevel,
             projectionCacheStamp: projectionCacheStamp
         )
+    }
+}
+
+/// State that only the jar's stage observes (device-verify-2 P4): the part of
+/// dev-D7's "not landed yet" bookkeeping that changes when a gem lands, and
+/// the stage's own measured geometry.
+///
+/// A manual entry's landing used to remove its ID from a `@State` set on
+/// HomeView, a Screen Time landing bumped a `@State` revision, and a readout
+/// that grew with the new gem (the first gem's rail) wrote its new bottom to
+/// another. Each change re-ran all of Home's body — its session projection,
+/// canonical sessions and integrity checks, the change tokens, every card —
+/// to add one gem to the readout: 103 ms of main-thread work in 210 ms and a
+/// 33 ms hitch on an iPhone 12 mini, right on the landing. Kept in this
+/// observable object, the same changes re-run only the views that read it
+/// (`JarStageReader`). Home's own body must never read these
+/// properties, or it subscribes to them again.
+///
+/// Receipts stay in Home's own state: removing one enables the start button
+/// and may present a queued celebration, which is Home's to re-render. A
+/// timer gem's landing is marked here instead (`landedReceiptIDs`), and Home
+/// releases the receipt once the landing has settled
+/// (`HomeView.landingSettleDelay`).
+@MainActor
+@Observable
+final class JarStageState {
+    /// Manual entries written a moment ago whose gem is still falling. The
+    /// readout counts them when they land, or after `manualLandingGrace` if
+    /// the landing is never reported.
+    var fallingManualSessionIDs = Set<UUID>()
+    /// Timer gems that have landed while Home still holds their receipt
+    /// (review of #58): the readout counts them at once, although Home's
+    /// pass still lists them as pending until it releases the receipt after
+    /// the landing. An ID stays until a later settle finds its receipt gone,
+    /// by which time Home has re-read the receipts.
+    var landedReceiptIDs = Set<UUID>()
+    /// Bumped when a Screen Time gem's drop is retired from
+    /// `ScreenTimeGemDropStore`, which lives in UserDefaults and is not
+    /// observed: readers re-read the store when it changes.
+    var screenTimeDropRevision = 0
+    /// Measured HUD bottom and jar stage top in the jar card's coordinate
+    /// space; the time core's orbit is laid out below the HUD.
+    var measuredHUDBottom: CGFloat?
+    var measuredStageTop: CGFloat = 0
+
+    /// Everything not landed yet: the pending receipts and completion marker
+    /// Home resolved on its own pass, less the timer gems that have landed
+    /// since, plus the falling manual entries and queued Screen Time gems.
+    func unlandedSessionIDs(pendingOnHomePass: Set<UUID>) -> Set<UUID> {
+        _ = screenTimeDropRevision
+        return pendingOnHomePass.subtracting(landedReceiptIDs).union(HomeProjectionPolicy.unlandedSessionIDs(
+            rewardReceipts: [],
+            completionMarker: nil,
+            screenTimeDrops: ScreenTimeGemDropStore.load(),
+            fallingManualEntries: fallingManualSessionIDs
+        ))
+    }
+}
+
+/// What `JarStageReader` needs from Home's own pass to count a gem once it
+/// has landed (dev-D7, device-verify-2 P4): the accepted crystals, the loose
+/// sessions, every saved session's totals, and the timer gems a receipt or
+/// the completion marker still holds back. Falling manual entries and queued
+/// Screen Time gems come from `JarStageState` when the reader runs.
+struct JarLandedTotalsInputs {
+    let roots: [AggregatePebble]
+    let looseSessions: [StudySession]
+    let pendingOnHomePass: Set<UUID>
+    /// Every saved session counted (`HomeProjectionPolicy.totals`), landed or
+    /// not.
+    let savedTotals: HomeProjectionPolicy.Totals
+
+    /// The landed totals as Home's own pass knows them, before the stage
+    /// applies what has landed or started falling since.
+    var landedTotalsOnHomePass: HomeProjectionPolicy.Totals {
+        HomeProjectionPolicy.landedTotals(
+            roots: roots,
+            looseSessions: looseSessions,
+            unlandedSessionIDs: pendingOnHomePass
+        )
+    }
+
+    @MainActor
+    func landedTotals(with state: JarStageState) -> HomeProjectionPolicy.Totals {
+        HomeProjectionPolicy.landedTotals(
+            roots: roots,
+            looseSessions: looseSessions,
+            unlandedSessionIDs: state.unlandedSessionIDs(pendingOnHomePass: pendingOnHomePass)
+        )
+    }
+
+    /// The landed loose sessions the jar's VoiceOver value counts (瓶の整理).
+    func landedLoosePebbleCount(_ landed: HomeProjectionPolicy.Totals) -> Int {
+        max(0, looseSessions.count - (savedTotals.pebbleCount - landed.pebbleCount))
+    }
+
+    /// A readout of these inputs with `landed` applied: the landed loose
+    /// gems, and while verified the jar's headline, core and count
+    /// (`HomeView.liveLifetimeReadout`). While iCloud is checked the headline
+    /// is the pending one (sync-03), which no landing changes.
+    func completing(
+        _ readout: LifetimeReadoutContinuityPolicy.Readout,
+        landed: HomeProjectionPolicy.Totals
+    ) -> LifetimeReadoutContinuityPolicy.Readout {
+        var readout = readout
+        readout.jarLoosePebbles = landedLoosePebbleCount(landed)
+        guard !readout.isCloudVerificationPending else { return readout }
+        readout.jarGrams = landed.grams
+        readout.jarCoreGrams = landed.grams
+        readout.jarPebbles = landed.pebbleCount
+        return readout
+    }
+}
+
+/// The only views that observe `JarStageState`. Its body reads that state,
+/// so a landing re-runs this reader and its content, never Home's body: the
+/// content must take everything else from values Home resolved on its own
+/// pass (`JarStageSnapshot`), not from Home's session projections, which
+/// would re-derive every session on each landing.
+///
+/// The jar's own reader also remembers a readout of settled inputs
+/// (`LifetimeReadoutContinuityPolicy`, device-verify-2 P2) as it presents
+/// it, gems landed since Home's pass included, so a held readout is what
+/// was on screen.
+private struct JarStageReader<Content: View>: View {
+    let state: JarStageState
+    let stage: JarStageSnapshot
+    var recordsSettledReadout = false
+    @ViewBuilder let content: (LifetimeReadoutContinuityPolicy.Readout) -> Content
+
+    var body: some View {
+        let readout = stage.presentedReadout(with: state)
+        if recordsSettledReadout {
+            // Unobserved: what is on screen now, kept for a later pass.
+            stage.settledRecord?.record(readout)
+        }
+        return content(readout)
+    }
+}
+
+/// The lifetime mass on Home. The jar's readout sets the number apart from
+/// its unit (「2.6」 kg) and the menu's 累計 reads them as one (「2.6kg」); one
+/// rule for both, so the menu no longer says 「2.60kg」 or 「3kg」 under a
+/// readout of 2.6 or 3.0 kg (device-verify-2 P7, after review). Grams below
+/// a kilogram; above, one decimal, or two when the second is not zero.
+enum HomeLifetimeMassText {
+    static let kilogramFractionDigits = 1 ... 2
+
+    /// The readout's number: 「250」「2.6」「3.0」「2.63」.
+    static func readoutNumber(_ grams: Int, locale: Locale = PomoGemLocale.current) -> String {
+        grams < 1_000
+            ? PomoGemLocale.grouped(grams, locale: locale)
+            : MassText.kilogramsNumber(fromGrams: grams, fractionDigits: kilogramFractionDigits, locale: locale)
+    }
+
+    /// The menu's 累計: 「250g」「2.6kg」「3.0kg」「2.63kg」.
+    static func text(_ grams: Int, locale: Locale = PomoGemLocale.current) -> String {
+        grams < 1_000
+            ? MassText.grams(value: grams, locale: locale)
+            : MassText.kilograms(fromGrams: grams, fractionDigits: kilogramFractionDigits, locale: locale)
+    }
+}
+
+/// Runs Home's follow-up to a landing once the jar has settled
+/// (`HomeView.scheduleLandingSettle`). A plain reference kept in `@State`, so
+/// scheduling from the landing callback never invalidates Home. Each landing
+/// restarts the wait, so a run of gems settles once.
+@MainActor
+final class LandingSettleScheduler {
+    private var task: Task<Void, Never>?
+
+    func schedule(after delay: Duration, _ work: @escaping @MainActor () -> Void) {
+        task?.cancel()
+        task = Task { @MainActor in
+            do { try await Task.sleep(for: delay) } catch { return }
+            work()
+        }
+    }
+}
+
+/// Home's jar values, resolved once per Home pass for the stage inside
+/// `JarStageReader` (device-verify-2 P4).
+private struct JarStageSnapshot {
+    /// The lifetime readout Home's pass presents (`presentedLifetime`).
+    let readout: LifetimeReadoutContinuityPolicy.Readout
+    /// For a readout of live inputs, what the stage completes it with as
+    /// gems land; nil for a held or loading readout, which stays as it is.
+    let landing: JarLandedTotalsInputs?
+    /// Where the stage remembers a readout of settled inputs; nil otherwise.
+    let settledRecord: SettledRecord?
+    let uniqueAchievementCount: Int
+    let accentHex: String
+    let inspectableAggregateID: UUID?
+    let aggregateInspectionSummary: AccumulationClusterSummary?
+
+    /// Home's `lastSettledLifetimeReadout` and the reset epoch its readout
+    /// describes.
+    struct SettledRecord {
+        let box: SettledLifetimeReadoutBox
+        let epochID: UUID?
+
+        @MainActor
+        func record(_ readout: LifetimeReadoutContinuityPolicy.Readout) {
+            box.value = .init(readout: readout, epochID: epochID)
+        }
+    }
+
+    /// The readout with the gems that have landed, or started falling, since
+    /// Home's pass. Reads `state` only for live inputs, so a held readout's
+    /// stage does not re-run on a landing.
+    @MainActor
+    func presentedReadout(with state: JarStageState) -> LifetimeReadoutContinuityPolicy.Readout {
+        guard let landing else { return readout }
+        return landing.completing(readout, landed: landing.landedTotals(with: state))
     }
 }
 
@@ -4927,6 +6591,528 @@ enum PostDropProgressAccessibilityPresentation {
             legacyProgress += "。\(longTermContextLabel)"
         }
         return legacyProgress
+    }
+}
+
+/// Copy for the completion card (Docs/GemExperienceDesign.md §8.3,
+/// walk-std-07/08, product-05): time first and grams second, one localized
+/// sentence per line, and the mechanics kept for 「しくみ」.
+enum CompletionCardPresentation {
+    /// 「英語 25分 → +250gの一粒」. The theme name is the person's own text.
+    static func mainLine(subjectName: String, grams: Int) -> String {
+        String(
+            localized: "\(subjectName) \(focusDuration(grams: grams)) → +\(mass(grams: grams))の一粒",
+            table: "Home",
+            comment: "Completion card main line. %1$@ is the theme name (user data, never translated), %2$@ the focus time (25分), %3$@ the gem's mass (250g). en: '%1$@ %2$@ → a +%3$@ gem'"
+        )
+    }
+
+    /// VoiceOver: 「英語、25分、250グラムの一粒。」 (one sentence).
+    static func spokenMainLine(subjectName: String, grams: Int) -> String {
+        String(
+            localized: "\(subjectName)、\(DurationText.spoken(minutes: DurationPresentation.focusMinutes(grams: grams)))、\(MassText.spoken(grams: max(0, grams)))の一粒。",
+            table: "Home",
+            comment: "VoiceOver: the completion card main line. %1$@ theme name (user data), %2$@ spoken focus time, %3$@ spoken mass. en: '%1$@, %2$@, a %3$@ gem'"
+        )
+    }
+
+    /// 「今週の実測 1時間15分」, or 「今週の実測 1時間15分・自己申告 30分」
+    /// when the week holds self-reported focus.
+    static func weekLine(measuredGrams: Int, selfReportedGrams: Int) -> String {
+        let measured = focusDuration(grams: measuredGrams)
+        guard selfReportedGrams > 0 else {
+            return String(
+                localized: "今週の実測 \(measured)",
+                table: "Home",
+                comment: "Completion card: this calendar week's measured focus time (timer and Screen Time). en: 'This week, measured: %@'"
+            )
+        }
+        return String(
+            localized: "今週の実測 \(measured)・自己申告 \(focusDuration(grams: selfReportedGrams))",
+            table: "Home",
+            comment: "Completion card: this calendar week's measured focus time, then its self-reported focus time. en: 'This week, measured: %1$@ · self-reported: %2$@'"
+        )
+    }
+
+    /// VoiceOver form of `weekLine`, one sentence.
+    static func spokenWeekLine(measuredGrams: Int, selfReportedGrams: Int) -> String {
+        let measured = DurationText.spoken(minutes: DurationPresentation.focusMinutes(grams: measuredGrams))
+        guard selfReportedGrams > 0 else {
+            return String(
+                localized: "今週の実測は\(measured)。",
+                table: "Home",
+                comment: "VoiceOver: this week's measured focus time on the completion card"
+            )
+        }
+        return String(
+            localized: "今週の実測は\(measured)、自己申告は\(DurationText.spoken(minutes: DurationPresentation.focusMinutes(grams: selfReportedGrams)))。",
+            table: "Home",
+            comment: "VoiceOver: this week's measured, then self-reported, focus time on the completion card"
+        )
+    }
+
+    static func spokenBreakAvailability(minutes: Int) -> String {
+        String(
+            localized: "\(minutes)分休憩を利用できます。",
+            table: "Home",
+            comment: "VoiceOver: the break the completion card offers. %lld is minutes"
+        )
+    }
+
+    /// The focus time a mass stands for (「25分」, 「1時間15分」).
+    static func focusDuration(grams: Int) -> String {
+        DurationText.short(minutes: DurationPresentation.focusMinutes(grams: grams))
+    }
+
+    /// 「250g」, 「1.8kg」, 「2.5kg」: grams below a kilogram, otherwise up to
+    /// two decimals without trailing zeros.
+    static func mass(grams rawGrams: Int) -> String {
+        let grams = max(0, rawGrams)
+        guard grams >= 1_000 else { return MassText.grams(String(grams)) }
+        var kilograms = String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), Double(grams) / 1_000)
+        while kilograms.hasSuffix("0") { kilograms.removeLast() }
+        if kilograms.hasSuffix(".") { kilograms.removeLast() }
+        return MassText.kilograms(kilograms)
+    }
+
+    // MARK: Rare and multi-draw outcomes
+
+    /// 「250gごとの抽選2回（通常1・金1）」 for a focus with more than one
+    /// 250 g draw, 「この一粒は金の粒」 for a single rare gem, nil for an
+    /// ordinary single gem. The card names what the colour alone would
+    /// only hint at (quiet mode paints the theme colour).
+    static func rareLine(kind: PebbleKind, counts: RareRewardCounts) -> String? {
+        if counts.drawCount > 1 {
+            return String(
+                localized: "\(MassText.grams(String(Constants.Mass.measuredPebbleGrams)))ごとの抽選\(counts.drawCount)回（\(ListText.compact(drawParts(counts)))）",
+                table: "Home",
+                comment: "Completion card: a long focus drew once per 250 g. %1$@ is 250g, %2$lld the draws, %3$@ the outcomes (通常1・金1). en: 'One draw per %1$@: %2$lld (%3$@)'"
+            )
+        }
+        switch kind {
+        case .normal:
+            return nil
+        case .gold:
+            return String(localized: "この一粒は金の粒", table: "Home",
+                          comment: "Completion card: this focus's gem is a gold gem. en: 'This gem is a gold gem'")
+        case .prism:
+            return String(localized: "この一粒は虹の粒", table: "Home",
+                          comment: "Completion card: this focus's gem is a rainbow gem. en: 'This gem is a rainbow gem'")
+        }
+    }
+
+    /// VoiceOver form of `rareLine`, one sentence.
+    static func spokenRareLine(kind: PebbleKind, counts: RareRewardCounts) -> String? {
+        if counts.drawCount > 1 {
+            return String(
+                localized: "\(MassText.spoken(grams: Constants.Mass.measuredPebbleGrams))ごとの抽選が\(counts.drawCount)回あり、内訳は\(ListText.inSentence(drawParts(counts)))です。",
+                table: "Home",
+                comment: "VoiceOver: the draws of a long focus. %1$@ is 250 grams (spoken), %2$lld the draws, %3$@ the outcomes as a list"
+            )
+        }
+        switch kind {
+        case .normal:
+            return nil
+        case .gold:
+            return String(localized: "この一粒は金の粒です。", table: "Home",
+                          comment: "VoiceOver: this focus's gem is a gold gem")
+        case .prism:
+            return String(localized: "この一粒は虹の粒です。", table: "Home",
+                          comment: "VoiceOver: this focus's gem is a rainbow gem")
+        }
+    }
+
+    private static func drawParts(_ counts: RareRewardCounts) -> [String] {
+        [
+            counts.normalCount > 0
+                ? String(localized: "通常\(counts.normalCount)", table: "Home",
+                         comment: "Completion card: ordinary gems among a long focus's draws. %lld is the count. en: 'Standard %lld'")
+                : nil,
+            counts.goldCount > 0
+                ? String(localized: "金\(counts.goldCount)", table: "Home",
+                         comment: "Completion card: gold gems among a long focus's draws. %lld is the count. en: 'Gold %lld'")
+                : nil,
+            counts.prismCount > 0
+                ? String(localized: "虹\(counts.prismCount)", table: "Home",
+                         comment: "Completion card: rainbow gems among a long focus's draws. %lld is the count. en: 'Rainbow %lld'")
+                : nil
+        ].compactMap { $0 }
+    }
+
+    // MARK: 「明日もこの時間に？」 (D18)
+
+    /// Only the jar's very first completion offers the reminder, only when
+    /// that is certain (a lower-bound projection may hide earlier gems), and
+    /// only while no reminder time has been chosen: neither the daily
+    /// reminder nor 先月の瓶のお知らせ (which shares its time) is on
+    /// (Docs/GemExperienceDesign.md §4.2: 「既存のリマインダーがあれば出さない」).
+    static func offersReminder(
+        fusionState: FusionRewardBridgeState,
+        projectionIsLowerBound: Bool,
+        reminderTimeIsChosen: Bool
+    ) -> Bool {
+        !reminderTimeIsChosen && !projectionIsLowerBound && fusionState.totalPebbleCount == 1
+    }
+
+    /// 「7:30」 in the person's locale.
+    static func reminderTimeLabel(_ date: Date, locale: Locale = PomoGemLocale.current) -> String {
+        date.formatted(.dateTime.hour().minute().locale(locale))
+    }
+
+    /// What the row offers, as a thing rather than a promise: nothing is
+    /// on until the person taps 「オンにする」.
+    static func reminderOfferDetail(time: String) -> String {
+        String(
+            localized: "毎日 \(time) のリマインダー",
+            table: "Home",
+            comment: "First completion card, under 「明日もこの時間に？」: the reminder a tap would turn on (it is off). %@ is a time of day (7:30). en: 'Daily reminder at %@'"
+        )
+    }
+
+    static func spokenReminderOfferDetail(time: String) -> String {
+        String(
+            localized: "毎日 \(time) のリマインダー。今はオフです",
+            table: "Home",
+            comment: "VoiceOver value of the first completion card's reminder offer. %@ is a time of day"
+        )
+    }
+
+    static func reminderScheduled(time: String) -> String {
+        String(
+            localized: "毎日 \(time) にお知らせします。設定でいつでも変えられます。",
+            table: "Home",
+            comment: "First completion card after the reminder was turned on. %@ is a time of day. en: 'I'll remind you daily at %@. You can change this in Settings.'"
+        )
+    }
+
+    /// iOS has notifications off: nothing was turned on, and the row comes
+    /// back as an offer once they are allowed.
+    static var reminderNeedsPermission: String {
+        String(
+            localized: "通知がオフになっています。設定で許可したあと、ここでもう一度「オンにする」を押せます。",
+            table: "Home",
+            comment: "First completion card when iOS notifications are off for PomoGem; after allowing them the offer returns"
+        )
+    }
+
+    static func reminderOutcome(_ phase: CompletionReminderOffer.Phase) -> String {
+        switch phase {
+        case .alreadyOn:
+            String(localized: "毎日のリマインダーは、すでにオンです。時刻は設定で変えられます。", table: "Home",
+                   comment: "First completion card: the daily reminder was already on, so the offer changed nothing")
+        case .scheduleFailed:
+            String(localized: "リマインダーはオンにしましたが、通知を予約できませんでした。設定で確かめてください。", table: "Home",
+                   comment: "First completion card: the reminder switch was saved but iOS did not book the notification")
+        default:
+            String(localized: "リマインダーを保存できませんでした。設定からも選べます。", table: "Home",
+                   comment: "First completion card: the reminder could not be saved")
+        }
+    }
+
+    // MARK: 「しくみ」
+
+    struct Mechanics: Equatable {
+        /// 「時間の核まで あと3時間45分」, or nil for a receipt without mass.
+        let coreLine: String?
+        let coreFraction: Double?
+        let unitLine: String?
+        let jarLine: String
+        let weekCountLine: String?
+    }
+
+    static func mechanics(
+        effortProgress: EffortProgressSnapshot?,
+        fusionState: FusionRewardBridgeState,
+        projectionIsLowerBound: Bool,
+        grams: Int,
+        weeklyTimerCompletionCount: Int
+    ) -> Mechanics {
+        Mechanics(
+            coreLine: effortProgress.map { coreLine($0, projectionIsLowerBound: projectionIsLowerBound) },
+            coreFraction: projectionIsLowerBound ? nil : effortProgress.map {
+                $0.crossedMilestoneGrams == nil ? $0.progressFraction : 1
+            },
+            unitLine: effortProgress == nil ? nil : String(
+                localized: "時間の核は、粒の数ではなく集中した時間で進みます。25分が1.0標準単位で、今回は\(standardUnits(grams: grams))標準単位です。",
+                table: "Home",
+                comment: "Completion card 「しくみ」: the time core counts time, not gems; 25 minutes is one standard unit. %@ is this focus in standard units (1.0)"
+            ),
+            jarLine: jarLine(fusionState, projectionIsLowerBound: projectionIsLowerBound),
+            weekCountLine: weeklyTimerCompletionCount > 0 ? String(
+                localized: "今週のタイマー完走は\(weeklyTimerCompletionCount)回です。回数は時間の価値とは別です。",
+                table: "Home",
+                comment: "Completion card 「しくみ」: timer completions this calendar week, a frequency cue only. %lld is the count"
+            ) : nil
+        )
+    }
+
+    /// The core's progress in plain words. The birth of the first core is
+    /// never said here: the card's face or the fusion sheet says it, once
+    /// (`coreBirthMoment`), so this line only says how far its next growth is.
+    private static func coreLine(_ snapshot: EffortProgressSnapshot, projectionIsLowerBound: Bool) -> String {
+        guard !projectionIsLowerBound else {
+            return String(localized: "時間の核の進みを確認しています", table: "Home",
+                          comment: "Completion card 「しくみ」 while the lifetime total is being checked")
+        }
+        if snapshot.crossedMilestoneGrams != nil {
+            let next = remainingDuration(grams: snapshot.nextTargetGrams - snapshot.totalGrams)
+            if snapshot.displayedTargetLevel <= 1 {
+                return String(localized: "集中した時間があと\(next)たまると、時間の核はさらに育ちます", table: "Home",
+                              comment: "Completion card 「しくみ」 when this focus brought the first time core (the card's face or the fusion sheet says so). %@ is the focus time until the core grows again. en: 'After %@ more of focus, your time core grows again'")
+            }
+            return String(localized: "時間の核が育ち、\(snapshot.displayedTargetLevel)段目になりました。集中した時間があと\(next)たまると、さらに育ちます", table: "Home",
+                          comment: "Completion card 「しくみ」: this focus grew the time core. %1$lld is its new level (the jar labels it 時間の核・二段目…), %2$@ the focus time until it grows again. en: 'Your time core grew to level %1$lld. After %2$@ more of focus, it grows again'")
+        }
+        let remaining = remainingDuration(grams: snapshot.remainingGrams)
+        if snapshot.displayedTargetLevel <= 1 {
+            return String(localized: "時間の核まで あと\(remaining)", table: "Home",
+                          comment: "Completion card 「しくみ」: focus time left until the first time core. %@ is a duration")
+        }
+        return String(localized: "時間の核の\(snapshot.displayedTargetLevel)段目まで あと\(remaining)", table: "Home",
+                      comment: "Completion card 「しくみ」: focus time left until the time core's next level. %1$lld is the level, %2$@ a duration")
+    }
+
+    private static func jarLine(_ state: FusionRewardBridgeState, projectionIsLowerBound: Bool) -> String {
+        guard !projectionIsLowerBound else {
+            return String(localized: "粒は1回の完走につき1つです。結晶までの数は、確認が済むと表示します。", table: "Home",
+                          comment: "Completion card 「しくみ」 while the gem count is being checked")
+        }
+        if state.isFusionComplete {
+            return String(localized: "粒は1回の完走につき1つです。この一粒で10粒がそろい、瓶の中でひとつの結晶になります。記録と重さはそのままです。", table: "Home",
+                          comment: "Completion card 「しくみ」: this gem completes ten, which fuse into one crystal; nothing is lost")
+        }
+        let remaining = max(1, state.immediateHorizon.remainingPebbleCount)
+        return String(localized: "粒は1回の完走につき1つです。10粒そろうと、瓶の中でひとつの結晶にまとまります（記録と重さはそのまま）。次の結晶まで あと\(remaining)粒。", table: "Home",
+                      comment: "Completion card 「しくみ」: ten gems fuse into one crystal; %lld gems to the next crystal")
+    }
+
+    /// Minutes rounded up, so 「あと」 never claims less than is left.
+    private static func remainingDuration(grams: Int) -> String {
+        let minutes = (max(0, grams) + Constants.Mass.gramsPerMinute - 1) / Constants.Mass.gramsPerMinute
+        return DurationText.short(minutes: minutes)
+    }
+
+    /// 「1.0」, 「0.4」, 「2.4」 (at least one decimal, at most two).
+    static func standardUnits(grams: Int) -> String {
+        var value = String(
+            format: "%.2f",
+            locale: Locale(identifier: "en_US_POSIX"),
+            EffortProgressPolicy.standardUnitEquivalent(totalGrams: grams)
+        )
+        while value.hasSuffix("0"), !value.hasSuffix(".0") { value.removeLast() }
+        return value
+    }
+
+    // MARK: The time core's one teaching moment (product-05)
+
+    enum CoreBirthMoment: Equatable {
+        /// This completion did not bring the first time core.
+        case none
+        /// It brought the core but not together with the first ×10 (a
+        /// 50-minute fifth gem, a 15-minute seventeenth): the card says so.
+        case card
+        /// It made the first ×10 and the core together (ten 25-minute gems):
+        /// that crystal's fusion sheet says so.
+        case fusionSheet
+    }
+
+    /// Where the birth of the first time core is taught: once, on the card
+    /// of the completion that crossed it, or on the fusion sheet when the
+    /// same completion made the first ×10. A lower bound never claims it.
+    static func coreBirthMoment(
+        effortProgress: EffortProgressSnapshot?,
+        fusionState: FusionRewardBridgeState,
+        projectionIsLowerBound: Bool
+    ) -> CoreBirthMoment {
+        guard !projectionIsLowerBound,
+              let effortProgress,
+              effortProgress.crossedMilestoneGrams == EffortProgressPolicy.firstMilestoneGrams
+        else { return .none }
+        let madeFirstCrystal = fusionState.totalPebbleCount == FusionHierarchyPresentation.fanIn
+            && fusionState.completedFusionLevels == [1]
+        return madeFirstCrystal ? .fusionSheet : .card
+    }
+
+    /// The card's form of the fusion sheet's line (no 「10粒で」: the core
+    /// came from time, however many gems carried it).
+    static var coreBirthOnCard: String {
+        String(
+            localized: "時間の核が生まれました。これからは核が、積み上げた時間の重さを表します。",
+            table: "Home",
+            comment: "Completion card, once: this focus brought the first time core (without a fusion). en: 'Your time core is born. From now on it shows the weight of the time you have built up.'"
+        )
+    }
+
+    /// Ends a sentence that was composed elsewhere (VoiceOver accounting),
+    /// with the language's own full stop.
+    static func sentence(_ text: String) -> String {
+        String(
+            localized: "\(text)。",
+            table: "Home",
+            comment: "VoiceOver: ends a sentence built elsewhere. %@ is the sentence without its final punctuation. en: '%@.'"
+        )
+    }
+}
+
+/// product-05: the card of the completion that made the first ×10 and the
+/// time core together was acknowledged; that crystal's sheet teaches, once.
+private struct CoreBirthTeachingPending: Equatable {
+    let receiptID: UUID
+    let acknowledgedAt: Date
+    let epochID: UUID?
+}
+
+/// D18: where the first completion card's 「明日もこの時間に？」 stands.
+struct CompletionReminderOffer: Equatable {
+    enum Phase: Equatable {
+        case offered
+        case working
+        case scheduled
+        /// The daily reminder was on by the time of the tap: nothing moved.
+        case alreadyOn
+        /// iOS has notifications off; the offer returns once they are allowed.
+        case needsSettings
+        /// The switch was saved but the notification could not be booked.
+        case scheduleFailed
+        case failed
+        case dismissed
+    }
+
+    let offerID: UUID
+    let phase: Phase
+}
+
+/// The completion card's hero (§8.3): this focus's own gem in the jar's art,
+/// the same theme tone, loose cut and UUID variant as the gem that drops,
+/// with its halo. 標準 adds one glint as the card arrives (never a loop);
+/// Reduce Motion and 演出の強さ＝控えめ keep it still.
+private struct CompletionCardHero: View {
+    let sessionID: UUID
+    let colorHex: String
+
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
+    @AppStorage(JarEffectsIntensity.defaultsKey) private var effectsIntensity: JarEffectsIntensity = .standard
+    @State private var glintIsLit = false
+
+    private var effects: JarEffectsIntensity {
+        .resolved(preference: effectsIntensity, reduceMotion: reduceMotionOverride ?? systemReduceMotion)
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let side = min(proxy.size.width, proxy.size.height)
+            ZStack {
+                // The halo reaches 1.4× the stone: stone and halo fill the frame.
+                GemArtworkStone(
+                    spec: GemArtworkStone.looseSpec(hex: colorHex, variant: GemArtworkSpec.variant(for: sessionID)),
+                    glowHex: colorHex,
+                    glowOpacity: 0.5 * Double(effects.haloScale)
+                )
+                .frame(width: side * 0.7, height: side * 0.7)
+                if !effects.isSubtle {
+                    Image(uiImage: GemArtwork.glintImage)
+                        .resizable()
+                        .frame(width: side * 0.46, height: side * 0.46)
+                        .blendMode(.plusLighter)
+                        .scaleEffect(glintIsLit ? 1 : 0.2)
+                        .rotationEffect(.degrees(glintIsLit ? 18 : -12))
+                        .opacity(glintIsLit ? 0.95 : 0)
+                        .offset(x: -side * 0.13, y: -side * 0.14)
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+        .accessibilityHidden(true)
+        .allowsHitTesting(false)
+        .task(id: sessionID) { await playGlint() }
+    }
+
+    /// One glint, once: it catches the light and goes.
+    @MainActor
+    private func playGlint() async {
+        glintIsLit = false
+        guard !effects.isSubtle else { return }
+        try? await Task.sleep(for: .milliseconds(520))
+        guard !Task.isCancelled, !effects.isSubtle else { return }
+        withAnimation(.easeOut(duration: 0.32)) { glintIsLit = true }
+        try? await Task.sleep(for: .milliseconds(360))
+        guard !Task.isCancelled else { return }
+        withAnimation(.easeIn(duration: 0.62)) { glintIsLit = false }
+    }
+}
+
+/// 「しくみ」 (walk-std-08, product-05): the mechanics of gems, crystals and
+/// the time core, collapsed under one quiet row on the completion card and
+/// the fusion sheet. It is one accessibility element that always carries
+/// the full accounting, open or not.
+private struct MechanicsDisclosure<Content: View>: View {
+    @Binding var isExpanded: Bool
+    let accessibilityAccounting: String
+    var accentHex: String?
+    @ViewBuilder let content: () -> Content
+
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
+
+    var body: some View {
+        Button {
+            withAnimation((reduceMotionOverride ?? systemReduceMotion) ? nil : .easeInOut(duration: 0.22)) {
+                isExpanded.toggle()
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 7) {
+                    Image(systemName: "info.circle")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(accentHex.map { Color(hex: $0) } ?? PomoGemTheme.amber)
+                    Text("しくみ", tableName: "Home",
+                         comment: "Disclosure that opens how gems, crystals and the time core work. en: 'How it works'")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(PomoGemTheme.text)
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(PomoGemTheme.muted)
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                }
+                .frame(minHeight: 44)
+                if isExpanded {
+                    VStack(alignment: .leading, spacing: 8) {
+                        content()
+                    }
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, 10)
+                    .transition(.opacity)
+                }
+            }
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(PomoGemTheme.raised.opacity(0.62), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(PomoGemBareButtonStyle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String(
+            localized: "しくみ。\(accessibilityAccounting)",
+            table: "Home",
+            comment: "VoiceOver label of the 「しくみ」 disclosure; %@ is its full accounting, read whether it is open or not"
+        ))
+        .accessibilityValue(isExpanded
+            ? String(localized: "開いています", table: "Home", comment: "VoiceOver value: the 「しくみ」 disclosure is open")
+            : String(localized: "閉じています", table: "Home", comment: "VoiceOver value: the 「しくみ」 disclosure is closed"))
+        .accessibilityHint(Text("説明の表示を切り替えます", tableName: "Home",
+                                comment: "VoiceOver hint: toggles the 「しくみ」 disclosure"))
+        .accessibilityAddTraits(.isButton)
+    }
+}
+
+/// product-05: the fusion sheet's one teaching line is for a ×10 made of
+/// ten gems (which one is decided by the acknowledged card's session).
+enum StratumCelebrationTeaching {
+    static func isTenGemCrystal(_ request: PendingStratumCelebration) -> Bool {
+        request.pebbleCount == FusionHierarchyPresentation.fanIn && max(1, request.level ?? 1) == 1
     }
 }
 
@@ -4963,6 +7149,7 @@ private struct RestampedWeeklyMetrics: Equatable {
     let request: Request
     let completionCount: Int
     let studyGrams: Int?
+    let selfReportedGrams: Int
 
     func matches(offer id: UUID, stamp: AggregateProjectionCacheStamp?) -> Bool {
         request.offerID == id && request.stamp == stamp
@@ -4978,6 +7165,9 @@ private struct BreakOffer: Identifiable {
     let colorHex: String
     private(set) var weeklyCompletionCount: Int
     private(set) var weeklyStudyGrams: Int?
+    /// walk-std-07. Read live from the completion's calendar week when the
+    /// card opens (the receipt predates it); never persisted.
+    private(set) var weeklySelfReportedGrams = 0
     let kind: PebbleKind
     let rareRewardCounts: RareRewardCounts
     private(set) var fusionState: FusionRewardBridgeState
@@ -5000,6 +7190,7 @@ private struct BreakOffer: Identifiable {
         if let weekly, weekly.request.offerID == id {
             copy.weeklyCompletionCount = weekly.completionCount
             copy.weeklyStudyGrams = weekly.studyGrams
+            copy.weeklySelfReportedGrams = weekly.selfReportedGrams
         }
         copy.fusionState = FusionRewardBridgePresentation.state(totalPebbleCount: max(1, totalPebbles))
         copy.effortProgress = EffortProgressPolicy.snapshot(
@@ -5060,43 +7251,29 @@ private struct BreakOffer: Identifiable {
         }
     }
 
-    func dropTitle(for mode: RareRewardMode) -> String {
-        if isAwaitingDrop { return "集中を記録しました。" }
-        if !mode.usesEnhancedPresentation {
-            return switch kind {
-            case .normal: "一粒、着地。"
-            case .gold: "金の粒を積みました。"
-            case .prism: "虹の粒を積みました。"
-            }
-        }
-        return switch kind {
-        case .normal: "一粒、着地。"
-        case .gold: "金の粒、着地。"
-        case .prism: "虹の粒、着地。"
+    /// walk-std-07. The week's self-reported focus from the same calendar
+    /// week and query as the frozen measured figure. A timer completion that
+    /// was demoted to self-reported leaves the measured figure, which the
+    /// receipt counted it in, and is named as self-reported instead.
+    mutating func applyWeeklySelfReport(grams: Int, includesThisCompletion: Bool) {
+        weeklySelfReportedGrams = max(0, grams)
+        if includesThisCompletion, let measured = weeklyStudyGrams {
+            weeklyStudyGrams = max(0, measured - self.grams)
         }
     }
 
-    var weeklyTitle: String {
-        if let weeklyStudyGrams {
-            return "今週 \(formattedWeeklyMass(weeklyStudyGrams)) ・ 戻った\(weeklyCompletionCount)回"
+    /// 「今週の実測 1時間15分・自己申告 30分」. A receipt from a build
+    /// before the weekly mass was saved has no line.
+    var weeklyTitle: String? {
+        weeklyStudyGrams.map {
+            CompletionCardPresentation.weekLine(measuredGrams: $0, selfReportedGrams: weeklySelfReportedGrams)
         }
-        return "今週戻った\(weeklyCompletionCount)回（時間価値とは別）"
     }
 
-    var weeklySpokenTitle: String {
-        if let weeklyStudyGrams {
-            return "今週記録した集中時間の質量\(formattedWeeklyMass(weeklyStudyGrams))。戻った回数\(weeklyCompletionCount)回。回数は時間価値とは別です"
+    var weeklySpokenTitle: String? {
+        weeklyStudyGrams.map {
+            CompletionCardPresentation.spokenWeekLine(measuredGrams: $0, selfReportedGrams: weeklySelfReportedGrams)
         }
-        return "今週戻った回数\(weeklyCompletionCount)回。回数は時間価値とは別です"
-    }
-
-    private func formattedWeeklyMass(_ grams: Int) -> String {
-        let value = max(0, grams)
-        guard value >= 1_000 else { return "\(value)g" }
-        let kilograms = Double(value) / 1_000
-        return kilograms.rounded() == kilograms
-            ? "\(Int(kilograms))kg"
-            : String(format: "%.2fkg", kilograms)
     }
 }
 
@@ -5107,17 +7284,33 @@ struct MonthLabelHint {
     let onOpen: () -> Void
 }
 
+/// The fusion sheet (Docs/GemExperienceDesign.md §8.3, D8): 「10粒ぶんの時間
+/// が、ひとつの結晶に。」 over the new crystal with its ten sources in a
+/// shallow bowl beneath it, 「重さはそのまま 2.50kg」, and the mechanics
+/// behind 「しくみ」. Nothing covers the art. The first ×10 that also made the
+/// time core says so, once (product-05). On a short screen the art shrinks
+/// so the actions stay in the first viewport; at accessibility sizes the
+/// actions come right after the two lines and the art follows them.
 private struct StratumCelebrationView: View {
     let request: PendingStratumCelebration
     /// The crystal's colour shares; empty uses the receipt's colour.
     let colorShares: [GemColorShare]
     let showsMonthLabel: Bool
+    /// product-05: this is the first ×10 and the same completion made the
+    /// time core.
+    var teachesCoreBirth = false
     let onExplore: () -> Void
     let onShare: () -> Void
     let onContinue: () -> Void
     var monthLabelHint: MonthLabelHint?
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var mechanicsExpanded = false
+    /// The height of what shares the first viewport with the art.
+    @State private var leadHeight: CGFloat = 0
+
+    private static let largestArt: CGFloat = 256
+    private static let smallestArt: CGFloat = 120
 
     private var colorHex: String {
         request.colorHex ?? Constants.Color.amberLamp
@@ -5141,107 +7334,53 @@ private struct StratumCelebrationView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 22) {
-                    SectionEyebrow(text: "LOSSLESS STORAGE")
-
-                    ZStack(alignment: .bottom) {
-                        RoundedRectangle(cornerRadius: 28, style: .continuous)
-                            .fill(
-                                RadialGradient(
-                                    colors: [
-                                        Color(hex: colorHex).opacity(0.19),
-                                        PomoGemTheme.auroraViolet.opacity(0.10),
-                                        PomoGemTheme.raised.opacity(0.58)
-                                    ],
-                                    center: .center,
-                                    startRadius: 4,
-                                    endRadius: 170
-                                )
-                            )
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                                    .stroke(Color(hex: colorHex).opacity(0.30), lineWidth: 1)
-                            }
-
-                        // The pill sits under the stage (round 12), never
-                        // over the lowest of the ten gems.
-                        VStack(spacing: 6) {
-                            FusionOrbitStage(
-                                state: orbitState,
-                                colorHex: colorHex,
-                                scale: .hero,
-                                destinationGrams: request.grams,
-                                colorShares: colorShares
-                            )
-                            .frame(width: 206, height: 206)
-
-                            HStack(spacing: 8) {
-                                Text("瓶の整理")
-                                    .foregroundStyle(PomoGemTheme.muted)
-                                Text("10")
-                                Image(systemName: "arrow.right")
-                                    .accessibilityHidden(true)
-                                Text("1")
-                                Text("・ 記録 100% 保持")
-                                    .foregroundStyle(PomoGemTheme.muted)
-                            }
-                            .font(.system(.caption, design: .rounded, weight: .black))
-                            .monospacedDigit()
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(PomoGemTheme.card.opacity(0.92), in: Capsule())
-                            .overlay(Capsule().stroke(.white.opacity(0.16), lineWidth: 0.7))
-                        }
-                        .padding(.bottom, 10)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 256)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(
-                        "瓶の整理として、10個の記録を1個の\(AggregatePresentation.title(level: level))へ圧縮。記録と質量は100パーセント保持。時間の価値は変わりません"
-                    )
-
-                    VStack(spacing: 8) {
-                        Text("\(request.pebbleCount)粒を、ひとつに整理した")
-                            .font(PomoGemTheme.brand(24))
-                            .multilineTextAlignment(.center)
-                        Text("これは瓶を軽く保つための二次的な整理です。保存表示だけを圧縮し、一粒ずつの時間も、\(formattedMass(request.grams))の質量も100%保持します。時間の核は回数でなく質量から進みます。次へ急ぐ必要はありません。")
-                            .font(.subheadline)
-                            .foregroundStyle(PomoGemTheme.muted)
-                            .multilineTextAlignment(.center)
-                    }
-                    Group {
+            GeometryReader { viewport in
+                ScrollView {
+                    VStack(spacing: sectionSpacing) {
                         if dynamicTypeSize.isAccessibilitySize {
-                            VStack(spacing: 10) {
-                                celebrationStats
+                            // A small crystal leads, whole, in the room the
+                            // lines and the actions leave on the first screen
+                            // (the 4.7-inch SE at AX5 included); the teaching
+                            // line follows the actions directly.
+                            celebrationStage(
+                                side: artSide(viewportHeight: viewport.size.height, minimum: 52, maximum: 120),
+                                framed: false
+                            )
+                            VStack(spacing: sectionSpacing) {
+                                celebrationLines
+                                celebrationActions
                             }
+                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { leadHeight = $0 }
+                            coreBirthLine
                         } else {
-                            HStack(spacing: 10) {
-                                celebrationStats
+                            celebrationStage(side: artSide(viewportHeight: viewport.size.height))
+                            VStack(spacing: 18) {
+                                celebrationLines
+                                coreBirthLine
+                                celebrationActions
                             }
+                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { leadHeight = $0 }
+                        }
+                        celebrationStats
+                        celebrationMechanics
+                        // settings-04: last, small and muted, below every
+                        // celebration action. Layout owned by the gem session;
+                        // this adds one row and restyles nothing above it.
+                        if let monthLabelHint {
+                            monthLabelHintLink(monthLabelHint)
                         }
                     }
-                    Button("この結晶の内訳を見る", action: onExplore)
-                        .buttonStyle(PomoGemPrimaryButtonStyle())
-                    Button("この結晶をカードにする", action: onShare)
-                        .buttonStyle(PomoGemSecondaryButtonStyle())
-                    Button("ここで休む", action: onContinue)
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(PomoGemTheme.muted)
-                        .frame(minHeight: 44)
-                        .buttonStyle(PomoGemBareButtonStyle())
-                    // settings-04: last, small and muted, below every
-                    // celebration action. Layout owned by the gem session;
-                    // this adds one row and restyles nothing above it.
-                    if let monthLabelHint {
-                        monthLabelHintLink(monthLabelHint)
-                    }
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 24)
+                    .padding(.top, topPadding)
                 }
-                .padding(24)
+                .scrollBounceBehavior(.basedOnSize)
             }
-            .scrollBounceBehavior(.basedOnSize)
             .background(NightBackground())
+            // Scrolled content passes under a solid bar, not under the bare
+            // 閉じる. Opaque: iOS 26 let a 0.94 bar show the headline and the
+            // source gems legibly through it.
+            .toolbarBackground(PomoGemTheme.background, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     PomoGemSheetCloseButton(
@@ -5251,6 +7390,187 @@ private struct StratumCelebrationView: View {
                 }
             }
         }
+    }
+
+    /// Accessibility sizes keep the gaps tight: on the 4.7-inch SE at AX5
+    /// the art, both lines and all three actions share one screen.
+    private var sectionSpacing: CGFloat { dynamicTypeSize.isAccessibilitySize ? 12 : 18 }
+    private var topPadding: CGFloat { dynamicTypeSize.isAccessibilitySize ? 8 : 24 }
+
+    /// The art takes what the first viewport has left after the lines and
+    /// the actions, within `minimum`…`maximum`.
+    private func artSide(
+        viewportHeight: CGFloat,
+        minimum: CGFloat = smallestArt,
+        maximum: CGFloat = largestArt
+    ) -> CGFloat {
+        // Top padding, the gap under the art and a little air at the bottom.
+        let room = viewportHeight - leadHeight - topPadding - sectionSpacing - 10
+        return min(maximum, max(minimum, room.rounded(.down)))
+    }
+
+    /// The new crystal in the jar's art with its ten sources in a shallow
+    /// bowl beneath it (no ring, no spokes, nothing over the gems). Small
+    /// (accessibility sizes) it drops the framed stage for a soft glow, so
+    /// a short frame never reads as a cut-off panel.
+    private func celebrationStage(side: CGFloat, framed: Bool = true) -> some View {
+        ZStack {
+            if framed {
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color(hex: colorHex).opacity(0.19),
+                                PomoGemTheme.auroraViolet.opacity(0.10),
+                                PomoGemTheme.raised.opacity(0.58)
+                            ],
+                            center: .center,
+                            startRadius: 4,
+                            endRadius: side * 0.66
+                        )
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 28, style: .continuous)
+                            .stroke(Color(hex: colorHex).opacity(0.30), lineWidth: 1)
+                    }
+            } else {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [Color(hex: colorHex).opacity(0.24), .clear],
+                            center: .center,
+                            startRadius: 2,
+                            endRadius: side * 0.62
+                        )
+                    )
+                    .frame(width: side * 1.3, height: side * 1.3)
+            }
+
+            FusionOrbitStage(
+                state: orbitState,
+                colorHex: colorHex,
+                scale: .hero,
+                destinationGrams: request.grams,
+                colorShares: colorShares
+            )
+            .frame(width: side * (framed ? 0.86 : 1), height: side * (framed ? 0.86 : 1))
+            // The bowl hangs low in the stage; keep it clear of the edge.
+            .offset(y: framed ? -side * 0.02 : 0)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: side)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(level == 1
+            ? String(localized: "新しい結晶。その下に、もとになった\(FusionHierarchyPresentation.fanIn)粒", table: "Home",
+                     comment: "VoiceOver: the fusion sheet art, a new ×10 crystal over its source gems. %lld is 10")
+            : String(localized: "新しい結晶。その下に、もとになった\(FusionHierarchyPresentation.fanIn)個の結晶", table: "Home",
+                     comment: "VoiceOver: the fusion sheet art, a larger crystal over its source crystals. %lld is 10"))
+    }
+
+    private var celebrationLines: some View {
+        VStack(spacing: 6) {
+            // The line break keeps 「結晶」 whole on a phone.
+            Text("\(request.pebbleCount)粒ぶんの時間が、\nひとつの結晶に。", tableName: "Home",
+                 comment: "Fusion sheet headline, two lines. %lld is the gems the new crystal holds (10). en: 'The time of %lld gems,\\nin one crystal.'")
+                .font(PomoGemTheme.brand(24))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("fusion.celebration.title")
+            Text(String(
+                localized: "重さはそのまま \(Self.massLabel(grams: request.grams))",
+                table: "Home",
+                comment: "Fusion sheet subline: the crystal weighs what its gems did. %@ is a mass (2.50kg). en: 'Same weight: %@'"
+            ))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(PomoGemTheme.muted)
+                .monospacedDigit()
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                .accessibilityIdentifier("fusion.celebration.mass")
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// product-05. The one teaching moment: said on this sheet and no other.
+    @ViewBuilder
+    private var coreBirthLine: some View {
+        if teachesCoreBirth {
+            Text("10粒で、時間の核が生まれました。これからは核が、積み上げた時間の重さを表します。", tableName: "Home",
+                 comment: "Fusion sheet, only when the first crystal and the first time core arrive together")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(PomoGemTheme.text)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                // The headline's ceiling: never larger than what it explains.
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
+                .background(
+                    Color(hex: colorHex).opacity(0.10),
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color(hex: colorHex).opacity(0.26), lineWidth: 0.8)
+                }
+                .accessibilityIdentifier("fusion.celebration.core-birth")
+        }
+    }
+
+    private var celebrationActions: some View {
+        VStack(spacing: 12) {
+            Button(action: onExplore) {
+                celebrationActionLabel(Text("この結晶の内訳を見る", tableName: "Home",
+                                            comment: "Fusion sheet primary action: opens the new crystal's breakdown"))
+            }
+            .buttonStyle(PomoGemPrimaryButtonStyle())
+            Button(action: onShare) {
+                celebrationActionLabel(Text("この結晶をカードにする", tableName: "Home",
+                                            comment: "Fusion sheet action: makes a share card of the new crystal"))
+            }
+            .buttonStyle(PomoGemSecondaryButtonStyle())
+            Button("ここで休む", action: onContinue)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(PomoGemTheme.muted)
+                .frame(minHeight: 44)
+                .buttonStyle(PomoGemBareButtonStyle())
+        }
+    }
+
+    /// Wrapped lines stay centred and clear of the button's edges at
+    /// accessibility sizes, in both styles alike.
+    private func celebrationActionLabel(_ text: Text) -> some View {
+        text
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 16)
+    }
+
+    private var celebrationMechanics: some View {
+        let lines = [
+            String(localized: "10粒がそろうと、瓶の中でひとつの結晶にまとまります。瓶を軽く保つための整理で、一粒ずつの時間も、\(Self.massLabel(grams: request.grams))の重さも、記録にそのまま残ります。", table: "Home",
+                   comment: "Fusion sheet 「しくみ」: fusing ten gems keeps the jar light and loses nothing. %@ is the crystal's mass"),
+            String(localized: "時間の核は、粒の数ではなく積み上げた時間で進みます。次へ急ぐ必要はありません。", table: "Home",
+                   comment: "Fusion sheet 「しくみ」: the time core counts time, not gems; no need to hurry"),
+            String(localized: "×10の結晶が10個そろうと、×100の結晶になります。", table: "Home",
+                   comment: "Fusion sheet 「しくみ」: ten ×10 crystals make a ×100 crystal")
+        ]
+        return MechanicsDisclosure(
+            isExpanded: $mechanicsExpanded,
+            accessibilityAccounting: SentenceText.join(lines),
+            accentHex: colorHex
+        ) {
+            ForEach(lines, id: \.self) { line in
+                Text(line)
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityIdentifier("fusion.celebration.mechanics")
     }
 
     private func monthLabelHintLink(_ hint: MonthLabelHint) -> some View {
@@ -5277,21 +7597,51 @@ private struct StratumCelebrationView: View {
         .onAppear(perform: hint.onShown)
     }
 
-    @ViewBuilder
+    /// Time first, then the gems (or Pro's engraved month), then the size:
+    /// 「時間 4時間10分」「粒 10粒」「結晶 ×10」.
     private var celebrationStats: some View {
-        StatPill(
-            title: "まとまり",
-            value: showsMonthLabel ? request.monthLabel : "\(request.pebbleCount)粒"
-        )
-        StatPill(title: "積んだ質量", value: formattedMass(request.grams))
-        // The tile names the crystal's size (×10, ×100…): its title already
-        // says 結晶 (round 12; the value repeated it).
-        StatPill(title: "結晶", value: AggregatePresentation.countLabel(request.pebbleCount))
+        let tiles: [CelebrationTile] = [
+            CelebrationTile(title: String(localized: "時間", table: "Home", comment: "Fusion sheet tile title: the focus time the crystal holds. en: 'Time'"),
+                            value: DurationText.short(minutes: DurationPresentation.focusMinutes(grams: request.grams))),
+            showsMonthLabel
+                ? CelebrationTile(title: String(localized: "刻印", table: "Home", comment: "Fusion sheet tile title for Pro: the month engraved on the crystal. en: 'Engraving'"),
+                                  value: request.monthLabel)
+                : CelebrationTile(title: String(localized: "粒", table: "Home", comment: "Fusion sheet tile title: how many gems the crystal holds. en: 'Gems'"),
+                                  value: CountText.gems(request.pebbleCount)),
+            // The size, not the noun: the tile is titled 結晶 (round 12).
+            CelebrationTile(title: String(localized: "結晶", table: "Home", comment: "Fusion sheet tile title: the crystal's size (×10). en: 'Crystal'"),
+                            value: AggregatePresentation.countLabel(request.pebbleCount))
+        ]
+        return Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 10) {
+                    ForEach(tiles) { StatPill(title: $0.title, value: $0.value) }
+                }
+            } else {
+                HStack(spacing: 10) {
+                    ForEach(tiles) { StatPill(title: $0.title, value: $0.value) }
+                }
+            }
+        }
     }
 
-    private func formattedMass(_ grams: Int) -> String {
-        grams >= 1_000 ? String(format: "%.1fkg", Double(grams) / 1_000) : "\(grams)g"
+    /// 「2.50kg」 (two decimals: the crystal weighs exactly what its gems
+    /// did), or 「100g」 under a kilogram.
+    static func massLabel(grams rawGrams: Int) -> String {
+        let grams = max(0, rawGrams)
+        guard grams >= 1_000 else { return MassText.grams(String(grams)) }
+        return MassText.kilograms(String(
+            format: "%.2f",
+            locale: Locale(identifier: "en_US_POSIX"),
+            Double(grams) / 1_000
+        ))
     }
+}
+
+private struct CelebrationTile: Identifiable {
+    let title: String
+    let value: String
+    var id: String { title }
 }
 
 private struct StatPill: View {
@@ -5300,13 +7650,34 @@ private struct StatPill: View {
     var body: some View {
         VStack(spacing: 3) {
             Text(title).font(.caption2).foregroundStyle(PomoGemTheme.muted)
-            Text(value).font(.system(.subheadline, design: .rounded, weight: .bold))
+            Text(value)
+                .font(.system(.subheadline, design: .rounded, weight: .bold))
+                .monospacedDigit()
         }
         .frame(maxWidth: .infinity)
         .padding(12)
         .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .combine)
     }
 }
+
+#if DEBUG && targetEnvironment(simulator)
+private extension View {
+    /// The pinned AX5 of an explicit Debug UI-test launch, for a sheet
+    /// (which does not inherit it from the root).
+    @ViewBuilder
+    func forwardingUITestAccessibility5() -> some View {
+        if LocalPreviewLaunchPolicy.forcesAccessibility5(
+            environment: ProcessInfo.processInfo.environment,
+            isDebugBuild: true
+        ) {
+            environment(\.dynamicTypeSize, .accessibility5)
+        } else {
+            self
+        }
+    }
+}
+#endif
 
 #if DEBUG && targetEnvironment(simulator)
 /// Fault-scenario-only raw SwiftData audit. Home deliberately canonicalizes
@@ -5431,14 +7802,41 @@ private struct FortyYearPersistentFixtureProbe: View {
 /// that keeps climbing. Debug builds only.
 /// It also keeps the one-time jar hint's window frame: the hint is hidden
 /// from accessibility (the jar speaks the same guidance), so a test cannot
-/// otherwise check that it stays clear of the gem it describes.
+/// otherwise check that it stays clear of the gem it describes. For the same
+/// reason it keeps the readout's and the time core's window frames: both are
+/// inside the jar's one accessibility element, and a test pins the tapped
+/// crystal's card clear of them.
 @MainActor
 enum HomeRenderDiagnostics {
     private(set) static var bodyEvaluationCount = 0
+    /// Gems that reported a landing to Home, and Home's body count at the
+    /// last of them, so a UI test can tell how many re-renders a landing
+    /// itself caused (device-verify-2 P4).
+    private(set) static var landingCount = 0
+    private(set) static var bodyEvaluationCountAtLastLanding = 0
     static var jarHintWindowFrame: CGRect?
+    static var jarHUDWindowFrame: CGRect?
+    /// The stone (or, before the core, its vessel) and the label block under it.
+    static var jarCoreWindowFrame: CGRect?
 
     static func recordBodyEvaluation() {
         bodyEvaluationCount &+= 1
+    }
+
+    static func recordLanding() {
+        landingCount &+= 1
+        bodyEvaluationCountAtLastLanding = bodyEvaluationCount
+    }
+
+    /// Home's deferred follow-up to the landings (`settleLandings`) and
+    /// Home's body count as it starts: equal to the count at the landing
+    /// when the landing's own frames did not re-render Home.
+    private(set) static var landingSettleCount = 0
+    private(set) static var bodyEvaluationCountAtLastLandingSettle = 0
+
+    static func recordLandingSettle() {
+        landingSettleCount &+= 1
+        bodyEvaluationCountAtLastLandingSettle = bodyEvaluationCount
     }
 }
 
@@ -5476,7 +7874,19 @@ private struct JarUITestPresentationProbe: View {
     /// Sampled from `HomeRenderDiagnostics`. Only this probe re-renders when
     /// it changes, so reading it cannot inflate the count it reports.
     @State private var homeBodyEvaluations = 0
+    @State private var homeLandings = 0
+    @State private var homeBodyEvaluationsAtLanding = 0
+    @State private var homeLandingSettles = 0
+    @State private var homeBodyEvaluationsAtSettle = 0
     @State private var jarHintFrame: CGRect?
+    /// A resting crystal (×10 or larger) in window points, for a test that
+    /// taps one to show its card; -1 while the jar holds none.
+    @State private var crystalWindowX: CGFloat = -1
+    @State private var crystalWindowY: CGFloat = -1
+    @State private var hudFrame: CGRect?
+    @State private var coreFrame: CGRect?
+    /// The bottle (`JarScene.outerJarRect`): every gem rests inside it.
+    @State private var bottleFrame: CGRect?
 
     var body: some View {
         Text("Jar presentation probe")
@@ -5501,7 +7911,7 @@ private struct JarUITestPresentationProbe: View {
 
     private var presentationValue: String {
         String(
-            format: "count=%d;maxY=%.3f;records=%@;bounceSequence=%d;bounceRise=%.3f;targetX=%.5f;targetY=%.5f;dropSequence=%d;dropFall=%.3f;dropLanded=%d;targetWindowX=%.1f;targetWindowY=%.1f;homeBodyEvaluations=%d;jarHint=%@",
+            format: "count=%d;maxY=%.3f;records=%@;bounceSequence=%d;bounceRise=%.3f;targetX=%.5f;targetY=%.5f;dropSequence=%d;dropFall=%.3f;dropLanded=%d;targetWindowX=%.1f;targetWindowY=%.1f;homeBodyEvaluations=%d;homeLandings=%d;homeBodyAtLanding=%d;homeSettles=%d;homeBodyAtSettle=%d;jarHint=%@;crystalWindowX=%.1f;crystalWindowY=%.1f;hud=%@;core=%@;bottle=%@",
             count,
             Double(maximumY),
             records,
@@ -5515,15 +7925,34 @@ private struct JarUITestPresentationProbe: View {
             Double(targetWindowX),
             Double(targetWindowY),
             homeBodyEvaluations,
-            jarHintFrame.map {
-                String(format: "%.1f,%.1f,%.1f,%.1f", $0.minX, $0.minY, $0.maxX, $0.maxY)
-            } ?? "none"
+            homeLandings,
+            homeBodyEvaluationsAtLanding,
+            homeLandingSettles,
+            homeBodyEvaluationsAtSettle,
+            Self.corners(jarHintFrame),
+            Double(crystalWindowX),
+            Double(crystalWindowY),
+            Self.corners(hudFrame),
+            Self.corners(coreFrame),
+            Self.corners(bottleFrame)
         )
+    }
+
+    private static func corners(_ frame: CGRect?) -> String {
+        frame.map {
+            String(format: "%.1f,%.1f,%.1f,%.1f", $0.minX, $0.minY, $0.maxX, $0.maxY)
+        } ?? "none"
     }
 
     private func samplePresentation() {
         homeBodyEvaluations = HomeRenderDiagnostics.bodyEvaluationCount
+        homeLandings = HomeRenderDiagnostics.landingCount
+        homeBodyEvaluationsAtLanding = HomeRenderDiagnostics.bodyEvaluationCountAtLastLanding
+        homeLandingSettles = HomeRenderDiagnostics.landingSettleCount
+        homeBodyEvaluationsAtSettle = HomeRenderDiagnostics.bodyEvaluationCountAtLastLandingSettle
         jarHintFrame = HomeRenderDiagnostics.jarHintWindowFrame
+        hudFrame = HomeRenderDiagnostics.jarHUDWindowFrame
+        coreFrame = HomeRenderDiagnostics.jarCoreWindowFrame
         dropSequence = Int(truncatingIfNeeded: scene.completionDropSequence)
         dropFall = scene.completionDropMaximumFall
         dropLanded = scene.completionDropHasLanded
@@ -5547,6 +7976,35 @@ private struct JarUITestPresentationProbe: View {
                 targetWindowX = point.x
                 targetWindowY = point.y
             }
+        }
+
+        if let crystal = pebbles.filter({ $0.descriptor.isAggregate }).min(by: {
+            $0.descriptor.id.uuidString < $1.descriptor.id.uuidString
+        }), let view = scene.view, let window = view.window {
+            let point = view.convert(scene.convertPoint(toView: crystal.position), to: window)
+            crystalWindowX = point.x
+            crystalWindowY = point.y
+        } else {
+            crystalWindowX = -1
+            crystalWindowY = -1
+        }
+        if let view = scene.view, let window = view.window,
+           scene.size.width > 0, scene.size.height > 0 {
+            let outer = JarScene.outerJarRect(sceneSize: scene.size)
+            let topLeft = view.convert(
+                scene.convertPoint(toView: CGPoint(x: outer.minX, y: outer.maxY)),
+                to: window
+            )
+            let bottomRight = view.convert(
+                scene.convertPoint(toView: CGPoint(x: outer.maxX, y: outer.minY)),
+                to: window
+            )
+            bottleFrame = CGRect(
+                x: topLeft.x,
+                y: topLeft.y,
+                width: bottomRight.x - topLeft.x,
+                height: bottomRight.y - topLeft.y
+            )
         }
 
         if trackedRecords != currentRecords {

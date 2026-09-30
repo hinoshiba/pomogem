@@ -407,10 +407,10 @@ enum Constants {
         static let giveUp = "今日はここまで"
         static let jarEmptyTitle = "まだ空っぽ。"
         static let jarEmptyBody = "25分の集中で、ここにひと粒落ちる。"
-        static let goldToast = "✦ 金のつぶが出た！ +250g"
-        static let prismToast = "❖ 虹のつぶ！！ +250g"
+        static let goldToast = "✦ 金の粒が出た！ +250g"
+        static let prismToast = "❖ 虹の粒！！ +250g"
         static let manualCapToast = "自己申告はこの端末で1日3回まで"
-        static let fairnessNote = "自己申告のつぶは破線つき。総質量には入るが、シェアの既定は実測のみ。"
+        static let fairnessNote = "自己申告の粒は破線つき。総質量には入るが、シェアの既定は実測のみ。"
         static let interruptionNote = "画面を離れたので、この回は自己申告あつかいになった"
         static let processTerminatedNote = "アプリが終了したため、この回は積まれませんでした"
         static let bedrockCTA = "過去の集中を記録する"
@@ -431,21 +431,17 @@ enum Constants {
         static func goldToast(grams: Int) -> String {
             grams == Constants.Mass.measuredPebbleGrams
                 ? goldToast
-                : "✦ 金のつぶが出た！ +\(grams)g"
+                : "✦ 金の粒が出た！ +\(grams)g"
         }
 
         static func prismToast(grams: Int) -> String {
             grams == Constants.Mass.measuredPebbleGrams
                 ? prismToast
-                : "❖ 虹のつぶ！！ +\(grams)g"
-        }
-
-        static func manualToast(subject: String, grams: Int) -> String {
-            "自己申告 \(subject) +\(grams)g"
+                : "❖ 虹の粒！！ +\(grams)g"
         }
 
         static func strataToast(pebbleCount: Int) -> String {
-            "\(pebbleCount)粒が、ひとつのまとまり粒になった"
+            "\(pebbleCount)粒が、ひとつの結晶になった"
         }
 
         static func bedrockToast(hours: Int) -> String {

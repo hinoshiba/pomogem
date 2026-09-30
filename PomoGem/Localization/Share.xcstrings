@@ -18,8 +18,14 @@
     "%@・記念石は自己申告" : {
       "comment" : "Share settings summary: focus scope, then the note that stones are self-reported"
     },
+    "この結晶は、確認が終わるとカードにできます。" : {
+
+    },
     "これまで" : {
       "comment" : "Share card period label for the whole history"
+    },
+    "シェアカード" : {
+      "comment" : "Eyebrow over the share composer title 積み重ねを、動く一枚に"
     },
     "写真に保存しています" : {
 
@@ -39,6 +45,9 @@
     "実測 %lld粒" : {
       "comment" : "Share card: measured gems (timer or Screen Time)"
     },
+    "新機能" : {
+      "comment" : "Badge on the 動くGIF choice"
+    },
     "瓶に積んだ集中 %@（%@）" : {
       "comment" : "Share sheet title for the GIF. Arguments: mass, focus time",
       "localizations" : {
@@ -52,6 +61,12 @@
     },
     "端末の中だけで生成" : {
 
+    },
+    "結晶 %lld" : {
+      "comment" : "Share card stat: crystal count"
+    },
+    "結晶%lld個" : {
+      "comment" : "Share caption disclosure item: crystals left out of the drawn jar"
     },
     "自己申告として明記したうえで、この記録をカードに含めます" : {
 

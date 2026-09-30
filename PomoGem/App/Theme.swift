@@ -662,14 +662,30 @@ struct PomoGemHeroButtonStyle: ButtonStyle {
 struct SectionEyebrow: View {
     let text: String
     var foreground: Color = PomoGemTheme.amber
+    /// Off for the product name, which keeps its own case (「ポモジェムPro」,
+    /// never 「ポモジェムPRO」).
+    var isUppercased = true
     @ScaledMetric(relativeTo: .caption2) private var fontSize: CGFloat = 10
 
     var body: some View {
-        Text(text.uppercased())
+        Text(isUppercased ? text.uppercased() : text)
             .font(.system(size: fontSize, weight: .bold, design: .monospaced))
             .tracking(1.5)
             .foregroundStyle(foreground)
             .accessibilityHidden(true)
+    }
+}
+
+extension View {
+    /// A card or section title: the brand face plus the VoiceOver heading
+    /// trait, so the Headings rotor can jump section by section through the
+    /// long card screens (記録, 積み上がり, 計画, シェア). SwiftUI never infers
+    /// a heading from font size, and the eyebrow above a title is hidden from
+    /// VoiceOver. Inside a card that is one `.ignore` element the trait is
+    /// dropped, so those cards keep a plain brand font instead.
+    func pomogemSectionTitle(size: CGFloat = 20) -> some View {
+        font(PomoGemTheme.brand(size))
+            .accessibilityAddTraits(.isHeader)
     }
 }
 

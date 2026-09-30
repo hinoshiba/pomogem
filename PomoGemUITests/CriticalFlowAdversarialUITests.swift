@@ -56,7 +56,12 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         manualConfirm.tap()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
         XCTAssertTrue(
-            app.buttons["瓶"].waitForExistence(timeout: 4),
+            app.buttons["manual.undo"].waitForExistence(timeout: 4),
+            "A confirmed self-reported entry can be undone for a few seconds"
+        )
+        // Saved when the Undo window ends (history-02).
+        XCTAssertTrue(
+            app.buttons["瓶"].waitForExistence(timeout: 20),
             "A saved self-reported session must become a visible pebble"
         )
 
@@ -75,7 +80,7 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
 
         openMenuAction(containing: "積み上がりを見る")
         XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["成果の星"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.staticTexts["記念石"].waitForExistence(timeout: 4))
         app.buttons["overview.close"].tap()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
 
@@ -515,7 +520,7 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         let olderMonths = app.buttons["log.past-history.from-months"]
         XCTAssertTrue(scrollUntilHittable(olderMonths, swiping: .up))
         let monthsAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        monthsAttachment.name = "記録 — 月ごとの瓶 leads to older months"
+        monthsAttachment.name = "記録 — 月の振り返り leads to older months"
         monthsAttachment.lifetime = .keepAlways
         add(monthsAttachment)
         olderMonths.tap()

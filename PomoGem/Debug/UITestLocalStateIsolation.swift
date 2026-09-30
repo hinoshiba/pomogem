@@ -23,8 +23,8 @@ import UserNotifications
 /// Home, because its synced timer row lived in the earlier store. Every
 /// UI-test launch therefore names its test (`POMOGEM_UI_TEST_SCENARIO`, set by
 /// `PomoGemUITestScenario` in the UI-test target). The first launch of a new
-/// test forgets the timer state, its OS notification requests and the
-/// queues; the test's own relaunches keep them.
+/// test forgets the timer state, its OS notification requests, the queues
+/// and Home's crystal-tip flag; the test's own relaunches keep them.
 ///
 /// The app calls this only in a Debug build on the Simulator, from three
 /// places in `PomoGemApp`: the first launch of a new test (init), a fixture
@@ -69,6 +69,15 @@ enum UITestLocalStateIsolation {
         defaults.removeObject(forKey: FocusPersistence.interruptedFlagKey)
         TimerCompletionAlertAcknowledgementStore.removeAll(defaults: defaults)
         forgetStateDerivedFromPreviousStores(defaults: defaults)
+        // home-11. Once a crystal's detail has been opened, Home drops the
+        // tip row under the jar for good. A test that opened one (at AX5, for
+        // example) left the next test's jar without the row whose removal
+        // that test measures. Runs after the account mode is chosen, so the
+        // key is the one Home reads.
+        defaults.removeObject(forKey: AccountScopedLocalState.defaultsKey(
+            base: HomeView.aggregateDetailSeenStorageBase,
+            defaults: defaults
+        ))
         defaults.set(scenario, forKey: scenarioDefaultsKey)
         return true
     }

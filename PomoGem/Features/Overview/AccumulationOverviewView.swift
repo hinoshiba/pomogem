@@ -20,7 +20,7 @@ struct AccumulationRecord: Identifiable, Equatable, Sendable {
 }
 
 struct AccumulationWeeklySummary: Equatable, Sendable {
-    /// Timers that ran to their end this week (the 「戻った回数」).
+    /// Timers that ran to their end this week (the 「完走した回数」).
     let timerCompletionCount: Int
     let measuredGrams: Int
     /// Self-reported mass this week. The weekly headline stays measured-only
@@ -316,23 +316,23 @@ struct AccumulationClusterSummary: Identifiable, Equatable, Sendable {
 
     var detailSubtitle: String {
         usesCompatibilityPresentation
-            ? "以前の形式で保存されたまとまり粒です。"
+            ? String(localized: "以前の形式で保存された結晶です。", table: "Overview")
             : "瓶の中では、ひとつの粒で表しています。"
     }
 
     var preservationTitle: String {
         hasStrongPreservationEvidence
-            ? "まとまり化で情報は削除されません"
+            ? String(localized: "結晶になっても情報は削除されません", table: "Overview")
             : "この粒に残っている情報"
     }
 
     var preservationMessage: String {
         if hasStrongPreservationEvidence {
-            return "まとまり化では元の記録を削除せず、この粒にも色・テーマ・質量の内訳と元記録への参照を保存します。記念石はまとまり粒に含めず、別の石として残します。"
+            return String(localized: "結晶になっても元の記録は削除せず、この粒にも色・テーマ・質量の内訳と元記録への参照を保存します。記念石は結晶に含めず、別の石として残します。", table: "Overview")
         }
         switch storage {
         case .aggregate(let hasStoredLineage) where hasStoredLineage:
-            return "まとまり化では元の記録を削除しません。この粒には元記録への参照と、確認できる色・粒数・質量を保存しています。合計が一致しない内訳は表示していません。記念石は別の石として残します。"
+            return String(localized: "結晶になっても元の記録は削除しません。この粒には元記録への参照と、確認できる色・粒数・質量を保存しています。合計が一致しない内訳は表示していません。記念石は別の石として残します。", table: "Overview")
         case .aggregate:
             return "以前の形式から引き継いだ粒です。保存済みの粒数・質量と、記録されている内訳を表示します。元記録への参照や一部の内訳がない場合があります。記念石は別の石として残します。"
         case .legacyStratum(let hasSessionReferences):
@@ -565,14 +565,22 @@ struct AccumulationOverviewPageScope: Equatable, Sendable {
         displayedClusterCount: Int,
         displayedAchievementCount: Int
     ) -> String {
-        "瓶の中は、粒\(max(0, displayedRecordCount).formatted())個・表示中のまとまり\(max(0, displayedClusterCount).formatted())個・記念石\(max(0, displayedAchievementCount).formatted())個の代表表示です。"
+        String(
+            localized: "瓶の中は、粒\(max(0, displayedRecordCount))個・表示中の結晶\(max(0, displayedClusterCount))個・記念石\(max(0, displayedAchievementCount))個の代表表示です。",
+            table: "Overview",
+            comment: "Lifetime bottle disclosure: gems, crystals and achievement stones drawn as representatives"
+        )
     }
 
     func constellationRepresentativeDisclosure(
         displayedClusterCount: Int,
         representativeCount: Int
     ) -> String {
-        "まとまり結晶は、表示中の\(max(0, displayedClusterCount).formatted())個のうち代表\(max(0, representativeCount).formatted())個を配置しています。"
+        String(
+            localized: "結晶は、表示中の\(max(0, displayedClusterCount))個のうち代表\(max(0, representativeCount))個を配置しています。",
+            table: "Overview",
+            comment: "Star map disclosure: crystals shown, how many are drawn"
+        )
     }
 }
 
@@ -868,16 +876,15 @@ struct AccumulationOverviewView: View {
 
     private var introduction: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionEyebrow(text: "FOCUS CONSTELLATION")
             Text("一粒は消えず、\n時間の景色に変わる。")
-                .font(PomoGemTheme.brand(32))
+                .pomogemSectionTitle(size: 32)
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
             Text(lifetimeIsCloudUnverified
                 ? projectionVerificationNotice
                 : (pageScope.historyPageIsPartial
-                    ? "今週育つ結晶、瓶で動くまとまり、直近の年月。古い一回ごとの記録も消えず、必要な範囲だけ読み込みます。"
-                    : "今週育つ結晶、瓶で動くまとまり、年月の棚。距離を変えても、一回ごとの集中と質量はそのまま残ります。"))
+                    ? String(localized: "今週の積み上げ、瓶で動く結晶、直近の年月。古い一回ごとの記録も消えず、必要な範囲だけ読み込みます。", table: "Overview")
+                    : String(localized: "今週の積み上げ、瓶で動く結晶、年月の棚。距離を変えても、一回ごとの集中と質量はそのまま残ります。", table: "Overview")))
                 .font(.subheadline)
                 .foregroundStyle(PomoGemTheme.text)
                 .fixedSize(horizontal: false, vertical: true)
@@ -925,13 +932,13 @@ struct AccumulationOverviewView: View {
         switch currentWeekSummary.cardState {
         case .measured where currentWeekSelfReportedGrams > 0:
             return String(
-                localized: "今週の積み上げ、\(DurationPresentation.focusLabel(grams: currentWeekGrams))、実測\(formattedMass(currentWeekGrams))、タイマー完走\(currentWeekTimerCompletionCount)回。このほか自己申告\(formattedMass(currentWeekSelfReportedGrams))。回数は戻った文脈で、時間価値とは別です",
+                localized: "今週の積み上げ、\(DurationPresentation.focusLabel(grams: currentWeekGrams))、実測\(formattedMass(currentWeekGrams))、完走した回数\(currentWeekTimerCompletionCount)回。このほか自己申告\(formattedMass(currentWeekSelfReportedGrams))。回数は時間の価値とは別に数えています",
                 table: "Overview",
                 comment: "VoiceOver weekly card: focus time, measured mass, timer completions, self-reported mass"
             )
         case .measured:
             return String(
-                localized: "今週の積み上げ、\(DurationPresentation.focusLabel(grams: currentWeekGrams))、実測\(formattedMass(currentWeekGrams))、タイマー完走\(currentWeekTimerCompletionCount)回。回数は戻った文脈で、時間価値とは別です",
+                localized: "今週の積み上げ、\(DurationPresentation.focusLabel(grams: currentWeekGrams))、実測\(formattedMass(currentWeekGrams))、完走した回数\(currentWeekTimerCompletionCount)回。回数は時間の価値とは別に数えています",
                 table: "Overview",
                 comment: "VoiceOver weekly card: focus time, measured mass, timer completions"
             )
@@ -961,7 +968,7 @@ struct AccumulationOverviewView: View {
     private var currentWeekCaption: String {
         switch currentWeekSummary.cardState {
         case .measured:
-            String(localized: "価値は集中時間で加算。完走回数は、戻ってきた文脈として別に残します。", table: "Overview")
+            String(localized: "積み上がるのは集中した時間です。完走した回数は、時間とは別に数えています。", table: "Overview")
         case .selfReportedOnly:
             String(
                 localized: "タイマーの完走はまだありません。自己申告の\(formattedMass(currentWeekSelfReportedGrams))も、瓶とこれまでの記録に入っています。",
@@ -1009,7 +1016,7 @@ struct AccumulationOverviewView: View {
         .accessibilityHidden(true)
 
         VStack(alignment: .leading, spacing: 9) {
-            SectionEyebrow(text: "THIS WEEK")
+            SectionEyebrow(text: String(localized: "今週", table: "Overview", comment: "Eyebrow over this week's headline in 積み上がり"))
             Text(currentWeekHeadline)
                 .font(PomoGemTheme.brand(22))
             Text(currentWeekCaption)
@@ -1051,7 +1058,10 @@ struct AccumulationOverviewView: View {
             title: String(localized: "時間", table: "Overview", comment: "This week's focus time stat title"),
             value: DurationPresentation.focusLabel(grams: currentWeekGrams)
         )
-        OverviewStat(title: "戻った回数", value: "\(currentWeekTimerCompletionCount)回")
+        OverviewStat(
+            title: String(localized: "完走した回数", table: "Overview", comment: "Weekly card tile: timers that ran to their end this week"),
+            value: String(localized: "\(currentWeekTimerCompletionCount)回", table: "Overview", comment: "Weekly card tile value: a count of times")
+        )
         OverviewStat(
             title: String(localized: "今週の実測", table: "Overview", comment: "Weekly card tile: measured mass this week"),
             value: formattedMass(currentWeekGrams)
@@ -1156,7 +1166,7 @@ struct AccumulationOverviewView: View {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("時間の核")
-                            .font(PomoGemTheme.brand(22))
+                            .pomogemSectionTitle(size: 22)
                         Text("価値は集中時間、粒の階層は瓶を整理する形として見る")
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
@@ -1206,35 +1216,46 @@ struct AccumulationOverviewView: View {
                 Group {
                     if dynamicTypeSize.isAccessibilitySize {
                         VStack(spacing: 7) {
-                            fusionStep("10分 = 0.4")
+                            fusionStep("10分 = 100g")
                             fusionArrow
-                            fusionStep("25分 = 1.0")
+                            fusionStep("25分 = 250g")
                             fusionArrow
-                            fusionStep("60分 = 2.4")
+                            fusionStep("60分 = 600g")
                             fusionArrow
                             fusionStep("時間の核")
                         }
                     } else {
                         HStack(spacing: 7) {
-                            fusionStep("10分 = 0.4")
+                            fusionStep("10分 = 100g")
                             fusionArrow
-                            fusionStep("25分 = 1.0")
+                            fusionStep("25分 = 250g")
                             fusionArrow
-                            fusionStep("60分 = 2.4")
+                            fusionStep("60分 = 600g")
                             fusionArrow
                             fusionStep("時間の核")
                         }
                     }
                 }
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("時間の核は集中時間で進みます。10分は0.4標準単位、25分は1.0標準単位、60分は2.4標準単位です")
+                // The legend counts in the grams the jar already shows, not in
+                // the internal 「標準単位」 (25分 = 1.0).
+                .accessibilityLabel(Text("時間の核は集中した時間で進みます。10分で100グラム、25分で250グラム、60分で600グラムです", tableName: "Overview"))
                 .accessibilityIdentifier("overview.fusion-legend")
 
-                Text("1完走につき粒は1つ。10粒→1の階層は瓶の整理で、時間の価値は変えません。まとまりをタップすると内訳を確認できます。")
+                // Two short paragraphs, not one: at AX5 a single 74-character
+                // caption grew taller than the sheet's viewport, so it could
+                // never be read in one piece (testAX5CrystalHierarchy…).
+                Text("10粒がひとつの結晶になるのは、瓶を整理するためです。時間の価値は変わりません。", tableName: "Overview",
+                     comment: "Overview crystal section: why 10 gems become one crystal")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.text)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("overview.fusion-disclosure")
+                Text("結晶をタップすると、内訳を見られます。", tableName: "Overview",
+                     comment: "Overview crystal section: tapping a crystal opens its details")
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.text)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .accessibilityElement(children: .contain)
@@ -1280,7 +1301,7 @@ struct AccumulationOverviewView: View {
                         : "iCloudの確認が終わるまで、古い階層は表示しません。この端末で確認できた記録だけを年月の棚に表示します。")
                     : (lifetimeIsLowerBound
                         ? "保存領域から確認できた範囲の階層です。整理が終わるまで、生涯値は減らさず「以上」で扱います。"
-                        : "段の個数は保存上のまとまりです。10個そろうと次へ圧縮しますが、時間の核はグラムから独立に計算します。"))
+                        : String(localized: "段は瓶を整理するための形です。10個そろうと次の段にまとまりますが、時間の核は集中した時間だけで進みます。", table: "Overview")))
                     .font(.caption2)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1292,10 +1313,10 @@ struct AccumulationOverviewView: View {
 
     private var fusionHierarchyHeading: some View {
         VStack(alignment: .leading, spacing: 4) {
-            SectionEyebrow(text: "STORAGE HIERARCHY")
-            Text("瓶の整理階層")
-                .font(PomoGemTheme.brand(22))
-            Text("10粒をひとつの表示へ圧縮します。これは価値の段階ではなく、記録と質量を失わず瓶を保つ仕組みです。")
+            // Not 「瓶の整理階層」: the section counts the crystal's steps.
+            Text("結晶の段", tableName: "Overview", comment: "Overview section title: the ×10, ×100 … crystal steps")
+                .pomogemSectionTitle(size: 22)
+            Text("10粒をひとつの結晶にまとめます。価値の段階ではなく、記録と質量をそのまま残して瓶に余白をつくる仕組みです。", tableName: "Overview")
                 .font(.caption)
                 .foregroundStyle(PomoGemTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1351,12 +1372,12 @@ struct AccumulationOverviewView: View {
                 context: lifetimePresentationContext
             )
         )
+        // Time, not 「標準換算」: the ungrouped 「350640.0標準単位」 of a 40-year
+        // history read as a code, and the unit was an accounting term.
         OverviewStat(
-            title: "標準換算",
+            title: String(localized: "集中時間", table: "Overview", comment: "Lifetime stat title: total focus time"),
             value: AggregateProjectionPresentationPolicy.overviewLifetimeValue(
-                verifiedValue: EffortProgressPresentation.formattedStandardUnits(
-                    grams: lifetimeGrams
-                ),
+                verifiedValue: DurationPresentation.focusLabel(grams: lifetimeGrams),
                 isLocalLowerBound: lifetimeIsLowerBound,
                 context: lifetimePresentationContext
             )
@@ -1364,13 +1385,11 @@ struct AccumulationOverviewView: View {
         OverviewStat(
             title: lifetimeIsCloudUnverified
                 ? "この端末で確認済み"
-                : "物理粒（履歴）",
-            value: lifetimeIsCloudUnverified
-                ? "\(lifetimePebbleCount.formatted(.number.grouping(.automatic)))粒"
-                : lifetimePebbleCount.formatted(.number.grouping(.automatic))
+                : String(localized: "積んだ粒", table: "Overview", comment: "Lifetime stat title: gems stacked so far"),
+            value: "\(lifetimePebbleCount.formatted(.number.grouping(.automatic)))粒"
         )
         OverviewStat(
-            title: "表示中のまとまり",
+            title: String(localized: "表示中の結晶", table: "Overview", comment: "Lifetime stat title: crystals on this page"),
             value: clusters.count.formatted(.number.grouping(.automatic))
         )
     }
@@ -1378,15 +1397,15 @@ struct AccumulationOverviewView: View {
     private var lifetimeBottleAccessibilityValue: String {
         if lifetimeIsCloudUnverified {
             let status = isCloudOfflineSession ? "このiPhoneの集計を確認中" : "iCloudを確認中"
-            return "\(status)。この端末で確認済みの記録は\(lifetimePebbleCount)粒。古いまとまりは表示していません。\(pageScope.achievementAccessibilitySummary)"
+            return "\(status)。この端末で確認済みの記録は\(lifetimePebbleCount)粒。古い結晶は表示していません。\(pageScope.achievementAccessibilitySummary)"
         }
-        return "集中\(formattedMass(lifetimeGrams))\(lifetimeIsLowerBound ? "以上" : "")、\(EffortProgressPresentation.formattedStandardUnits(grams: lifetimeGrams))、物理履歴\(lifetimePebbleCount)粒、表示中のまとまり粒\(clusters.count)個、\(pageScope.achievementAccessibilitySummary)。\(pageScope.bottleRepresentativeDisclosure(displayedRecordCount: bottleGraphicRecords.count, displayedClusterCount: bottleGraphicClusters.count, displayedAchievementCount: bottleGraphicMilestones.count))"
+        return "集中\(formattedMass(lifetimeGrams))\(lifetimeIsLowerBound ? "以上" : "")、\(DurationPresentation.focusLabel(grams: lifetimeGrams))、\(lifetimePebbleCount)粒、表示中の結晶\(clusters.count)個、\(pageScope.achievementAccessibilitySummary)。\(pageScope.bottleRepresentativeDisclosure(displayedRecordCount: bottleGraphicRecords.count, displayedClusterCount: bottleGraphicClusters.count, displayedAchievementCount: bottleGraphicMilestones.count))"
     }
 
     private var scaleGuide: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("時間をズームする")
-                .font(PomoGemTheme.brand(20))
+                .pomogemSectionTitle()
             if layoutPolicy.usesMenuLensPicker {
                 Picker("表示の距離", selection: $selectedLens) {
                     ForEach(AccumulationLens.allCases) { lens in
@@ -1433,16 +1452,16 @@ struct AccumulationOverviewView: View {
             VStack(alignment: .leading, spacing: 14) {
                 if layoutPolicy.stacksSummaryCards {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("成果の星")
-                            .font(PomoGemTheme.brand(20))
+                        Text("記念石", tableName: "Overview", comment: "Overview section title: achievement stones")
+                            .pomogemSectionTitle()
                         Text(pageScope.achievementSectionSubtitle)
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
                     }
                 } else {
                     HStack(alignment: .firstTextBaseline) {
-                        Text("成果の星")
-                            .font(PomoGemTheme.brand(20))
+                        Text("記念石", tableName: "Overview", comment: "Overview section title: achievement stones")
+                            .pomogemSectionTitle()
                         Spacer()
                         Text(pageScope.achievementSectionSubtitle)
                             .font(.caption)
@@ -1477,16 +1496,16 @@ struct AccumulationOverviewView: View {
         VStack(alignment: .leading, spacing: 14) {
             if layoutPolicy.stacksSummaryCards {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("まとまり粒")
-                        .font(PomoGemTheme.brand(20))
+                    Text("結晶", tableName: "Overview", comment: "Overview section title: the jar's crystals (10 gems -> 1)")
+                        .pomogemSectionTitle()
                     Text("表示中 \(clusters.count)個")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(PomoGemTheme.muted)
                 }
             } else {
                 HStack(alignment: .firstTextBaseline) {
-                    Text("まとまり粒")
-                        .font(PomoGemTheme.brand(20))
+                    Text("結晶", tableName: "Overview", comment: "Overview section title: the jar's crystals (10 gems -> 1)")
+                        .pomogemSectionTitle()
                     Spacer()
                     Text("表示中 \(clusters.count)個")
                         .font(.caption.weight(.bold))
@@ -1503,7 +1522,7 @@ struct AccumulationOverviewView: View {
                                 : "10粒ごとに生まれます")
                                 .font(.subheadline.weight(.bold))
                             Text(lifetimeIsCloudUnverified
-                                ? "確認が終わるまで古いまとまり粒は表示しません。"
+                                ? String(localized: "確認が終わるまで古い結晶は表示しません。", table: "Overview")
                                 : "粒の色と数を内側に残したまま、大きな一粒になります。")
                                 .font(.caption)
                                 .foregroundStyle(PomoGemTheme.muted)
@@ -1769,7 +1788,7 @@ private struct FusionHierarchyLevelRow: View {
         )
         FusionHierarchyMetric(
             title: "保持する質量",
-            value: "\(summary.grams.formatted(.number.grouping(.automatic)))g"
+            value: MassText.grams(value: summary.grams)
         )
     }
 }
@@ -1876,7 +1895,7 @@ enum AccumulationLens: String, CaseIterable, Identifiable {
         case .now:
             "一回ずつの手触りと、今週積み上げた時間を見ます。"
         case .crystals:
-            "生涯の時間価値と、瓶を整理するまとまりを見ます。"
+            String(localized: "生涯の時間と、瓶を整理する結晶を見ます。", table: "Overview")
         case .timeline:
             "月ごとの瓶で、離れていた時期も含む歩みを見ます。"
         }
@@ -1937,7 +1956,11 @@ private struct MilestoneSummaryCard: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            "\(milestone.subjectName)、\(milestone.title)の成果の星、\(milestone.date.formatted(.dateTime.year().month().day()))"
+            String(
+                localized: "\(milestone.subjectName)、\(milestone.title)の記念石、\(milestone.date.formatted(.dateTime.year().month().day()))",
+                table: "Overview",
+                comment: "VoiceOver, one achievement stone card: theme, kind, date"
+            )
         )
     }
 
@@ -2052,7 +2075,13 @@ private struct ClusterSummaryCard: View {
                 .stroke(PomoGemTheme.glassEdge.opacity(0.12), lineWidth: 1)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(cluster.scaleLabel)のまとまり粒、\(cluster.pebbleCount)粒、\(formattedMass(cluster.grams))")
+        .accessibilityLabel(
+            String(
+                localized: "\(cluster.scaleLabel)の結晶、\(cluster.pebbleCount)粒、\(formattedMass(cluster.grams))",
+                table: "Overview",
+                comment: "VoiceOver, crystal card: scale such as ×10, gems inside, mass"
+            )
+        )
         .accessibilityHint("ダブルタップで内訳を表示します")
     }
 
@@ -2067,7 +2096,7 @@ private struct ClusterSummaryCard: View {
                     .foregroundStyle(PomoGemTheme.muted)
             }
             VStack(alignment: .leading, spacing: 3) {
-                Text("\(cluster.scaleLabel)のまとまり")
+                Text("\(cluster.scaleLabel)の結晶", tableName: "Overview", comment: "Crystal card title; the argument is a scale such as ×10")
                     .font(.subheadline.weight(.bold))
                     .fixedSize(horizontal: false, vertical: true)
                 if cluster.canPresentStoredPeriod {
@@ -2081,7 +2110,9 @@ private struct ClusterSummaryCard: View {
     }
 
     private func formattedMass(_ grams: Int) -> String {
-        grams >= 1_000 ? String(format: "%.1fキログラム", Double(grams) / 1_000) : "\(grams)グラム"
+        grams >= 1_000
+            ? MassText.spoken(kilograms: Double(grams) / 1_000, fractionDigits: 1)
+            : MassText.spoken(grams: grams)
     }
 }
 
@@ -2100,7 +2131,7 @@ struct ClusterDetailSheet: View {
                         .padding(.top, 8)
                     VStack(spacing: 6) {
                         Text("\(cluster.pebbleCount.formatted())粒分の積み重ね")
-                            .font(PomoGemTheme.brand(24))
+                            .pomogemSectionTitle(size: 24)
                             .multilineTextAlignment(.center)
                         Text(cluster.detailSubtitle)
                             .font(.subheadline)
@@ -2241,7 +2272,7 @@ struct ClusterDetailSheet: View {
                 .padding(20)
             }
             .background(NightBackground())
-            .navigationTitle("まとまり粒")
+            .navigationTitle(Text("結晶の内訳", tableName: "Overview", comment: "Navigation title of one crystal's detail"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -2274,15 +2305,9 @@ struct ClusterDetailSheet: View {
     }
 
     private func formattedMass(_ grams: Int) -> String {
-        if grams >= 1_000 {
-            let kilograms = (Double(grams) / 1_000).formatted(
-                .number
-                    .grouping(.automatic)
-                    .precision(.fractionLength(1))
-            )
-            return "\(kilograms)kg"
-        }
-        return "\(grams.formatted())g"
+        grams >= 1_000
+            ? MassText.kilograms(fromGrams: grams, fractionDigits: 1)
+            : MassText.grams(value: grams)
     }
 
     private var visibleSubjectMix: [AggregateSubjectFraction] {
@@ -2524,7 +2549,9 @@ private struct MonthBottleCard: View {
     }
 
     private func formattedMass(_ grams: Int) -> String {
-        grams >= 1_000 ? String(format: "%.1fkg", Double(grams) / 1_000) : "\(grams)g"
+        grams >= 1_000
+            ? MassText.kilograms(fromGrams: grams, fractionDigits: 1)
+            : MassText.grams(value: grams)
     }
 }
 

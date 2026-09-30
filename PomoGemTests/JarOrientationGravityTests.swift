@@ -220,7 +220,8 @@ final class JarOrientationGravityTests: XCTestCase {
 
     func testTheOnboardingTrialDropLandsInEveryPoseWithinItsWait() throws {
         // OnboardingView: a 240 × 320 jar, emptied, then one tutorial gem
-        // from above; its motion starts only once the gem is in the scene.
+        // through its actual one-second trial arc. The entry masks and the
+        // arc must coexist, including when gravity points at a wall or cap.
         for pose in Pose.allCases {
             let scene = JarScene(size: CGSize(width: 240, height: 320))
             scene.soundEnabled = false
@@ -231,15 +232,29 @@ final class JarOrientationGravityTests: XCTestCase {
             var landed = false
             scene.onLanding = { if $0.pebble.isTutorial { landed = true } }
             scene.restore(pebbles: [])
-            scene.dropFromAbove(loose(1, isTutorial: true))
+            scene.setGravityReading(pose.reading, smoothing: false)
+            let drop = loose(1, isTutorial: true)
+            scene.dropTrialGem(drop, fallDuration: 1.0)
             var frames = 0
             driver.step(frames: 150) {
-                if frames > 0 { scene.setGravityReading(pose.reading) }
+                scene.setGravityReading(pose.reading)
                 self.assertContained(scene, "onboarding \(pose)")
                 if !landed { frames += 1 }
             }
             XCTAssertTrue(landed, "onboarding \(pose): 着地 within 2.5 s")
             XCTAssertLessThan(frames, 150, "onboarding \(pose)")
+            let interior = JarScene.interiorRect(sceneSize: scene.size)
+            let resting = try node(scene, drop.id).position
+            switch pose {
+            case .upsideDown:
+                XCTAssertGreaterThan(resting.y, interior.midY, "onboarding \(pose): follows gravity to the cap")
+            case .landscapeLeft:
+                XCTAssertLessThan(resting.x, interior.midX, "onboarding \(pose): follows gravity to the left wall")
+            case .landscapeRight:
+                XCTAssertGreaterThan(resting.x, interior.midX, "onboarding \(pose): follows gravity to the right wall")
+            default:
+                XCTAssertLessThan(resting.y, interior.midY, "onboarding \(pose): rests near the floor")
+            }
         }
     }
 
