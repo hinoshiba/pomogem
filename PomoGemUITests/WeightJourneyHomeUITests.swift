@@ -171,6 +171,21 @@ final class WeightJourneyHomeUITests: XCTestCase {
         saveScreenshot("chip-away")
     }
 
+    func testLeavingBeforeTheQuietChipDoesNotConsumeTheArrival() throws {
+        // Give the menu time to cover Home before its deferred chip appears.
+        // The same 10-hour arrival must still be named after returning.
+        app.launchEnvironment["POMOGEM_UI_TEST_JOURNEY"] = "3750"
+        app.launchEnvironment["POMOGEM_UI_TEST_JOURNEY_CHIP_DELAY_MS"] = "3000"
+        launch(showcase: "midload", size: .standard)
+        app.buttons["メニュー"].tap()
+        XCTAssertTrue(app.buttons["home.menu.close"].waitForExistence(timeout: 5))
+        pause(3.5)
+        app.buttons["home.menu.close"].tap()
+        let toast = app.descendants(matching: .any).matching(identifier: "app.toast").firstMatch
+        XCTAssertTrue(toast.waitForExistence(timeout: 12), "The arrival remains due after leaving Home")
+        XCTAssertTrue(toast.label.contains("10時間。大玉スイカ1玉ほどの重さになりました"), toast.label)
+    }
+
     func testTheCompletionCardNamesTheLandmarkItReached() throws {
         // 5,750 g: the 12-second Debug demo persists a canonical 250 g
         // completion and reaches 10 hours.

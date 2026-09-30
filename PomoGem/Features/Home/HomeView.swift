@@ -1315,8 +1315,7 @@ struct HomeView: View {
         }
         .onDisappear {
             homeIsVisible = false
-            journeyChipTask?.cancel()
-            journeyChipTask = nil
+            cancelPendingWeightJourneyChip()
             commitPendingManualEntry()
             widgetRefreshTask?.cancel()
             celebrationRecoveryTask?.cancel()
@@ -1340,7 +1339,10 @@ struct HomeView: View {
         .onChange(of: scenePhase) { _, phase in
             // Never keep an unsaved entry in memory while iOS may suspend or
             // end the app.
-            if phase != .active { commitPendingManualEntry() }
+            if phase != .active {
+                commitPendingManualEntry()
+                cancelPendingWeightJourneyChip()
+            }
             if phase == .active {
                 // Back in front: the study day may have turned, and what
                 // arrived meanwhile may be named once (§5.6).
@@ -1351,12 +1353,14 @@ struct HomeView: View {
         .onChange(of: router.focusPresentationIsActive) { _, isActive in
             guard !isActive else {
                 commitPendingManualEntry()
+                cancelPendingWeightJourneyChip()
                 return
             }
             configureScene()
             syncScene()
             continueRewardDropIfPossible()
             recoverPendingRewardReceipt()
+            evaluateWeightJourney()
         }
         .onChange(of: rewardDropSurfaceIsObscured) { _, isObscured in
             guard !isObscured else {
@@ -1364,6 +1368,7 @@ struct HomeView: View {
                 // add, share) must see the entry as saved, and 元に戻す is only
                 // offered here on Home.
                 commitPendingManualEntry()
+                cancelPendingWeightJourneyChip()
                 return
             }
             syncScene()
@@ -6632,7 +6637,8 @@ struct HomeView: View {
     }
 
     private func evaluateWeightJourney() {
-        guard homeIsVisible,
+        guard journeyChipTask == nil,
+              homeIsVisible,
               !rewardDropSurfaceIsObscured,
               focusConfiguration == nil,
               let grams = journeyTracker.lastObservation.grams
@@ -6643,30 +6649,60 @@ struct HomeView: View {
             grams: grams,
             isArmed: journeyTracker.isArmed
         )
-        if outcome.watermark != watermark {
-            WeightJourneyCelebrationStore.save(outcome.watermark)
-        }
         if outcome.consumesArm { journeyTracker.isArmed = false }
         if let chip = outcome.chip {
-            presentWeightJourneyChip(chip.text)
+            // The chip may wait behind a toast or be cancelled when Home is
+            // covered. Commit the watermark only after it is actually shown,
+            // so returning to Home can still name an unseen arrival.
+            presentWeightJourneyChip(chip.text, watermark: outcome.watermark)
+        } else if outcome.watermark != watermark {
+            WeightJourneyCelebrationStore.save(outcome.watermark)
         }
     }
 
     /// One quiet chip at a time, after whatever toast is up (a landing's,
     /// Screen Time's), on Home only.
-    private func presentWeightJourneyChip(_ text: String) {
-        journeyChipTask?.cancel()
+    private func presentWeightJourneyChip(_ text: String, watermark: Int?) {
         journeyChipTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(900))
-            var waited = 0
-            while router.toast != nil, waited < 16, !Task.isCancelled {
+            try? await Task.sleep(for: Self.journeyChipDelay)
+            while router.toast != nil, !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(500))
-                waited += 1
             }
-            guard !Task.isCancelled, homeIsVisible, !rewardDropSurfaceIsObscured else { return }
+            guard !Task.isCancelled else { return }
+            guard scenePhase == .active,
+                  homeIsVisible,
+                  !rewardDropSurfaceIsObscured,
+                  focusConfiguration == nil,
+                  journeyTracker.lastObservation.grams != nil
+            else {
+                journeyChipTask = nil
+                journeyTracker.isArmed = true
+                return
+            }
             router.showToast(text, symbol: "diamond", duration: .seconds(5))
+            WeightJourneyCelebrationStore.save(watermark)
+            journeyChipTask = nil
         }
     }
+
+    private func cancelPendingWeightJourneyChip() {
+        guard journeyChipTask != nil else { return }
+        journeyChipTask?.cancel()
+        journeyChipTask = nil
+        journeyTracker.isArmed = true
+    }
+
+    private static let journeyChipDelay: Duration = {
+#if DEBUG && targetEnvironment(simulator)
+        if LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess,
+           let value = ProcessInfo.processInfo.environment["POMOGEM_UI_TEST_JOURNEY_CHIP_DELAY_MS"],
+           let milliseconds = Int(value),
+           (0...10_000).contains(milliseconds) {
+            return .milliseconds(milliseconds)
+        }
+#endif
+        return .milliseconds(900)
+    }()
 
     /// What decides the completion card's chip: the offer, and whether its
     /// totals can be trusted yet (a restamp may verify them later).
