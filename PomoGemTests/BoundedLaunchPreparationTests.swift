@@ -1308,7 +1308,7 @@ final class BoundedLaunchPreparationTests: XCTestCase {
     /// the jar at each landing and again when verification flipped ~7 s
     /// later (device audit 2026-09-29), each restore keeping the jar awake
     /// ~6 s. A new generation now restores only when the jar's content
-    /// changed: its epoch, its roots or its loose bodies and their grams.
+    /// changed: its epoch, its roots or a loose body's presentation.
     func testANewSnapshotGenerationRestoresOnlyWhenTheJarsContentChanged() {
         var presentation = AggregateProjectionPresentationContext.initial(for: .cloudKit)
         let pending = HomeSceneSessionSnapshotGeneration(presentation)
@@ -1355,6 +1355,12 @@ final class BoundedLaunchPreparationTests: XCTestCase {
             epochID: epoch, roots: [root], pebbles: [gem(1), gem(2, grams: 500)]
         )), "grams")
         XCTAssertTrue(restores(content, HomeSceneContent(
+            epochID: epoch, roots: [root], pebbles: [gem(1), gem(2, subjectName: "数学")]
+        )), "a renamed subject changes the gem's VoiceOver name")
+        XCTAssertTrue(restores(content, HomeSceneContent(
+            epochID: epoch, roots: [root], pebbles: [gem(1), gem(2, colorHex: Constants.Color.science)]
+        )), "a recolored subject changes the gem's appearance")
+        XCTAssertTrue(restores(content, HomeSceneContent(
             epochID: epoch, roots: [(root.id, 3_000)], pebbles: [gem(1), gem(2)]
         )), "a root's grams")
         XCTAssertTrue(restores(content, HomeSceneContent(
@@ -1375,11 +1381,16 @@ final class BoundedLaunchPreparationTests: XCTestCase {
         ), from: verified, to: verified))
     }
 
-    private func gem(_ index: Int, grams: Int = Constants.Mass.measuredPebbleGrams) -> PebbleDescriptor {
+    private func gem(
+        _ index: Int,
+        grams: Int = Constants.Mass.measuredPebbleGrams,
+        subjectName: String = "英語",
+        colorHex: String = Constants.Color.english
+    ) -> PebbleDescriptor {
         PebbleDescriptor(
             id: UUID(uuidString: String(format: "E2000000-0000-4000-8000-%012X", index))!,
-            subjectName: "英語",
-            colorHex: Constants.Color.english,
+            subjectName: subjectName,
+            colorHex: colorHex,
             source: .timer,
             kind: .normal,
             grams: grams,

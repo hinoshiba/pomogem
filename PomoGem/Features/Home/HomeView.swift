@@ -17,25 +17,35 @@ struct HomeSceneSessionSnapshotGeneration: Equatable {
 
 /// launch-perf (e): what a silent restore lays out, i.e. everything a new
 /// snapshot generation can change in the jar: the activity epoch, the
-/// aggregate roots and the loose bodies, each with its grams.
+/// aggregate roots and the loose bodies' complete presentation.
 struct HomeSceneContent: Equatable {
     let epochID: UUID?
     let rootGrams: [UUID: Int]
-    let pebbleGrams: [UUID: Int]
+    let pebblePresentations: [UUID: PebbleDescriptor]
 
     init(epochID: UUID?, roots: [(id: UUID, grams: Int)], pebbles: [PebbleDescriptor]) {
         self.epochID = epochID
         rootGrams = Dictionary(roots.map { ($0.id, $0.grams) }, uniquingKeysWith: { $1 })
-        pebbleGrams = Dictionary(pebbles.map { ($0.id, $0.grams) }, uniquingKeysWith: { $1 })
+        pebblePresentations = Dictionary(pebbles.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.epochID == rhs.epochID
+            && lhs.rootGrams == rhs.rootGrams
+            && lhs.pebblePresentations.count == rhs.pebblePresentations.count
+            && lhs.pebblePresentations.allSatisfy { entry in
+                guard let other = rhs.pebblePresentations[entry.key] else { return false }
+                return entry.value.hasSamePresentation(as: other)
+            }
     }
 }
 
 enum HomeSceneSessionSnapshotPolicy {
     /// A new generation re-lays the jar out silently, so rows that become
     /// loose or leave never replay as new drops. launch-perf (e): only when
-    /// the content changed. A restore keeps the jar awake ~6 s, and while
-    /// the totals read 「iCloudを確認中」 it ran at each landing and again
-    /// ~7 s later when verification flipped with the same roots (device
+    /// the content or a loose gem's presentation changed. A restore keeps
+    /// the jar awake ~6 s, and while the totals read 「iCloudを確認中」 it ran at
+    /// each landing and again ~7 s later when verification flipped (device
     /// audit 2026-09-29). An unknown content (nil) restores, as before.
     static func shouldRestoreSilently(
         sceneIsInitialized: Bool,
