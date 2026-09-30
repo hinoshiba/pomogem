@@ -172,11 +172,12 @@ final class WeightJourneyHomeUITests: XCTestCase {
     }
 
     func testTheCompletionCardNamesTheLandmarkItReached() throws {
-        // 5,998 g: the 12-second demo (2 g) reaches 10 hours.
-        app.launchEnvironment["POMOGEM_UI_TEST_EDGE_GRAMS"] = "5998"
+        // 5,750 g: the 12-second Debug demo persists a canonical 250 g
+        // completion and reaches 10 hours.
+        app.launchEnvironment["POMOGEM_UI_TEST_EDGE_GRAMS"] = "5750"
         launch(showcase: "edge", size: .standard)
         let fields = try waitForRestingJar()
-        XCTAssertTrue((fields["journey"] ?? "").hasPrefix("つぎの名所　大玉スイカ1玉ほど・10時間・あと1分"), "\(fields)")
+        XCTAssertTrue((fields["journey"] ?? "").hasPrefix("つぎの名所　大玉スイカ1玉ほど・10時間・あと25分"), "\(fields)")
         runDemoFocus()
         let chip = app.descendants(matching: .any)["reward.journey"]
         XCTAssertTrue(chip.waitForExistence(timeout: 10), "The card names the landmark")
@@ -190,8 +191,8 @@ final class WeightJourneyHomeUITests: XCTestCase {
     }
 
     func testTheCompletionCardNamesTheMarkerAndItsDiamondLightsAfterTheDrop() throws {
-        // 29h59m48s: the demo reaches the third 一里塚 (30 hours).
-        app.launchEnvironment["POMOGEM_UI_TEST_EDGE_GRAMS"] = "17998"
+        // 29h35m: the canonical 250 g demo reaches the third 一里塚 (30 hours).
+        app.launchEnvironment["POMOGEM_UI_TEST_EDGE_GRAMS"] = "17750"
         launch(showcase: "edge", size: .standard)
         _ = try waitForRestingJar()
         saveScreenshot("home-before-marker")
