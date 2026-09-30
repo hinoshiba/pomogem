@@ -685,6 +685,7 @@ CとDの差は視覚的レアだけに限定し、Dでも本人はいつでも`q
 - 結晶化保存障害時、source 10件の変更とaggregate挿入を同一transactionで完全rollbackし、常設カードから明示再試行。DEBUG限定の実save faultでloose 10件→aggregate 1件→再起動後も同一1件、2,500g、元source UUID集合の不変を検証
 - 旧`SeedData.bootstrap`は本番呼び出しを持たない状態を維持。部分同期下で競合親を作り得る一括migrationは再有効化せず、既存配布storeを移行する場合だけ有界batch workerとして別途実装する
 - Reduce Motionの有効・無効に関係なく、瓶の粒は同じ物理挙動で跳ね、落下し、傾きやシェイクにも反応する。Reduce Motionはカメラ、光、粒子、結晶形成などの装飾演出に適用し、質量・保存・Reward Receipt・結晶化の意味は変えない
+  - 例外（F3、2026-09-27 に瓶のデザインの持ち主が決定）：端末の向きを変えて止まった山が落ち着き直すときだけ、Reduce Motionでは山の減衰を上げて跳ねさせず、光や演出も足さない（揺らした山が止まるまでは揺らしを従来どおりに保つ）。変えるのは減衰だけで、摩擦や接触は変えない（2026-09-29 の同じ持ち主の決定）。山は新しい向きの重力に従う（横にすれば横に積もる）。詳細は`Docs/JarOrientationGravity.md`
 - 最大文字サイズではOverviewのレンズをsegmented controlからmenu pickerへ切り替え、棚・要約・週KPIを1列化。Home／Menu／Overviewの主要画面はAX5の25監査とsystem Dynamic Type変更監査を通過
 
 リリース前の最優先課題:

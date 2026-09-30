@@ -13,6 +13,10 @@ import SpriteKit
 /// (`ShareJarGraphic`) instead, which is built from exactly the shared
 /// records. Hidden pebbles that hold nothing up, such as black stones packed
 /// on top of the pile after a relaunch, still allow the real jar.
+///
+/// F3: a pile resting off the jar's floor is a separate reason for the
+/// drawn bottle (`pileRestsOnTheFloor(in:)`). The composer asks
+/// `livePileNeedsDrawnBottle(in:options:)`, which asks both.
 enum ShareJarSnapshotPolicy {
     struct Body: Equatable {
         let center: CGPoint
@@ -53,8 +57,29 @@ enum ShareJarSnapshotPolicy {
         return false
     }
 
+    /// Whether the live jar's bodies rest on its floor (F3,
+    /// `JarScene.pileRestsOnTheFloor`: within 30° of the jar's own down).
+    /// Any other scene counts as resting on its floor.
+    ///
+    /// A pile resting against a wall or the invisible cap (the phone held
+    /// sideways or upside down when it settled) would hang on the side or
+    /// at the mouth of the card's upright bottle, so the card draws its own
+    /// bottle when this is false, whatever a share hides. It
+    /// reads the pose the pile settled in, not the live gravity a sheet
+    /// resets (`JarScene.pileGravityVector`); an awake pile that left the
+    /// floor counts as off it until it rests again.
+    @MainActor
+    static func pileRestsOnTheFloor(in scene: SKScene) -> Bool {
+        (scene as? JarScene)?.pileRestsOnTheFloor ?? true
+    }
+
     /// Splits the scene's pebbles with the snapshotter's own hiding rule and
-    /// checks them against the scene's current gravity.
+    /// checks them against the gravity the bodies rest under: for the jar,
+    /// the gravity its resting pile settled under (F3: the motion observer
+    /// resets the live gravity while a sheet covers Home, without moving
+    /// the frozen pile), otherwise the scene's current gravity. It answers
+    /// only for the hidden bodies: whether the pile rests on the floor at
+    /// all is `pileRestsOnTheFloor(in:)`'s question.
     @MainActor
     static func hidingLeavesUnsupportedBody(
         in scene: SKScene,
@@ -76,11 +101,23 @@ enum ShareJarSnapshotPolicy {
                 visible.append(body)
             }
         }
-        let gravity = scene.physicsWorld.gravity
+        let gravity = (scene as? JarScene)?.pileGravityVector ?? scene.physicsWorld.gravity
         return hidingLeavesUnsupportedBody(
             hidden: hidden,
             visible: visible,
             up: CGVector(dx: -gravity.dx, dy: -gravity.dy)
         )
+    }
+
+    /// The composer's decision: the card draws its own bottle when the pile
+    /// rests off the floor (F3) or hiding leaves a visible gem unsupported,
+    /// and shows the live jar otherwise.
+    @MainActor
+    static func livePileNeedsDrawnBottle(
+        in scene: SKScene,
+        options: JarSnapshotOptions
+    ) -> Bool {
+        !pileRestsOnTheFloor(in: scene)
+            || hidingLeavesUnsupportedBody(in: scene, options: options)
     }
 }
