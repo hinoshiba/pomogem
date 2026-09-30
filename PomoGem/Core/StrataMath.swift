@@ -306,7 +306,7 @@ struct ShareAggregateVisual: Identifiable, Equatable {
         colorMix = StrataMath.decodeColorMix(stratum.colorMixJSON)
         subjectMix = colorMix.enumerated().map { index, item in
             AggregateSubjectFraction(
-                name: index == 0 ? "過去の集中" : "過去の集中 \(index + 1)",
+                name: AggregateSubjectFraction.legacySubjectName(at: index),
                 colorHex: item.hex,
                 pebbleCount: NonnegativeIntPolicy.clamped(
                     (item.fraction * Double(max(stratum.pebbleCount, 1))).rounded()
@@ -330,7 +330,7 @@ struct ShareAggregateVisual: Identifiable, Equatable {
         colorMix = StrataMath.decodeColorMix(stratum.colorMixJSON)
         subjectMix = colorMix.enumerated().map { index, item in
             AggregateSubjectFraction(
-                name: index == 0 ? "過去の集中" : "過去の集中 \(index + 1)",
+                name: AggregateSubjectFraction.legacySubjectName(at: index),
                 colorHex: item.hex,
                 pebbleCount: NonnegativeIntPolicy.clamped(
                     (item.fraction * Double(max(stratum.pebbleCount, 1))).rounded()
@@ -877,6 +877,12 @@ enum StrataMath {
         )
     }
 
+    /// The persisted month key 「2026年9月」 (`Stratum.monthLabel`, aggregate
+    /// requests, `ShareScope.aggregate`). 1.0.2 devices read and write this
+    /// exact Japanese spelling, so it stays data in every language (L10N D6).
+    /// Never show it: label the month with `displayMonthLabel(for:timeZone:)`
+    /// from the bucket's date (`bakedAt`, `createdAt`), or recover that date
+    /// with `monthStart(fromLegacyLabel:timeZone:)` when only the key is known.
     static func monthLabel(
         for date: Date,
         timeZone: TimeZone = .current
@@ -884,7 +890,38 @@ enum StrataMath {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
         let components = calendar.dateComponents([.year, .month], from: date)
+        // l10n-ignore: the persisted month key, compatible with 1.0.2
         return "\(components.year ?? 0)年\(components.month ?? 0)月"
+    }
+
+    /// The month a bucket belongs to, as people read it: ja 「2026年9月」
+    /// (the same text as the key), en "September 2026". Gregorian, like the
+    /// key, whatever calendar the iPhone uses.
+    static func displayMonthLabel(
+        for date: Date,
+        timeZone: TimeZone = .current
+    ) -> String {
+        DateText.yearMonth(date, timeZone: timeZone)
+    }
+
+    /// The first moment of the month a persisted key names, for surfaces that
+    /// hold only `monthLabel`. Nil for anything `monthLabel(for:)` would not
+    /// have written (an empty legacy value, say), so the caller can fall back.
+    static func monthStart(
+        fromLegacyLabel label: String,
+        timeZone: TimeZone = .current
+    ) -> Date? {
+        // l10n-ignore-begin: parses the persisted Japanese key, never shown
+        guard let yearEnd = label.firstIndex(of: "年"),
+              label.hasSuffix("月"),
+              let year = Int(label[..<yearEnd]),
+              let month = Int(label[label.index(after: yearEnd)..<label.index(before: label.endIndex)]),
+              (1...12).contains(month)
+        else { return nil }
+        // l10n-ignore-end
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        return calendar.date(from: DateComponents(year: year, month: month, day: 1))
     }
 
     /// Total mass remains reconstructible after bake: loose sessions plus the

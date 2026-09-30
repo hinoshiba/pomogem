@@ -35,11 +35,14 @@ enum PurchaseManagerError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .productUnavailable:
-            return "商品情報を読み込めませんでした。通信状態を確認して、もう一度お試しください。"
+            return String(localized: "商品情報を読み込めませんでした。通信状態を確認して、もう一度お試しください。", table: "Paywall",
+                          comment: "Purchase error: the Pro product could not be loaded from the App Store")
         case .failedVerification:
-            return "購入情報を確認できませんでした。"
+            return String(localized: "購入情報を確認できませんでした。", table: "Paywall",
+                          comment: "Purchase error: the App Store purchase could not be verified")
         case .restoreInProgress:
-            return "購入情報を復元しています。完了までお待ちください。"
+            return String(localized: "購入情報を復元しています。完了までお待ちください。", table: "Paywall",
+                          comment: "Purchase message: a restore is already running")
         }
     }
 }
@@ -256,7 +259,11 @@ final class PurchaseManager {
     private(set) var isPurchasing = false
     private(set) var isRestoring = false
     private(set) var productLoadErrorDescription: String?
-    private(set) var lastErrorDescription: String?
+    /// The last failure, kept as the error itself: logic compares its case
+    /// (`restorePurchases`), never its text, which follows the app language.
+    private(set) var lastError: (any Error)?
+    /// Display only.
+    var lastErrorDescription: String? { lastError?.localizedDescription }
     /// Whether StoreKit has answered at least once in this process. Until it
     /// has, `isPro == false` means "not known yet", not "free": the cold pass
     /// starts at App.init but can still be running when the first screens
@@ -361,26 +368,26 @@ final class PurchaseManager {
                 )
                 product = nil
                 productLoadErrorDescription = PaywallErrorCopy.message(for: error, action: .loadProduct)
-                lastErrorDescription = error.localizedDescription
+                lastError = error
                 return
             }
 
             product = fetchedProduct
             productLoadErrorDescription = nil
-            lastErrorDescription = nil
+            lastError = nil
         } catch {
             product = nil
             // Shown under 「商品情報を読み込めませんでした」: never StoreKit's
             // own framework text (settings-02).
             productLoadErrorDescription = PaywallErrorCopy.message(for: error, action: .loadProduct)
-            lastErrorDescription = error.localizedDescription
+            lastError = error
         }
     }
 
     func purchase(productID: String) async throws -> PurchaseOutcome {
         guard productID == IntegrationConstants.proProductID else {
             let error = PurchaseManagerError.productUnavailable(productID)
-            lastErrorDescription = error.localizedDescription
+            lastError = error
             throw error
         }
 
@@ -389,7 +396,7 @@ final class PurchaseManager {
         }
         guard let product, product.id == productID else {
             let error = PurchaseManagerError.productUnavailable(productID)
-            lastErrorDescription = error.localizedDescription
+            lastError = error
             throw error
         }
         return try await purchase(product)
@@ -399,7 +406,7 @@ final class PurchaseManager {
         guard product.id == IntegrationConstants.proProductID,
               product.type == .nonConsumable else {
             let error = PurchaseManagerError.productUnavailable(product.id)
-            lastErrorDescription = error.localizedDescription
+            lastError = error
             throw error
         }
 
@@ -424,25 +431,25 @@ final class PurchaseManager {
                 return .purchased
 
             case .pending:
-                lastErrorDescription = nil
+                lastError = nil
                 updateApprovalWait { $0.recordPendingRequest(at: .now) }
                 return .pending
 
             case .userCancelled:
-                lastErrorDescription = nil
+                lastError = nil
                 return .cancelled
 
             @unknown default:
-                lastErrorDescription = nil
+                lastError = nil
                 updateApprovalWait { $0.recordPendingRequest(at: .now) }
                 return .pending
             }
         } catch StoreKitError.userCancelled {
             // Some flows throw the cancel instead of returning it.
-            lastErrorDescription = nil
+            lastError = nil
             return .cancelled
         } catch {
-            lastErrorDescription = error.localizedDescription
+            lastError = error
             throw error
         }
     }
@@ -462,19 +469,19 @@ final class PurchaseManager {
             // answers an open approval wait owes no second notice.
             await refreshEntitlements(grantPath: .restore)
             if !isPro,
-               lastErrorDescription == PurchaseManagerError.failedVerification.localizedDescription {
+               (lastError as? PurchaseManagerError) == .failedVerification {
                 throw PurchaseManagerError.failedVerification
             }
-            lastErrorDescription = nil
+            lastError = nil
             return isPro ? .restored : .nothingFound
         } catch StoreKitError.userCancelled {
             // settings-02. `AppStore.sync()` throws this when the person
             // closes the Apple Account prompt. They chose not to sign in;
             // nothing failed, so nothing is reported.
-            lastErrorDescription = nil
+            lastError = nil
             return .cancelled
         } catch {
-            lastErrorDescription = error.localizedDescription
+            lastError = error
             throw error
         }
     }
@@ -519,8 +526,8 @@ final class PurchaseManager {
         if currentEntitlement != nil {
             updateApprovalWait { $0.proGranted(via: grantPath, at: .now) }
         }
-        lastErrorDescription = encounteredVerificationFailure
-            ? PurchaseManagerError.failedVerification.localizedDescription
+        lastError = encounteredVerificationFailure
+            ? PurchaseManagerError.failedVerification
             : nil
     }
 
@@ -541,9 +548,7 @@ final class PurchaseManager {
                         grantPath: .transactionUpdate
                     )
                 case .unverified:
-                    self.lastErrorDescription = PurchaseManagerError
-                        .failedVerification
-                        .localizedDescription
+                    self.lastError = PurchaseManagerError.failedVerification
                 }
             }
         }
@@ -571,9 +576,7 @@ final class PurchaseManager {
             guard !Task.isCancelled else { return }
             await self.refreshEntitlements()
             if encounteredVerificationFailure {
-                self.lastErrorDescription = PurchaseManagerError
-                    .failedVerification
-                    .localizedDescription
+                self.lastError = PurchaseManagerError.failedVerification
             }
         }
     }
@@ -601,7 +604,7 @@ final class PurchaseManager {
                     entitlement = .lifetime(productID: transaction.productID)
                     // A verified delivery is an answer from StoreKit too.
                     if !hasResolvedEntitlements { hasResolvedEntitlements = true }
-                    lastErrorDescription = nil
+                    lastError = nil
                     updateApprovalWait { $0.proGranted(via: grantPath, at: .now) }
                 case .reconcileWithoutGrant:
                     // A refund, revocation, or upgraded-away transaction must
@@ -618,9 +621,7 @@ final class PurchaseManager {
             }
         )
         if decision == .rejectInvalidProductType {
-            lastErrorDescription = PurchaseManagerError
-                .failedVerification
-                .localizedDescription
+            lastError = PurchaseManagerError.failedVerification
         }
         return decision
     }

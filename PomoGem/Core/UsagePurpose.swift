@@ -5,10 +5,31 @@ enum UsagePurpose: String, CaseIterable, Identifiable, Sendable {
     case work
 
     struct CategoryPreset: Identifiable, Hashable, Sendable {
+        /// The name a theme chosen from this suggestion is saved with. A
+        /// built-in study preset keeps its canonical Japanese name, the one
+        /// its fixed-ID row carries on every device; a work suggestion is
+        /// saved as the user saw it, in the app's language (L10N D6).
         let name: String
+        /// What the suggestion shows. Display only: never persisted.
+        let displayName: String
+        /// The Japanese spelling. Typed input matching it, `name` or
+        /// `displayName` resolves to this suggestion in any language.
+        let canonicalName: String
         let colorHex: String
 
         var id: String { name }
+
+        init(name: String, displayName: String? = nil, canonicalName: String? = nil, colorHex: String) {
+            self.name = name
+            self.displayName = displayName ?? name
+            self.canonicalName = canonicalName ?? name
+            self.colorHex = colorHex
+        }
+
+        /// Every spelling that selects this suggestion.
+        var matchingNames: [String] {
+            [name, displayName, canonicalName]
+        }
     }
 
     static let storageKey = "usage.purpose"
@@ -17,8 +38,8 @@ enum UsagePurpose: String, CaseIterable, Identifiable, Sendable {
 
     var title: String {
         switch self {
-        case .study: "勉強"
-        case .work: "仕事"
+        case .study: String(localized: "勉強", table: "Onboarding", comment: "Legacy usage purpose: study")
+        case .work: String(localized: "仕事", table: "Onboarding", comment: "Legacy usage purpose: work")
         }
     }
 
@@ -31,63 +52,79 @@ enum UsagePurpose: String, CaseIterable, Identifiable, Sendable {
 
     var summary: String {
         switch self {
-        case .study: "教科・資格の集中を積む"
-        case .work: "自分の仕事の集中を積む"
+        case .study: String(localized: "教科・資格の集中を積む", table: "Onboarding", comment: "Legacy usage purpose summary: study")
+        case .work: String(localized: "自分の仕事の集中を積む", table: "Onboarding", comment: "Legacy usage purpose summary: work")
         }
     }
 
     var categoryTitle: String {
         switch self {
-        case .study: "教科・資格"
-        case .work: "仕事カテゴリ"
+        case .study: String(localized: "教科・資格", table: "Onboarding", comment: "Legacy usage purpose: kind of study theme")
+        case .work: String(localized: "仕事カテゴリ", table: "Onboarding", comment: "Legacy usage purpose: kind of work theme")
         }
     }
 
     var firstCategoryTitle: String {
         switch self {
-        case .study: "最初の教科・資格"
-        case .work: "最初の仕事カテゴリ"
+        case .study: String(localized: "最初の教科・資格", table: "Onboarding", comment: "Legacy usage purpose: heading for the first study theme")
+        case .work: String(localized: "最初の仕事カテゴリ", table: "Onboarding", comment: "Legacy usage purpose: heading for the first work theme")
         }
     }
 
     var setupDetail: String {
         switch self {
         case .study:
-            "まず1つ選んでください。資格名や科目は、瓶をひらいた後も自由に追加・編集できます。"
+            String(
+                localized: "まず1つ選んでください。資格名や科目は、瓶をひらいた後も自由に追加・編集できます。",
+                table: "Onboarding",
+                comment: "Legacy usage purpose: setup note for study themes"
+            )
         case .work:
-            "まず1つ選んでください。仕事の種類は、瓶をひらいた後も自由に追加・編集できます。"
+            String(
+                localized: "まず1つ選んでください。仕事の種類は、瓶をひらいた後も自由に追加・編集できます。",
+                table: "Onboarding",
+                comment: "Legacy usage purpose: setup note for work themes"
+            )
         }
     }
 
     var customFieldTitle: String {
         switch self {
-        case .study: "資格・科目名を入力"
-        case .work: "仕事カテゴリを入力"
+        case .study: String(localized: "資格・科目名を入力", table: "Onboarding", comment: "Legacy usage purpose: title of the custom study theme field")
+        case .work: String(localized: "仕事カテゴリを入力", table: "Onboarding", comment: "Legacy usage purpose: title of the custom work theme field")
         }
     }
 
     var customFieldPlaceholder: String {
         switch self {
-        case .study: "例：簿記2級、TOEIC"
-        case .work: "例：設計、レビュー"
+        case .study: String(localized: "例：簿記2級、TOEIC", table: "Onboarding", comment: "Legacy usage purpose: study theme field placeholder. en: culturally neutral examples, not a literal translation")
+        case .work: String(localized: "例：設計、レビュー", table: "Onboarding", comment: "Legacy usage purpose: work theme field placeholder")
         }
     }
 
     var customExamples: String {
         switch self {
-        case .study: "例：簿記2級、TOEIC"
-        case .work: "例：企画、開発、資料作成、顧客対応"
+        case .study: String(localized: "例：簿記2級、TOEIC", table: "Onboarding", comment: "Legacy usage purpose: study theme field placeholder. en: culturally neutral examples, not a literal translation")
+        case .work: String(localized: "例：企画、開発、資料作成、顧客対応", table: "Onboarding", comment: "Legacy usage purpose: example work themes (the built-in work suggestions)")
         }
     }
 
     var privacyGuidance: String? {
         guard self == .work else { return nil }
-        return "シェアカードにテーマ名は載せません。成果メモも載せません。終了通知にもテーマ名は表示しません。案件名・顧客名・個人名などの守秘情報は入れず、「企画」「顧客対応」のような大分類がおすすめです。"
+        return String(
+            localized: "シェアカードにテーマ名は載せません。成果メモも載せません。終了通知にもテーマ名は表示しません。案件名・顧客名・個人名などの守秘情報は入れず、「企画」「顧客対応」のような大分類がおすすめです。",
+            table: "Onboarding",
+            comment: "Legacy usage purpose: privacy note for work themes (theme names never appear on share cards or notifications)"
+        )
     }
 
     var professionalUseGuidance: String? {
         guard self == .work else { return nil }
-        return "個人の集中を振り返るための記録です。勤怠・請求・正式な工数管理の代わりには使わないでください。"
+        return String(
+            localized: "個人の集中を振り返るための記録です。勤怠・請求・正式な工数管理の代わりには使わないでください。",
+            table: "Onboarding",
+            comment: "Not for attendance, billing or official time tracking"
+        )
     }
 
     var achievementKindsInDisplayOrder: [AchievementKind] {
@@ -101,18 +138,41 @@ enum UsagePurpose: String, CaseIterable, Identifiable, Sendable {
     }
 
     var presets: [CategoryPreset] {
+        categoryPresets(bundle: .main)
+    }
+
+    /// `presets` in the language of `bundle` (tests resolve English).
+    func categoryPresets(bundle: Bundle) -> [CategoryPreset] {
+        func workPreset(_ name: String, canonical: String, colorHex: String) -> CategoryPreset {
+            CategoryPreset(name: name, canonicalName: canonical, colorHex: colorHex)
+        }
         switch self {
         case .study:
-            SeedData.subjects.map {
-                CategoryPreset(name: $0.name, colorHex: $0.colorHex)
+            // The built-in rows: saved under the canonical Japanese name of
+            // their fixed ID, shown in the app's language.
+            return SeedData.subjects.map {
+                CategoryPreset(name: $0.name, displayName: $0.displayName(bundle: bundle), colorHex: $0.colorHex)
             }
         case .work:
-            [
-                CategoryPreset(name: "企画", colorHex: "#D6863A"),
-                CategoryPreset(name: "開発", colorHex: Constants.Color.mathematics),
-                CategoryPreset(name: "資料作成", colorHex: Constants.Color.science),
-                CategoryPreset(name: "顧客対応", colorHex: Constants.Color.japanese)
+            // No built-in rows: the theme is saved exactly as shown, so a
+            // work suggestion picked in English is an ordinary theme named
+            // "Planning". The Japanese spelling still selects it.
+            // l10n-ignore-begin: canonical Japanese spellings, matched against typed input only
+            return [
+                workPreset(String(localized: "企画", table: "Onboarding", bundle: bundle,
+                                  comment: "Work theme suggestion; saved as shown"),
+                           canonical: "企画", colorHex: "#D6863A"),
+                workPreset(String(localized: "開発", table: "Onboarding", bundle: bundle,
+                                  comment: "Work theme suggestion; saved as shown"),
+                           canonical: "開発", colorHex: Constants.Color.mathematics),
+                workPreset(String(localized: "資料作成", table: "Onboarding", bundle: bundle,
+                                  comment: "Work theme suggestion: making documents and slides; saved as shown"),
+                           canonical: "資料作成", colorHex: Constants.Color.science),
+                workPreset(String(localized: "顧客対応", table: "Onboarding", bundle: bundle,
+                                  comment: "Work theme suggestion: customer support; saved as shown"),
+                           canonical: "顧客対応", colorHex: Constants.Color.japanese)
             ]
+            // l10n-ignore-end
         }
     }
 }
@@ -124,23 +184,54 @@ enum UsagePurpose: String, CaseIterable, Identifiable, Sendable {
 /// exports. New UI must not branch on that legacy preference: learning and
 /// work themes live in the same list and differ only by the name users choose.
 enum SubjectSuggestionCatalog {
-    static let presets: [UsagePurpose.CategoryPreset] =
-        UsagePurpose.study.presets + UsagePurpose.work.presets
+    static let presets: [UsagePurpose.CategoryPreset] = suggestions(bundle: .main)
 
-    static let inputPlaceholder = "例：英語、TOEIC、企画、開発"
-    static let exampleHint = "例：英語、数学、TOEIC、企画、開発、資料作成"
-    static let setupDetail =
-        "勉強も仕事も同じテーマ一覧で管理できます。候補を1つ選ぶか、自由に入力してください。"
-    static let privacyGuidance =
-        "仕事に使う場合は、案件名・顧客名・個人名などの守秘情報を避け、「企画」「開発」のような大分類がおすすめです。"
-    static let professionalUseGuidance =
-        "個人の集中を振り返るための記録です。勤怠・請求・正式な工数管理の代わりには使わないでください。"
+    /// `presets` in the language of `bundle` (tests resolve English).
+    static func suggestions(bundle: Bundle) -> [UsagePurpose.CategoryPreset] {
+        UsagePurpose.study.categoryPresets(bundle: bundle) + UsagePurpose.work.categoryPresets(bundle: bundle)
+    }
 
-    static func preset(named name: String) -> UsagePurpose.CategoryPreset? {
+    static let inputPlaceholder = String(
+        localized: "例：英語、TOEIC、企画、開発",
+        table: "Onboarding",
+        comment: "Theme name field placeholder. en: culturally neutral examples mixing study and work, e.g. SAT prep"
+    )
+    static let exampleHint = String(
+        localized: "例：英語、数学、TOEIC、企画、開発、資料作成",
+        table: "Onboarding",
+        comment: "Example theme names under the theme name field (Settings). en: culturally neutral examples"
+    )
+    static let setupDetail = String(
+        localized: "勉強も仕事も同じテーマ一覧で管理できます。候補を1つ選ぶか、自由に入力してください。",
+        table: "Onboarding",
+        comment: "Onboarding theme step: study and work themes share one list"
+    )
+    static let privacyGuidance = String(
+        localized: "仕事に使う場合は、案件名・顧客名・個人名などの守秘情報を避け、「企画」「開発」のような大分類がおすすめです。",
+        table: "Onboarding",
+        comment: "Privacy note for work themes: avoid confidential names; the quoted examples are the work suggestions"
+    )
+    static let professionalUseGuidance = String(
+        localized: "個人の集中を振り返るための記録です。勤怠・請求・正式な工数管理の代わりには使わないでください。",
+        table: "Onboarding",
+        comment: "Not for attendance, billing or official time tracking"
+    )
+
+    /// The suggestion a typed name means: its saved name, what it shows, or
+    /// its Japanese spelling (so 「英語」 and "English" both pick the built-in
+    /// preset). Resolving to the suggestion's own `name` keeps a built-in
+    /// preset on its fixed-ID row whatever language the name was typed in.
+    static func preset(named name: String, bundle: Bundle? = nil) -> UsagePurpose.CategoryPreset? {
         let key = SubjectNamePolicy.comparisonKey(name)
-        return presets.first {
-            SubjectNamePolicy.comparisonKey($0.name) == key
+        return (bundle.map(suggestions(bundle:)) ?? presets).first { preset in
+            preset.matchingNames.contains { SubjectNamePolicy.comparisonKey($0) == key }
         }
+    }
+
+    /// What a chosen theme reads as before it exists: a suggestion's shown
+    /// name, or the typed name itself. Display only.
+    static func displayName(forChosen name: String) -> String {
+        presets.first { $0.name == name }?.displayName ?? name
     }
 }
 

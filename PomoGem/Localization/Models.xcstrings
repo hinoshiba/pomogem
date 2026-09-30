@@ -1,13 +1,1182 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "100点" : {
+      "comment" : "Achievement kind: a perfect score on a test",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Perfect score"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "100点"
+          }
+        }
+      }
+    },
+    "250gごとの抽選%lld回" : {
+      "comment" : "How many rare-reward draws (one per 250 g) one completion made",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld draw (one per 250 g)"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld draws (one per 250 g)"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "250gごとの抽選%lld回"
+          }
+        }
+      }
+    },
+    "250gごとの抽選%lld回（%@）" : {
+      "comment" : "%1$lld draws (one per 250 g; always 2 or more here) and %2$@ their results, e.g. 通常3・金1",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld draws (one per 250 g): %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "250gごとの抽選%lld回（%@）"
+          }
+        }
+      }
+    },
+    "250gごとの抽選で金が%lld回続けて出なかった場合、次の抽選は金の粒になります。虹はこの回数をリセットしません。" : {
+      "comment" : "Gold guarantee rule; %lld is how many draws in a row without gold",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "If %lld draw in a row (one per 250 g) brings no gold, the next draw is a gold gem. A rainbow gem doesn’t reset this count."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "If %lld draws in a row (one per 250 g) bring no gold, the next draw is a gold gem. A rainbow gem doesn’t reset this count."
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "250gごとの抽選で金が%lld回続けて出なかった場合、次の抽選は金の粒になります。虹はこの回数をリセットしません。"
+          }
+        }
+      }
+    },
+    "iCloudのレア粒epochが不整合です。抽選を停止しました。" : {
+      "comment" : "Rare-reward ledger error (feature disabled in shipping builds)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The rare gem epoch in iCloud is inconsistent. Draws have stopped."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudのレア粒epochが不整合です。抽選を停止しました。"
+          }
+        }
+      }
+    },
+    "iCloudのレア粒台帳が見つかりません。" : {
+      "comment" : "Rare-reward ledger error (feature disabled in shipping builds)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The rare gem ledger in iCloud can’t be found."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudのレア粒台帳が見つかりません。"
+          }
+        }
+      }
+    },
+    "iCloudのレア粒台帳を検証できませんでした。" : {
+      "comment" : "Rare-reward ledger error (feature disabled in shipping builds)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The rare gem ledger in iCloud couldn’t be verified."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudのレア粒台帳を検証できませんでした。"
+          }
+        }
+      }
+    },
+    "iCloudのレア粒確定結果が不整合です。抽選を停止しました。" : {
+      "comment" : "Rare-reward ledger error (feature disabled in shipping builds)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The confirmed rare gem results in iCloud are inconsistent. Draws have stopped."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudのレア粒確定結果が不整合です。抽選を停止しました。"
+          }
+        }
+      }
+    },
+    "iCloudへレア粒を確定できませんでした。端末内の完走記録は保持されています。\n%@" : {
+      "comment" : "Rare-reward ledger error (feature disabled in shipping builds); %@ is CloudKit's own error text",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rare gems couldn’t be confirmed in iCloud. The completed sessions on this device are kept.\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudへレア粒を確定できませんでした。端末内の完走記録は保持されています。\n%@"
+          }
+        }
+      }
+    },
+    "このテーマは変更の回数が上限に達したため、これ以上変更できません。" : {
+      "comment" : "Theme edit error: the theme reached its edit limit",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This theme has reached its limit of changes and can’t be changed any further."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このテーマは変更の回数が上限に達したため、これ以上変更できません。"
+          }
+        }
+      }
+    },
+    "しっかり・3回" : {
+      "comment" : "Timer completion haptic name: strong, three taps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Strong · 3 Taps"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "しっかり・3回"
+          }
+        }
+      }
+    },
+    "はっきりした3回で知らせます" : {
+      "comment" : "Timer completion haptic description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Three firm taps when time is up"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "はっきりした3回で知らせます"
+          }
+        }
+      }
+    },
+    "やさしい・1回" : {
+      "comment" : "Timer completion haptic name: gentle, one tap",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gentle · 1 Tap"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "やさしい・1回"
+          }
+        }
+      }
+    },
+    "やわらかいベル" : {
+      "comment" : "Timer completion sound name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Soft Bell"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "やわらかいベル"
+          }
+        }
+      }
+    },
     "スクリーンタイム" : {
       "comment" : "Record source label: Screen Time",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screen Time"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "スクリーンタイム"
+          }
+        }
+      }
+    },
+    "テーマの保存データが多すぎるため、安全に変更できませんでした。" : {
+      "comment" : "Theme edit error: too many stored copies of the theme to change it safely",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This theme has too much saved data to change safely, so it wasn’t changed."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマの保存データが多すぎるため、安全に変更できませんでした。"
+          }
+        }
+      }
+    },
+    "リングのみ" : {
+      "comment" : "Timer display style: ring only",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ring Only"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "リングのみ"
+          }
+        }
+      }
+    },
+    "リング＋時間" : {
+      "comment" : "Timer display style: ring and remaining time",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ring + Time"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "リング＋時間"
+          }
+        }
+      }
+    },
+    "レア粒の完走結果より台帳情報が遅れているため、iCloud同期後に再試行してください。" : {
+      "comment" : "Rare-reward ledger error (feature disabled in shipping builds)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The ledger is behind your rare gem results. Please try again after iCloud syncs."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "レア粒の完走結果より台帳情報が遅れているため、iCloud同期後に再試行してください。"
+          }
+        }
+      }
+    },
+    "レア粒台帳の数値上限を超えました。" : {
+      "comment" : "Rare-reward ledger error (feature disabled in shipping builds)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The rare gem ledger has reached its numeric limit."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "レア粒台帳の数値上限を超えました。"
+          }
+        }
+      }
+    },
+    "今後は通常の粒だけを積み、抽選の端数と金の保証は現在の位置で停止します" : {
+      "comment" : "Rare-reward mode description: off; the draw remainder and gold guarantee pause where they are",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "From now on, only standard gems are added, and the draw remainder and gold guarantee pause where they are"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今後は通常の粒だけを積み、抽選の端数と金の保証は現在の位置で停止します"
+          }
+        }
+      }
+    },
+    "仕事の節目" : {
+      "comment" : "Achievement kind: a work milestone",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Work milestone"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仕事の節目"
+          }
+        }
+      }
+    },
+    "低めで穏やかな2音" : {
+      "comment" : "Timer completion sound description: two low, gentle notes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Two low, gentle notes"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "低めで穏やかな2音"
+          }
+        }
+      }
+    },
+    "例：2学期 期末テスト" : {
+      "comment" : "Achievement note placeholder for a perfect score. en: a culturally neutral example, not a literal translation",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "e.g. Fall semester final"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "例：2学期 期末テスト"
+          }
+        }
+      }
+    },
+    "例：初回リリース" : {
+      "comment" : "Achievement note placeholder for a work milestone",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "e.g. First release"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "例：初回リリース"
+          }
+        }
+      }
+    },
+    "例：簿記2級" : {
+      "comment" : "Achievement note placeholder for an exam pass. en: a culturally neutral example, not a literal translation",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "e.g. Spanish B1"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "例：簿記2級"
+          }
+        }
+      }
+    },
+    "保留中のレア粒台帳を検証できませんでした。記録は保持されています。" : {
+      "comment" : "Rare-reward ledger error (feature disabled in shipping builds)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The pending rare gem ledger couldn’t be verified. Your records are kept."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保留中のレア粒台帳を検証できませんでした。記録は保持されています。"
+          }
+        }
+      }
+    },
+    "円盤（数字なし）" : {
+      "comment" : "Timer display style: a shrinking coloured disc without numbers",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dial (No Numbers)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "円盤（数字なし）"
+          }
+        }
+      }
+    },
+    "別の端末との更新競合が続いています。完走記録を保持して後で再試行します。" : {
+      "comment" : "Rare-reward ledger error (feature disabled in shipping builds)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Updates keep conflicting with another device. Your completed sessions are kept, and it will try again later."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "別の端末との更新競合が続いています。完走記録を保持して後で再試行します。"
+          }
+        }
+      }
+    },
+    "別の端末と同時に台帳を更新しました。再試行します。" : {
+      "comment" : "Rare-reward ledger error (feature disabled in shipping builds)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Another device updated the ledger at the same time. Trying again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "別の端末と同時に台帳を更新しました。再試行します。"
+          }
+        }
+      }
+    },
+    "別の端末と旧レア粒台帳の状態が一致しません。抽選を停止しました。" : {
+      "comment" : "Rare-reward ledger error (feature disabled in shipping builds)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The old rare gem ledger doesn’t match another device’s. Draws have stopped."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "別の端末と旧レア粒台帳の状態が一致しません。抽選を停止しました。"
+          }
+        }
+      }
+    },
+    "区切りが分かる、落ち着いた2音" : {
+      "comment" : "Timer completion sound description: two calm notes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Two calm notes that mark the end"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "区切りが分かる、落ち着いた2音"
+          }
+        }
+      }
+    },
+    "同じ同期履歴を持つ設定内容が一致しないため、変更せず保持しました。サポートへお問い合わせください。" : {
+      "comment" : "Settings sync error: two synced copies disagree, so nothing was changed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copies of your settings with the same sync history don’t match, so they were kept unchanged. Please contact support."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同じ同期履歴を持つ設定内容が一致しないため、変更せず保持しました。サポートへお問い合わせください。"
+          }
+        }
+      }
+    },
+    "同じ完走IDに異なる内容が届いたため、抽選を停止しました。" : {
+      "comment" : "Rare-reward ledger error (feature disabled in shipping builds)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Different data arrived for the same completed session, so draws have stopped."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同じ完走IDに異なる内容が届いたため、抽選を停止しました。"
+          }
+        }
+      }
+    },
+    "同期されたレア粒台帳の移行情報が一致しないため、抽選を停止しました。" : {
+      "comment" : "Rare-reward ledger error (feature disabled in shipping builds)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The synced rare gem ledger’s migration data doesn’t match, so draws have stopped."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同期されたレア粒台帳の移行情報が一致しないため、抽選を停止しました。"
+          }
+        }
+      }
+    },
+    "同期済みのレア粒台帳を検証できませんでした。記録は保持されています。" : {
+      "comment" : "Rare-reward ledger error (feature disabled in shipping builds)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The synced rare gem ledger couldn’t be verified. Your records are kept."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同期済みのレア粒台帳を検証できませんでした。記録は保持されています。"
+          }
+        }
+      }
+    },
+    "完走記録とレア粒epochが一致しません。" : {
+      "comment" : "Rare-reward ledger error (feature disabled in shipping builds)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The completed session doesn’t match the rare gem epoch."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完走記録とレア粒epochが一致しません。"
+          }
+        }
+      }
+    },
+    "完走記録よりレア粒の再送情報が遅れているため、iCloud同期後に再試行してください。" : {
+      "comment" : "Rare-reward ledger error (feature disabled in shipping builds)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The rare gem resend data is behind your completed sessions. Please try again after iCloud syncs."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完走記録よりレア粒の再送情報が遅れているため、iCloud同期後に再試行してください。"
+          }
+        }
+      }
+    },
+    "実測" : {
+      "comment" : "Record source label: measured by the timer (glossary: timed)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Timed"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "実測"
+          }
+        }
+      }
+    },
+    "抽選しない" : {
+      "comment" : "Rare-reward mode: no draws",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No Draws"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "抽選しない"
+          }
+        }
+      }
+    },
+    "控えめ" : {
+      "comment" : "Rare-reward mode: quiet (draws without extra effects)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quiet"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控えめ"
+          }
+        }
+      }
+    },
+    "控えめな1回で知らせます" : {
+      "comment" : "Timer completion haptic description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "One soft tap when time is up"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控えめな1回で知らせます"
+          }
+        }
+      }
+    },
+    "明るいチャイム" : {
+      "comment" : "Timer completion sound name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bright Chime"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "明るいチャイム"
+          }
+        }
+      }
+    },
+    "時計回りに減るリングと残りの割合を表示します。残り時間の数字は表示しません" : {
+      "comment" : "Timer display style description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows a ring that shrinks clockwise and the percentage left. The time left isn’t shown"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時計回りに減るリングと残りの割合を表示します。残り時間の数字は表示しません"
+          }
+        }
+      }
+    },
+    "時間のみ" : {
+      "comment" : "Timer display style: remaining time only",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Time Only"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間のみ"
+          }
+        }
+      }
+    },
+    "標準" : {
+      "comment" : "Rare-reward mode: standard (draws with full effects)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standard"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "標準"
+          }
+        }
+      }
+    },
+    "標準・2回" : {
+      "comment" : "Timer completion haptic name: standard, two taps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standard · 2 Taps"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "標準・2回"
+          }
+        }
+      }
+    },
+    "残り時間と、時計回りに減るリングを表示します" : {
+      "comment" : "Timer display style description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows the time left and a ring that shrinks clockwise"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "残り時間と、時計回りに減るリングを表示します"
+          }
+        }
+      }
+    },
+    "残り時間の数字だけを大きく表示します" : {
+      "comment" : "Timer display style description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows only the time left, in large numbers"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "残り時間の数字だけを大きく表示します"
+          }
+        }
+      }
+    },
+    "満点だったテスト" : {
+      "comment" : "Achievement kind detail: perfect score",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A test you aced"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "満点だったテスト"
+          }
+        }
+      }
+    },
+    "澄んだチャイム" : {
+      "comment" : "Timer completion sound name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear Chime"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "澄んだチャイム"
+          }
+        }
+      }
+    },
+    "物理タイマーのように、色の円盤が時計回りに減ります。数字は表示しません" : {
+      "comment" : "Timer display style description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Like a kitchen timer, a colored disc shrinks clockwise. No numbers are shown"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "物理タイマーのように、色の円盤が時計回りに減ります。数字は表示しません"
+          }
+        }
+      }
+    },
+    "短い2回で終了を知らせます" : {
+      "comment" : "Timer completion haptic description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Two short taps when time is up"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "短い2回で終了を知らせます"
+          }
+        }
+      }
+    },
+    "種類の色・光と専用の音・触覚を使います" : {
+      "comment" : "Rare-reward mode description: standard",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uses each kind’s colors and glow, with special sounds and haptics"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "種類の色・光と専用の音・触覚を使います"
+          }
+        }
+      }
+    },
+    "種類は残し、追加の発光・専用音・専用触覚を使いません" : {
+      "comment" : "Rare-reward mode description: quiet",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keeps the kinds, without extra glow, special sounds or special haptics"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "種類は残し、追加の発光・専用音・専用触覚を使いません"
+          }
+        }
+      }
+    },
+    "納品・公開・案件完了など、自分で決めた節目" : {
+      "comment" : "Achievement kind detail: a milestone the user defines, such as a delivery, launch or finished project",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A milestone you set, such as a delivery, a launch or a finished project"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "納品・公開・案件完了など、自分で決めた節目"
+          }
+        }
+      }
+    },
+    "自己申告" : {
+      "comment" : "Record source label: entered by hand (glossary: self-reported)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Self-reported"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自己申告"
+          }
+        }
+      }
+    },
+    "虹%lld" : {
+      "comment" : "Compact count of rainbow gems from rare-reward draws, e.g. 虹1",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rainbow %lld"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "虹%lld"
+          }
+        }
+      }
+    },
+    "記録のリセット履歴が上限に達しました。サポートへお問い合わせください。" : {
+      "comment" : "Reset error: the record reset history reached its limit",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your records have reached their reset history limit. Please contact support."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録のリセット履歴が上限に達しました。サポートへお問い合わせください。"
+          }
+        }
+      }
+    },
+    "記録を保護するため、iCloudのリセットは一時的に利用できません。" : {
+      "comment" : "Settings: resetting records is unavailable in iCloud mode, to protect them",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To protect your records, resetting iCloud data is temporarily unavailable."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録を保護するため、iCloudのリセットは一時的に利用できません。"
+          }
+        }
+      }
+    },
+    "設定の同期コピーが安全に確認できる上限を超えたため、変更せず保持しました。サポートへお問い合わせください。" : {
+      "comment" : "Settings sync error: too many synced copies to check safely, so nothing was changed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "There are more synced copies of your settings than can be checked safely, so they were kept unchanged. Please contact support."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定の同期コピーが安全に確認できる上限を超えたため、変更せず保持しました。サポートへお問い合わせください。"
+          }
+        }
+      }
+    },
+    "設定の同期履歴が上限に達したため、変更を保存できません。サポートへお問い合わせください。" : {
+      "comment" : "Settings sync error: the settings reached their sync history limit",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your settings have reached their sync history limit, so this change can’t be saved. Please contact support."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定の同期履歴が上限に達したため、変更を保存できません。サポートへお問い合わせください。"
+          }
+        }
+      }
+    },
+    "試験・検定・資格の合格" : {
+      "comment" : "Achievement kind detail: passing an exam, test or certification",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passing an exam, test or certification"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "試験・検定・資格の合格"
+          }
+        }
+      }
+    },
+    "試験合格" : {
+      "comment" : "Achievement kind: passed an exam or certification",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passed an exam"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "試験合格"
+          }
+        }
+      }
+    },
+    "軽やかに上がる3音" : {
+      "comment" : "Timer completion sound description: three light rising notes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Three light, rising notes"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "軽やかに上がる3音"
+          }
+        }
+      }
+    },
+    "通常%lld" : {
+      "comment" : "Compact count of standard gems from rare-reward draws, e.g. 通常3",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standard %lld"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通常%lld"
+          }
+        }
+      }
+    },
+    "金%lld" : {
+      "comment" : "Compact count of gold gems from rare-reward draws, e.g. 金1",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gold %lld"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "金%lld"
+          }
+        }
+      }
+    },
+    "集中時間は1分から360分の範囲で指定してください。" : {
+      "comment" : "Settings error: the focus length must be 1 to 360 minutes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a focus length from 1 to 360 min."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中時間は1分から360分の範囲で指定してください。"
           }
         }
       }
