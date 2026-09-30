@@ -185,8 +185,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// under the count. Nothing else about a crystal depends on Pro.
     var showsMonthLabels = false {
         didSet {
-            renderBaseLayers()
+            // Home assigns it on every base-layer sync; only a change is
+            // drawn (launch-perf (b)).
             guard showsMonthLabels != oldValue else { return }
+            renderBaseLayers()
             allPebbleNodes.forEach { $0.setMonthEngraving(showsMonthLabels) }
         }
     }
@@ -233,6 +235,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         static let tapSpecular = "jar.tapSpecular"
         static let reducedMotionHighlight = "jar.reducedMotionHighlight"
         static let pileGlowShape = "jar.pileGlow.shape"
+        static let glassCrossfade = "jar.glass.crossfade"
     }
 
     /// A tap launches one primary gem and lets SpriteKit transfer that motion
@@ -309,6 +312,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// Glass v2: moving additive highlights (reflection bands, shoulder
     /// light) over the pre-rendered front glass; ±6 pt with tilt.
     private let glassHighlightNode = SKSpriteNode()
+    /// launch-perf (a): plain glass (a faint tint and the outline) shown
+    /// until the presented size's glass textures are baked off the main
+    /// thread; they then cross-fade in (`glassCrossfadeDuration`).
+    private let glassPlaceholderNode = SKShapeNode()
     /// Copper neck collar: three pre-rendered tilt states (−1, 0, +1) of
     /// which at most two are visible at once.
     private let collarNode = SKNode()
@@ -1112,6 +1119,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         soundSynth: SoundSynth? = nil,
         haptics: Haptics? = nil
     ) {
+#if DEBUG && targetEnvironment(simulator)
+        JarFrameProbe.shared?.markHomeStart()
+        let initStart = CACurrentMediaTime()
+        defer {
+            JarFrameProbe.shared?.note(String(format: "scene-init ms=%.1f", (CACurrentMediaTime() - initStart) * 1_000))
+        }
+#endif
         self.soundSynth = soundSynth ?? .shared
         self.haptics = haptics ?? .shared
         super.init(size: size)
@@ -1223,6 +1237,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         legacyStrata: [JarStratumVisual] = []
     ) {
         let previouslyPersistedIDs = persistedBakedPebbleIDs
+        let previousHistory = historyDescriptors
+        let previousQueuedDrops = dropQueue.count
         let roots = AggregatePebblePolicy.visibleRoots(from: aggregates)
         let aggregateDescriptors = roots.map(PebbleDescriptor.init(aggregate:))
         // A migrated legacy stratum can now be a non-root leaf in the compact
@@ -1249,13 +1265,24 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         acceptedPebbleIDs.formUnion(persistedBakedPebbleIDs)
         dropQueue.removeAll { persistedBakedPebbleIDs.contains($0.descriptor.id) }
         mutedLandingIDs.subtract(persistedBakedPebbleIDs)
+        var removedLiveBody = false
         for pebble in livePebbles
         where persistedBakedPebbleIDs.contains(pebble.descriptor.id) {
             pebble.removeFromParent()
+            removedLiveBody = true
         }
-        synchronizeHistoryBodies()
+        let historyBodiesChanged = synchronizeHistoryBodies()
         rebuildFloor()
-        resumeSimulation()
+        // launch-perf (b): Home re-applies its roots whenever a menu or a
+        // sheet opens or closes. The same roots, grams and presentation must
+        // not wake a resting jar (each wake kept it awake ~3 s: ~0.4 s of
+        // main thread and ~180 GPU frames on an iPhone 12 mini).
+        let changed = historyBodiesChanged
+            || removedLiveBody
+            || dropQueue.count != previousQueuedDrops
+            || persistedBakedPebbleIDs != previouslyPersistedIDs
+            || !PebbleDescriptor.haveSamePresentation(previousHistory, historyDescriptors)
+        if changed { resumeSimulation() }
     }
 
     /// Restores bodies without replaying the reward animation. They are shelf-packed and
@@ -1410,7 +1437,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         return didBegin
     }
 
-    private func synchronizeHistoryBodies() {
+    /// Returns whether any body was removed, replaced or added.
+    @discardableResult
+    private func synchronizeHistoryBodies() -> Bool {
         let wanted = Dictionary(uniqueKeysWithValues: historyDescriptors.map { ($0.id, $0) })
         let wantedIDs = Set(wanted.keys)
         let removedIDs = installedHistoryIDs.subtracting(wantedIDs)
@@ -1479,11 +1508,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             insertPebble(node)
         }
         installedHistoryIDs = wantedIDs
-        if !removedIDs.isEmpty || !replacements.isEmpty || !additions.isEmpty {
+        let changed = !removedIDs.isEmpty || !replacements.isEmpty || !additions.isEmpty
+        if changed {
             reconcileJarScale()
         }
         publishPhysicalContentChangeIfNeeded(force: !replacements.isEmpty)
-        resetIdleObservation()
+        // An unchanged pile keeps its idle countdown (launch-perf (b)).
+        if changed { resetIdleObservation() }
+        return changed
     }
 
     private func replaceHistoryBody(
@@ -2709,6 +2741,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         floorNode.name = "jar.floor"
         glassNode.name = "jar.glass.front"
         glassHighlightNode.name = "jar.glass.highlights"
+        glassPlaceholderNode.name = "jar.glass.placeholder"
         reducedMotionHighlightNode.name = "jar.reducedMotion.highlight"
         rimNode.name = "jar.glass.rim"
         innerRimNode.name = "jar.glass.innerRim"
@@ -2733,6 +2766,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         worldNode.addChild(floorNode)
         worldNode.addChild(glassNode)
         worldNode.addChild(glassHighlightNode)
+        worldNode.addChild(glassPlaceholderNode)
         worldNode.addChild(reducedMotionHighlightNode)
         worldNode.addChild(collarNode)
         collarNode.addChild(collarLeftNode)
@@ -2854,11 +2888,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
         // Glass v2: back and front are pre-rendered per jar size (cached),
         // so the bottle is a handful of textured draws instead of a dozen
-        // hairline strokes.
-        let glassTextures = Self.glassTextures(for: outer.size, neckInset: neckInset)
+        // hairline strokes. The textures are set by `refreshGlassTextures`
+        // below: baked off the main thread, at the presented size only.
         backGlassNode.path = jarPath
         backGlassNode.fillColor = .white
-        backGlassNode.fillTexture = glassTextures.back
         backGlassNode.strokeColor = .clear
         backGlassNode.lineWidth = 0
         backGlassNode.glowWidth = 0
@@ -2879,18 +2912,29 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
         glassNode.path = jarPath
         glassNode.fillColor = .white
-        glassNode.fillTexture = glassTextures.front
         // The silhouette is carried by the thick-glass rims in the texture.
         glassNode.strokeColor = .clear
         glassNode.lineWidth = 0
         glassNode.glowWidth = 0
         glassNode.zPosition = JarZPosition.glass
 
-        glassHighlightNode.texture = glassTextures.highlights
-        glassHighlightNode.size = outer.size
         glassHighlightNode.position = CGPoint(x: outer.midX + opticalTiltFraction * 6, y: outer.midY)
         glassHighlightNode.blendMode = .add
+        applyGlassHighlightBlendMode()
+        fitGlassHighlights()
         glassHighlightNode.zPosition = JarZPosition.glass + 0.4
+
+        // Plain glass until the textures are in: the back wall's tint and
+        // the faint outline, in one untextured shape behind the gems.
+        glassPlaceholderNode.path = jarPath
+        glassPlaceholderNode.fillColor = JarPalette.color(hex: Constants.Color.glassAbsorption)
+            .withAlphaComponent(0.10)
+        glassPlaceholderNode.strokeColor = JarPalette.color(hex: Constants.Color.glassEdge)
+            .withAlphaComponent(0.42)
+        glassPlaceholderNode.lineWidth = 1.6
+        glassPlaceholderNode.glowWidth = 0
+        glassPlaceholderNode.zPosition = JarZPosition.background + 0.1
+        refreshGlassTextures(for: outer.size)
 
         reducedMotionHighlightNode.path = jarPath
         reducedMotionHighlightNode.fillColor = UIColor.white.withAlphaComponent(0.11)
@@ -3060,27 +3104,385 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         return path
     }
 
-    private struct GlassTextures {
+    struct GlassTextures {
         let back: SKTexture
         let front: SKTexture
         let highlights: SKTexture
+        /// The textures' size in points (the bottle's, rounded).
+        let size: CGSize
+        /// launch-perf (c): where `highlights` holds any light, in points
+        /// from its bottom-left (`litRegions`). The layer draws only these.
+        let highlightRegions: [CGRect]
     }
 
-    private static let glassTextureCache = NSCache<NSString, NSArray>()
+    /// One size of baked glass (launch-perf (a)): the bottle's outer size
+    /// and neck inset in whole points, at the renderer's pixel scale.
+    struct GlassTextureKey: Hashable, Sendable, CustomStringConvertible {
+        let width: Int
+        let height: Int
+        let neckInset: Int
+        let scale: CGFloat
+
+        init(size: CGSize, neckInset: CGFloat, scale: CGFloat) {
+            width = Int(max(1, size.width.rounded()))
+            height = Int(max(1, size.height.rounded()))
+            self.neckInset = Int(neckInset.rounded())
+            self.scale = scale
+        }
+
+        var description: String { "\(width)x\(height)-\(neckInset)@\(scale)x" }
+    }
+
+    /// What a glass bake draws: the key's size with the exact neck inset.
+    struct GlassBakeRequest: Sendable {
+        let key: GlassTextureKey
+        let neckInset: CGFloat
+
+        init(size: CGSize, neckInset: CGFloat, scale: CGFloat) {
+            key = GlassTextureKey(size: size, neckInset: neckInset, scale: scale)
+            self.neckInset = neckInset
+        }
+    }
+
+    /// Every glass bake this process ran, with its thread (tests read it).
+    final class GlassBakeLedger: @unchecked Sendable {
+        struct Entry: Equatable, Sendable {
+            let key: GlassTextureKey
+            let onMainThread: Bool
+        }
+
+        private let lock = NSLock()
+        private var entries: [Entry] = []
+
+        func record(_ entry: Entry) {
+            lock.lock()
+            entries.append(entry)
+            if entries.count > 64 { entries.removeFirst(entries.count - 64) }
+            lock.unlock()
+        }
+
+        var all: [Entry] {
+            lock.lock()
+            defer { lock.unlock() }
+            return entries
+        }
+
+        func reset() {
+            lock.lock()
+            entries.removeAll()
+            lock.unlock()
+        }
+    }
+
+    /// A background bake of one size that any number of scenes wait for.
+    private final class GlassBakeJob: @unchecked Sendable {
+        let request: GlassBakeRequest
+        private let done = DispatchSemaphore(value: 0)
+        private let lock = NSLock()
+        private var result: GlassTextures?
+        /// Main thread only.
+        var completions: [@MainActor (GlassTextures) -> Void] = []
+        /// Main thread only: the result reached the cache and the scenes.
+        var isDelivered = false
+
+        init(request: GlassBakeRequest) {
+            self.request = request
+        }
+
+        func finish(_ textures: GlassTextures) {
+            lock.lock()
+            result = textures
+            lock.unlock()
+            done.signal()
+        }
+
+        /// Blocks until `finish` (at once when it already ran).
+        func waitForResult() -> GlassTextures {
+            done.wait()
+            done.signal()
+            lock.lock()
+            defer { lock.unlock() }
+            return result!
+        }
+    }
+
+    /// Baked glass of the latest `glassCacheLimit` sizes, newest first. A
+    /// size is ~14 MB of textures at 3× (measured on the iPhone 12 mini), so
+    /// only the sizes in use stay: Home's jar and one other (a preview).
+    static let glassCacheLimit = 2
+    private static var glassCache: [(key: GlassTextureKey, textures: GlassTextures)] = []
+    private static var glassBakesInFlight: [GlassTextureKey: GlassBakeJob] = [:]
+    nonisolated static let glassBakeLedger = GlassBakeLedger()
+    /// The main screen's scale, as `UIGraphicsImageRendererFormat.preferred()`.
+    private static let glassRenderScale = UIGraphicsImageRendererFormat.preferred().scale
+    /// Plain glass cross-fades to the baked glass this fast (≤150 ms).
+    static let glassCrossfadeDuration: TimeInterval = 0.15
+
+    enum GlassPresentation: Equatable {
+        /// The untextured stand-in (`glassPlaceholderNode`).
+        case placeholder
+        /// The baked textures (possibly still cross-fading in).
+        case baked
+    }
+
+    /// Glass textures bake off the main thread (tests may bake inline).
+    var bakesGlassInBackground = true
+    private(set) var glassPresentation: GlassPresentation = .placeholder
+    /// The size whose textures the glass shows.
+    private(set) var shownGlassKey: GlassTextureKey?
+    /// Those textures' size in points.
+    private var shownGlassSize: CGSize?
+    /// The glass the scene's current bottle should show.
+    private var wantedGlassRequest: GlassBakeRequest?
+    /// The size this scene waits on a background bake for.
+    private var awaitedGlassKey: GlassTextureKey?
+    /// A bake starts on the next main-queue turn (`startGlassBakeIfNeeded`).
+    private var isGlassBakeScheduled = false
+
+    private var glassTextureNodes: [SKNode] { [backGlassNode, glassNode, glassHighlightNode] }
+
+    /// Shows the glass of a bottle `size` (outer) in this scene (launch-perf
+    /// (a), device audit 2026-09-29: the glass was drawn twice on the main
+    /// thread at launch, once at `init`'s guessed size that was never shown,
+    /// 42–72 % of Home's first 570–683 ms on an iPhone 12 mini). A cached
+    /// size shows at once. Otherwise plain glass shows, and only a presented
+    /// scene (its real size) bakes: once per size, off the main thread; the
+    /// textures then cross-fade in. A resize keeps the previous textures,
+    /// stretched, until the new ones are in.
+    private func refreshGlassTextures(for size: CGSize) {
+        let request = GlassBakeRequest(size: size, neckInset: neckInset, scale: Self.glassRenderScale)
+        let key = request.key
+        wantedGlassRequest = request
+        guard shownGlassKey != key else { return }
+        if let cached = Self.cachedGlass(for: key) {
+            showGlass(cached, key: key, animated: false)
+            return
+        }
+        if shownGlassKey == nil { showGlassPlaceholder() }
+        guard view != nil else { return }
+        guard bakesGlassInBackground else {
+            let textures = Self.bakeGlassTextures(request)
+            Self.storeGlass(textures, for: key)
+            showGlass(textures, key: key, animated: false)
+            return
+        }
+        // A presentation settles its size within one pass (the SKView's
+        // resize, then Home's own): the bake takes the size it ends with.
+        guard !isGlassBakeScheduled else { return }
+        isGlassBakeScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.isGlassBakeScheduled = false
+                self.startGlassBakeIfNeeded()
+            }
+        }
+    }
+
+    private func startGlassBakeIfNeeded() {
+        guard view != nil,
+              let request = wantedGlassRequest,
+              shownGlassKey != request.key,
+              awaitedGlassKey != request.key
+        else { return }
+        let key = request.key
+        // Another scene may have baked this size meanwhile.
+        if let cached = Self.cachedGlass(for: key) {
+            showGlass(cached, key: key, animated: true)
+            return
+        }
+        awaitedGlassKey = key
+        Self.bakeGlassInBackground(request) { [weak self] textures in
+            guard let self, self.awaitedGlassKey == key else { return }
+            self.awaitedGlassKey = nil
+            guard self.wantedGlassRequest?.key == key else { return }
+            self.showGlass(textures, key: key, animated: true)
+        }
+    }
+
+    private func showGlassPlaceholder() {
+        glassTextureNodes.forEach {
+            $0.removeAction(forKey: ActionKey.glassCrossfade)
+            $0.isHidden = true
+        }
+        glassPlaceholderNode.removeAction(forKey: ActionKey.glassCrossfade)
+        glassPlaceholderNode.alpha = 1
+        glassPlaceholderNode.isHidden = false
+        glassPresentation = .placeholder
+    }
+
+    private func showGlass(_ textures: GlassTextures, key: GlassTextureKey, animated: Bool) {
+        backGlassNode.fillTexture = textures.back
+        glassNode.fillTexture = textures.front
+        Self.arrangeGlassHighlights(textures, on: glassHighlightNode, fade: lightEdgeFade)
+        shownGlassSize = textures.size
+        fitGlassHighlights()
+        shownGlassKey = key
+        let fromPlaceholder = glassPresentation == .placeholder
+        glassPresentation = .baked
+        settleGlassNodes()
+        // A resting jar runs no actions: it swaps in its one redrawn frame.
+        if fromPlaceholder, animated, view != nil, !isPaused, !isIdlePaused {
+            let fade = Self.glassCrossfadeDuration
+            glassTextureNodes.forEach {
+                $0.alpha = 0
+                $0.run(.fadeIn(withDuration: fade), withKey: ActionKey.glassCrossfade)
+            }
+            glassPlaceholderNode.isHidden = false
+            glassPlaceholderNode.run(
+                .sequence([.fadeOut(withDuration: fade), .hide(), .fadeIn(withDuration: 0)]),
+                withKey: ActionKey.glassCrossfade
+            )
+            requestRedraw(for: fade + JarScene.redrawHold)
+        } else {
+            requestRedraw()
+        }
+#if DEBUG && targetEnvironment(simulator)
+        if view != nil { JarFrameProbe.shared?.noteGlassReady() }
+#endif
+    }
+
+    /// The strips map the shown texture onto the bottle as the whole layer
+    /// did: stretched to the bottle's exact (or, while a new size bakes,
+    /// new) size.
+    private func fitGlassHighlights() {
+        guard let textureSize = shownGlassSize, textureSize.width > 0, textureSize.height > 0 else { return }
+        let outer = outerJarRect.size
+        glassHighlightNode.xScale = outer.width / textureSize.width
+        glassHighlightNode.yScale = outer.height / textureSize.height
+    }
+
+    /// The highlight strips follow their node's blend mode (a capture draws
+    /// them as ordinary alpha).
+    private func applyGlassHighlightBlendMode() {
+        for case let strip as SKSpriteNode in glassHighlightNode.children {
+            strip.blendMode = glassHighlightNode.blendMode
+        }
+    }
+
+    /// The baked glass at full strength and the placeholder gone.
+    private func settleGlassNodes() {
+        glassTextureNodes.forEach {
+            $0.removeAction(forKey: ActionKey.glassCrossfade)
+            $0.alpha = 1
+            $0.isHidden = false
+        }
+        glassPlaceholderNode.removeAction(forKey: ActionKey.glassCrossfade)
+        glassPlaceholderNode.alpha = 1
+        glassPlaceholderNode.isHidden = true
+    }
+
+    /// Ends a cross-fade in progress (a resting jar or a capture must never
+    /// keep a half-faded bottle).
+    private func finishGlassCrossfade() {
+        guard glassPresentation == .baked,
+              glassPlaceholderNode.action(forKey: ActionKey.glassCrossfade) != nil
+                || glassTextureNodes.contains(where: { $0.action(forKey: ActionKey.glassCrossfade) != nil })
+        else { return }
+        settleGlassNodes()
+    }
+
+    /// A capture shows the final glass. A bake still out (only in the first
+    /// moments after Home appears) is waited for here.
+    func settleGlassForCapture() {
+        startGlassBakeIfNeeded()
+        if let key = awaitedGlassKey {
+            Self.waitForGlassBake(key)
+        }
+        finishGlassCrossfade()
+    }
+
+    private static func cachedGlass(for key: GlassTextureKey) -> GlassTextures? {
+        guard let index = glassCache.firstIndex(where: { $0.key == key }) else { return nil }
+        let entry = glassCache.remove(at: index)
+        glassCache.insert(entry, at: 0)
+        return entry.textures
+    }
+
+    private static func storeGlass(_ textures: GlassTextures, for key: GlassTextureKey) {
+        glassCache.removeAll { $0.key == key }
+        glassCache.insert((key, textures), at: 0)
+        if glassCache.count > glassCacheLimit {
+            glassCache.removeLast(glassCache.count - glassCacheLimit)
+        }
+    }
+
+    /// One background bake per size, whoever asks for it.
+    private static func bakeGlassInBackground(
+        _ request: GlassBakeRequest,
+        completion: @escaping @MainActor (GlassTextures) -> Void
+    ) {
+        if let job = glassBakesInFlight[request.key] {
+            job.completions.append(completion)
+            return
+        }
+        let job = GlassBakeJob(request: request)
+        job.completions.append(completion)
+        glassBakesInFlight[request.key] = job
+        DispatchQueue.global(qos: .userInitiated).async {
+            job.finish(JarScene.bakeGlassTextures(request))
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    JarScene.deliverGlassBake(job)
+                }
+            }
+        }
+    }
+
+    /// Caches a finished bake and hands it to the scenes waiting for it.
+    private static func deliverGlassBake(_ job: GlassBakeJob) {
+        guard !job.isDelivered else { return }
+        job.isDelivered = true
+        let textures = job.waitForResult()
+        if glassBakesInFlight[job.request.key] === job {
+            glassBakesInFlight[job.request.key] = nil
+        }
+        storeGlass(textures, for: job.request.key)
+        let completions = job.completions
+        job.completions.removeAll()
+        completions.forEach { $0(textures) }
+    }
+
+    private static func waitForGlassBake(_ key: GlassTextureKey) {
+        guard let job = glassBakesInFlight[key] else { return }
+        deliverGlassBake(job)
+    }
+
+#if DEBUG
+    /// Forgets every baked glass size (tests start from a cold launch).
+    static func resetGlassCacheForTesting() {
+        glassCache.removeAll()
+        glassBakesInFlight.removeAll()
+        glassBakeLedger.reset()
+    }
+
+    static var cachedGlassKeysForTesting: [GlassTextureKey] { glassCache.map(\.key) }
+#endif
 
     /// Glass v2 (Docs/GemExperienceDesign.md §7.8), pre-rendered once per jar
     /// size. Back: absorption tint and inner shadows. Front: 7 pt wall band,
     /// warm left rim, cool right rim with a lower-right flare, a 14 pt base
     /// lens with its caustic line, neck ridges and a faint outline.
     /// Highlights (additive, moved ±6 pt with tilt): two vertical reflection
-    /// bands and the shoulder light. No SKEffectNode or CIFilter.
-    private static func glassTextures(for size: CGSize, neckInset: CGFloat) -> GlassTextures {
-        let width = max(1, size.width.rounded())
-        let height = max(1, size.height.rounded())
-        let key = NSString(string: "\(Int(width))x\(Int(height))-\(Int(neckInset.rounded()))")
-        if let cached = glassTextureCache.object(forKey: key) as? [SKTexture], cached.count == 3 {
-            return GlassTextures(back: cached[0], front: cached[1], highlights: cached[2])
+    /// bands and the shoulder light. No SKEffectNode or CIFilter. Safe off
+    /// the main thread (launch-perf (a)); it touches no scene state.
+    nonisolated static func bakeGlassTextures(_ request: GlassBakeRequest) -> GlassTextures {
+        let width = CGFloat(request.key.width)
+        let height = CGFloat(request.key.height)
+        let neckInset = request.neckInset
+        glassBakeLedger.record(GlassBakeLedger.Entry(key: request.key, onMainThread: Thread.isMainThread))
+#if DEBUG && targetEnvironment(simulator)
+        let bakeStart = CACurrentMediaTime()
+        defer {
+            let line = String(
+                format: "glass-bake size=%.0fx%.0f ms=%.1f main=%d",
+                width, height, (CACurrentMediaTime() - bakeStart) * 1_000, Thread.isMainThread ? 1 : 0
+            )
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { JarFrameProbe.shared?.note(line) }
+            }
         }
+#endif
         let renderSize = CGSize(width: width, height: height)
         // Jar path in y-down texture space.
         var flip = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: height)
@@ -3089,7 +3491,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             neckInset: neckInset
         ).copy(using: &flip) ?? CGPath(rect: CGRect(origin: .zero, size: renderSize), transform: nil)
         let space = CGColorSpaceCreateDeviceRGB()
-        let format = UIGraphicsImageRendererFormat.preferred()
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = request.key.scale
         format.opaque = false
         format.preferredRange = .standard
         let renderer = UIGraphicsImageRenderer(size: renderSize, format: format)
@@ -3416,8 +3819,168 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             texture.filteringMode = .linear
             return texture
         }
-        glassTextureCache.setObject(textures as NSArray, forKey: key)
-        return GlassTextures(back: textures[0], front: textures[1], highlights: textures[2])
+        return GlassTextures(
+            back: textures[0],
+            front: textures[1],
+            highlights: textures[2],
+            size: renderSize,
+            highlightRegions: highlights.cgImage.map { litRegions(of: $0, scale: request.key.scale) }
+                ?? [CGRect(origin: .zero, size: renderSize)]
+        )
+    }
+
+    /// launch-perf (c): the parts of `image` that hold any light, as
+    /// rectangles in points (y up, from its bottom-left) on a `tile`-point
+    /// grid. A tile counts when a pixel within 2 px of it is lit (linear
+    /// filtering reads one texel over), and rectangles that would overlap
+    /// or touch are merged, so no pixel is drawn twice or lies on a seam.
+    /// The glass highlights are ~38 % of the bottle's rectangle this way.
+    nonisolated static func litRegions(of image: CGImage, scale: CGFloat, tile tilePoints: CGFloat = 12) -> [CGRect] {
+        let width = image.width
+        let height = image.height
+        let whole = [CGRect(x: 0, y: 0, width: CGFloat(width) / scale, height: CGFloat(height) / scale)]
+        guard width > 0, height > 0, scale > 0 else { return whole }
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        let drawn = bytes.withUnsafeMutableBytes { buffer -> Bool in
+            guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+                  let context = CGContext(
+                      data: buffer.baseAddress,
+                      width: width,
+                      height: height,
+                      bitsPerComponent: 8,
+                      bytesPerRow: width * 4,
+                      space: space,
+                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                  )
+            else { return false }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        guard drawn else { return whole }
+        // Tiles in pixels; row 0 is the image's top.
+        let tile = max(1, Int((tilePoints * scale).rounded()))
+        let columns = (width + tile - 1) / tile
+        let rows = (height + tile - 1) / tile
+        var lit = [Bool](repeating: false, count: columns * rows)
+        let margin = 2
+        for y in 0 ..< height {
+            let rowStart = y * width * 4
+            for x in 0 ..< width where bytes[rowStart + x * 4 + 3] != 0 {
+                let c0 = max(0, x - margin) / tile
+                let c1 = min(width - 1, x + margin) / tile
+                let r0 = max(0, y - margin) / tile
+                let r1 = min(height - 1, y + margin) / tile
+                for r in r0 ... r1 {
+                    for c in c0 ... c1 { lit[r * columns + c] = true }
+                }
+            }
+        }
+        // Connected groups of lit tiles, as bounding boxes (inclusive).
+        typealias Box = (c0: Int, r0: Int, c1: Int, r1: Int)
+        var boxes: [Box] = []
+        var seen = [Bool](repeating: false, count: lit.count)
+        for start in lit.indices where lit[start] && !seen[start] {
+            seen[start] = true
+            var stack = [start]
+            var box: Box = (start % columns, start / columns, start % columns, start / columns)
+            while let index = stack.popLast() {
+                let c = index % columns
+                let r = index / columns
+                box = (min(box.c0, c), min(box.r0, r), max(box.c1, c), max(box.r1, r))
+                for (dc, dr) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                    let nc = c + dc
+                    let nr = r + dr
+                    guard nc >= 0, nc < columns, nr >= 0, nr < rows else { continue }
+                    let neighbour = nr * columns + nc
+                    if lit[neighbour], !seen[neighbour] {
+                        seen[neighbour] = true
+                        stack.append(neighbour)
+                    }
+                }
+            }
+            boxes.append(box)
+        }
+        // Boxes that overlap or touch (an edge or a corner) become one.
+        var merging = true
+        while merging {
+            merging = false
+            search: for i in boxes.indices {
+                for j in boxes.indices where j > i {
+                    let a = boxes[i]
+                    let b = boxes[j]
+                    guard a.c0 <= b.c1 + 1, b.c0 <= a.c1 + 1, a.r0 <= b.r1 + 1, b.r0 <= a.r1 + 1 else { continue }
+                    boxes[i] = (min(a.c0, b.c0), min(a.r0, b.r0), max(a.c1, b.c1), max(a.r1, b.r1))
+                    boxes.remove(at: j)
+                    merging = true
+                    break search
+                }
+            }
+        }
+        return boxes.map { box in
+            let x0 = box.c0 * tile
+            let y0 = box.r0 * tile
+            let x1 = min(width, (box.c1 + 1) * tile)
+            let y1 = min(height, (box.r1 + 1) * tile)
+            return CGRect(
+                x: CGFloat(x0) / scale,
+                y: CGFloat(height - y1) / scale,
+                width: CGFloat(x1 - x0) / scale,
+                height: CGFloat(y1 - y0) / scale
+            )
+        }
+    }
+
+    /// launch-perf (c): the moving highlights as strips of their one baked
+    /// texture, one per lit region (largest first), placed from the
+    /// texture's centre. They share the texture, the shader and the blend
+    /// mode, so SpriteKit draws them in one batch, and they draw the same
+    /// pixels as the whole layer
+    /// (`testGlassHighlightStripsDrawTheWholeLayersPixels`).
+    /// Shows the highlights on `node` as strips: the node draws the first
+    /// (its anchor keeps its origin at the bottle's centre, where the tilt
+    /// moves it) and holds the others as children with its blend mode and
+    /// the edge fade.
+    static func arrangeGlassHighlights(_ textures: GlassTextures, on node: SKSpriteNode, fade: JarLightEdgeFade?) {
+        node.removeAllChildren()
+        var strips = glassHighlightStrips(textures)
+        guard !strips.isEmpty else {
+            node.texture = nil
+            node.size = .zero
+            return
+        }
+        let first = strips.removeFirst()
+        node.texture = first.texture
+        node.size = first.size
+        node.anchorPoint = CGPoint(
+            x: 0.5 - first.position.x / max(first.size.width, 1),
+            y: 0.5 - first.position.y / max(first.size.height, 1)
+        )
+        for strip in strips {
+            strip.blendMode = node.blendMode
+            fade?.apply(to: strip)
+            node.addChild(strip)
+        }
+    }
+
+    static func glassHighlightStrips(_ textures: GlassTextures) -> [SKSpriteNode] {
+        let size = textures.size
+        let regions = textures.highlightRegions.sorted { $0.width * $0.height > $1.width * $1.height }
+        return regions.map { region in
+            let texture = SKTexture(
+                rect: CGRect(
+                    x: region.minX / size.width,
+                    y: region.minY / size.height,
+                    width: region.width / size.width,
+                    height: region.height / size.height
+                ),
+                in: textures.highlights
+            )
+            texture.filteringMode = .linear
+            let strip = SKSpriteNode(texture: texture, size: region.size)
+            strip.name = "jar.glass.highlights.strip"
+            strip.position = CGPoint(x: region.midX - size.width / 2, y: region.midY - size.height / 2)
+            return strip
+        }
     }
 
     // MARK: Copper collar
@@ -5046,6 +5609,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         // A settled pile over the core or the HUD steps down first: the jar
         // stays awake for the 0.5 s transition and settles anew after it.
         if enforcePileClearances() { return }
+        // The frozen frame shows the glass whole, never mid-fade.
+        finishGlassCrossfade()
         if !isIdlePaused {
             isIdlePaused = true
             onIdlePauseChanged?(true)
@@ -5061,6 +5626,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// (additive colour over a clear texture would be lost or saturated when
     /// the PNG is un-premultiplied). Returns the restore closure.
     func prepareForSnapshot() -> () -> Void {
+        settleGlassForCapture()
         let pebbles = allPebbleNodes
         pebbles.forEach {
             $0.settleGemTwinkle()
@@ -5074,6 +5640,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         // pile lights are halved for the capture (no pink haze).
         let sceneLights = [floorGlowNode, pileGlowNode, glassHighlightNode].map { ($0, $0.blendMode, $0.alpha) }
         sceneLights.forEach { $0.0.blendMode = .alpha }
+        applyGlassHighlightBlendMode()
         floorGlowNode.alpha *= 0.5
         pileGlowNode.alpha *= 0.45
         // The capture's texture is the bottle's rectangle, not the view:
@@ -5090,6 +5657,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 $0.0.blendMode = $0.1
                 $0.0.alpha = $0.2
             }
+            self?.applyGlassHighlightBlendMode()
             // A resting jar's render loop is stopped: show the restored
             // (settled) frame, so the screen never lags the scene.
             self?.requestRedraw()

@@ -104,6 +104,58 @@ final class JarIdleEnergyTests: XCTestCase {
         assertAwake(scene, "drop")
     }
 
+    /// launch-perf (b). Home re-applies its aggregate roots whenever a menu
+    /// or a sheet opens or closes. The same roots, grams and presentation
+    /// leave a resting jar asleep (each needless wake cost ~0.4 s of main
+    /// thread and ~180 GPU frames on an iPhone 12 mini); a real change
+    /// wakes it.
+    @MainActor
+    func testUnchangedAggregatesKeepTheRestingJarAsleepAndARealChangeWakesIt() {
+        let (scene, clock) = makeScene()
+        let view = SKView(frame: CGRect(origin: .zero, size: scene.size))
+        view.presentScene(scene)
+        defer { view.presentScene(nil) }
+        let root = aggregateRow(index: 1, grams: 2_500)
+        let other = aggregateRow(index: 2, grams: 2_500)
+        scene.showsMonthLabels = false
+        scene.configureAggregates([root])
+        scene.restore(pebbles: [loose(1)])
+
+        // Home's syncBaseLayers after a menu or sheet: the same inputs.
+        rest(scene, clock: clock)
+        for _ in 0 ..< 3 {
+            scene.showsMonthLabels = false
+            scene.configureAggregates([root])
+            XCTAssertTrue(scene.isIdlePaused, "unchanged roots keep the physics asleep")
+            XCTAssertTrue(scene.isRenderLoopPaused, "and the render loop stopped")
+            XCTAssertTrue(view.isPaused)
+            XCTAssertFalse(scene.wantsFullRateMotion)
+        }
+
+        root.grams = 3_200
+        scene.configureAggregates([root])
+        assertAwake(scene, "grams")
+
+        rest(scene, clock: clock)
+        scene.configureAggregates([root, other])
+        assertAwake(scene, "a new root")
+
+        rest(scene, clock: clock)
+        scene.configureAggregates([other])
+        assertAwake(scene, "a root gone")
+
+        rest(scene, clock: clock)
+        other.colorMixJSON = StrataMath.encodeColorMix([
+            StratumColorFraction(hex: Constants.Color.science, fraction: 1)
+        ])
+        scene.configureAggregates([other])
+        assertAwake(scene, "presentation")
+
+        rest(scene, clock: clock)
+        scene.showsMonthLabels = true
+        assertRedrawing(scene, "month labels still redraw on a change")
+    }
+
     @MainActor
     func testTapShakeAndVoiceOverActionsWakeTheRestingJar() {
         let (scene, clock) = makeScene()
@@ -569,6 +621,26 @@ final class JarIdleEnergyTests: XCTestCase {
             grams: Constants.Mass.measuredPebbleGrams,
             createdAt: Date(timeIntervalSince1970: TimeInterval(1_000 + index)),
             isTutorial: isTutorial
+        )
+    }
+
+    private func aggregateRow(index: Int, grams: Int) -> AggregatePebble {
+        let date = Date(timeIntervalSince1970: TimeInterval(1_750_000_000 + index))
+        return AggregatePebble(
+            id: UUID(uuidString: String(format: "E1A00000-0000-4000-8000-%012X", index))!,
+            createdAt: date,
+            level: 1,
+            pebbleCount: 10,
+            grams: grams,
+            measuredPebbleCount: 10,
+            colorMixJSON: StrataMath.encodeColorMix([
+                StratumColorFraction(hex: Constants.Color.english, fraction: 1)
+            ]),
+            subjectMixJSON: StrataMath.encodeSubjectMix([
+                AggregateSubjectFraction(name: "英語", colorHex: Constants.Color.english, pebbleCount: 10)
+            ]),
+            periodStart: date,
+            periodEnd: date
         )
     }
 
