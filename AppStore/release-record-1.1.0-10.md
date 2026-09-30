@@ -124,9 +124,10 @@ No signing credentials, keys, certificates or profiles are attached here.
   local candidates and are awaiting replacement. English currently inherits
   the older Japanese set. The separate IAP review image is not a listing image.
 - Saved both new IAP descriptions as Prepare for Submission revisions alongside
-  the existing approved descriptions. Saved the current IAP review notes and price
-  image; reload matched the notes and retained the new image with all three Pro
-  benefits. The English description is within Connect's 55-character limit.
+  the existing approved descriptions. Saved the IAP review notes and the
+  2026-09-22 price image; reload matched the notes and retained that image with
+  all three Pro benefits. The English description is within Connect's
+  55-character limit.
 - App Information still shows the existing global 4+ age rating.
 - Existing commercial terms, territories, review contact and release settings are
   retained. No purchase, refund or review submission occurred in this preparation.

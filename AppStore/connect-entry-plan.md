@@ -305,7 +305,11 @@ architecture、codesignを再検証します。
 deployは未完了です。これはbuild選択・TestFlight配布より前のblockerであり、production schemaをclearして
 解消してはいけません。
 
-## Remaining App Store Connect work
+## Historical 1.0 App Store Connect work plan
+
+The following checklist records the 2026-09-06 initial submission plan. It is
+not the current 1.1.0 status; use `release-record-1.1.0-10.md` and
+`submission-checklist.md` for the current remaining work.
 
 - 新version 1.0のja-JP／en-US description、review notes、listing field、copyright、screenshots、
   category、content rightsをsource-of-truthどおり保存し、reload後の完全一致を確認
