@@ -1766,6 +1766,9 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         let statusLabel = status.exists ? status.label : "<missing>"
         note("[\(label)] screen-time.authorization-status = \(statusLabel)")
 
+        let authorizationFailure = app.staticTexts["screen-time.authorization-failure"]
+        note("[\(label)] screen-time.authorization-failure = \(authorizationFailure.exists ? authorizationFailure.label : "<absent>")")
+
         let authorize = app.buttons["screen-time.authorize"]
         note("[\(label)] screen-time.authorize exists=\(authorize.exists) enabled=\(authorize.exists && authorize.isEnabled) label=\(authorize.exists ? authorize.label : "-")")
 
@@ -2603,6 +2606,13 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             pause(3)
             capture("authorization-after-affirmative")
         } else {
+            let failure = app.staticTexts["screen-time.authorization-failure"]
+            if failure.exists, !failure.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let reason = failure.label
+                note("AUTHORIZATION: explicit app refusal in screen-time.authorization-failure = \(reason)")
+                try skipWithEvidence("authorization-explicit-refusal",
+                                     "The app reported a Family Controls authorization failure before any approval button was addressable: \(reason). No approval button was tapped.")
+            }
             note("AUTHORIZATION: no affirmative button was addressable within 25 s.")
             try skipWithEvidence("authorization-prompt-unreachable",
                                  "Apple's Family Controls authorization prompt exposed no addressable affirmative button (tried \(Self.affirmatives.joined(separator: ", ")) in the app, in any sheet and in SpringBoard). Hand the authorization step to a human.")
