@@ -172,8 +172,20 @@ enum PomoGemSettingsUITestNavigation {
                     }
                 }
                 if frame.height > bottom - top, element.isHittable { return true }
-                if frame.height > 0, frame.minY < top {
-                    app.swipeDown(velocity: .slow)
+                if frame.height > 0, frame.width > 0,
+                   frame.minY < top || frame.maxY > bottom {
+                    // At AX5 an index row can occupy much of a small screen.
+                    // A whole-screen swipe can carry it past the opposite
+                    // edge, so correct only its distance from the viewport.
+                    let correction = frame.minY < top
+                        ? top - frame.minY + 12 : bottom - frame.maxY - 12
+                    let distance = min(220, max(60, abs(correction)))
+                        * (correction < 0 ? -1 : 1)
+                    let start = app.windows.firstMatch.coordinate(
+                        withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)
+                    )
+                    start.press(forDuration: 0.05,
+                                thenDragTo: start.withOffset(CGVector(dx: 0, dy: distance)))
                     continue
                 }
             }

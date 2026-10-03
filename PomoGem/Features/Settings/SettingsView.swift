@@ -877,12 +877,14 @@ struct SettingsView: View {
                     tableName: "Settings",
                     comment: "Settings footer under the leave-pause switch. The argument is the quick-glance grace (20秒). The lock is recognised from a notice iOS sends late right after an unlock, so both lock sentences are hedged; keep them hedged. Suggested English: When on, going Home or to another app during a focus pauses the timer from the moment you left. Coming back within %@ does not pause it. On an iPhone with a passcode, locking the screen usually keeps the timer running. However, locking again right after unlocking can pause it, and locking right after leaving the app can keep it running. Without a passcode, iPhone cannot tell locking from switching apps, so locking also pauses it."
                 )
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("settings.focus-leave-footer.behavior")
                 Text(
                     "自動では再開しません。アプリに戻って「再開する」をタップすると、離れた時点の続きから進みます。休憩中と、終了まで\(focusLeaveFinalStretchText)以内の集中は止めません。オフのときは、アプリを離れてもタイマーは止まりません。",
                     tableName: "Settings",
                     comment: "Settings footer under the leave-pause switch: how the timer resumes, what is never paused, and the off state. The argument is the final stretch that is never paused (1分). Suggested English: The timer never resumes by itself. Go back to the app and tap Resume to continue from where you left. Breaks and the last %@ of a focus are never paused. When off, the timer keeps running after you leave the app."
                 )
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("settings.focus-leave-footer.resume")
                 if focusLeavePauseEnabled {
                     Text(
@@ -890,6 +892,7 @@ struct SettingsView: View {
                         tableName: "Settings",
                         comment: "Settings footer under the leave-pause notification switch; it replaces the older Return-to-Focus Reminder while the leave pause is on. The switch is on by default, so the permission sentence is a plain fact with no call to action. Suggested English: These notifications say the timer is paused, and the rest are withdrawn when you come back. They do not arrive unless notifications are allowed on this iPhone. While Pause When You Leave the App is on, they replace the Return-to-Focus Reminder."
                     )
+                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("settings.focus-leave-footer.nudges")
                 }
             }
