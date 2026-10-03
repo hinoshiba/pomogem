@@ -18,7 +18,9 @@ import XCTest
 /// local-reset explicitly performs the destructive visible-record reset there.
 /// Timer phases require the cloud audit theme and no already-running timer.
 /// Offline starts ONLINE with an existing cloud installation. Activate external
-/// network loss only after POMOGEM_REAL_NETWORK_ARM_READY appears; the runner
+/// network loss only after the runner's Documents/network-barrier.json has a
+/// fresh arm event for this run prefix (and POMOGEM_REAL_NETWORK_ARM_READY);
+/// devicectl can read the runner container while this test waits. The runner
 /// waits 45 seconds before relaunching the terminated target. An OS certificate
 /// or launch failure is not evidence of the app's offline behavior.
 /// Offline-warm keeps a real running timer open through the loss window, then
@@ -63,9 +65,21 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
     }
     private enum AuditFailure: Error { case failed }
     private enum ScrollDirection { case up, down }
+    private enum NetworkBarrierEvent: String { case arm, relaunch, restore }
+
+    private struct NetworkBarrier: Encodable {
+        let schemaVersion: Int
+        let phase: String
+        let runPrefix: String
+        let event: String
+        let writtenAtUTC: String
+        let token: String
+        let runnerBundleID: String
+    }
 
     private var app: XCUIApplication?
     private var phase: Phase?
+    private var runPrefix = ""
     private var themeName = ""
     private var didLaunch = false
     private var retainedFailureEvidence = false
@@ -95,6 +109,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         let prefix = environment["POMOGEM_REAL_ICLOUD_RUN_PREFIX"] ?? ""
         try require(prefix.range(of: "^[A-Za-z0-9-]{8,24}$", options: .regularExpression) != nil,
                     "Supply a unique 8...24-character ASCII run prefix; reuse it for all phases.")
+        runPrefix = prefix
         themeName = "PomoGemAudit-\(prefix)"
         if let existingName = environment["POMOGEM_REAL_ICLOUD_THEME_NAME"] {
             try require([.offlineOnline, .offlineUse, .offlineRelaunch, .offlineRecover, .offlineWarm, .offlineCleanup, .offlineResume].contains(phase!),
@@ -310,8 +325,10 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         // iOS may need the network to trust this development-signed runner and
         // target. Finish both initial launches before the operator enables loss.
         app!.terminate()
+        try writeNetworkBarrier(.arm)
         NSLog("POMOGEM_REAL_NETWORK_ARM_READY")
         try await Task.sleep(for: .seconds(45))
+        try writeNetworkBarrier(.relaunch)
         NSLog("POMOGEM_REAL_NETWORK_RELAUNCH_BEGIN")
         let started = ProcessInfo.processInfo.systemUptime
         let app = launchRealApplication()
@@ -351,8 +368,10 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         try require(!offlineBanner.exists, "The network arm window requires the verified online baseline first.")
         try selectAuditTheme()
         app!.terminate()
+        try writeNetworkBarrier(.arm)
         NSLog("POMOGEM_REAL_NETWORK_ARM_READY")
         try await Task.sleep(for: .seconds(45))
+        try writeNetworkBarrier(.relaunch)
         NSLog("POMOGEM_REAL_NETWORK_RELAUNCH_BEGIN")
         let started = ProcessInfo.processInfo.systemUptime
         _ = launchRealApplication()
@@ -431,8 +450,10 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         let paused = try timerRemainingSeconds()
         try require((1...1500).contains(paused), "Resume only the previously retained synthetic 25-minute timer.")
         app!.terminate()
+        try writeNetworkBarrier(.arm)
         NSLog("POMOGEM_REAL_NETWORK_ARM_READY")
         try await Task.sleep(for: .seconds(45))
+        try writeNetworkBarrier(.relaunch)
         NSLog("POMOGEM_REAL_NETWORK_RELAUNCH_BEGIN")
         _ = launchRealApplication()
         try requireFocus(paused: true, timeout: 30)
@@ -464,6 +485,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         try selectAuditTheme()
         try startRealTwentyFiveMinuteTimer()
         let beforeLoss = try requireRunningCountdown()
+        try writeNetworkBarrier(.arm)
         NSLog("POMOGEM_REAL_NETWORK_ARM_READY")
         try await Task.sleep(for: .seconds(45))
         let duringLoss = try requireRunningCountdown()
@@ -493,6 +515,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
                     && !app!.buttons["このiPhoneだけに保存"].exists,
                     "The warm retry notice must not replace the initialized data with fresh storage selection.")
         retainEvidence(failure: false)
+        try writeNetworkBarrier(.restore)
         NSLog("POMOGEM_REAL_NETWORK_RESTORE_READY")
         try await Task.sleep(for: .seconds(45))
         // A restored network path retries by itself; tap only if it has not.
@@ -1118,6 +1141,46 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         XCTWaiter.wait(for: [XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "exists == false"), object: element
         )], timeout: 10) == .completed
+    }
+
+    /// The app under test is already launched before each arm point, but NSLog
+    /// from the UI runner may only appear in the xcresult after the window has
+    /// closed. A small atomic file in the RUNNER's Documents is observable by
+    /// devicectl before the operator changes the external network condition.
+    /// Each event replaces the previous one and carries a fresh token/time so
+    /// an old run or a later event cannot be mistaken for the current barrier.
+    private func writeNetworkBarrier(_ event: NetworkBarrierEvent) throws {
+        guard let phase, !runPrefix.isEmpty else {
+            try require(false, "The network barrier has no validated phase or runner prefix.")
+            return
+        }
+        let bundleID = Bundle.main.bundleIdentifier ?? ""
+        try require(!bundleID.isEmpty, "The network barrier cannot identify its UI-test runner bundle.")
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let barrier = NetworkBarrier(
+            schemaVersion: 1,
+            phase: phase.rawValue,
+            runPrefix: runPrefix,
+            event: event.rawValue,
+            writtenAtUTC: formatter.string(from: Date()),
+            token: UUID().uuidString,
+            runnerBundleID: bundleID
+        )
+        do {
+            guard let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+                throw AuditFailure.failed
+            }
+            try FileManager.default.createDirectory(at: documents, withIntermediateDirectories: true)
+            let marker = documents.appendingPathComponent("network-barrier.json", isDirectory: false)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let payload = try encoder.encode(barrier)
+            try payload.write(to: marker, options: .atomic)
+            guard try Data(contentsOf: marker) == payload else { throw AuditFailure.failed }
+        } catch {
+            try require(false, "The UI-test runner could not atomically write and verify its network barrier marker.")
+        }
     }
 
     private func require(_ condition: @autoclosure () -> Bool, _ message: String,
