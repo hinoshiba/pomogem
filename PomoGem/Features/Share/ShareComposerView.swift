@@ -3926,6 +3926,26 @@ private struct ShareJarGraphic: View {
                 .padding(.horizontal, 3)
             }
             .frame(width: mouth + 6, height: band)
+            .overlay(alignment: .top) {
+                // Same seated glass lid as the live jar: the surface and
+                // its small copper grip make the closed top readable.
+                Ellipse()
+                    .fill(Color(hex: "#BED8EE").opacity(0.30))
+                    .overlay { Ellipse().stroke(.white.opacity(0.76), lineWidth: 1.3) }
+                    .overlay {
+                        Capsule().fill(.white.opacity(0.70))
+                            .frame(width: mouth * 0.60, height: 1.8)
+                            .rotationEffect(.degrees(-2))
+                    }
+                    .overlay(alignment: .top) {
+                        Capsule().fill(Color(hex: "#FFE3CF").opacity(0.82))
+                            .frame(width: 18, height: 4)
+                            .overlay { Capsule().stroke(.white.opacity(0.84), lineWidth: 0.6) }
+                            .offset(y: 2)
+                    }
+                    .frame(width: max(1, mouth - 4), height: 14)
+                    .offset(y: -7)
+            }
             .padding(.top, size.height - height - band * 0.5)
     }
 
@@ -4371,12 +4391,9 @@ private struct AnimatedShareCardPreview: View {
     }
 }
 
-/// Motion over the flattened jar snapshot of a share card: the time core
-/// breathes (1.00 ↔ 1.04) inside a glow that swells with it, a soft sheen
-/// of light slides once across the glass, and glints on the highest gems
-/// light in turn (phase-shifted), so every GIF frame differs visibly while
-/// the jar itself stays the real capture. The still card uses one fixed
-/// phase.
+/// Motion over the flattened jar snapshot: glass sheen and the highest
+/// gems' glints. The rear-wall relief stays in the captured image, behind
+/// its glass and gems, rather than being drawn over them again.
 private struct ShareJarMotionLayer: View {
     let motion: ShareJarMotion
     let imageAspect: CGFloat
@@ -4390,20 +4407,8 @@ private struct ShareJarMotionLayer: View {
                 ? CGSize(width: frame.height * imageAspect, height: frame.height)
                 : CGSize(width: frame.width, height: frame.width / max(imageAspect, 0.001))
             let origin = CGPoint(x: (frame.width - fitted.width) / 2, y: (frame.height - fitted.height) / 2)
-            let stone = CGRect(
-                x: origin.x + motion.stoneRect.minX * fitted.width,
-                y: origin.y + motion.stoneRect.minY * fitted.height,
-                width: motion.stoneRect.width * fitted.width,
-                height: motion.stoneRect.height * fitted.height
-            )
-            // 控えめ (D17): the stone and its glow hold the still card's
-            // breath, the glow is dimmer and no glint lights up; the sheen
-            // still crosses the glass, so the GIF keeps moving.
+            // 控えめ (D17): no glint lights up; the glass sheen still moves.
             let effects = motion.effects
-            let breath = effects.allowsBreathing
-                ? (1 - cos(phase * .pi * 2)) / 2
-                : (1 - cos(0.18 * .pi * 2)) / 2
-            let halo = Double(effects.haloScale)
             ZStack {
                 // A sheen of light sliding across the glass (one pass per loop).
                 LinearGradient(
@@ -4422,32 +4427,6 @@ private struct ShareJarMotionLayer: View {
                     RoundedRectangle(cornerRadius: fitted.width * 0.08, style: .continuous)
                         .frame(width: fitted.width * 0.96, height: fitted.height * 0.97)
                         .position(x: origin.x + fitted.width / 2, y: origin.y + fitted.height / 2)
-                }
-                if motion.stoneRect.width > 0 {
-                    Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: [
-                                    Color(uiColor: motion.glowColor).opacity((0.10 + 0.42 * breath) * halo),
-                                    Color(uiColor: motion.glowColor).opacity((0.04 + 0.16 * breath) * halo),
-                                    .clear
-                                ],
-                                center: .center,
-                                startRadius: stone.width * 0.30,
-                                endRadius: stone.width * (0.95 + 0.45 * breath)
-                            )
-                        )
-                        .frame(width: stone.width * 3, height: stone.width * 3)
-                        .position(x: stone.midX, y: stone.midY)
-                        .blendMode(.screen)
-                }
-                if let image = motion.stone {
-                    Image(uiImage: image)
-                        .resizable()
-                        .interpolation(.high)
-                        .frame(width: stone.width, height: stone.height)
-                        .scaleEffect(1 + 0.04 * breath)
-                        .position(x: stone.midX, y: stone.midY)
                 }
                 ForEach(Array((effects.allowsSpontaneousTwinkle ? motion.glints : []).enumerated()), id: \.offset) { index, point in
                     let wave = max(0, sin((phase + Double(index) / Double(max(motion.glints.count, 1))) * .pi * 2))

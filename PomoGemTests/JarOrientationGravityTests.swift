@@ -168,6 +168,49 @@ final class JarOrientationGravityTests: XCTestCase {
 
     // MARK: Entry ritual and landing
 
+    func testTheVisibleLidOpensForEntryAndReseatsAfterLandingOrRestore() throws {
+        for reducedMotion in [false, true] {
+            let scene = makeScene()
+            scene.reduceMotion = reducedMotion
+            scene.restore(pebbles: [])
+            let driver = try Driver(scene: scene)
+            defer { driver.finish() }
+            let lid = try XCTUnwrap(scene.childNode(withName: "//jar.lid"))
+            XCTAssertEqual(lid.alpha, 1, "A resting bottle visibly contains its gems")
+
+            let drop = loose(901, minutes: 25)
+            scene.dropFromAbove(drop)
+            var sawOpenNeck = false
+            driver.step(frames: 60) {
+                if scene.entryPhaseNameForTesting(drop.id) == "throughMouth", lid.alpha < 0.1 {
+                    sawOpenNeck = true
+                }
+                self.assertContained(scene, "visible lid during entry")
+            }
+            XCTAssertTrue(sawOpenNeck, "The incoming gem never passes through a visibly sealed face")
+            driver.step(frames: 180)
+            XCTAssertTrue(scene.hasLandedPebble(withID: drop.id))
+            XCTAssertNil(scene.entryPhaseNameForTesting(drop.id))
+            XCTAssertEqual(lid.alpha, 1, accuracy: 0.01, "The lid reseats after the gem is inside")
+
+            let removedDrop = loose(902, minutes: 25)
+            scene.dropFromAbove(removedDrop)
+            driver.step(frames: 8)
+            scene.removePebbles(withIDs: [removedDrop.id])
+            XCTAssertNil(scene.entryPhaseNameForTesting(removedDrop.id))
+            let restoreCapture = scene.prepareForSnapshot()
+            XCTAssertEqual(lid.alpha, 1, "Removing the final entrant must reseat the lid, including captures during the closing fade")
+            XCTAssertNil(lid.action(forKey: "jar.lid.entry"))
+            restoreCapture()
+
+            scene.dropFromAbove(loose(903, minutes: 25))
+            driver.step(frames: 8)
+            scene.restore(pebbles: [])
+            XCTAssertEqual(lid.alpha, 1, "Restoring the jar must not leave an open or half-faded lid")
+            XCTAssertNil(lid.action(forKey: "jar.lid.entry"))
+        }
+    }
+
     func testACompletionDropEntersThroughTheMouthAndLandsInEveryPose() throws {
         for pose in Pose.allCases {
             for filled in [false, true] {

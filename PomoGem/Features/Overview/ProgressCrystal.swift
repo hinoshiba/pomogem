@@ -2474,18 +2474,66 @@ struct JarLifetimeCoreLabelLimits: Equatable {
     }
 }
 
-/// A noninteractive optical layer behind the SpriteKit bottle. The recent
-/// physical stones remain touchable in front; this centre makes compressed
-/// lifetime effort legible instead of letting higher tiers become a pile of
-/// similarly weighted discs.
-///
-/// Time core v3 (Docs/GemExperienceDesign.md §7.9): a luminous radial
-/// brilliant painted by the approximate theme shares, a soft bloom that
-/// hugs its girdle, a copper dashed orbit with double-diamond slots (their
-/// meaning is unchanged: `litOrbitSlotCount`), and the name plate with the
-/// progress card below the orbit (`JarLifetimeCoreLayout`). Growth never
-/// stalls: the stone grows to 0.26 of the jar width, then a second orbit
-/// (250 kg), a crown of lights (2.5 t) and a third orbit (25 t) appear.
+/// The time summary is a fixed relief on the rear wall, distinct from the
+/// physical gems. Home and exported snapshots share its light and mount.
+enum JarCoreReliefAppearance {
+    static let haloScale: CGFloat = 0.62
+    static let vesselGlowScale: CGFloat = 0.70
+    static let mountDiameterRatio: CGFloat = 1.14
+    static let engravingDiameterRatio: CGFloat = 1.06
+    static let mountFillAlpha: CGFloat = 0.14
+    static let mountStrokeAlpha: CGFloat = 0.48
+    static let engravingAlpha: CGFloat = 0.18
+    static let mountLineWidth: CGFloat = 0.8
+    static let copperHex = "#D9967A"
+
+    static func drawMount(diameter: CGFloat, center: CGPoint, in context: CGContext) {
+        func rect(_ ratio: CGFloat) -> CGRect {
+            let side = diameter * ratio
+            return CGRect(x: center.x - side / 2, y: center.y - side / 2, width: side, height: side)
+        }
+        context.saveGState()
+        context.setFillColor(GemColor(hex: Constants.Color.inkRaised).withAlpha(mountFillAlpha).cgColor)
+        context.fillEllipse(in: rect(mountDiameterRatio))
+        context.setStrokeColor(GemColor(hex: copperHex).withAlpha(mountStrokeAlpha).cgColor)
+        context.setLineWidth(mountLineWidth)
+        context.strokeEllipse(in: rect(mountDiameterRatio))
+        context.setStrokeColor(UIColor.white.withAlphaComponent(engravingAlpha).cgColor)
+        context.setLineWidth(mountLineWidth * 0.75)
+        context.strokeEllipse(in: rect(engravingDiameterRatio))
+        context.restoreGState()
+    }
+}
+
+private struct JarCoreReliefMount: View {
+    let diameter: CGFloat
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color(hex: Constants.Color.inkRaised).opacity(reduceTransparency ? 0.26 : Double(JarCoreReliefAppearance.mountFillAlpha)))
+                .overlay {
+                    Circle()
+                        .stroke(
+                            Color(hex: JarCoreReliefAppearance.copperHex).opacity(contrast == .increased ? 0.75 : Double(JarCoreReliefAppearance.mountStrokeAlpha)),
+                            lineWidth: JarCoreReliefAppearance.mountLineWidth
+                        )
+                }
+                .frame(width: diameter * JarCoreReliefAppearance.mountDiameterRatio, height: diameter * JarCoreReliefAppearance.mountDiameterRatio)
+            Circle()
+                .stroke(Color.white.opacity(Double(JarCoreReliefAppearance.engravingAlpha)), lineWidth: JarCoreReliefAppearance.mountLineWidth * 0.75)
+                .frame(width: diameter * JarCoreReliefAppearance.engravingDiameterRatio, height: diameter * JarCoreReliefAppearance.engravingDiameterRatio)
+        }
+        .accessibilityHidden(true)
+        .allowsHitTesting(false)
+    }
+}
+
+/// A noninteractive rear-wall summary behind the SpriteKit bottle. The
+/// physical gems remain touchable in front and may obscure the relief.
+/// Its theme shares, growth stages and progress orbit retain their meaning.
 struct JarLifetimeCoreBackdrop: View {
     let state: JarLifetimeCoreState
     let colorHex: String
@@ -2504,19 +2552,6 @@ struct JarLifetimeCoreBackdrop: View {
     /// 演出の強さ as the jar resolved it (its Reduce Motion includes the
     /// test override); nil resolves it here.
     var effectsInEffect: JarEffectsIntensity?
-    /// Which part this copy draws. A pile that reaches the core (round 12)
-    /// splits it: the broad bloom and the orbit stay behind the gems, the
-    /// stone and its own light step in front of them.
-    var parts: Parts = .whole
-
-    enum Parts {
-        case whole
-        case behindThePile
-        case inFrontOfThePile
-
-        var drawsOrbit: Bool { self != .inFrontOfThePile }
-        var drawsStone: Bool { self != .behindThePile }
-    }
 
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     /// UI tests force Reduce Motion through this seam (as Home and the jar do).
@@ -2594,11 +2629,11 @@ struct JarLifetimeCoreBackdrop: View {
             let quantized = shares
             // 控えめ (D17): the bloom, the lobes and the girdle bloom at the
             // halo scale (the stone itself is unchanged).
-            let halo = Double(effects.haloScale)
+            let halo = Double(effects.haloScale * JarCoreReliefAppearance.haloScale)
 
             ZStack {
                 // Broad, soft bloom that seats the core in the jar's light.
-                if parts.drawsOrbit {
+                Group {
                     Circle()
                         .fill(
                             RadialGradient(
@@ -2637,7 +2672,7 @@ struct JarLifetimeCoreBackdrop: View {
                     }
                 }
 
-                if parts.drawsStone {
+                Group {
                     // Halo in two lobes: the left half's colour leaves the left
                     // side, the right half's the right (10 % aurora violet),
                     // α0.45 out to about 1.35R — light, not a neon ring.
@@ -2674,6 +2709,10 @@ struct JarLifetimeCoreBackdrop: View {
                             )
                         )
                         .frame(width: stone * 1.24, height: stone * 1.24)
+
+                    // A stationary copper engraving seats the summary on
+                    // the rear wall; loose gems pass in front of this mount.
+                    JarCoreReliefMount(diameter: stone)
 
                     // The unquantised fan: the core's marks (Differentiate
                     // Without Color) tell theme arcs from the mixed その他.
@@ -3160,7 +3199,7 @@ struct JarLifetimeCoreVessel: View {
             let lit = min(10, max(0, totalGrams / max(1, Constants.Mass.measuredPebbleGrams)))
             // 控えめ (D17): the vessel's light at the inner-glow scale.
             let effects = effectsInEffect ?? .resolved(preference: effectsIntensity, reduceMotion: reduceMotion)
-            let inner = Double(effects.innerGlowScale)
+            let inner = Double(effects.innerGlowScale * JarCoreReliefAppearance.vesselGlowScale)
             ZStack {
                 // A clear crystal from the first day: white light (α0.3 out
                 // to 1.3R) around an ice-white stone. Still no theme colour.
@@ -3178,6 +3217,7 @@ struct JarLifetimeCoreVessel: View {
                         )
                     )
                     .frame(width: core * 1.3, height: core * 1.3)
+                JarCoreReliefMount(diameter: core * 0.92)
                 let scale = displayScale
                 HeroArtworkImage(key: GemArtwork.vesselImageKey(litFacets: lit, scale: scale)) {
                     GemArtwork.vesselImage(litFacets: lit, scale: scale)

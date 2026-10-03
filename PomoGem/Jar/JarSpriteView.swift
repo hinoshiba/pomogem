@@ -389,10 +389,9 @@ struct JarSpriteView: View {
                     bedTop: bedTop,
                     pileTop: 0
                 ).floor
-                // Round 12: the column is placed from the HUD, the bed and
-                // the floor row only, so the core never moves or shrinks
-                // with the pile (the pile scale keeps the pile below it,
-                // `JarScene.pileClearances`). The labels then show whole,
+                // The rear-wall relief stays fixed between the HUD and bed.
+                // Physical gems may pass in front of it; they never shrink
+                // to reserve a clear window around the core. Labels show whole,
                 // without the second line, or not at all, whichever fits
                 // above the settled gems (the completion card shortens the
                 // jar the same way).
@@ -456,22 +455,8 @@ struct JarSpriteView: View {
                     bottomLimit: coreBottomLimit,
                     labelBottomLimit: coreLabelBottomLimit
                 )
-                // A pile the scale could not keep down (a heavy jar at
-                // 1.0, or a young one at the 2.0 floor) never buries the
-                // core: it steps in front of the settled gems instead.
-                let coreInFront = coreDisc.map { disc in
-                    scene.settledPileTop(
-                        minX: disc.center.x - disc.radius,
-                        maxX: disc.center.x + disc.radius,
-                        below: proxy.size.height - disc.center.y + disc.radius
-                    ) > proxy.size.height - disc.center.y - disc.radius * 0.8
-                } ?? false
                 let pileClearances = Self.pileClearances(
                     stageSize: proxy.size,
-                    coreDisc: coreDisc,
-                    namePlate: coreLayout.map { layout in
-                        (top: layout.labelTop, height: coreLabelMetrics.namePlate, halfWidth: namePlateHalfWidth)
-                    },
                     hudBottom: coreTopClearance
                 )
                 let effects = JarEffectsIntensity.resolved(preference: effectsIntensity, reduceMotion: reduceMotion)
@@ -486,8 +471,8 @@ struct JarSpriteView: View {
                     effects: effects
                 )
                 if let coreState = lifetimeCoreState {
-                    // Behind the scene: all of it, or (when the pile reaches
-                    // the core) its bloom and orbit, the stone in front.
+                    // The fixed summary belongs to the back wall: the pile
+                    // and front-glass reflections always occlude it.
                     JarLifetimeCoreBackdrop(
                         state: coreState,
                         colorHex: lifetimeCoreColorHex,
@@ -496,8 +481,7 @@ struct JarSpriteView: View {
                         bottomLimit: coreBottomLimit,
                         labelBottomLimit: coreLabelBottomLimit,
                         labelHeight: coreLabelHeight,
-                        effectsInEffect: effects,
-                        parts: coreInFront ? .behindThePile : .whole
+                        effectsInEffect: effects
                     )
                     // The whole block, laid out but never drawn, measures
                     // the labels (their measured size keeps the layout
@@ -514,7 +498,7 @@ struct JarSpriteView: View {
                         metrics: $coreLabelMetrics
                     )
                     .opacity(0)
-                } else if totalGrams > 0, totalGrams < GemCutLadder.firstCrystalTierGrams, !coreInFront {
+                } else if totalGrams > 0, totalGrams < GemCutLadder.firstCrystalTierGrams {
                     // Where the core will be born: a colourless vessel whose
                     // facets light up one per 250 g.
                     JarLifetimeCoreVessel(
@@ -616,30 +600,6 @@ struct JarSpriteView: View {
                         .receive(on: RunLoop.main)
                 ) { _ in
                     allowsAmbientSparkle = JarScene.allowsAmbientSparkle
-                }
-
-                if coreInFront {
-                    if let coreState = lifetimeCoreState {
-                        JarLifetimeCoreBackdrop(
-                            state: coreState,
-                            colorHex: lifetimeCoreColorHex,
-                            colorShares: lifetimeCoreColorShares,
-                            topClearance: coreTopClearance,
-                            bottomLimit: coreBottomLimit,
-                            labelBottomLimit: coreLabelBottomLimit,
-                            labelHeight: coreLabelHeight,
-                            effectsInEffect: effects,
-                            parts: .inFrontOfThePile
-                        )
-                    } else {
-                        JarLifetimeCoreVessel(
-                            totalGrams: totalGrams,
-                            topClearance: coreTopClearance,
-                            bottomLimit: coreBottomLimit,
-                            labelBottomLimit: coreLabelBottomLimit,
-                            effectsInEffect: effects
-                        )
-                    }
                 }
 
                 // F3 (review F1): the lifted 「N巡」 pill, in front of the
@@ -816,43 +776,16 @@ struct JarSpriteView: View {
         )
     }
 
-    /// Where the settled pile must stay below (scene coordinates, y up),
-    /// for the pile scale (`JarScene.pileClearances`, round 12):
-    /// - under the core, no higher than 0.45 of its radius below its
-    ///   centre, so at least about 85 % of the stone shows; the scale never
-    ///   gives way below 2.0 for it;
-    /// - under the core's name plate (its width and 6 pt), 6 pt below it,
-    ///   so a young jar keeps 「時間の核」 readable, but only when two rungs
-    ///   smaller gems clear it (large gems come first; out of reach, the
-    ///   plate hides instead);
-    /// - under the Home HUD's value (its central 200 pt), 8 pt below its
-    ///   measured bottom, down to scale 1.0 (the completion card shortens
-    ///   the jar under a HUD that stays put).
+    /// Only the Home HUD reserves room in the physical pile. The rear
+    /// relief may be obscured, and its labels adapt to the gems in front.
+    /// The central 200 pt stay 8 pt below the measured HUD, down to scale
+    /// 1.0 (the completion card shortens the jar under a HUD that stays put).
     static func pileClearances(
         stageSize: CGSize,
-        coreDisc: (center: CGPoint, radius: CGFloat)?,
-        namePlate: (top: CGFloat, height: CGFloat, halfWidth: CGFloat)? = nil,
         hudBottom: CGFloat?
     ) -> [JarPileClearance] {
         guard stageSize.width > 0, stageSize.height > 0 else { return [] }
         var clearances: [JarPileClearance] = []
-        if let disc = coreDisc, disc.radius > 0 {
-            clearances.append(JarPileClearance(
-                minX: disc.center.x - disc.radius,
-                maxX: disc.center.x + disc.radius,
-                ceiling: (stageSize.height - disc.center.y - disc.radius * 0.45).rounded(),
-                minimumScale: JarPileClearance.coreMinimumScale
-            ))
-        }
-        if let plate = namePlate, plate.height > 0, plate.halfWidth > 0 {
-            clearances.append(JarPileClearance(
-                minX: stageSize.width / 2 - plate.halfWidth,
-                maxX: stageSize.width / 2 + plate.halfWidth,
-                ceiling: (stageSize.height - plate.top - plate.height - JarLifetimeCoreLabelLimits.clearance).rounded(),
-                minimumScale: JarPileClearance.namePlateMinimumScale,
-                isOptional: true
-            ))
-        }
         if let hudBottom, hudBottom > 0 {
             clearances.append(JarPileClearance(
                 minX: stageSize.width / 2 - JarPileClearance.hudHalfWidth,
@@ -1623,8 +1556,8 @@ struct JarShareCore: Equatable {
 }
 
 /// Core Graphics twin of `JarLifetimeCoreBackdrop` / `JarLifetimeCoreVessel`
-/// for share snapshots: bloom, the two halo lobes, girdle bloom, a quiet
-/// orbit ring and the same baked stone image.
+/// for share snapshots: the fixed copper mount, quieter bloom and halo
+/// lobes, a quiet orbit ring and the same baked stone image behind the pile.
 enum JarShareCoreArtwork {
     /// Share snapshots place the centrepiece in the upper middle of the
     /// bottle (there is no HUD on a card): this share of the jar height
@@ -1658,8 +1591,8 @@ enum JarShareCoreArtwork {
         }
         // 控えめ (D17): the bloom, the lobes and the girdle bloom at the
         // halo scale; the colourless vessel's light at the inner-glow scale.
-        let halo = core.effects.haloScale
-        let inner = core.effects.innerGlowScale
+        let halo = core.effects.haloScale * JarCoreReliefAppearance.haloScale
+        let inner = core.effects.innerGlowScale * JarCoreReliefAppearance.vesselGlowScale
         if core.vesselLitFacets != nil {
             let white = UIColor.white
             radial([white.withAlphaComponent(0.30 * inner), white.withAlphaComponent(0.10 * inner), .clear], [0, 0.5, 1], from: d * 0.30, to: d * 0.65)
@@ -1693,8 +1626,9 @@ enum JarShareCoreArtwork {
             }
             radial([rim.withAlphaComponent(0.95 * halo), rim.withAlphaComponent(0.34 * halo), .clear], [0, 0.5, 1], from: d * 0.44, to: d * 0.62)
         }
-        guard let stone = stoneImage(for: core, scale: scale).cgImage else { return }
         let rect = stoneRect(for: core, center: center)
+        JarCoreReliefAppearance.drawMount(diameter: rect.width, center: center, in: context)
+        guard let stone = stoneImage(for: core, scale: scale).cgImage else { return }
         context.saveGState()
         context.translateBy(x: rect.minX, y: rect.maxY)
         context.scaleBy(x: 1, y: -1)
