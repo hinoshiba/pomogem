@@ -37,14 +37,15 @@ final class ScreenTimeArrivalAnnouncer {
         self.quietInterval = quietInterval
     }
 
-    /// A Screen Time learning pebble reached the jar. Group by the stored
-    /// name; only the final sentence uses the localized display name.
+    /// A Screen Time learning pebble reached the jar. Group by the theme's
+    /// identity; only the final sentence uses the localized display name.
     func noteLearningLanding(
+        subjectID: UUID? = nil,
         subjectName: String,
         displayName: String? = nil,
         announce: @escaping (String, String) -> Void
     ) {
-        learning.addLearning(subjectName: subjectName, displayName: displayName)
+        learning.addLearning(subjectID: subjectID, subjectName: subjectName, displayName: displayName)
         scheduleFlush(announce)
     }
 
@@ -88,7 +89,8 @@ final class ScreenTimeArrivalAnnouncer {
 /// What arrived since the last summary, and the one sentence that says it.
 struct ScreenTimeArrivalTally: Equatable {
     struct Entry: Equatable {
-        let name: String
+        let subjectID: UUID?
+        var name: String
         var displayName: String
         var count: Int
     }
@@ -97,12 +99,17 @@ struct ScreenTimeArrivalTally: Equatable {
     private(set) var learningBySubject: [Entry] = []
     private(set) var blackStones = 0
 
-    mutating func addLearning(subjectName: String, displayName: String? = nil) {
-        if let index = learningBySubject.firstIndex(where: { $0.name == subjectName }) {
+    mutating func addLearning(subjectID: UUID? = nil, subjectName: String, displayName: String? = nil) {
+        if let index = learningBySubject.firstIndex(where: { entry in
+            if let subjectID { return entry.subjectID == subjectID }
+            return entry.subjectID == nil && entry.name == subjectName
+        }) {
             learningBySubject[index].count += 1
+            learningBySubject[index].name = subjectName
             learningBySubject[index].displayName = displayName ?? subjectName
         } else {
-            learningBySubject.append(Entry(name: subjectName, displayName: displayName ?? subjectName, count: 1))
+            learningBySubject.append(Entry(subjectID: subjectID, name: subjectName,
+                                           displayName: displayName ?? subjectName, count: 1))
         }
     }
 
