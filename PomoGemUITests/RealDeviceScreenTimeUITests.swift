@@ -77,6 +77,8 @@ private let screenTimeFreeLearningLimit = 5
 ///   revoke      (P8)  drives iOS 設定 → スクリーンタイム, toggles PomoGem's
 ///                     Screen Time access OFF, verifies the revoked state in
 ///                     PomoGem, then restores the toggle to ON.
+///   screen-time-access-readout  reads the iOS app-access list and PomoGem's
+///                     switch value without changing any permission.
 ///   reset       (P9)  the in-app 「スクリーンタイムの内容をリセット」 flow.
 ///
 /// Operator steps
@@ -112,6 +114,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         case revoke
         case reset
         case screenTimeSettingsReadout = "screen-time-settings-readout"
+        case screenTimeAccessReadout = "screen-time-access-readout"
     }
 
     private enum StorageAction: String {
@@ -292,6 +295,33 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
     }
 
     // MARK: - read-only iOS Settings readout
+
+    func testReadScreenTimeAccessListWithoutChangingPermissions() throws {
+        try select(.screenTimeAccessReadout)
+        let settings = XCUIApplication(bundleIdentifier: Self.preferencesID)
+        defer { leavePreferences(settings) }
+        try guardAgainstSystemAlert("access-readout-before-navigation")
+        guard let toggle = try openScreenTimeAccessToggle(in: settings, readOnly: true) else {
+            capture("access-readout-app-not-found")
+            dumpHierarchy(settings, name: "access-readout-app-not-found")
+            try skipWithEvidence("access-readout-inaccessible",
+                                 "PomoGem's Screen Time access entry was not reachable; no permission was changed.")
+        }
+        try guardAgainstSystemAlert("access-readout-after-navigation")
+        try guardAgainstPasscode(settings)
+        let pomoGemValue = describeValue(toggle)
+        capture("access-readout-page")
+        dumpHierarchy(settings, name: "access-readout-page")
+
+        // Keep other installed app names in the private result attachment,
+        // never in NSLog or the public test summary.
+        let visibleSwitches = settings.switches.allElementsBoundByIndex.filter(\.isHittable)
+        let lines = visibleSwitches.map {
+            "name=\($0.label) identifier=\($0.identifier) value=\(describeValue($0))"
+        }
+        attach(string: lines.joined(separator: "\n"), name: "access-readout-visible-switches")
+        note("ACCESS READOUT: PomoGem value=\(pomoGemValue); visible switches=\(visibleSwitches.count). No switch or confirmation was tapped.")
+    }
 
     /// Walks 設定 → スクリーンタイム and READS the one OS-side condition that
     /// decides whether iOS is measuring app usage at all
@@ -3048,10 +3078,11 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         capture("timer-cancelled")
     }
 
-    // MARK: - iOS Settings (revoke phase only)
+    // MARK: - iOS Settings
 
-    /// Locates PomoGem's Screen Time access toggle. Touches nothing else.
-    private func openScreenTimeAccessToggle(in settings: XCUIApplication) throws -> XCUIElement? {
+    /// Locates PomoGem's Screen Time access toggle. The read-only route taps
+    /// navigation cells only; the existing revoke route retains its wider search.
+    private func openScreenTimeAccessToggle(in settings: XCUIApplication, readOnly: Bool = false) throws -> XCUIElement? {
         settings.terminate()
         settings.activate()
         pause(3)
@@ -3092,6 +3123,12 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         let row = settings.cells.matching(rowPredicate).firstMatch
         if row.exists, reveal(element: row, in: settings) {
             let inner = row.switches.firstMatch
+            if readOnly && inner.exists {
+                let value = describeValue(inner)
+                if value == "0" || value == "1" { return inner }
+                note("SETTINGS: app row contains a switch with unreadable value; not opening it.")
+                return nil
+            }
             if inner.exists, safelyHittable(inner, in: settings) {
                 note("SETTINGS: the access switch is inside the 「\(row.identifier)」 row.")
                 return inner
@@ -3117,13 +3154,30 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         // iOS nests the list of apps with Screen Time access one level deeper
         // on some releases. Drill into any row whose label mentions the app or
         // the access list, then search again.
-        let drillPredicate = NSPredicate(
-            format: "label CONTAINS %@ OR label CONTAINS %@ OR label CONTAINS %@ OR label CONTAINS %@",
-            "ポモジェム", "PomoGem", "スクリーンタイムを使用", "アクセス"
-        )
-        for query in [settings.cells, settings.buttons] {
+        let drillPredicate = readOnly
+            ? NSPredicate(
+                format: "label CONTAINS %@ OR label CONTAINS %@ OR identifier CONTAINS %@ OR identifier CONTAINS %@ OR label CONTAINS %@ OR label CONTAINS %@",
+                "ポモジェム", "PomoGem", "ポモジェム", "PomoGem",
+                "スクリーンタイムにアクセス可能なアプリ", "Apps with Screen Time Access"
+            )
+            : NSPredicate(
+                format: "label CONTAINS %@ OR label CONTAINS %@ OR label CONTAINS %@ OR label CONTAINS %@",
+                "ポモジェム", "PomoGem", "スクリーンタイムを使用", "アクセス"
+            )
+        let drillQueries: [XCUIElementQuery] = readOnly ? [settings.cells] : [settings.cells, settings.buttons]
+        for query in drillQueries {
             for row in query.matching(drillPredicate).allElementsBoundByIndex.prefix(6) {
                 guard row.exists, reveal(element: row, in: settings), safelyHittable(row, in: settings) else { continue }
+                if readOnly && row.switches.firstMatch.exists {
+                    let name = "\(row.label) \(row.identifier)"
+                    let value = describeValue(row.switches.firstMatch)
+                    if (name.contains("ポモジェム") || name.localizedCaseInsensitiveContains("PomoGem")),
+                       value == "0" || value == "1" {
+                        return row.switches.firstMatch
+                    }
+                    note("SETTINGS: stopped at a candidate containing a switch; not opening it.")
+                    return nil
+                }
                 note("SETTINGS: drilling into \"\(row.label)\" to look for the access toggle.")
                 row.tap()
                 pause(3)
