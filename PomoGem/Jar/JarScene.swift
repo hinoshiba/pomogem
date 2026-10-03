@@ -3500,11 +3500,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         backGlassNode.glowWidth = 0
         backGlassNode.zPosition = JarZPosition.background
 
+        // The aperture, rims and lid share one seated plane. A taller stage
+        // must not expose the old open mouth above the closed glass face.
+        let mouthCenterY = outer.maxY - 8
         let mouthRect = CGRect(
             x: outer.minX + neckInset - 1,
-            y: outer.maxY - 8,
+            y: mouthCenterY - 7,
             width: outer.width - neckInset * 2 + 2,
-            height: 18
+            height: 14
         )
         mouthDepthNode.path = CGPath(ellipseIn: mouthRect, transform: nil)
         mouthDepthNode.fillColor = JarPalette.mouthDepth
@@ -3555,7 +3558,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         rimNode.path = CGPath(
             ellipseIn: CGRect(
                 x: outer.minX + neckInset - 2,
-                y: outer.maxY - 6,
+                y: mouthCenterY - 6,
                 width: outer.width - neckInset * 2 + 4,
                 height: 12
             ),

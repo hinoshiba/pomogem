@@ -177,6 +177,15 @@ final class JarOrientationGravityTests: XCTestCase {
             defer { driver.finish() }
             let lid = try XCTUnwrap(scene.childNode(withName: "//jar.lid"))
             XCTAssertEqual(lid.alpha, 1, "A resting bottle visibly contains its gems")
+            let outer = JarScene.outerJarRect(sceneSize: scene.size)
+            for name in ["jar.mouth.depth", "jar.glass.rim", "jar.glass.innerRim"] {
+                let shape = try XCTUnwrap(scene.childNode(withName: "//" + name) as? SKShapeNode)
+                let bounds = try XCTUnwrap(shape.path).boundingBoxOfPath
+                XCTAssertEqual(bounds.midY, lid.position.y, accuracy: 0.001,
+                               "The aperture and lid share a plane even when the full mouth is visible")
+                XCTAssertLessThanOrEqual(bounds.maxY + shape.lineWidth / 2, outer.maxY,
+                                         "No old mouth protrudes above the closed face")
+            }
 
             let drop = loose(901, minutes: 25)
             scene.dropFromAbove(drop)
