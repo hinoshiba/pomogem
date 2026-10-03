@@ -124,6 +124,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         openMenuAction(containing: "設定")
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
 
+        PomoGemSettingsUITestNavigation.open(.timer, in: app)
         let liveActivity = app.switches["settings.live-activity"]
         XCTAssertTrue(scrollUntilHittable(liveActivity, attempts: 6))
         XCTAssertTrue(liveActivity.label.contains("ロック画面などに残り時間・進捗を表示"),
@@ -138,6 +139,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(returnCaption.label.contains("画面をロックしただけなら通知しません"))
         retainScreenshot(named: "Settings — focus section copy")
 
+        PomoGemSettingsUITestNavigation.open(.notifications, in: app)
         let daily = app.switches["settings.daily-reminder"]
         XCTAssertTrue(scrollUntilHittable(daily, attempts: 20))
         XCTAssertFalse(app.alerts["通知を設定できませんでした"].waitForExistence(timeout: 2),
@@ -223,10 +225,12 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         ])
         openMenuAction(containing: "設定")
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
+        PomoGemSettingsUITestNavigation.open(.timer, in: app)
         let returnReminder = app.switches["settings.focus-return-reminder"]
         XCTAssertTrue(scrollUntilHittable(returnReminder, attempts: 12))
         app.swipeUp()
         retainScreenshot(named: "AX5 Settings — return reminder caption")
+        PomoGemSettingsUITestNavigation.open(.notifications, in: app)
         let daily = app.switches["settings.daily-reminder"]
         XCTAssertTrue(scrollUntilHittable(daily, attempts: 40))
         XCTAssertEqual(daily.value as? String, "1")
@@ -268,6 +272,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             settings.tap()
         }
         guard app.navigationBars["設定"].waitForExistence(timeout: 5) else { return false }
+        guard PomoGemSettingsUITestNavigation.open(.notifications, in: app) else { return false }
         let wrapped = app.switches["settings.wrapped-notification"]
         guard scrollUntilHittable(wrapped, attempts: 20) else { return false }
         if wrapped.value as? String == "1" {
@@ -284,6 +289,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         needsFocusReturnReminderCleanup = true
         openMenuAction(containing: "設定")
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
+        PomoGemSettingsUITestNavigation.open(.timer, in: app)
         let toggle = app.switches["settings.focus-return-reminder"]
         XCTAssertTrue(scrollUntilHittable(toggle, attempts: 20))
         XCTAssertEqual(toggle.value as? String, "0", "The return reminder must start disabled")
@@ -291,7 +297,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         allowReminderNotificationPermissionIfPresented(timeout: 5)
         XCTAssertTrue(waitForSwitch(toggle, value: "1", timeout: 8),
                       "The reminder may turn on only after notification permission is granted")
-        tapNavigationBack(from: "設定")
+        PomoGemSettingsUITestNavigation.returnHome(in: app)
     }
 
     private func startTwentyFiveMinuteFocusForReminder() -> XCUIElement {
@@ -359,6 +365,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             settings.tap()
         }
         guard app.navigationBars["設定"].waitForExistence(timeout: 5) else { return false }
+        guard PomoGemSettingsUITestNavigation.open(.timer, in: app) else { return false }
         let toggle = app.switches["settings.focus-return-reminder"]
         guard scrollUntilHittable(toggle, attempts: 20) else { return false }
         if toggle.value as? String == "1" {
@@ -366,8 +373,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         }
         guard waitForSwitch(toggle, value: "0", timeout: 5) else { return false }
         needsFocusReturnReminderCleanup = false
-        let back = app.navigationBars["設定"].buttons.element(boundBy: 0)
-        if back.exists, back.isHittable { back.tap() }
+        PomoGemSettingsUITestNavigation.returnHome(in: app)
         return waitForHittable(app.buttons["メニュー"], timeout: 5)
     }
 
@@ -457,6 +463,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
     private func openTimerDisplaySettings() {
         openMenuAction(containing: "設定")
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
+        PomoGemSettingsUITestNavigation.open(.timer, in: app)
         let settingsDisplay = app.descendants(matching: .any)["settings.timer-display-mode"].firstMatch
         XCTAssertTrue(scrollUntilHittable(settingsDisplay, attempts: 20))
         settingsDisplay.tap()
@@ -465,7 +472,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
 
     private func closeTimerDisplaySettings() {
         app.navigationBars["タイマーの表示"].buttons.element(boundBy: 0).tap()
-        tapNavigationBack(from: "設定")
+        PomoGemSettingsUITestNavigation.returnHome(in: app)
     }
 
     func testCompletionDropsOnePebbleOnlyAfterRewardDismissalAndDoesNotReplay() throws {
@@ -1065,7 +1072,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             : "First earned pebble — observed fall and landing")
 
         openMenuAction(containing: "設定")
-        tapNavigationBack(from: "設定")
+        PomoGemSettingsUITestNavigation.returnHome(in: app)
         XCTAssertTrue(probe.waitForExistence(timeout: 5))
         try assertCompletionPresentationUnchanged(from: probe, matching: landed, duration: 1)
         XCTAssertFalse(dismiss.exists, "A landed receipt must not reopen its Reward Bridge")
@@ -1159,8 +1166,8 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             let manageThemes = app.buttons["テーマを管理"]
             XCTAssertTrue(manageThemes.waitForExistence(timeout: 4))
             manageThemes.tap()
-            XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
-            tapNavigationBack(from: "設定")
+            XCTAssertTrue(app.navigationBars["テーマ"].waitForExistence(timeout: 6))
+            PomoGemSettingsUITestNavigation.returnHome(in: app)
             let launcher = app.buttons["home.focus-launcher"]
             XCTAssertTrue(scrollUntilHittable(launcher, attempts: 12))
             XCTAssertTrue(launcher.label.contains("45分集中する"))
@@ -1225,7 +1232,8 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         let manageThemes = app.buttons["テーマを管理"]
         XCTAssertTrue(manageThemes.waitForExistence(timeout: 4))
         manageThemes.tap()
-        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
+        XCTAssertTrue(app.navigationBars["テーマ"].waitForExistence(timeout: 6))
+        PomoGemSettingsUITestNavigation.open(.themes, in: app)
         let addTheme = app.buttons["テーマを追加"]
         XCTAssertTrue(scrollUntilHittable(addTheme))
         addTheme.tap()
@@ -1237,7 +1245,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         nameField.typeText(themeName)
         app.navigationBars["テーマを追加"].buttons["保存"].tap()
         XCTAssertTrue(waitForAbsence(app.navigationBars["テーマを追加"]))
-        tapNavigationBack(from: "設定")
+        PomoGemSettingsUITestNavigation.returnHome(in: app)
         XCTAssertTrue(waitForHittable(launcher, timeout: 5))
         themePicker.tap()
         let theme = app.buttons[themeName]
@@ -1284,6 +1292,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         openMenuAction(containing: "設定")
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
 
+        PomoGemSettingsUITestNavigation.open(.themes, in: app)
         let addTheme = app.buttons["テーマを追加"]
         XCTAssertTrue(scrollUntilHittable(addTheme), "Settings must expose theme creation")
         addTheme.tap()
@@ -1339,7 +1348,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(editedRow.waitForExistence(timeout: 6))
         XCTAssertFalse(editedRow.label.contains("非表示"), editedRow.label)
 
-        tapNavigationBack(from: "設定")
+        PomoGemSettingsUITestNavigation.returnHome(in: app)
         let themeMenu = app.buttons["home.subject-picker"]
         XCTAssertTrue(themeMenu.waitForExistence(timeout: 4))
         themeMenu.tap()
@@ -1360,6 +1369,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         // Scope to the exact Settings row. The previously selected Home
         // launcher remains in the backing navigation hierarchy and also
         // contains the theme name, but is intentionally not hittable here.
+        PomoGemSettingsUITestNavigation.open(.themes, in: app)
         editedRow = app.buttons[editedName]
         XCTAssertTrue(scrollUntilHittable(editedRow))
         editedRow.swipeLeft()
@@ -1400,6 +1410,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
 
         cancel.tap()
         XCTAssertTrue(waitForAbsence(confirmationTitle))
+        PomoGemSettingsUITestNavigation.open(.themes, in: app)
         editedRow = app.buttons[editedName]
         XCTAssertTrue(
             editedRow.waitForExistence(timeout: 3),
@@ -1420,7 +1431,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         app.buttons["「\(editedName)」を削除"].tap()
         XCTAssertFalse(app.buttons[editedName].waitForExistence(timeout: 2))
 
-        tapNavigationBack(from: "設定")
+        PomoGemSettingsUITestNavigation.returnHome(in: app)
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
         XCTAssertTrue(
             app.buttons.matching(
@@ -1453,6 +1464,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
 
         openMenuAction(containing: "設定")
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
+        PomoGemSettingsUITestNavigation.open(.themes, in: app)
         XCTAssertTrue(
             scrollUntilHittable(app.buttons["英語"]),
             "The live theme must stay listed in Settings"
@@ -1615,6 +1627,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         // real customization screen without exposing the Debug-only duration.
         openMenuAction(containing: "設定")
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
+        PomoGemSettingsUITestNavigation.open(.timer, in: app)
         let timerDisplay = app.buttons["settings.timer-display-mode"]
         XCTAssertTrue(scrollUntilHittable(timerDisplay))
         timerDisplay.tap()
@@ -1723,6 +1736,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(scrollUntilHittable(settings))
         settings.tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 6))
+        PomoGemSettingsUITestNavigation.open(.timer, in: app, english: true)
         let timerDisplay = app.buttons["settings.timer-display-mode"]
         XCTAssertTrue(scrollUntilHittable(timerDisplay))
         timerDisplay.tap()

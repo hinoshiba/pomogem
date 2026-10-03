@@ -2853,7 +2853,7 @@ struct HomeView: View {
             subjectSelectionActions
             Divider()
             Button {
-                router.selectedTab = .settings
+                router.selectedTab = .settingsPage(.themes)
             } label: {
                 Label(
                     String(localized: "テーマを管理", table: "Home", comment: "Home theme menu: open the theme settings"),
@@ -2974,7 +2974,7 @@ struct HomeView: View {
     private var focusLauncher: some View {
         Button {
             if selectedSubject == nil {
-                router.selectedTab = .settings
+                router.selectedTab = .settingsPage(.themes)
             } else {
                 startFocus(duration: selectedDuration)
             }
@@ -3414,7 +3414,7 @@ struct HomeView: View {
             ) {
                 guard selectedSubject != nil else {
                     showHomeMenu = false
-                    router.selectedTab = .settings
+                    router.selectedTab = .settingsPage(.themes)
                     return
                 }
                 showHomeMenu = false
@@ -3431,7 +3431,7 @@ struct HomeView: View {
             ) {
                 guard selectedSubject != nil else {
                     showHomeMenu = false
-                    router.selectedTab = .settings
+                    router.selectedTab = .settingsPage(.themes)
                     return
                 }
                 showHomeMenu = false
@@ -3558,7 +3558,7 @@ struct HomeView: View {
             }
             menuActionButton(
                 title: String(localized: "設定", table: "Home", comment: "Home menu row: open Settings"),
-                detail: String(localized: "テーマ・通知・サウンド・Pro", table: "Home", comment: "Home menu row detail: what Settings holds"),
+                detail: String(localized: "タイマー・テーマ・通知・データ", table: "Home", comment: "Home menu row detail: what Settings holds"),
                 symbol: "gearshape.fill"
             ) {
                 showHomeMenu = false
@@ -5253,7 +5253,7 @@ struct HomeView: View {
     private func startFocus(duration: PomodoroDuration) {
         commitPendingManualEntry()
         guard let subject = selectedSubject else {
-            router.selectedTab = .settings
+            router.selectedTab = .settingsPage(.themes)
             return
         }
         selectedDuration = duration
@@ -5626,7 +5626,7 @@ struct HomeView: View {
         }
         guard !activeSubjects.isEmpty else {
             showManualEntry = false
-            router.selectedTab = .settings
+            router.selectedTab = .settingsPage(.themes)
             router.showToast(
                 String(localized: "先にテーマを追加してください", table: "Home", comment: "Toast: add a theme before adding time"),
                 symbol: "books.vertical.fill"

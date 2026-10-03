@@ -212,6 +212,7 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         launch()
         openMenuRow("設定")
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
+        PomoGemSettingsUITestNavigation.open(.timer, in: app)
         let customTimer = app.buttons["settings.custom-timer"]
         XCTAssertTrue(scrollUntilHittable(customTimer, attempts: 20))
         customTimer.tap()
@@ -608,6 +609,7 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
     private func addTheme(named name: String) {
         openMenuRow("設定")
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
+        PomoGemSettingsUITestNavigation.open(.themes, in: app)
         let addTheme = app.buttons["テーマを追加"]
         XCTAssertTrue(scrollUntilHittable(addTheme))
         // A tap sent while 設定 is still being pushed can be lost: a failed
@@ -628,9 +630,7 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         XCTAssertTrue(XCTWaiter.wait(for: [XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "exists == false"), object: app.navigationBars["テーマを追加"]
         )], timeout: 5) == .completed)
-        let back = app.navigationBars["設定"].buttons.element(boundBy: 0)
-        XCTAssertTrue(back.exists)
-        back.tap()
+        PomoGemSettingsUITestNavigation.returnHome(in: app)
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
     }
 

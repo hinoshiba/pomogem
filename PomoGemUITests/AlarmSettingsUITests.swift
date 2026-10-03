@@ -135,13 +135,14 @@ final class AlarmSettingsUITests: XCTestCase {
         XCTAssertTrue(settings.waitForExistence(timeout: 5))
         settings.tap()
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 8))
+        PomoGemSettingsUITestNavigation.open(.sensory, in: app)
     }
 
     private func goBack(from title: String) {
         let bar = app.navigationBars[title]
         XCTAssertTrue(bar.waitForExistence(timeout: 3))
         bar.buttons.element(boundBy: 0).tap()
-        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["音と触覚"].waitForExistence(timeout: 5))
     }
 
     private func element(_ identifier: String) -> XCUIElement {

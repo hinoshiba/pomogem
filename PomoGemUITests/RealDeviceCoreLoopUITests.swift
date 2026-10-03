@@ -510,6 +510,7 @@ final class RealDeviceCoreLoopUITests: XCTestCase {
         try require(app.navigationBars["設定"].waitForExistence(timeout: 10), "Settings must open.")
         pause(1)
         capture("settings-top")
+        PomoGemSettingsUITestNavigation.open(.data, in: app)
         let local = app.descendants(matching: .any).matching(
             NSPredicate(format: "label BEGINSWITH %@", "このiPhoneだけに保存")
         ).firstMatch
@@ -1066,6 +1067,7 @@ final class RealDeviceCoreLoopUITests: XCTestCase {
 
         try openMenuAction("設定")
         try require(app.navigationBars["設定"].waitForExistence(timeout: 10), "Settings must open.")
+        PomoGemSettingsUITestNavigation.open(.data, in: app)
         let storage = app.descendants(matching: .any).matching(
             NSPredicate(format: "label BEGINSWITH %@", "現在の保存先")
         ).firstMatch
@@ -1751,6 +1753,9 @@ final class RealDeviceCoreLoopUITests: XCTestCase {
     }
 
     private func returnHome(from title: String) throws {
+        if title == "設定" {
+            try require(PomoGemSettingsUITestNavigation.backToIndex(in: app), "The Settings category must close before returning Home.")
+        }
         let bar = app.navigationBars[title]
         try require(bar.waitForExistence(timeout: 5), "Missing navigation bar: \(title).")
         try tap(bar.buttons.element(boundBy: 0))

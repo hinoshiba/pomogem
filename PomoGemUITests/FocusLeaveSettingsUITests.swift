@@ -160,9 +160,7 @@ final class FocusLeaveSettingsUITests: XCTestCase {
                        "The ON went through the permission request, which was granted")
 
         // Settings reads the choices back when it opens again.
-        let back = app.navigationBars["設定"].buttons.element(boundBy: 0)
-        XCTAssertTrue(back.waitForExistence(timeout: 3))
-        back.tap()
+        PomoGemSettingsUITestNavigation.returnHome(in: app)
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 6))
         openSettings()
         XCTAssertTrue(scrollUntilHittable(leavePause, attempts: 12))
@@ -240,9 +238,7 @@ final class FocusLeaveSettingsUITests: XCTestCase {
         XCTAssertTrue(waitForSwitch(nudges, value: "0", timeout: 4), "A refused ON must save nothing")
         XCTAssertFalse(permission.exists)
 
-        let back = app.navigationBars["設定"].buttons.element(boundBy: 0)
-        XCTAssertTrue(back.waitForExistence(timeout: 3))
-        back.tap()
+        PomoGemSettingsUITestNavigation.returnHome(in: app)
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 6))
         openSettings()
         XCTAssertTrue(scrollUntilHittable(leavePause, attempts: 12))
@@ -328,6 +324,7 @@ final class FocusLeaveSettingsUITests: XCTestCase {
         XCTAssertTrue(scrollUntilHittable(settings))
         settings.tap()
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 8))
+        PomoGemSettingsUITestNavigation.open(.timer, in: app)
     }
 
     /// Apple's audits, run while this feature's rows are on screen and scoped

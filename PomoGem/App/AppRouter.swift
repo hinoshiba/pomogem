@@ -6,9 +6,20 @@ enum AppTab: Hashable {
     case jar
     case log
     case settings
+    case settingsPage(SettingsPage)
     /// The Screen Time settings pushed straight from Home's menu, the same
     /// page Settings links to.
     case screenTime
+
+    /// A direct theme entry has the same back route as an index category.
+    /// Rebuilding the path after an iCloud remount preserves that route too.
+    var navigationPath: [AppTab] {
+        switch self {
+        case .jar: []
+        case let .settingsPage(page): [.settings, .settingsPage(page)]
+        default: [self]
+        }
+    }
 }
 
 /// What the user was doing when a Pro feature sent them to the paywall. A

@@ -2076,6 +2076,23 @@
         }
       }
     },
+    "タイマー・テーマ・通知・データ" : {
+      "comment" : "Home menu row detail: what Settings holds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Timers, themes, notifications, and data"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマー・テーマ・通知・データ"
+          }
+        }
+      }
+    },
     "タップすると、毎日のリマインダーをこの時刻でオンにします。通知の許可を求めることがあります" : {
       "comment" : "VoiceOver hint on the first completion card's reminder offer",
       "localizations" : {
@@ -2276,23 +2293,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "テーマを選んではじめる"
-          }
-        }
-      }
-    },
-    "テーマ・通知・サウンド・Pro" : {
-      "comment" : "Home menu row detail: what Settings holds",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Themes · Notifications · Sound · Pro"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマ・通知・サウンド・Pro"
           }
         }
       }
@@ -2633,7 +2633,7 @@
       }
     },
     "今週の実測 %@" : {
-      "comment" : "Completion card: this calendar week's timed focus time (timer and Screen Time). en: 'This week: %@ timed'",
+      "comment" : "Completion card: this calendar week's measured focus time (timer and Screen Time). en: 'This week, measured: %@'",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2650,7 +2650,7 @@
       }
     },
     "今週の実測 %@・自己申告 %@" : {
-      "comment" : "Completion card: this calendar week's timed focus time, then its self-reported focus time. en: 'This week: %1$@ timed · %2$@ self-reported'",
+      "comment" : "Completion card: this calendar week's measured focus time, then its self-reported focus time. en: 'This week, measured: %1$@ · self-reported: %2$@'",
       "localizations" : {
         "en" : {
           "stringUnit" : {

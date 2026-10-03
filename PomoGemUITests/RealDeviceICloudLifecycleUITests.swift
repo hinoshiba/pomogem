@@ -698,6 +698,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         try returnHome(from: "記録")
         try openSettingsAndRequireRealCloud()
         try checkKeepAwake(expected: false)
+        try require(PomoGemSettingsUITestNavigation.open(.themes, in: app), "Themes must open before managing the audit theme.")
         let theme = app.buttons[themeName]
         try scrollTo(theme, direction: .down, attempts: 24)
         theme.swipeLeft()
@@ -841,7 +842,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
             try require(!app.buttons[themeName].exists, "The deleted theme must not be selectable from Home.")
             try tap(manage)
         }
-        try require(app.navigationBars["設定"].waitForExistence(timeout: 5), "Theme management must open Settings.")
+        try require(app.navigationBars["テーマ"].waitForExistence(timeout: 5), "Theme management must open Themes directly.")
         try scrollTo(app.buttons["テーマを追加"], direction: .down, attempts: 24)
         try require(!app.buttons[themeName].exists, "The deleted theme must not return in Settings.")
         try returnHome(from: "設定")
@@ -998,6 +999,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         let app = app!
         try openMenuAction("設定")
         try require(app.navigationBars["設定"].waitForExistence(timeout: 10), "Settings must open.")
+        try require(PomoGemSettingsUITestNavigation.open(.data, in: app), "Records & iCloud must open.")
         let statusTitles = [
             "iCloudを確認中", "iCloudに接続できます", "iCloudは実機で確認できます",
             "Apple Accountへのサインインが必要です", "この端末ではiCloudが制限されています",
@@ -1017,6 +1019,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
     private func openSettingsAndRequireLocalOnly() throws {
         try openMenuAction("設定")
         try require(app!.navigationBars["設定"].waitForExistence(timeout: 10), "Settings must open.")
+        try require(PomoGemSettingsUITestNavigation.open(.data, in: app!), "Records & iCloud must open.")
         let local = app!.descendants(matching: .any).matching(
             NSPredicate(format: "label BEGINSWITH %@", "このiPhoneだけに保存")
         ).firstMatch
@@ -1033,6 +1036,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
     }
 
     private func checkKeepAwake(expected: Bool, setIfNeeded: Bool = false, timeout: TimeInterval = 5) throws {
+        try require(PomoGemSettingsUITestNavigation.open(.timer, in: app!), "Focus Timer must open for the saved preference.")
         let toggle = app!.switches["settings.keep-screen-awake"]
         try scrollTo(toggle, direction: .down, attempts: 24)
         let expectedValue = expected ? "1" : "0"
@@ -1044,9 +1048,13 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         )
         try require(XCTWaiter.wait(for: [changed], timeout: timeout) == .completed,
                     "The audit's saved keep-screen-awake setting must be retained.")
+        try require(PomoGemSettingsUITestNavigation.open(.data, in: app!), "Return to Records & iCloud after reading the timer preference.")
     }
 
     private func returnHome(from title: String) throws {
+        if title == "設定" {
+            try require(PomoGemSettingsUITestNavigation.backToIndex(in: app!), "The Settings category must close before returning Home.")
+        }
         let bar = app!.navigationBars[title]
         try require(bar.waitForExistence(timeout: 5), "Missing navigation bar: \(title).")
         try tap(bar.buttons.element(boundBy: 0))

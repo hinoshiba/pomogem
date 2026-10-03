@@ -107,6 +107,7 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
             "commitGeneration",
             in: settingsAudit
         )
+        PomoGemSettingsUITestNavigation.open(.timer, in: firstColdLaunch)
         let keepAwake = firstColdLaunch.switches["settings.keep-screen-awake"]
         XCTAssertTrue(
             scrollUntilHittable(keepAwake, in: firstColdLaunch),
@@ -204,7 +205,7 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
             10,
             "The XCUI round trip must not deadlock after restoring one preference"
         )
-        firstColdLaunch.navigationBars["設定"].buttons.element(boundBy: 0).tap()
+        PomoGemSettingsUITestNavigation.returnHome(in: firstColdLaunch)
         XCTAssertTrue(firstColdLaunch.buttons["メニュー"].waitForExistence(timeout: 5))
         assertExpected(try waitForStableFixtureProbe(in: firstColdLaunch, timeout: 10))
         firstColdLaunch.terminate()
@@ -241,6 +242,7 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
         XCTAssertTrue(scrollUntilHittable(relaunchedSettings, in: secondColdLaunch))
         relaunchedSettings.tap()
         XCTAssertTrue(secondColdLaunch.navigationBars["設定"].waitForExistence(timeout: 5))
+        PomoGemSettingsUITestNavigation.open(.timer, in: secondColdLaunch)
         let persistedKeepAwake = secondColdLaunch.switches["settings.keep-screen-awake"]
         XCTAssertTrue(scrollUntilHittable(persistedKeepAwake, in: secondColdLaunch))
         XCTAssertEqual(
@@ -263,7 +265,7 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
         // notification: every XCUI query snapshots the app's accessibility
         // tree on the app's main thread, hundreds of milliseconds over this
         // screen, and would read as a stall of the app's own.
-        secondColdLaunch.navigationBars["設定"].buttons.element(boundBy: 0).tap()
+        PomoGemSettingsUITestNavigation.returnHome(in: secondColdLaunch)
         XCTAssertTrue(secondColdLaunch.buttons["メニュー"].waitForExistence(timeout: 5))
         secondColdLaunch.buttons["メニュー"].tap()
         let log = secondColdLaunch.buttons.matching(
@@ -495,6 +497,7 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
         settings.tap()
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
 
+        PomoGemSettingsUITestNavigation.open(.timer, in: app)
         let keepAwake = app.switches["settings.keep-screen-awake"]
         // On a 4.7-inch iPhone the switch is below the fold and the list has
         // not laid it out yet, so scroll to it (as the 40-year test does).
@@ -735,7 +738,7 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
         afterGeneration generation: Int,
         timeout: TimeInterval = 5
     ) throws -> [String: String] {
-        let probe = app.descendants(matching: .any)["settings.render-audit.probe"]
+        let probe = app.descendants(matching: .any)["settings.render-audit.probe.timer"]
         guard probe.waitForExistence(timeout: timeout) else {
             throw ProbeError.settingsCommitDidNotAdvance(
                 afterGeneration: generation,
@@ -848,7 +851,7 @@ final class FortyYearPlanningUITests: XCTestCase {
         XCTAssertTrue(scrollUntilHittable(launcher, in: app))
         XCTAssertEqual(launcher.label, "テーマを選んではじめる")
         launcher.tap()
-        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["テーマ"].waitForExistence(timeout: 5))
         let addTheme = app.buttons["テーマを追加"]
         XCTAssertTrue(scrollUntilHittable(addTheme, in: app))
         addTheme.tap()
@@ -866,7 +869,7 @@ final class FortyYearPlanningUITests: XCTestCase {
             )], timeout: 5),
             .completed
         )
-        app.navigationBars["設定"].buttons.element(boundBy: 0).tap()
+        PomoGemSettingsUITestNavigation.returnHome(in: app)
 
         let durationPicker = app.buttons["home.duration-picker"]
         XCTAssertTrue(durationPicker.waitForExistence(timeout: 5))

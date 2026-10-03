@@ -331,23 +331,6 @@
         }
       }
     },
-    "Proは1回だけの買い切りです。記録・テーマ・iCloud同期・シェアなど、ほかの機能は無料で使えます。" : {
-      "comment" : "Settings footer under the Pro row for free users",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pro is a one-time purchase. Everything else, including records, themes, iCloud sync and sharing, is free."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Proは1回だけの買い切りです。記録・テーマ・iCloud同期・シェアなど、ほかの機能は無料で使えます。"
-          }
-        }
-      }
-    },
     "Pro：%@" : {
       "comment" : "Support mail line; the argument is whether Pro is owned",
       "localizations" : {
@@ -935,6 +918,23 @@
         }
       }
     },
+    "お知らせ" : {
+      "comment" : "Settings category title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reminders"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "お知らせ"
+          }
+        }
+      }
+    },
     "きらめきと傾けたときの星を止め、光を弱め、着地と融合を短くします" : {
       "comment" : "Effect intensity detail for Subtle",
       "localizations" : {
@@ -1224,7 +1224,7 @@
       }
     },
     "アプリの利用時間" : {
-      "comment" : "Settings section header above the Screen Time row",
+      "comment" : "Settings index row title: app usage",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1597,6 +1597,23 @@
         }
       }
     },
+    "サポートとアプリ情報" : {
+      "comment" : "Settings category title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Support & App Info"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サポートとアプリ情報"
+          }
+        }
+      }
+    },
     "サポートとプライバシー" : {
       "comment" : "Settings section header",
       "localizations" : {
@@ -1644,23 +1661,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "シェア"
-          }
-        }
-      }
-    },
-    "スクリーンタイム" : {
-      "comment" : "Settings row title: Screen Time",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Screen Time"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "スクリーンタイム"
           }
         }
       }
@@ -1904,7 +1904,7 @@
       }
     },
     "テーマ" : {
-      "comment" : "Settings section header: the person's themes",
+      "comment" : "Settings category title\nSettings section header: the person's themes",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2161,6 +2161,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "テーマ名を入力してください。"
+          }
+        }
+      }
+    },
+    "データの書き出し" : {
+      "comment" : "Settings data export section header",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export Data"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "データの書き出し"
           }
         }
       }
@@ -2636,6 +2653,23 @@
         }
       }
     },
+    "リセットと削除" : {
+      "comment" : "Settings reset and deletion section header",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset & Delete"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "リセットと削除"
+          }
+        }
+      }
+    },
     "リセット履歴" : {
       "comment" : "Export progress: the collection being written (reset history)",
       "localizations" : {
@@ -2853,6 +2887,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "保存中の変更を確定できませんでした。\n%@"
+          }
+        }
+      }
+    },
+    "保存先・同期・書き出し" : {
+      "comment" : "Settings category summary",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Storage, sync, and export"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存先・同期・書き出し"
           }
         }
       }
@@ -3163,6 +3214,40 @@
         }
       }
     },
+    "名前・色・表示順" : {
+      "comment" : "Settings category summary",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Names, colors, and order"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名前・色・表示順"
+          }
+        }
+      }
+    },
+    "問い合わせ・プライバシー・バージョン" : {
+      "comment" : "Settings category summary",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Contact, privacy, and version"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "問い合わせ・プライバシー・バージョン"
+          }
+        }
+      }
+    },
     "待機中" : {
       "comment" : "VoiceOver value: the preview is not running",
       "localizations" : {
@@ -3414,6 +3499,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "旧形式の岩盤"
+          }
+        }
+      }
+    },
+    "時間・画面・離席時の動作" : {
+      "comment" : "Settings category summary",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duration, display, and when you leave the app"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間・画面・離席時の動作"
           }
         }
       }
@@ -3723,6 +3825,23 @@
         }
       }
     },
+    "毎日のリマインダー・先月の瓶" : {
+      "comment" : "Settings category summary",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Daily reminders and last month's jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "毎日のリマインダー・先月の瓶"
+          }
+        }
+      }
+    },
     "毎日のリマインダー設定を保存できませんでした。\n変更前の状態に戻しました。\n%@" : {
       "comment" : "Settings error; the argument is the system error description",
       "localizations" : {
@@ -3859,6 +3978,23 @@
         }
       }
     },
+    "瓶とシェア" : {
+      "comment" : "Settings category title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jar & Sharing"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶とシェア"
+          }
+        }
+      }
+    },
     "瓶の上に、つぎの一里塚か名所までを1行で表示します" : {
       "comment" : "Settings toggle subtitle: Home shows one line above the jar with the next milestone marker (一里塚, every 10 hours) or landmark (名所). Suggested en: 'One line above the jar with the next marker or landmark'",
       "localizations" : {
@@ -3872,6 +4008,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "瓶の上に、つぎの一里塚か名所までを1行で表示します"
+          }
+        }
+      }
+    },
+    "瓶の演出・シェアに含める記録" : {
+      "comment" : "Settings category summary",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jar effects and records included in shares"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "瓶の演出・シェアに含める記録"
           }
         }
       }
@@ -4046,6 +4199,23 @@
         }
       }
     },
+    "終了アラーム・効果音・振動" : {
+      "comment" : "Settings category summary",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "End alarms, sound effects, and vibration"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了アラーム・効果音・振動"
+          }
+        }
+      }
+    },
     "結晶" : {
       "comment" : "Export progress: the collection being written (crystals)",
       "localizations" : {
@@ -4182,19 +4352,19 @@
         }
       }
     },
-    "自由な集中時間・結晶の月刻印・勉強アプリ数の無制限" : {
+    "自由な集中時間など・買い切り" : {
       "comment" : "Settings Pro row subtitle for free users: what Pro adds",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Any focus length · month stamps on crystals · unlimited study apps"
+            "value" : "Custom focus durations & more · One-time purchase"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "自由な集中時間・結晶の月刻印・勉強アプリ数の無制限"
+            "value" : "自由な集中時間など・買い切り"
           }
         }
       }
@@ -4318,6 +4488,23 @@
         }
       }
     },
+    "表示とお知らせ" : {
+      "comment" : "Settings index group header",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Display & Reminders"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表示とお知らせ"
+          }
+        }
+      }
+    },
     "表示中の記録をリセット" : {
       "comment" : "Alert title and Settings button: reset the records shown now (earlier records stay stored)",
       "localizations" : {
@@ -4403,19 +4590,36 @@
         }
       }
     },
-    "記録の書き出しとリセット" : {
-      "comment" : "Settings section header: export and reset",
+    "記録とiCloud" : {
+      "comment" : "Settings category title",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Export and Reset Records"
+            "value" : "Records & iCloud"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "記録の書き出しとリセット"
+            "value" : "記録とiCloud"
+          }
+        }
+      }
+    },
+    "記録とサポート" : {
+      "comment" : "Settings index group header",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Records & Support"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録とサポート"
           }
         }
       }
@@ -5015,6 +5219,23 @@
         }
       }
     },
+    "集中する" : {
+      "comment" : "Settings index group header",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中する"
+          }
+        }
+      }
+    },
     "集中と休憩の終わりを、選んだ音と強さで知らせます。アプリを開いている間にタイマーが終わったときは、止めるまで終了音と強い振動を鳴らし続け、その間は画面をつけたままにします。%@たつと自動的に止まります。通知で知らせたあとや、あとからアプリに戻ったときは鳴らさず、そのまま記録を表示します。音はサイレントスイッチに従います。通知を許可している場合、ロック中は長めの終了音の通知で知らせます。" : {
       "comment" : "Footer of the Sound & Haptics section at the Standard alarm strength; %@ is a duration such as 3分 (3 min). Suggested English: Focus and break ends use the sound and strength you choose. If the timer ends while the app is open, the sound and a strong vibration continue until you stop them, and the screen stays on meanwhile. They stop by themselves after %@. After a notification, or when you come back later, nothing rings and your record appears. Sound follows the silent switch. With notifications allowed, a locked iPhone gets a notification with a longer sound.",
       "localizations" : {
@@ -5113,6 +5334,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "集中の粒・結晶・記念石を表示と集計から外し、0から始めます。同じiCloudを使うほかのiPhoneにも、接続したときに反映されます。オフラインのiPhoneから古い記録が戻らないよう、リセット前の記録は同期のために残り、データの書き出しにも含まれます。このiPhoneから完全に消すにはアプリを削除し、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除してください。この操作は取り消せません。"
+          }
+        }
+      }
+    },
+    "集中タイマー" : {
+      "comment" : "Settings category title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus Timer"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中タイマー"
           }
         }
       }
@@ -5338,7 +5576,7 @@
       }
     },
     "音と触覚" : {
-      "comment" : "Settings section header",
+      "comment" : "Settings category title\nSettings section header",
       "localizations" : {
         "en" : {
           "stringUnit" : {
