@@ -397,6 +397,29 @@ final class ScreenTimeArrivalSummaryTests: XCTestCase {
         XCTAssertEqual(tally.message, "スクリーンタイム：勉強アプリの時間 +30分（3粒）")
     }
 
+    func testSameNamedThemesRemainSeparateAndOneThemeSurvivesRename() {
+        let firstID = UUID()
+        let secondID = UUID()
+        var tally = ScreenTimeArrivalTally()
+        tally.addLearning(subjectID: firstID, subjectName: "英語", displayName: "English")
+        tally.addLearning(subjectID: secondID, subjectName: "英語", displayName: "English")
+        XCTAssertEqual(tally.learningBySubject.map(\.subjectID), [firstID, secondID])
+        XCTAssertEqual(tally.message, "スクリーンタイム：勉強アプリの時間 +20分（2粒）")
+
+        var renamed = ScreenTimeArrivalTally()
+        renamed.addLearning(subjectID: firstID, subjectName: "英語", displayName: "English")
+        renamed.addLearning(subjectID: firstID, subjectName: "語学", displayName: "Languages")
+        XCTAssertEqual(renamed.learningBySubject.count, 1)
+        XCTAssertEqual(renamed.learningBySubject[0].name, "語学")
+        XCTAssertEqual(renamed.message, "スクリーンタイム：Languages +20分（2粒）")
+
+        // A legacy descriptor without an ID cannot claim a known theme's
+        // arrivals just because its stored name happens to match.
+        renamed.addLearning(subjectName: "語学", displayName: "Languages")
+        XCTAssertEqual(renamed.learningBySubject.count, 2)
+        XCTAssertEqual(renamed.message, "スクリーンタイム：勉強アプリの時間 +30分（3粒）")
+    }
+
     func testOnlyARiseSinceTheLastAcknowledgedCountIsAnnounced() {
         typealias Tally = ScreenTimeArrivalTally
         XCTAssertEqual(Tally.blackStoneStep(acknowledged: nil, current: 12).newStones, 0,

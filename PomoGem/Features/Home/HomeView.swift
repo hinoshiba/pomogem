@@ -6146,6 +6146,7 @@ struct HomeView: View {
             // One attributed summary per import (「スクリーンタイム：英語 +30分
             // （3粒）」) instead of a generic toast per 10-minute pebble.
             screenTimeArrivals.noteLearningLanding(
+                subjectID: descriptor.subjectID,
                 subjectName: descriptor.subjectName,
                 displayName: displayedSubjectName
             ) { text, symbol in
