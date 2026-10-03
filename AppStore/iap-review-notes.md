@@ -4,14 +4,16 @@ Product: `com.hinoshiba.pomogem.pro.lifetime`
 
 Candidate: 1.1.0 (10). The existing non-consumable gains unlimited learning-app selection.
 
-Current review image (`captured_live_price`, 2026-09-22): `AppStore/screenshots/iap-review/01-pomogem-pro-live-price.png`
+Current local review image (`captured_live_price`, 2026-10-01): `AppStore/screenshots/iap-review/01-pomogem-pro-live-price.png`
 Historical image: `AppStore/screenshots/history/iap-review-20260906.png`
 （1.0 build 5、実際のStoreKit商品価格を表示、購入未実行。候補の新しいPro機能の証拠にはしません。）
 
 The current 1.1.0 (10) Simulator image shows the actual StoreKit `Product.displayPrice`
 `$0.99`, including the unlimited learning-app benefit. The storefront country was not
 independently read; this is not evidence of a US storefront or a Japanese-yen price.
-No purchase or restore was performed. See `screenshots/README.md` for capture provenance.
+No purchase or restore was performed. The 2026-09-22 image remains in App Store Connect
+until the current local candidate is compared with the signed build and uploaded.
+See `screenshots/README.md` for capture provenance.
 
 Type: Non-Consumable
 

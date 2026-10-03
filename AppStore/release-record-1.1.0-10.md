@@ -1,8 +1,27 @@
 # PomoGem 1.1.0 (10) — preparation record
 
-Updated: 2026-09-30. This is a preparation record, not an upload or submission receipt.
+Updated: 2026-10-01. This is a preparation record, not an upload or submission receipt.
 App Store Connect shows the public version as 1.0.2 (9), Ready for Distribution.
 The new 1.1.0 draft is in Prepare for Submission, with no build assigned.
+
+## 2026-10-01 follow-up
+
+- PR #74 merged the final bilingual listing screenshot candidates and release
+  metadata into main at `1c521ed2a90be5aa0c9153611bc6274de8522759`.
+  Its iOS CI run 36733813287 completed successfully, including an unsigned
+  Release build, unit tests, localization and English UI smoke checks. The
+  local Japanese and English screenshot tests also passed.
+- Re-captured the IAP review image from that main revision's current paywall.
+  The focused UI test passed once with no failures or skips, using the real
+  `Product.products` path and no StoreKit configuration file. It displayed
+  `$0.99` and the current three Pro benefits. The storefront country was not
+  verified, and no purchase or restore was attempted. The byte-identical
+  1284 × 2778 image and private test evidence are documented in
+  [screenshots/README.md](screenshots/README.md).
+- The new IAP image is a local candidate. The older image remains in App Store
+  Connect; comparison with the final signed build, replacement and reload
+  confirmation remain open. This capture does not close the signing, device,
+  Sandbox or Japan paid-IAP disclosure gates.
 
 ## 2026-09-30 live submission check
 
@@ -66,8 +85,9 @@ dependency run alone is not a substitute for the final integration run.
 - Integrated iCloud policy/transfer regression run: 72 tests passed, no failures.
 - Distribution profile policy regressions: 27 passed. Metadata, bilingual website,
   generated-project and current-file OSS checks passed during preparation.
-- Screenshot journey and actual StoreKit price capture: two tests passed, no
-  failures/skips; five listing images and one IAP image visually reviewed.
+- The earlier screenshot journey and actual StoreKit price capture: two tests
+  passed, no failures/skips; five listing images and one IAP image were
+  visually reviewed. The IAP image was superseded on 2026-10-01.
   Provenance and integrity hashes are in [screenshots/README.md](screenshots/README.md).
 - PR #24's first integration CI exposed an existing duplicate-history pagination
   bug: tied physical copies could be skipped, allowing an ownership claim despite
@@ -99,16 +119,18 @@ No signing credentials, keys, certificates or profiles are attached here.
 - Saved Japanese and English descriptions, release notes, promotional text,
   keywords and support/marketing links, plus the shared review notes. Main text
   fields were reloaded and compared with the checked-in originals.
-- Replaced the five inherited Japanese listing images with the current captures in
-  order 01–05; after reloading, Connect retained all five in that order. English
-  uses the Japanese set. The separate IAP review image is not a listing image.
+- The earlier Connect draft saved five Japanese listing images in order 01–05;
+  after reloading, Connect retained them. They predate the 2026-09-30 bilingual
+  local candidates and are awaiting replacement. English currently inherits
+  the older Japanese set. The separate IAP review image is not a listing image.
 - Saved both new IAP descriptions as Prepare for Submission revisions alongside
-  the existing approved descriptions. Saved the current IAP review notes and price
-  image; reload matched the notes and retained the new image with all three Pro
-  benefits. The English description is within Connect's 55-character limit.
+  the existing approved descriptions. Saved the IAP review notes and the
+  2026-09-22 price image; reload matched the notes and retained that image with
+  all three Pro benefits. The English description is within Connect's
+  55-character limit.
 - App Information still shows the existing global 4+ age rating.
 - Existing commercial terms, territories, review contact and release settings are
-  retained. No purchase, refund, agreement acceptance or review submission occurred.
+  retained. No purchase, refund or review submission occurred in this preparation.
 
 ## Outstanding submission conditions
 
@@ -125,9 +147,10 @@ No signing credentials, keys, certificates or profiles are attached here.
    development-signed Release audit recorded four delivered callbacks/four recorded
    callbacks after the fix; that partial evidence does not cover untested day,
    account, permission, purchase or distribution-signing boundaries.
-4. Confirm the published Japanese/English privacy policy after the Pages deployment.
-   Connect texts and images are saved, but simulator images still need signed-device
+4. The published Japanese/English privacy policy matched the deployed page on
+   2026-09-30. Connect texts are saved, but simulator images still need signed-device
    parity and the pending IAP localization revisions have not been submitted.
 5. Review all remaining owner decisions and release gates in
    [configuration.yml](configuration.yml) and [submission-checklist.md](submission-checklist.md),
-   then explicitly authorize submission. Preparing a draft does not authorize release.
+   before submission. The user has authorized submission after validation, but
+   authorization does not mark unfinished gates as passed.

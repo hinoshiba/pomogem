@@ -30,10 +30,11 @@ Smart App BannerをWebに表示し、`app_store_listing_status: public`としま
 確認しました。現在の掲載文は次の1.1.0 (10)候補用で、1.1.0のdraftは作成済みですがbinaryは未uploadです。
 Family Controlsの配布権限と最終署名済み候補での実到達は未確認で、旧版の提出結果を流用しません。
 
-現在の掲載画像5枚とIAP審査画像は2026-09-22に1.1.0 (10)から撮り直しました。実行結果とhashは
+現在の掲載画像は2026-09-30に日英各5枚、IAP審査画像は2026-10-01に1.1.0 (10)から撮り直しました。実行結果とhashは
 `screenshots/README.md`に記録しています。実StoreKit表示価格は$0.99（storefront国は未確認）で、
 `review_screenshot_status: captured_live_price`です。購入・復元の成功や署名済み実機との表示一致は未確認です。
-旧IAP画像はupload対象外の`history/`に保存しています。現在の準備状態は
+2026-09-22のIAP画像はまだConnectにあり、現行候補への差し替えと再読込確認が残ります。
+2026-09-06の旧IAP画像はupload対象外の`history/`に保存しています。現在の準備状態は
 `release-record-1.1.0-10.md`を参照してください。
 過去のDeveloper Portal確認ではmain／Widget App IDとCloudKit containerの登録・hostへの割当を確認しました。
 この登録はProduction schemaのdeployや配布署名の完了を意味しません。新IDの署名・実機表示・Sandbox・

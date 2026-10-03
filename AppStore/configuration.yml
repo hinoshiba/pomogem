@@ -360,7 +360,7 @@ release_blockers:
   - verify Family Controls distribution authorization and matching final profiles for both host and Screen Time monitor extension
   - verify actual signed-device 10-minute learning and black-gem delivery after the callback fix; prior failed or simulator-only checks are not a pass
   - compare the ten ja-JP/en-US simulator screenshot candidates refreshed 2026-09-30 with the signed Release candidate on a physical supported iPhone, review the 03 reward-card transition, and replace inherited/older images in Connect before submission
-  - recapture the IAP review image from the current paywall with a live StoreKit price before submission
+  - compare the 2026-10-01 live-StoreKit-price IAP image with the final signed build, replace the older image in Connect, and confirm it survives reload before submission
   - candidate signed-device testing must verify equal first-launch choices and both confirmations, explicit enable/disable confirmations and initially unselected deletion acknowledgment, verified destination copies and retained cloud data on disable, offline eligibility/revocation/reconnect and pending-upload disclosures, and complete local-only basic use without an Apple Account or network; record untested cases as pending
   - owner must accept the focus partition trade-off that materialized completions survive delayed cancellation
   - owner must accept the fail-closed interactive recovery ceiling when more than 256 corrupt active logical timer sessions precede a valid session, or ship a versioned reversible quarantine design

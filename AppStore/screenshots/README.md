@@ -17,17 +17,17 @@ transition: the reward card says a 250 g gem was earned while the jar behind
 it still shows 0 g until the card is closed. The optional daily-reminder offer
 was dismissed before capture so its real clock time does not conflict with the
 9:41 status bar override. Review the remaining 0 g transition before
-uploading. The IAP review image remains from 2026-09-22 and needs recapture.
+uploading. The IAP review image was refreshed separately on 2026-10-01.
 These ten images are candidates until compared with the final signed build on
 a physical iPhone; App Store Connect still holds the older Japanese images,
 which its English listing inherits.
 
 ## Original 1.1.0 (10) capture — 2026-09-22
 
-The original five Japanese images and the separate image in `iap-review/` were
+The original five Japanese images and an earlier IAP image were
 captured from PomoGem 1.1.0 (10) on an iOS 26.5 iPhone 12 Pro Max Simulator.
 The original 01–05 files were superseded on 2026-09-30; the IAP review image
-still comes from this capture. All were unretouched XCTest attachments,
+was superseded on 2026-10-01. All were unretouched XCTest attachments,
 copied byte for byte as portrait 1284 × 2778 RGB PNGs without alpha.
 
 Product source was `f3d7f456fdb9b8da05d77d2c4cdb9af4026039f2`; the capture-only
@@ -43,15 +43,11 @@ Both selected tests passed: two tests, zero failures, zero skips. No images
 from the earlier capture attempt are selected; its Settings accessibility-row
 locator was corrected and the complete capture was rerun.
 
-## Remaining IAP image recapture
+## IAP image refresh — 2026-10-01
 
-`iap-review/01-pomogem-pro-live-price.png` shows the paywall before the
-settings-04 changes. The current paywall orders its three Pro features by entry
-point, says what stays free, and shows a month-label example. Recapture the live
-StoreKit price from the final candidate before submission. The obsolete
-`ja-JP/05-iCloud-and-privacy.png` was replaced with a complete Timer Display
-screen because the Simulator's iCloud section showed a diagnostic unavailable
-on a physical device.
+`iap-review/01-pomogem-pro-live-price.png` now shows the paywall after the
+settings-04 changes, with its three current Pro features ordered by entry
+point, what stays free, and a month-label example.
 
 ## Japanese iPhone set
 
@@ -90,10 +86,16 @@ Family Controls distribution approval, device behavior, or upload completion.
 
 Status: `captured_live_price`.
 
-`iap-review/01-pomogem-pro-live-price.png` comes from
-`RuntimeFlowAuditUITests/testCaptureActualStoreKitPrice` in the same passing
-capture run. The actual `Product.products` path returned
+`iap-review/01-pomogem-pro-live-price.png` comes from main
+`1c521ed2a90be5aa0c9153611bc6274de8522759`, captured on 2026-10-01 by
+`RuntimeFlowAuditUITests/testCaptureActualStoreKitPrice` on a disposable
+iOS 26.5 iPhone 12 Pro Max Simulator. The Debug build used version overrides
+1.1.0 (10), standard text size, Japanese UI, local-preview test isolation,
+and a 9:41 status bar. The test passed: one test, zero failures or skips.
+The actual production `Product.products` path returned
 `com.hinoshiba.pomogem.pro.lifetime`, without a StoreKit configuration file.
+The generated xctestrun opted the test runner in with
+`POMOGEM_CAPTURE_LIVE_STOREKIT=1`.
 `Product.displayPrice` was `$0.99`; the purchase control read `$0.99でProを購入`.
 The storefront country was not independently read, so this image establishes
 neither a US storefront nor a Japanese-yen price.
@@ -104,12 +106,14 @@ Purchases starts below the captured viewport. No purchase, restore, or offer
 redemption was invoked. This is price/display evidence, not a purchase or
 restore test.
 
-The original source attachment was `8686D580-F195-471C-B06B-46FBEE628EC6.png`,
-with attachment prefix `IAP_01-pomogem-pro-live-price`. The selected capture
-passed before the explicit live-StoreKit opt-in guard was added to the test;
-the capture path after that guard is unchanged. A focused follow-up on the same
-Simulator verified one intentional skip without the flag and one passing test
-with the flag. Those follow-up runs did not replace any selected image.
+The original source attachment was `82B5D009-430D-45BC-9293-62C5AC9E8C1C.png`,
+with attachment prefix `IAP_01-pomogem-pro-live-price`. It was copied byte for
+byte as a 1284 × 2778 RGB PNG without alpha. The result bundle and attachment
+are retained outside the public repository under
+`~/.codex/release-validation/pomogem-20261001/IAP/`. Its SHA-256 is recorded in
+`checksums.sha256` and `ASSET_LICENSES.md`. This Simulator image still needs
+comparison with the final signed device build; the older image remains in
+App Store Connect until that review and replacement are complete.
 
 ## Reproduce
 
