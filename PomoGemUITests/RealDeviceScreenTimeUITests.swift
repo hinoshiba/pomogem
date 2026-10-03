@@ -332,14 +332,13 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
     /// NAVIGATE (the スクリーンタイム row, and the activity row when that row is
     /// a disclosure rather than a control). It never taps a switch, never
     /// answers a confirmation, never types, and never presses any
-    /// 「…をオンにする」/「…をオフにする」 button — a switch's state is read from
-    /// its value in place. It changes no setting, so it can be run at any
+    /// 「…をオンにする」/「…をオフにする」 button — switch values and button labels
+    /// are read in place. It changes no setting, so it can be run at any
     /// point of the audit without disturbing what the other phases measure.
     ///
-    /// It answers H2(d) from `pr24/CALLBACK-DIAGNOSIS.md`: if app activity is
-    /// OFF, the DeviceActivity extension can never be called no matter what
-    /// PomoGem registered, and every counter in the diagnostics mirror is
-    /// expected to be zero for reasons that have nothing to do with this app.
+    /// This observes iOS usage reporting. The earlier real-device audit saw
+    /// DeviceActivity thresholds even while reporting was OFF, so this value
+    /// alone does not establish callback or authorization eligibility.
     func testReadScreenTimeStateInIOSSettings() throws {
         try select(.screenTimeSettingsReadout)
         let settings = XCUIApplication(bundleIdentifier: Self.preferencesID)
@@ -375,28 +374,48 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         inventory(settings, name: "readout-screen-time-page")
 
         let activityTitle = "アプリとWebサイトのアクティビティ"
-        let activityPredicate = NSPredicate(
-            format: "label CONTAINS %@ OR identifier CONTAINS %@", activityTitle, activityTitle
+        let activityRowPredicate = NSPredicate(
+            format: "identifier == %@ OR label == %@", "APP_AND_WEBSITE_ACTIVITY", activityTitle
         )
+        let activitySwitchPredicate = NSPredicate(
+            format: "label == %@ OR identifier == %@ OR identifier == %@",
+            activityTitle, activityTitle, "APP_AND_WEBSITE_ACTIVITY"
+        )
+        let turnOnTitle = "\(activityTitle)をオンにする"
+        let turnOffTitle = "\(activityTitle)をオフにする"
 
-        // A switch answers the question WITHOUT a tap.
-        var verdict = "unknown"
-        var evidenceLine = "no element carrying 「\(activityTitle)」 was found on the スクリーンタイム page"
-        let activitySwitch = settings.switches.matching(activityPredicate).firstMatch
-        if activitySwitch.exists {
-            _ = reveal(element: activitySwitch, in: settings)
-            let raw = describeValue(activitySwitch)
-            verdict = raw == "1" ? "ON" : (raw == "0" ? "OFF" : "unreadable(\(raw))")
-            evidenceLine = "switch 「\(activitySwitch.label)」 value=\(raw) on the スクリーンタイム page (not tapped)"
-            note("READOUT: \(activityTitle) = \(verdict) — \(evidenceLine)")
+        // Only this feature's exact switch or visible action button can answer.
+        func readActivityControls(on page: String) -> (verdict: String, evidence: String)? {
+            let featureSwitch = settings.switches.matching(activitySwitchPredicate).firstMatch
+            if featureSwitch.exists {
+                _ = reveal(element: featureSwitch, in: settings)
+                let raw = describeValue(featureSwitch)
+                if raw == "1" || raw == "0" {
+                    return (raw == "1" ? "ON" : "OFF",
+                            "switch 「\(featureSwitch.label)」 value=\(raw) on \(page) (not tapped)")
+                }
+            }
+            let turnOn = settings.buttons[turnOnTitle]
+            let turnOff = settings.buttons[turnOffTitle]
+            let onVisible = turnOn.exists && turnOn.isHittable
+            let offVisible = turnOff.exists && turnOff.isHittable
+            if onVisible != offVisible {
+                let action = onVisible ? turnOn : turnOff
+                return (onVisible ? "OFF" : "ON", "exact visible button 「\(action.label)」 on \(page) (not tapped)")
+            }
+            return nil
         }
 
-        // Otherwise the row is a disclosure; opening it is navigation, and the
-        // page it opens carries either the switch or the 「…をオンにする」
-        // invitation that only appears while the feature is OFF.
-        if verdict == "unknown" {
-            let row = settings.descendants(matching: .any).matching(activityPredicate).firstMatch
-            if row.exists, reveal(element: row, in: settings), safelyHittable(row, in: settings) {
+        var observation = readActivityControls(on: "スクリーンタイム page")
+        // Navigate only through the exact feature cell, never a switch row or
+        // an action cell; a missing cell leaves the current-page readout intact.
+        if observation == nil {
+            let row = settings.cells.matching(activityRowPredicate).firstMatch
+            if row.exists,
+               !row.switches.firstMatch.exists,
+               !row.buttons[turnOnTitle].exists,
+               !row.buttons[turnOffTitle].exists,
+               reveal(element: row, in: settings), safelyHittable(row, in: settings) {
                 let detail = describeValue(row)
                 note("READOUT: 「\(activityTitle)」 is a row (label=\(row.label) value=\(detail)); opening it to read its page. Nothing on it will be tapped.")
                 row.tap()
@@ -405,28 +424,12 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                 capture("readout-activity-page")
                 dumpHierarchy(settings, name: "readout-activity-page")
                 inventory(settings, name: "readout-activity-page")
-
-                let pageSwitch = settings.switches.firstMatch
-                if pageSwitch.exists {
-                    _ = reveal(element: pageSwitch, in: settings)
-                    let raw = describeValue(pageSwitch)
-                    verdict = raw == "1" ? "ON" : (raw == "0" ? "OFF" : "unreadable(\(raw))")
-                    evidenceLine = "switch 「\(pageSwitch.label)」 value=\(raw) on the 「\(activityTitle)」 page (not tapped)"
-                } else {
-                    let turnOn = settings.descendants(matching: .any).matching(
-                        NSPredicate(format: "label CONTAINS %@", "をオンにする")
-                    ).firstMatch
-                    if turnOn.exists {
-                        verdict = "OFF"
-                        evidenceLine = "the page offers 「\(turnOn.label)」, which iOS shows only while the feature is off (NOT tapped)"
-                    } else if !detail.isEmpty {
-                        verdict = detail.contains("オン") ? "ON" : (detail.contains("オフ") ? "OFF" : "unknown")
-                        evidenceLine = "the row's own detail text was \(detail)"
-                    }
-                }
-                note("READOUT: \(activityTitle) = \(verdict) — \(evidenceLine)")
+                observation = readActivityControls(on: "「\(activityTitle)」 page")
             }
         }
+        let verdict = observation?.verdict ?? "unknown"
+        let evidenceLine = observation?.evidence ?? "no exact readable activity switch or visible activity action button was found"
+        note("READOUT: \(activityTitle) = \(verdict) — \(evidenceLine)")
 
         // Whatever app names this page shows, in either direction.
         let wanted = ["計算機", "メモ", "ボイスメモ"]
