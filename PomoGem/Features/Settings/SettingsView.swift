@@ -506,8 +506,7 @@ struct SettingsView: View {
 
     private func categoryRow(_ category: SettingsPage) -> some View {
         NavigationLink(value: AppTab.settingsPage(category)) {
-            SettingLabel(title: category.title, subtitle: category.subtitle, symbol: category.symbol)
-                .frame(minHeight: 44, alignment: .leading)
+            SettingsIndexRowLabel(title: category.title, subtitle: category.subtitle, symbol: category.symbol)
         }
         .accessibilityIdentifier("settings.category.\(category.rawValue)")
     }
@@ -999,6 +998,7 @@ struct SettingsView: View {
                     tableName: "Settings",
                     comment: "Settings footer: the Live Activity switch. Suggested English: The Lock Screen timer appears when Live Activities are allowed in iPhone Settings. Whether the timer stops when you leave the app follows Pause When You Leave the App."
                 )
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("settings.live-activity-footer")
                 if !focusLeavePauseEnabled {
                     Text(
@@ -3554,6 +3554,43 @@ private struct SubjectReorderAccessibilityModifier: ViewModifier {
     }
 }
 
+/// A fixed text column keeps wrapped category names and summaries aligned
+/// at accessibility sizes, instead of flowing beneath the decorative icon.
+private struct SettingsIndexRowLabel: View {
+    let title: String
+    let subtitle: String
+    let symbol: String
+    var isWarning = false
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 22))
+                .foregroundStyle(PomoGemTheme.amber)
+                .frame(width: 26)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .foregroundStyle(PomoGemTheme.text)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    if isWarning {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 13))
+                            .accessibilityHidden(true)
+                    }
+                    Text(subtitle)
+                }
+                .font(.caption)
+                .foregroundStyle(isWarning ? PomoGemTheme.amber : PomoGemTheme.muted)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(minHeight: 44, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// The Screen Time row, with the feature's status in place of a fixed
 /// caption: a stop used to be visible only inside the page. Its own view so
 /// that only this row follows the controller, not the whole Settings list.
@@ -3572,24 +3609,12 @@ private struct ScreenTimeSettingsRowLabel: View {
     }
 
     var body: some View {
-        Label {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("アプリの利用時間", tableName: "Settings", comment: "Settings index row title: app usage")
-                    .foregroundStyle(PomoGemTheme.text)
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    if status.isWarning {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .accessibilityHidden(true)
-                    }
-                    Text(status.subtitle)
-                }
-                .font(.caption)
-                .foregroundStyle(status.isWarning ? PomoGemTheme.amber : PomoGemTheme.muted)
-            }
-        } icon: {
-            Image(systemName: "hourglass").foregroundStyle(PomoGemTheme.amber).frame(width: 26)
-        }
-        .accessibilityElement(children: .combine)
+        SettingsIndexRowLabel(
+            title: String(localized: "アプリの利用時間", table: "Settings", comment: "Settings index row title: app usage"),
+            subtitle: status.subtitle,
+            symbol: "hourglass",
+            isWarning: status.isWarning
+        )
     }
 }
 
@@ -3620,6 +3645,7 @@ private struct NotificationPermissionStatusRow: View {
             Button(action: status == .denied ? openSettings : allow) {
                 Text(actionTitle)
                     .font(.subheadline.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, minHeight: 44)
             }
             .buttonStyle(.bordered)

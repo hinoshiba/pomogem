@@ -89,7 +89,7 @@ enum PomoGemSettingsUITestNavigation {
         if destination.exists && destination.isHittable { return true }
         guard backToIndex(in: app, english: english, file: file, line: line) else { return false }
         let row = app.buttons[page.identifier]
-        guard reveal(row, in: app) else {
+        guard reveal(row, in: app, indexIdentifier: page.identifier) else {
             XCTFail("Settings must expose \(page.identifier)", file: file, line: line)
             return false
         }
@@ -133,8 +133,30 @@ enum PomoGemSettingsUITestNavigation {
     }
 
     @discardableResult
-    static func reveal(_ element: XCUIElement, in app: XCUIApplication) -> Bool {
-        for _ in 0 ..< 16 {
+    static func reveal(
+        _ element: XCUIElement,
+        in app: XCUIApplication,
+        indexIdentifier: String? = nil
+    ) -> Bool {
+        // Lazy List removes an index row above the viewport from its AX tree.
+        // Use the visible category's position to choose a direction, rather
+        // than assuming every absent row is further down the page.
+        let indexRows = [
+            "settings.category.themes", "settings.category.timer", "settings.screen-time",
+            "settings.category.sensory", "settings.category.jar", "settings.category.notifications",
+            "settings.category.data", "settings.pro", "settings.category.support"
+        ]
+        var swipingDown = false
+        if !element.exists, let indexIdentifier, let target = indexRows.firstIndex(of: indexIdentifier) {
+            for (index, identifier) in indexRows.enumerated() {
+                let candidate = app.buttons[identifier]
+                if candidate.exists && candidate.isHittable {
+                    swipingDown = target < index
+                    break
+                }
+            }
+        }
+        for attempt in 0 ..< 24 {
             if element.exists {
                 let top = app.navigationBars.allElementsBoundByIndex
                     .filter(\.isHittable).map(\.frame.maxY).max() ?? 0
@@ -150,12 +172,17 @@ enum PomoGemSettingsUITestNavigation {
                     }
                 }
                 if frame.height > bottom - top, element.isHittable { return true }
-                if frame.minY < top {
+                if frame.height > 0, frame.minY < top {
                     app.swipeDown(velocity: .slow)
                     continue
                 }
             }
-            app.swipeUp(velocity: .slow)
+            if attempt == 12 { swipingDown.toggle() }
+            if swipingDown {
+                app.swipeDown(velocity: .slow)
+            } else {
+                app.swipeUp(velocity: .slow)
+            }
         }
         return false
     }

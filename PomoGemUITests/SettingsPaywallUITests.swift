@@ -49,7 +49,7 @@ final class SettingsPaywallUITests: XCTestCase {
         let confirmation = app.alerts["表示中の記録をリセット"]
         XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
         XCTAssertTrue(confirmation.staticTexts.matching(NSPredicate(
-            format: "label CONTAINS %@", "テーマと設定は残ります"
+            format: "label CONTAINS %@ AND label CONTAINS %@", "0から始めます", "取り消せません"
         )).firstMatch.exists)
         XCTAssertTrue(confirmation.buttons["リセット"].exists)
         confirmation.buttons["キャンセル"].tap()

@@ -190,7 +190,11 @@ final class AlarmSettingsUITests: XCTestCase {
                 settle(element)
                 let top = app.navigationBars.allElementsBoundByIndex
                     .filter(\.isHittable).map(\.frame.maxY).max() ?? 0
-                let bottom = app.windows.firstMatch.frame.maxY - 36
+                // On the iPhone used by this suite the fully rendered final
+                // footer ends 34 pt above the window edge. A 36 pt inset
+                // leaves the last 2 pt unreachable after this page reaches
+                // its natural scroll limit, although all its text is visible.
+                let bottom = app.windows.firstMatch.frame.maxY - 34
                 let frame = element.frame
                 if frame.height > 0, frame.width > 0 {
                     if frame.minY >= top, frame.maxY <= bottom { return true }
