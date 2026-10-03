@@ -105,6 +105,7 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
 
         openMenuAction(containing: "設定")
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
+        PomoGemSettingsUITestNavigation.open(.timer, in: app)
         let keepAwake = app.switches["settings.keep-screen-awake"]
         XCTAssertTrue(scrollUntilHittable(keepAwake, swiping: .up))
         let originalKeepAwake = keepAwake.value as? String
@@ -125,7 +126,7 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         // A tile tucked almost entirely under the navigation bar still
         // reports hittable, and the tap then lands on the bar (a full run
         // tapped it there and no paywall opened). Bring it below the bar.
-        let settingsBarBottom = app.navigationBars["設定"].frame.maxY
+        let settingsBarBottom = app.navigationBars["集中タイマー"].frame.maxY
         for _ in 0..<4 where customTimer.frame.minY < settingsBarBottom {
             let start = app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
             start.press(
@@ -145,8 +146,8 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         XCTAssertTrue(paywallClose.waitForExistence(timeout: 6), "Paywall must always expose an exit")
         XCTAssertTrue(app.staticTexts["ポモジェムPro"].exists)
         paywallClose.tap()
-        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 4))
-        tapNavigationBack(from: "設定")
+        XCTAssertTrue(app.navigationBars["集中タイマー"].waitForExistence(timeout: 4))
+        PomoGemSettingsUITestNavigation.returnHome(in: app)
 
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -159,6 +160,7 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         openMenuAction(containing: "設定")
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
 
+        PomoGemSettingsUITestNavigation.open(.timer, in: app)
         let keepAwake = app.switches["settings.keep-screen-awake"]
         XCTAssertTrue(scrollUntilHittable(keepAwake, swiping: .up))
         let original = keepAwake.value as? String
@@ -205,7 +207,7 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         // the navigation bar) although the list came to rest as intended.
         XCTAssertTrue(waitUntilFrameSettles(customTimer))
         XCTAssertEqual(customTimer.value as? String, "未選択")
-        let navigationBottom = app.navigationBars["設定"].frame.maxY
+        let navigationBottom = app.navigationBars["集中タイマー"].frame.maxY
         for minutes in [25, 45, 60, 90] {
             let preset = app.buttons["settings.focus-preset.\(minutes)"]
             XCTAssertTrue(preset.isHittable)
@@ -221,7 +223,7 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
 
-        tapNavigationBack(from: "設定")
+        PomoGemSettingsUITestNavigation.returnHome(in: app)
         let homeDuration = app.buttons["home.duration-picker"]
         XCTAssertTrue(homeDuration.waitForExistence(timeout: 5))
         XCTAssertTrue(homeDuration.label.contains("25分"))
@@ -232,6 +234,7 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         openMenuAction(containing: "設定")
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
 
+        PomoGemSettingsUITestNavigation.open(.sensory, in: app)
         let soundPicker = app.descendants(matching: .any)[
             "settings.completion-sound"
         ]
@@ -266,6 +269,7 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         openMenuAction(containing: "設定")
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
 
+        PomoGemSettingsUITestNavigation.open(.jar, in: app)
         let picker = app.descendants(matching: .any)["settings.rare-reward-mode"]
         XCTAssertFalse(picker.waitForExistence(timeout: 1))
         XCTAssertFalse(app.staticTexts["粒のバリエーション"].exists)
@@ -707,6 +711,7 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         let themeName = "英検QA"
         openMenuAction(containing: "設定")
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
+        PomoGemSettingsUITestNavigation.open(.themes, in: app)
         let addTheme = app.buttons["テーマを追加"]
         XCTAssertTrue(scrollUntilHittable(addTheme, swiping: .up))
         addTheme.tap()
@@ -716,9 +721,9 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         nameField.tap()
         nameField.typeText(themeName)
         app.navigationBars["テーマを追加"].buttons["保存"].tap()
-        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["テーマ"].waitForExistence(timeout: 5))
         waitForUISettle()
-        tapNavigationBack(from: "設定")
+        PomoGemSettingsUITestNavigation.returnHome(in: app)
 
         let themeMenu = app.buttons["home.subject-picker"]
         XCTAssertTrue(themeMenu.waitForExistence(timeout: 4))
@@ -742,6 +747,7 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
 
         openMenuAction(containing: "設定")
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
+        PomoGemSettingsUITestNavigation.open(.themes, in: app)
         let themeRow = app.buttons[themeName]
         XCTAssertTrue(scrollUntilHittable(themeRow, swiping: .up))
         themeRow.swipeLeft()
@@ -752,7 +758,7 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         confirm.tap()
         XCTAssertFalse(app.buttons[themeName].waitForExistence(timeout: 2))
-        tapNavigationBack(from: "設定")
+        PomoGemSettingsUITestNavigation.returnHome(in: app)
 
         openMenuAction(containing: "記録を見る")
         XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 5))

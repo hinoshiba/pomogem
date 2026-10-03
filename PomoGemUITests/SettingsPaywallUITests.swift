@@ -1,6 +1,6 @@
 import XCTest
 
-/// settings-04 / -05 / -06 / -07, product-08. Settings' order, the About
+/// Settings' purpose-based tree, the About
 /// page, the support rows and the paywall's context-first layout, in the
 /// Simulator's local preview. No purchase, restore or App Store sign-in is
 /// ever attempted: the paywall is only opened, read and closed.
@@ -38,10 +38,47 @@ final class SettingsPaywallUITests: XCTestCase {
         checkSettingsLayout(accessibility5: true)
     }
 
+    func testRecordsResetNeedsItsOwnConfirmationAndCancelReturnsToRecords() {
+        launchAndOpenSettings()
+        XCTAssertFalse(app.buttons["settings.activity-reset"].exists)
+        PomoGemSettingsUITestNavigation.open(.data, in: app)
+        let reset = app.buttons["settings.activity-reset"]
+        XCTAssertTrue(reveal(reset))
+        XCTAssertTrue(reset.isEnabled, "The isolated preview uses a disposable local store")
+        reset.tap()
+        let confirmation = app.alerts["表示中の記録をリセット"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        XCTAssertTrue(confirmation.staticTexts.matching(NSPredicate(
+            format: "label CONTAINS %@ AND label CONTAINS %@", "0から始めます", "取り消せません"
+        )).firstMatch.exists)
+        XCTAssertTrue(confirmation.buttons["リセット"].exists)
+        confirmation.buttons["キャンセル"].tap()
+        XCTAssertTrue(waitForAbsence(confirmation, timeout: 5))
+        XCTAssertTrue(app.navigationBars["記録とiCloud"].waitForExistence(timeout: 5))
+        attach("Settings — reset cancelled on Records & iCloud")
+        PomoGemSettingsUITestNavigation.returnHome(in: app)
+        XCTAssertTrue(app.buttons["home.subject-picker"].label.contains("英語"))
+    }
+
+    func testScreenTimeRemainsOneTapFromTheSettingsIndex() {
+        launchAndOpenSettings()
+        let entry = app.buttons["settings.screen-time"]
+        XCTAssertTrue(reveal(entry))
+        entry.tap()
+        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 8))
+        XCTAssertTrue(element("screen-time.authorization-status").waitForExistence(timeout: 6))
+        XCTAssertFalse(XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.firstMatch.exists,
+                       "Opening the settings page never asks for Screen Time access")
+        app.navigationBars["スクリーンタイム"].buttons.firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
+        PomoGemSettingsUITestNavigation.returnHome(in: app)
+    }
+
     /// settings-04. From the 「カスタム」 tile the paywall leads with the timer,
     /// marks it, and says what stays free.
     func testTheCustomTileOpensAPaywallThatLeadsWithTheTimer() {
         launchAndOpenSettings()
+        PomoGemSettingsUITestNavigation.open(.timer, in: app)
         let custom = app.buttons["settings.custom-timer"]
         XCTAssertTrue(reveal(custom))
         custom.tap()
@@ -61,7 +98,7 @@ final class SettingsPaywallUITests: XCTestCase {
         attach("Paywall — opened from Settings' custom tile")
 
         app.buttons["paywall.close"].tap()
-        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
+        XCTAssertTrue(app.navigationBars["集中タイマー"].waitForExistence(timeout: 6))
         XCTAssertFalse(
             app.buttons["custom-timer.confirm"].waitForExistence(timeout: 2),
             "Closing without buying must not open the duration editor"
@@ -170,6 +207,7 @@ final class SettingsPaywallUITests: XCTestCase {
         app.launchArguments += ["-music.focus.source", classical]
         launchAndOpenSettings()
 
+        PomoGemSettingsUITestNavigation.open(.timer, in: app)
         let row = app.buttons["settings.focus-music"]
         XCTAssertTrue(reveal(row))
         XCTAssertEqual(row.label, "集中用の音楽")
@@ -220,7 +258,7 @@ final class SettingsPaywallUITests: XCTestCase {
 
         close.tap()
         XCTAssertTrue(waitForAbsence(close, timeout: 6))
-        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
+        XCTAssertTrue(app.navigationBars["集中タイマー"].waitForExistence(timeout: 6))
         XCTAssertTrue(row.exists)
     }
 
@@ -239,95 +277,115 @@ final class SettingsPaywallUITests: XCTestCase {
         if accessibility5 { app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1" }
         let prefix = accessibility5 ? "Settings AX5" : "Settings"
         launchAndOpenSettings()
-        attach("\(prefix) — top")
+        attach("\(prefix) — index top")
 
-        // F4. The 集中 card's music row keeps its 44 pt target and its name;
-        // at AX5 the sheet it opens stays closable and scrolls to its end.
+        // The index names the task before showing its controls. It contains
+        // all seven categories and keeps Screen Time and Pro one tap away.
+        let identifiers = [
+            "settings.category.themes", "settings.category.timer", "settings.screen-time",
+            "settings.category.sensory", "settings.category.jar", "settings.category.notifications",
+            "settings.category.data", "settings.pro", "settings.category.support"
+        ]
+        let window = app.windows.firstMatch.frame
+        var previous: XCUIElement?
+        for identifier in identifiers {
+            let row = app.buttons[identifier]
+            XCTAssertTrue(reveal(row), identifier)
+            XCTAssertGreaterThanOrEqual(row.frame.height, 43.5, identifier)
+            XCTAssertGreaterThanOrEqual(row.frame.minX, window.minX - 1, identifier)
+            XCTAssertLessThanOrEqual(row.frame.maxX, window.maxX + 1, identifier)
+            XCTAssertFalse(row.label.isEmpty, identifier)
+            if let previous, previous.exists, previous.isHittable {
+                XCTAssertLessThanOrEqual(previous.frame.maxY, row.frame.minY + 1,
+                                         "Settings categories follow the purpose-based order")
+            }
+            previous = row
+        }
+        XCTAssertFalse(app.switches["settings.focus-leave-pause"].exists)
+        XCTAssertFalse(app.buttons["settings.activity-reset"].exists,
+                       "A destructive action lives inside Records & iCloud")
+        attach("\(prefix) — index records and support")
+
+        PomoGemSettingsUITestNavigation.open(.themes, in: app)
+        let addTheme = app.buttons["テーマを追加"]
+        XCTAssertTrue(reveal(addTheme))
+        XCTAssertGreaterThanOrEqual(addTheme.frame.height, 43.5)
+        attach("\(prefix) — themes")
+
+        PomoGemSettingsUITestNavigation.open(.timer, in: app)
         let music = app.buttons["settings.focus-music"]
         XCTAssertTrue(reveal(music))
         XCTAssertGreaterThanOrEqual(music.frame.height, 43.5)
         XCTAssertEqual(music.label, "集中用の音楽")
-        XCTAssertFalse((music.value as? String ?? "").isEmpty, "The row names the chosen music or 未選択")
+        XCTAssertFalse((music.value as? String ?? "").isEmpty)
         attach("\(prefix) — focus music row")
-        if accessibility5 {
-            checkFocusMusicSheetAtAccessibilitySize(from: music)
-        }
+        if accessibility5 { checkFocusMusicSheetAtAccessibilitySize(from: music) }
 
-        // F1. UI-test processes start with the leave pause off (shared
-        // Simulators background many focuses); FocusLeaveSettingsUITests
-        // covers the product default, on.
         let leavePause = app.switches["settings.focus-leave-pause"]
         XCTAssertTrue(reveal(leavePause))
         XCTAssertTrue(leavePause.label.contains("アプリを離れたら一時停止"), leavePause.label)
         XCTAssertEqual(leavePause.value as? String, "0")
-        XCTAssertFalse(app.switches["settings.focus-leave-nudges"].exists,
-                       "The series exists only while the leave pause is on")
+        XCTAssertFalse(app.switches["settings.focus-leave-nudges"].exists)
         XCTAssertTrue(reveal(text(containing: "パスコードがないiPhoneでは、ロックとアプリの切り替えを区別できないため")))
         XCTAssertTrue(reveal(text(containing: "オフのときは、アプリを離れてもタイマーは止まりません")))
         attach("\(prefix) — leave pause and its footer")
-        if music.exists, music.isHittable, leavePause.isHittable {
-            XCTAssertLessThan(music.frame.minY, leavePause.frame.minY,
-                              "The 集中 card ends with 集中用の音楽; the leave pause card follows it")
-        }
 
-        // The leave pause sits with the timer, above the Live Activity. Its
-        // card's last footer paragraph and the Live Activity row are
-        // compared while both are on screen, at every text size.
         let liveActivity = app.switches["settings.live-activity"]
         let resumeFooter = element("settings.focus-leave-footer.resume")
         XCTAssertTrue(reveal(liveActivity))
-        XCTAssertTrue(resumeFooter.exists, "The leave-pause card ends right above the Live Activity card")
-        XCTAssertLessThanOrEqual(resumeFooter.frame.maxY, liveActivity.frame.minY + 1,
-                                 "The leave pause sits with the timer, above the Live Activity")
-        if !accessibility5 {
-            XCTAssertTrue(leavePause.exists)
-            XCTAssertLessThan(leavePause.frame.minY, liveActivity.frame.minY,
-                              "The leave pause sits with the timer, above the Live Activity")
-        }
+        XCTAssertTrue(resumeFooter.exists)
+        XCTAssertLessThanOrEqual(resumeFooter.frame.maxY, liveActivity.frame.minY + 1)
         let returnReminder = app.switches["settings.focus-return-reminder"]
-        XCTAssertTrue(reveal(returnReminder), "With the leave pause off the return reminder is offered as before")
+        XCTAssertTrue(reveal(returnReminder))
         XCTAssertTrue(reveal(text(containing: "「アプリを離れたら一時停止」の設定に従います")))
         XCTAssertFalse(text(containing: "タイマーはバックグラウンドでも止まりません").exists)
         attach("\(prefix) — timer notices and their footer")
 
+        PomoGemSettingsUITestNavigation.backToIndex(in: app)
         let pro = app.buttons["settings.pro"]
         XCTAssertTrue(reveal(pro))
         XCTAssertTrue(pro.label.contains("ポモジェムPro"), pro.label)
         XCTAssertTrue(pro.label.contains("自由な集中時間"), pro.label)
-        XCTAssertTrue(reveal(text(containing: "Proは1回だけの買い切りです")))
-        attach("\(prefix) — Pro beside the timer")
+        XCTAssertTrue(pro.label.contains("自由な集中時間など・買い切り"), pro.label)
+        attach("\(prefix) — Pro")
 
-        // F5. The rows that open the timer end sound and strength lists keep
-        // their 44 pt target, name the chosen value, and stay inside the
-        // window. At AX5 the value moves under the label instead of
-        // squeezing it.
-        let window = app.windows.firstMatch.frame
+        PomoGemSettingsUITestNavigation.open(.sensory, in: app)
         for identifier in ["settings.completion-sound", "settings.alarm-strength"] {
             let row = element(identifier)
             XCTAssertTrue(reveal(row), identifier)
             XCTAssertGreaterThanOrEqual(row.frame.height, 43.5, identifier)
             XCTAssertLessThanOrEqual(row.frame.maxX, window.maxX + 1, identifier)
             XCTAssertGreaterThanOrEqual(row.frame.minX, window.minX - 1, identifier)
-            XCTAssertFalse((row.value as? String ?? "").isEmpty, "\(identifier) names its choice")
+            XCTAssertFalse((row.value as? String ?? "").isEmpty, identifier)
             attach("\(prefix) — \(identifier)")
         }
 
-        // Only this card's switches are off by default: the leave-pause
-        // series in the Focus card is on by default.
+        PomoGemSettingsUITestNavigation.open(.jar, in: app)
+        XCTAssertTrue(reveal(element("settings.effects-intensity")))
+        let nextTarget = app.switches["settings.home-next-target"]
+        XCTAssertTrue(reveal(nextTarget))
+        XCTAssertGreaterThanOrEqual(nextTarget.frame.height, 43.5)
+        XCTAssertTrue(reveal(app.switches.matching(NSPredicate(
+            format: "label CONTAINS %@", "自己申告を含める"
+        )).firstMatch))
+        attach("\(prefix) — jar and sharing")
+
+        PomoGemSettingsUITestNavigation.open(.notifications, in: app)
         let notificationsFooter = element("settings.notifications-footer")
         XCTAssertTrue(reveal(notificationsFooter))
         XCTAssertTrue(notificationsFooter.label.contains("「毎日のリマインダー」と「先月の瓶のお知らせ」は既定でオフです"),
                       notificationsFooter.label)
         XCTAssertFalse(notificationsFooter.label.hasPrefix("既定はオフ。"), notificationsFooter.label)
-        attach("\(prefix) — notifications footer")
+        attach("\(prefix) — notifications")
 
+        PomoGemSettingsUITestNavigation.open(.data, in: app)
         let export = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "データを書き出す")).firstMatch
         XCTAssertTrue(reveal(export))
-        let exportValue = export.value as? String ?? ""
-        XCTAssertTrue(exportValue.contains("読み込みには非対応"), exportValue)
+        XCTAssertTrue((export.value as? String ?? "").contains("読み込みには非対応"))
         XCTAssertTrue(reveal(text(containing: "タイマーの同期に使うランダムな端末ID")))
-        attach("\(prefix) — records export and its footer")
+        attach("\(prefix) — records and iCloud")
 
+        PomoGemSettingsUITestNavigation.open(.support, in: app)
         let mail = app.buttons["settings.support-mail"]
         XCTAssertTrue(reveal(mail))
         XCTAssertTrue(mail.label.contains("メールで問い合わせる"), mail.label)
@@ -340,14 +398,9 @@ final class SettingsPaywallUITests: XCTestCase {
         let about = app.buttons["settings.about"]
         XCTAssertTrue(reveal(about))
         XCTAssertTrue(about.label.contains("バージョン"), about.label)
-        // At AX5 the List has already unloaded the review row by the time
-        // the About row scrolls in; compare only while both are on screen.
-        if review.exists {
-            XCTAssertLessThan(review.frame.minY, about.frame.minY)
-        }
-        XCTAssertFalse(app.staticTexts["あなたのプライベートデータベースのみ"].exists)
+        if review.exists { XCTAssertLessThan(review.frame.minY, about.frame.minY) }
         XCTAssertFalse(text(containing: "出荷対象").exists)
-        attach("\(prefix) — support, privacy and About")
+        attach("\(prefix) — support and app info")
 
         about.tap()
         XCTAssertTrue(app.navigationBars["このアプリについて"].waitForExistence(timeout: 6))
@@ -361,6 +414,9 @@ final class SettingsPaywallUITests: XCTestCase {
         XCTAssertTrue(close.waitForExistence(timeout: 6))
         close.tap()
         XCTAssertTrue(app.navigationBars["このアプリについて"].waitForExistence(timeout: 6))
+        app.navigationBars["このアプリについて"].buttons.firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["サポートとアプリ情報"].waitForExistence(timeout: 6))
+        PomoGemSettingsUITestNavigation.returnHome(in: app)
     }
 
     /// Settings hands its Dynamic Type size to the music sheet, which opens
@@ -404,7 +460,7 @@ final class SettingsPaywallUITests: XCTestCase {
 
         close.tap()
         XCTAssertTrue(waitForAbsence(close, timeout: 6))
-        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
+        XCTAssertTrue(app.navigationBars["集中タイマー"].waitForExistence(timeout: 6))
         XCTAssertTrue(row.exists)
     }
 

@@ -118,6 +118,7 @@ final class ThemeColorPaletteUITests: XCTestCase {
         XCTAssertTrue(scrollUntilHittable(settings))
         settings.tap()
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
+        PomoGemSettingsUITestNavigation.open(.themes, in: app)
     }
 
     private func openAddTheme() {

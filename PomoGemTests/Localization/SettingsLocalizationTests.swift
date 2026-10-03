@@ -131,9 +131,9 @@ final class SettingsLocalizationTests: XCTestCase {
     func testSettingsHeadersAndRowsInEnglish() throws {
         XCTAssertEqual(try english("設定"), "Settings")
         XCTAssertEqual(
-            try ["テーマ", "集中", "音と触覚", "瓶の表示", "通知", "シェア", "アプリの利用時間", "記録の書き出しとリセット", "サポートとプライバシー"]
+            try ["テーマ", "集中タイマー", "音と触覚", "瓶とシェア", "お知らせ", "記録とiCloud", "アプリの利用時間", "データの書き出し", "リセットと削除", "サポートとアプリ情報"]
                 .map { try english($0) },
-            ["Themes", "Focus", "Sound & Haptics", "Jar Display", "Notifications", "Sharing", "App Usage", "Export and Reset Records", "Support & Privacy"]
+            ["Themes", "Focus Timer", "Sound & Haptics", "Jar & Sharing", "Reminders", "Records & iCloud", "App Usage", "Export Data", "Reset & Delete", "Support & App Info"]
         )
         XCTAssertEqual(try english("集中が切れたらお知らせ"), "Notify Me When I Drift Away")
         XCTAssertEqual(try english("集中に戻るお知らせ"), "Return-to-Focus Reminder", "Glossary name")

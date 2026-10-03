@@ -523,6 +523,29 @@ final class CloudLaunchResumePolicyTests: XCTestCase {
 
     // MARK: Navigation after a remount
 
+    func testSettingsCategoryPathsKeepTheIndexAsTheirBackDestination() {
+        for page in SettingsPage.allCases {
+            let destination = AppTab.settingsPage(page)
+            XCTAssertEqual(destination.navigationPath, [.settings, destination])
+            XCTAssertEqual(destination.navigationPath.dropLast().last, .settings)
+        }
+        XCTAssertEqual(AppTab.settings.navigationPath, [.settings])
+        XCTAssertEqual(AppTab.jar.navigationPath, [])
+        XCTAssertEqual(AppTab.screenTime.navigationPath, [.screenTime])
+    }
+
+    @MainActor
+    func testAnAccountRemountRestoresTheSettingsCategoryWithoutSheetsOrStoreObjects() {
+        let namespace = AccountDataNamespace()
+        let memory = CloudRemountNavigationMemory()
+        memory.record(.settingsPage(.data), namespace: namespace)
+        let restored = memory.takeRestoredTab(for: namespace)
+        XCTAssertEqual(restored?.navigationPath, [.settings, .settingsPage(.data)])
+        XCTAssertNil(memory.takeRestoredTab(for: namespace))
+        memory.record(.settingsPage(.data), namespace: namespace)
+        XCTAssertNil(memory.takeRestoredTab(for: AccountDataNamespace()))
+    }
+
     @MainActor
     func testTheTabIsRestoredOnlyForTheSameNamespaceAndOnlyOnce() {
         let namespace = AccountDataNamespace()

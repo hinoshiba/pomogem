@@ -6,7 +6,7 @@ import SwiftUI
 /// A session that outlives the background grace is retired, and the next one
 /// is a new RootView with a new router: before this, a trip to iOS Settings
 /// from the in-app 「設定を開く」 always came back to the jar. Only the tab is
-/// remembered (jar / 記録 / 設定) — never a sheet, a recovered focus, a share
+/// remembered (jar / 記録 / 設定 and its purpose page) — never a sheet, a recovered focus, a share
 /// scope or anything read from the store — and only inside this process.
 enum CloudRemountNavigationPolicy {
     struct Saved: Equatable, Sendable {

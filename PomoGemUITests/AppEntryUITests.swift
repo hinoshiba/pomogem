@@ -61,6 +61,7 @@ final class AppEntryUITests: XCTestCase {
     func testStartLinkFromTheSettingsMusicSheetStarts() throws {
         openMenuAction(containing: "設定")
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
+        PomoGemSettingsUITestNavigation.open(.timer, in: app)
         let row = app.buttons["settings.focus-music"]
         for _ in 0 ..< 10 where !(row.exists && row.isHittable) {
             app.swipeUp()

@@ -444,6 +444,7 @@ final class TimerOrientationUITests: XCTestCase {
             settings.tap()
         }
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
+        PomoGemSettingsUITestNavigation.open(.timer, in: app)
         let row = app.descendants(matching: .any)["settings.timer-default-orientation"].firstMatch
         XCTAssertTrue(reveal(row, towardStart: false, attempts: 20))
         row.tap()
@@ -486,9 +487,8 @@ final class TimerOrientationUITests: XCTestCase {
 
     private func closeDefaultOrientationSettings() {
         app.navigationBars["タイマーの既定の向き"].buttons.element(boundBy: 0).tap()
-        let settings = app.navigationBars["設定"]
-        XCTAssertTrue(settings.waitForExistence(timeout: 5))
-        settings.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.navigationBars["集中タイマー"].waitForExistence(timeout: 5))
+        PomoGemSettingsUITestNavigation.returnHome(in: app)
         XCTAssertTrue(waitForHittable(app.buttons["メニュー"]))
     }
 

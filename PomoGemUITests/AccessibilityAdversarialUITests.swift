@@ -33,6 +33,7 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         XCTAssertTrue(scrollUntilHittable(settingsAction))
         settingsAction.tap()
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 8))
+        PomoGemSettingsUITestNavigation.open(.timer, in: app)
         let settingsDisplay = app.descendants(matching: .any)["settings.timer-display-mode"].firstMatch
         XCTAssertTrue(scrollUntilHittable(settingsDisplay, attempts: 20))
         XCTAssertGreaterThanOrEqual(settingsDisplay.frame.height, 43.5)
@@ -55,7 +56,7 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
         app.navigationBars["タイマーの表示"].buttons.element(boundBy: 0).tap()
-        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["集中タイマー"].waitForExistence(timeout: 5))
 
         // The default duration leads the 集中 card (settings-06), so the
         // presets sit above the display row the page came back to.
@@ -81,7 +82,7 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         durationAttachment.lifetime = .keepAlways
         add(durationAttachment)
 
-        app.navigationBars["設定"].buttons.element(boundBy: 0).tap()
+        PomoGemSettingsUITestNavigation.returnHome(in: app)
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
         let launcher = app.buttons["home.focus-launcher"]
         XCTAssertTrue(scrollUntilHittable(launcher, attempts: 12))
@@ -201,11 +202,11 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         XCTAssertTrue(manageThemes.waitForExistence(timeout: 4))
         XCTAssertTrue(scrollUntilHittable(manageThemes))
         manageThemes.tap()
-        let settingsNavigation = app.navigationBars["設定"]
+        let settingsNavigation = app.navigationBars["テーマ"]
         XCTAssertTrue(settingsNavigation.waitForExistence(timeout: 6))
         XCTAssertFalse(app.buttons["一時停止"].exists)
 
-        settingsNavigation.buttons.element(boundBy: 0).tap()
+        PomoGemSettingsUITestNavigation.returnHome(in: app)
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
         XCTAssertTrue(scrollUntilFullyVisibleInContent(launcher, attempts: 12))
         XCTAssertTrue(launcher.label.contains("45分集中する"))
@@ -336,6 +337,7 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         settingsAction.tap()
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 8))
 
+        PomoGemSettingsUITestNavigation.open(.jar, in: app)
         let picker = app.descendants(matching: .any)["settings.rare-reward-mode"]
         XCTAssertFalse(picker.waitForExistence(timeout: 1))
         XCTAssertFalse(app.staticTexts["粒のバリエーション"].exists)

@@ -141,6 +141,7 @@ final class ProCustomDurationUITests: XCTestCase {
         XCTAssertTrue(settings.waitForExistence(timeout: 4))
         settings.tap()
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
+        PomoGemSettingsUITestNavigation.open(.timer, in: app)
         let preference = app.buttons["settings.preferred-focus-duration"]
         XCTAssertTrue(reveal(preference))
         XCTAssertTrue(preference.label.contains("25分30秒"))
@@ -171,7 +172,7 @@ final class ProCustomDurationUITests: XCTestCase {
         XCTAssertTrue(reveal(preference))
         XCTAssertEqual(preference.value as? String, "未選択")
         screenshot("Pro duration — Settings preset clears fractional seconds")
-        app.navigationBars["設定"].buttons.element(boundBy: 0).tap()
+        PomoGemSettingsUITestNavigation.returnHome(in: app)
         XCTAssertTrue(app.buttons["home.duration-picker"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["home.duration-picker"].label.contains("25分"))
         XCTAssertFalse(app.buttons["home.duration-picker"].label.contains("30秒"))

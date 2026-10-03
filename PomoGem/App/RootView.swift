@@ -1066,7 +1066,7 @@ struct RootView: View {
         ) { _ in
             // The late-arrival banner sits above this view and cannot reach the
             // router. Navigation only: nothing here reads, writes or transfers.
-            router.selectedTab = .settings
+            router.selectedTab = .settingsPage(.data)
         }
         .onChange(of: appEntryRoutingState, initial: true) { _, _ in
             routeAppEntryIfPossible()
@@ -3434,6 +3434,8 @@ struct MainNavigationView: View {
                         LogView()
                     case .settings:
                         SettingsView(persistenceMode: persistenceMode)
+                    case let .settingsPage(page):
+                        SettingsView(persistenceMode: persistenceMode, page: page)
                     case .screenTime:
                         ScreenTimeSettingsView()
                     }
@@ -3476,7 +3478,7 @@ struct MainNavigationView: View {
     }
 
     private func updateNavigationPath(for selectedTab: AppTab) {
-        let destinationPath: [AppTab] = selectedTab == .jar ? [] : [selectedTab]
+        let destinationPath = selectedTab.navigationPath
         if navigationPath != destinationPath {
             navigationPath = destinationPath
         }

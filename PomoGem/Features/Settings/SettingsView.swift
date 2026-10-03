@@ -47,8 +47,51 @@ final class NotificationPreferenceIntentGate {
     }
 }
 
+/// Purpose-based destinations. Each page owns its asynchronous work and sheets;
+/// pushing a page never lends it the disappearing index's ModelContext tasks.
+enum SettingsPage: String, CaseIterable, Hashable, Sendable {
+    case themes, timer, sensory, jar, notifications, data, support
+
+    var title: String {
+        switch self {
+        case .themes: String(localized: "テーマ", table: "Settings", comment: "Settings category title")
+        case .timer: String(localized: "集中タイマー", table: "Settings", comment: "Settings category title")
+        case .sensory: String(localized: "音と触覚", table: "Settings", comment: "Settings category title")
+        case .jar: String(localized: "瓶とシェア", table: "Settings", comment: "Settings category title")
+        case .notifications: String(localized: "お知らせ", table: "Settings", comment: "Settings category title")
+        case .data: String(localized: "記録とiCloud", table: "Settings", comment: "Settings category title")
+        case .support: String(localized: "サポートとアプリ情報", table: "Settings", comment: "Settings category title")
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .themes: String(localized: "名前・色・表示順", table: "Settings", comment: "Settings category summary")
+        case .timer: String(localized: "時間・画面・離席時の動作", table: "Settings", comment: "Settings category summary")
+        case .sensory: String(localized: "終了アラーム・効果音・振動", table: "Settings", comment: "Settings category summary")
+        case .jar: String(localized: "瓶の演出・シェアに含める記録", table: "Settings", comment: "Settings category summary")
+        case .notifications: String(localized: "毎日のリマインダー・先月の瓶", table: "Settings", comment: "Settings category summary")
+        case .data: String(localized: "保存先・同期・書き出し", table: "Settings", comment: "Settings category summary")
+        case .support: String(localized: "問い合わせ・プライバシー・バージョン", table: "Settings", comment: "Settings category summary")
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .themes: "paintpalette"
+        case .timer: "timer"
+        case .sensory: "speaker.wave.2"
+        case .jar: "sparkles"
+        case .notifications: "bell"
+        case .data: "externaldrive.badge.icloud"
+        case .support: "questionmark.circle"
+        }
+    }
+}
+
 struct SettingsView: View {
     let persistenceMode: PersistenceLaunchMode
+    let page: SettingsPage?
 
     @Environment(\.modelContext) private var modelContext
     @Environment(AppRouter.self) private var router
@@ -149,8 +192,9 @@ struct SettingsView: View {
         ActivityResetPolicy.isCurrent(epochID, markers: resetSnapshots)
     }
 
-    init(persistenceMode: PersistenceLaunchMode = .inMemoryPreview) {
+    init(persistenceMode: PersistenceLaunchMode = .inMemoryPreview, page: SettingsPage? = nil) {
         self.persistenceMode = persistenceMode
+        self.page = page
         _storedSubjects = Query(SubjectSyncPolicy.liveRowsDescriptor(sortBy: [
             SortDescriptor(\Subject.sortOrder),
             SortDescriptor(\Subject.createdAt),
@@ -164,45 +208,12 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        // settings-06. Ordered by what people look for, not by when each
-        // feature was built: the timer, then Pro beside the timer it
-        // extends, then the other preferences, then everything about the
-        // records and iCloud together, then support and the app itself.
         List {
-            subjectsSection
-            focusSection
-            focusLeaveSection
-            focusNoticesSection
-            proSection
-            screenTimeSection
-            if RareRewardReleasePolicy.isEnabled {
-                rarePebbleSection
-            }
-            sensorySection
-            // 演出の強さ sits with 音と触覚: both are how the app feels on
-            // this iPhone, not what it records.
-            JarEffectsSettingsSection()
-            notificationSection
-            shareSection
-            // 記録とiCloud: where the records live, moving them, exporting
-            // and resetting them.
-            CloudSyncSettingsSection(persistenceMode: persistenceMode)
-            StorageTransferSettingsSection(
-                persistenceMode: persistenceMode,
-                controller: storageTransfer,
-                otherWorkIsActive: isCloudOfflineSession || isExportingData || completeDeletion.hasStarted
-                    || router.focusPresentationIsActive || router.recoveredFocus != nil
-                    || router.deferredFocusRecovery != nil || router.recoveredBreak != nil
-                    || router.cloudFocusRecoveryOffer != nil,
-                disclosesScreenTimeReset: screenTimeIsInUse
-            )
-            dataSection
-            privacySection
-            aboutSection
+            pageContent
         }
         .scrollContentBackground(.hidden)
         .background(NightBackground())
-        .pomogemNavigationTitle(String(localized: "設定", table: "Settings", comment: "Navigation title of the Settings screen"))
+        .pomogemNavigationTitle(page?.title ?? String(localized: "設定", table: "Settings", comment: "Navigation title of the Settings screen"))
         .toolbarTitleDisplayMode(.large)
         .sheet(isPresented: $isSubjectEditorPresented, onDismiss: {
             editingSubjectID = nil
@@ -371,7 +382,8 @@ struct SettingsView: View {
                     .font(.system(size: 1))
                     .foregroundStyle(Color.clear)
                     .frame(width: 1, height: 1)
-                    .accessibilityIdentifier("settings.render-audit.probe")
+                    .accessibilityIdentifier(page.map { "settings.render-audit.probe.\($0.rawValue)" }
+                        ?? "settings.render-audit.probe")
                     .accessibilityLabel(Text(verbatim: "Settings render audit probe"))
                     .accessibilityValue(Text(verbatim:
                         (router.settingsRenderAuditValue ?? "state=waiting")
@@ -415,7 +427,7 @@ struct SettingsView: View {
         .onChange(of: router.settingsCustomDurationResumeRequested) { _, requested in
             // Set from the paywall sheet's onDismiss, so presenting the
             // editor here never collides with the closing paywall.
-            guard requested, router.consumeSettingsCustomDurationResumeRequest(),
+            guard page == .timer, requested, router.consumeSettingsCustomDurationResumeRequest(),
                   purchase.isPro else { return }
             showCustomDuration = true
         }
@@ -426,6 +438,77 @@ struct SettingsView: View {
             cancelDataExport(announce: false)
             removePresentedDataExport()
         }
+    }
+
+    @ViewBuilder
+    private var pageContent: some View {
+        switch page {
+        case nil:
+            settingsIndex
+        case .themes:
+            subjectsSection
+        case .timer:
+            focusSection
+            focusLeaveSection
+            focusNoticesSection
+        case .sensory:
+            sensorySection
+        case .jar:
+            JarEffectsSettingsSection()
+            if RareRewardReleasePolicy.isEnabled { rarePebbleSection }
+            shareSection
+        case .notifications:
+            notificationSection
+        case .data:
+            CloudSyncSettingsSection(persistenceMode: persistenceMode)
+            StorageTransferSettingsSection(
+                persistenceMode: persistenceMode,
+                controller: storageTransfer,
+                otherWorkIsActive: isCloudOfflineSession || isExportingData || completeDeletion.hasStarted
+                    || router.focusPresentationIsActive || router.recoveredFocus != nil
+                    || router.deferredFocusRecovery != nil || router.recoveredBreak != nil
+                    || router.cloudFocusRecoveryOffer != nil,
+                disclosesScreenTimeReset: screenTimeIsInUse
+            )
+            dataExportSection
+            dataResetSection
+        case .support:
+            privacySection
+            aboutSection
+        }
+    }
+
+    private var settingsIndex: some View {
+        Group {
+            Section {
+                categoryRow(.themes)
+                categoryRow(.timer)
+                screenTimeRow
+            } header: {
+                Text("集中する", tableName: "Settings", comment: "Settings index group header")
+            }
+            Section {
+                categoryRow(.sensory)
+                categoryRow(.jar)
+                categoryRow(.notifications)
+            } header: {
+                Text("表示とお知らせ", tableName: "Settings", comment: "Settings index group header")
+            }
+            Section {
+                categoryRow(.data)
+                proRow
+                categoryRow(.support)
+            } header: {
+                Text("記録とサポート", tableName: "Settings", comment: "Settings index group header")
+            }
+        }
+    }
+
+    private func categoryRow(_ category: SettingsPage) -> some View {
+        NavigationLink(value: AppTab.settingsPage(category)) {
+            SettingsIndexRowLabel(title: category.title, subtitle: category.subtitle, symbol: category.symbol)
+        }
+        .accessibilityIdentifier("settings.category.\(category.rawValue)")
     }
 
     private var rareRewardMode: RareRewardMode {
@@ -794,12 +877,14 @@ struct SettingsView: View {
                     tableName: "Settings",
                     comment: "Settings footer under the leave-pause switch. The argument is the quick-glance grace (20秒). The lock is recognised from a notice iOS sends late right after an unlock, so both lock sentences are hedged; keep them hedged. Suggested English: When on, going Home or to another app during a focus pauses the timer from the moment you left. Coming back within %@ does not pause it. On an iPhone with a passcode, locking the screen usually keeps the timer running. However, locking again right after unlocking can pause it, and locking right after leaving the app can keep it running. Without a passcode, iPhone cannot tell locking from switching apps, so locking also pauses it."
                 )
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("settings.focus-leave-footer.behavior")
                 Text(
                     "自動では再開しません。アプリに戻って「再開する」をタップすると、離れた時点の続きから進みます。休憩中と、終了まで\(focusLeaveFinalStretchText)以内の集中は止めません。オフのときは、アプリを離れてもタイマーは止まりません。",
                     tableName: "Settings",
                     comment: "Settings footer under the leave-pause switch: how the timer resumes, what is never paused, and the off state. The argument is the final stretch that is never paused (1分). Suggested English: The timer never resumes by itself. Go back to the app and tap Resume to continue from where you left. Breaks and the last %@ of a focus are never paused. When off, the timer keeps running after you leave the app."
                 )
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("settings.focus-leave-footer.resume")
                 if focusLeavePauseEnabled {
                     Text(
@@ -807,6 +892,7 @@ struct SettingsView: View {
                         tableName: "Settings",
                         comment: "Settings footer under the leave-pause notification switch; it replaces the older Return-to-Focus Reminder while the leave pause is on. The switch is on by default, so the permission sentence is a plain fact with no call to action. Suggested English: These notifications say the timer is paused, and the rest are withdrawn when you come back. They do not arrive unless notifications are allowed on this iPhone. While Pause When You Leave the App is on, they replace the Return-to-Focus Reminder."
                     )
+                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("settings.focus-leave-footer.nudges")
                 }
             }
@@ -915,6 +1001,7 @@ struct SettingsView: View {
                     tableName: "Settings",
                     comment: "Settings footer: the Live Activity switch. Suggested English: The Lock Screen timer appears when Live Activities are allowed in iPhone Settings. Whether the timer stops when you leave the app follows Pause When You Leave the App."
                 )
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("settings.live-activity-footer")
                 if !focusLeavePauseEnabled {
                     Text(
@@ -1374,53 +1461,40 @@ struct SettingsView: View {
         }
     }
 
-    private var screenTimeSection: some View {
-        Section(String(localized: "アプリの利用時間", table: "Settings", comment: "Settings section header above the Screen Time row")) {
-            NavigationLink {
-                ScreenTimeSettingsView()
-            } label: {
-                ScreenTimeSettingsRowLabel()
-            }
-            .accessibilityIdentifier("settings.screen-time")
+    private var screenTimeRow: some View {
+        NavigationLink {
+            ScreenTimeSettingsView()
+        } label: {
+            ScreenTimeSettingsRowLabel()
+                .frame(minHeight: 44, alignment: .leading)
         }
+        .accessibilityIdentifier("settings.screen-time")
     }
 
-    /// settings-06. Right after the timer settings, where its 「カスタム」
-    /// tile already points to it. A row, never a banner.
-    private var proSection: some View {
-        Section {
-            Button {
-                router.presentPaywall(from: .settings)
-            } label: {
-                HStack(spacing: 14) {
-                    // Decorative: for Pro users the seal would read the row
-                    // as 「選択済み」; 「利用中」 already says it.
-                    Image(systemName: purchase.isPro ? "checkmark.seal.fill" : "sparkles")
-                        .foregroundStyle(PomoGemTheme.amber)
-                        .frame(width: 28)
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(Constants.UIStrings.paywallTitle).font(.headline)
-                        Text(proRowSubtitle)
-                            .font(.caption)
-                            .foregroundStyle(PomoGemTheme.muted)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right").font(.caption).foregroundStyle(PomoGemTheme.muted)
+    private var proRow: some View {
+        Button {
+            router.presentPaywall(from: .settings)
+        } label: {
+            HStack(spacing: 14) {
+                // Decorative: for Pro users the seal would read the row
+                // as 「選択済み」; 「利用中」 already says it.
+                Image(systemName: purchase.isPro ? "checkmark.seal.fill" : "sparkles")
+                    .foregroundStyle(PomoGemTheme.amber)
+                    .frame(width: 28)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(Constants.UIStrings.paywallTitle).font(.headline)
+                    Text(proRowSubtitle)
+                        .font(.caption)
+                        .foregroundStyle(PomoGemTheme.muted)
                 }
-                .frame(minHeight: 44)
+                Spacer()
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(PomoGemTheme.muted)
             }
-            .buttonStyle(PomoGemBareButtonStyle())
-            .accessibilityIdentifier("settings.pro")
-        } footer: {
-            if !purchase.isPro {
-                Text(
-                    "Proは1回だけの買い切りです。記録・テーマ・iCloud同期・シェアなど、ほかの機能は無料で使えます。",
-                    tableName: "Settings",
-                    comment: "Settings footer under the Pro row for free users"
-                )
-            }
+            .frame(minHeight: 44)
         }
+        .buttonStyle(PomoGemBareButtonStyle())
+        .accessibilityIdentifier("settings.pro")
     }
 
     private var proRowSubtitle: String {
@@ -1439,7 +1513,7 @@ struct SettingsView: View {
             )
         }
         return String(
-            localized: "自由な集中時間・結晶の月刻印・勉強アプリ数の無制限",
+            localized: "自由な集中時間など・買い切り",
             table: "Settings",
             comment: "Settings Pro row subtitle for free users: what Pro adds"
         )
@@ -1558,7 +1632,7 @@ struct SettingsView: View {
             || screenTime.negativeGemCount > 0
     }
 
-    private var dataSection: some View {
+    private var dataExportSection: some View {
         Section {
             Button(action: startDataExport) {
                 HStack(spacing: 14) {
@@ -1616,6 +1690,15 @@ struct SettingsView: View {
                 }
             }
 
+        } header: {
+            Text("データの書き出し", tableName: "Settings", comment: "Settings data export section header")
+        } footer: {
+            Text(dataStorageDisclosure)
+        }
+    }
+
+    private var dataResetSection: some View {
+        Section {
             Button(String(
                 localized: "表示中の記録をリセット",
                 table: "Settings",
@@ -1703,9 +1786,7 @@ struct SettingsView: View {
                 }
             }
         } header: {
-            Text("記録の書き出しとリセット", tableName: "Settings", comment: "Settings section header: export and reset")
-        } footer: {
-            Text(dataStorageDisclosure)
+            Text("リセットと削除", tableName: "Settings", comment: "Settings reset and deletion section header")
         }
     }
 
@@ -3476,6 +3557,43 @@ private struct SubjectReorderAccessibilityModifier: ViewModifier {
     }
 }
 
+/// A fixed text column keeps wrapped category names and summaries aligned
+/// at accessibility sizes, instead of flowing beneath the decorative icon.
+private struct SettingsIndexRowLabel: View {
+    let title: String
+    let subtitle: String
+    let symbol: String
+    var isWarning = false
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 22))
+                .foregroundStyle(PomoGemTheme.amber)
+                .frame(width: 26)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .foregroundStyle(PomoGemTheme.text)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    if isWarning {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 13))
+                            .accessibilityHidden(true)
+                    }
+                    Text(subtitle)
+                }
+                .font(.caption)
+                .foregroundStyle(isWarning ? PomoGemTheme.amber : PomoGemTheme.muted)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(minHeight: 44, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// The Screen Time row, with the feature's status in place of a fixed
 /// caption: a stop used to be visible only inside the page. Its own view so
 /// that only this row follows the controller, not the whole Settings list.
@@ -3494,24 +3612,12 @@ private struct ScreenTimeSettingsRowLabel: View {
     }
 
     var body: some View {
-        Label {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("スクリーンタイム", tableName: "Settings", comment: "Settings row title: Screen Time")
-                    .foregroundStyle(PomoGemTheme.text)
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    if status.isWarning {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .accessibilityHidden(true)
-                    }
-                    Text(status.subtitle)
-                }
-                .font(.caption)
-                .foregroundStyle(status.isWarning ? PomoGemTheme.amber : PomoGemTheme.muted)
-            }
-        } icon: {
-            Image(systemName: "hourglass").foregroundStyle(PomoGemTheme.amber).frame(width: 26)
-        }
-        .accessibilityElement(children: .combine)
+        SettingsIndexRowLabel(
+            title: String(localized: "アプリの利用時間", table: "Settings", comment: "Settings index row title: app usage"),
+            subtitle: status.subtitle,
+            symbol: "hourglass",
+            isWarning: status.isWarning
+        )
     }
 }
 
@@ -3542,6 +3648,7 @@ private struct NotificationPermissionStatusRow: View {
             Button(action: status == .denied ? openSettings : allow) {
                 Text(actionTitle)
                     .font(.subheadline.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, minHeight: 44)
             }
             .buttonStyle(.bordered)
