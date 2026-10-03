@@ -29,6 +29,9 @@ private let screenTimeFreeLearningLimit = 5
 ///        Bundle ids of the SAME apps, for the usage phases. The usage phase
 ///        splits its minutes evenly across them.
 ///   POMOGEM_REAL_SCREEN_TIME_USAGE_MINUTES=11       (default 11, ≥10 required)
+///   POMOGEM_REAL_SCREEN_TIME_FRESH_RUN=1            (required for 20-minute
+///        phases: the tested lane has a new same-day monitoring run with no
+///        previously reached threshold; this suite does not reset user data)
 ///   POMOGEM_REAL_SCREEN_TIME_STORAGE_ACTION=none|retry|offline-continue
 ///        What to do when the app opens on 「保存領域を確認できません」.
 ///        none (default) stops with evidence; retry taps 「もう一度試す」 once
@@ -56,6 +59,15 @@ private let screenTimeFreeLearningLimit = 5
 ///   usage-distraction(P5) same for the black-gem lane; expects
 ///                     screen-time.negative-total to grow by exactly one
 ///                     「10分 × 1個ぶん」 step.
+///   restart-monitoring  keeps the saved selections and theme, saves recording
+///                     OFF (unless already off), verifies monitoring stopped,
+///                     then saves ON and verifies monitoring resumed. This is
+///                     the non-reset bridge to a fresh 20-minute run.
+///   usage-learning-twenty / usage-distraction-twenty  separate opt-in phases
+///                     for a new monitoring run, 20–29 minutes of usage
+///                     (22 recommended), a final +2 step and no later +3.
+///                     They allow the OS to deliver thresholds 1 and 2 in
+///                     either separate callbacks or one catch-up callback.
 ///   timer-pause (P6)  starts a real 25-minute timer, records that the focus
 ///                     screen is interactive-dismiss-disabled (so the paused
 ///                     status string is unreachable from XCUITest), cancels
@@ -92,6 +104,9 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         case save
         case usageLearning = "usage-learning"
         case usageDistraction = "usage-distraction"
+        case restartMonitoring = "restart-monitoring"
+        case usageLearningTwenty = "usage-learning-twenty"
+        case usageDistractionTwenty = "usage-distraction-twenty"
         case timerPause = "timer-pause"
         case relaunch
         case revoke
@@ -150,6 +165,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
     private var themeName: String?
     private var usageBundleIDs: [String] = []
     private var usageMinutes = 11
+    private var freshUsageRunConfirmed = false
     private var storageAction: StorageAction = .none
     private var transcript: [String] = []
     private var attachmentIndex = 0
@@ -183,6 +199,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             "POMOGEM_REAL_SCREEN_TIME_THEME",
             "POMOGEM_REAL_SCREEN_TIME_USAGE_BUNDLE_IDS",
             "POMOGEM_REAL_SCREEN_TIME_USAGE_MINUTES",
+            "POMOGEM_REAL_SCREEN_TIME_FRESH_RUN",
             "POMOGEM_REAL_SCREEN_TIME_STORAGE_ACTION"
         ]
         let unexpectedFlags = environment.keys.filter {
@@ -212,6 +229,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             }
             usageMinutes = minutes
         }
+        freshUsageRunConfirmed = environment["POMOGEM_REAL_SCREEN_TIME_FRESH_RUN"] == "1"
         if let raw = environment["POMOGEM_REAL_SCREEN_TIME_STORAGE_ACTION"] {
             guard let action = StorageAction(rawValue: raw.trimmingCharacters(in: .whitespaces)) else {
                 XCTFail("POMOGEM_REAL_SCREEN_TIME_STORAGE_ACTION must be none, retry or offline-continue: \(raw).")
@@ -831,8 +849,107 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
 
     // MARK: - P4 usage (learning lane)
 
+    /// Restart both saved lanes without clearing their selections, awards or
+    /// authorization. A plain re-save of an unchanged ON configuration keeps
+    /// the old run; saving OFF and then ON creates new run identities.
+    func testRestartMonitoringWithSelectionsRetained() throws {
+        try select(.restartMonitoring)
+        let app = launchRealApplication()
+        try reachHome(app)
+        let homeBefore = readHomeTotals(app, label: "restart-monitoring-home-before")
+        guard !homeBefore.isSettling, homeBefore.pebbles >= 0 else {
+            try skipWithEvidence("restart-monitoring-home-unsettled",
+                                 "Home has no settled, comparable study total before restarting monitoring.")
+        }
+        try openScreenTimeSettings(app)
+        let status = recordSettingsState(app, label: "restart-monitoring-before")
+        guard status.contains("許可済み") else {
+            try skipWithEvidence("restart-monitoring-not-authorized",
+                                 "Screen Time access must already be granted; the phase never requests authorization (\(status)).")
+        }
+        let learningBefore = selectionCount(app, lane: .learning)
+        let distractionBefore = selectionCount(app, lane: .distraction)
+        let blackBefore = negativeGemCount(app)
+        guard let learningBefore, learningBefore > 0,
+              let distractionBefore, distractionBefore > 0,
+              let blackBefore else {
+            try skipWithEvidence("restart-monitoring-missing-baseline",
+                                 "Both app selections and the black-stone total must be readable and saved first (learning=\(describeCount(learningBefore)), distraction=\(describeCount(distractionBefore)), black=\(describeCount(blackBefore))).")
+        }
+        let theme = themePicker(app)
+        _ = reveal(theme)
+        let themeLabel = labelIfPresent(theme)
+        let themeValue = describeValue(theme)
+        let themeDescription = "\(themeLabel) / \(themeValue)"
+        let hasChosenTheme = theme.exists
+            && !themeDescription.contains("選んでください")
+            && !themeDescription.contains("削除されたテーマ")
+            && (themeLabel != "記録先のテーマ" || (!themeValue.isEmpty && themeValue != "<missing>"))
+        guard hasChosenTheme else {
+            try skipWithEvidence("restart-monitoring-no-theme",
+                                 "The learning lane needs an existing saved theme; screen-time.theme reads \(themeDescription).")
+        }
+        let toggle = app.switches["screen-time.enabled"]
+        _ = reveal(toggle)
+        let initialValue = describeValue(toggle)
+        guard initialValue == "0" || initialValue == "1" else {
+            try skipWithEvidence("restart-monitoring-toggle-unreadable",
+                                 "screen-time.enabled must report 0 or 1 before the phase; it reports \(initialValue).")
+        }
+        note("RESTART-MONITORING baseline: enabled=\(initialValue) learning=\(learningBefore) distraction=\(distractionBefore) theme=\(themeDescription) black=\(blackBefore) home=\(homeBefore.summary)")
+
+        if initialValue == "1" {
+            try setRecordingToggle(app, on: false)
+            try saveRecordingState(app, expectedStatus: "自動記録は停止中です。", label: "restart-monitoring-off")
+        } else {
+            scrollSettingsToTop(app)
+            let stopped = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "自動記録は停止中です。")).firstMatch
+            try require(stopped.waitForExistence(timeout: 30),
+                        "Recording was already OFF, but the stopped status was not visible.",
+                        evidence: "restart-monitoring-already-off-no-status")
+            note("RESTART-MONITORING: recording was already OFF; stopped status confirmed without an unnecessary save.")
+        }
+        try require(selectionCount(app, lane: .learning) == learningBefore,
+                    "Stopping monitoring changed the learning selection.",
+                    evidence: "restart-monitoring-off-learning-lost")
+        try require(selectionCount(app, lane: .distraction) == distractionBefore,
+                    "Stopping monitoring changed the black-stone selection.",
+                    evidence: "restart-monitoring-off-distraction-lost")
+        try require((negativeGemCount(app) ?? -1) >= blackBefore,
+                    "Stopping monitoring lost existing black stones.",
+                    evidence: "restart-monitoring-off-black-lost")
+
+        try setRecordingToggle(app, on: true)
+        try saveRecordingState(app, expectedStatus: "自動記録中", label: "restart-monitoring-on")
+        try require(selectionCount(app, lane: .learning) == learningBefore,
+                    "Restarting monitoring changed the learning selection.",
+                    evidence: "restart-monitoring-on-learning-lost")
+        try require(selectionCount(app, lane: .distraction) == distractionBefore,
+                    "Restarting monitoring changed the black-stone selection.",
+                    evidence: "restart-monitoring-on-distraction-lost")
+        let blackAfter = negativeGemCount(app)
+        try require((blackAfter ?? -1) >= blackBefore,
+                    "Restarting monitoring lost existing black stones: \(blackBefore) → \(describeCount(blackAfter)).",
+                    evidence: "restart-monitoring-on-black-lost")
+        let themeAfter = themePicker(app)
+        _ = reveal(themeAfter)
+        try require(labelIfPresent(themeAfter) == themeLabel && describeValue(themeAfter) == themeValue,
+                    "Restarting monitoring changed the saved learning theme: \(themeDescription) → \(labelIfPresent(themeAfter)) / \(describeValue(themeAfter)).",
+                    evidence: "restart-monitoring-theme-lost")
+        try returnToHome(app, from: "スクリーンタイム")
+        let homeAfter = readHomeTotals(app, label: "restart-monitoring-home-after")
+        try require(!homeAfter.isSettling && homeAfter.pebbles >= homeBefore.pebbles,
+                    "Restarting monitoring lost existing study gems: \(homeBefore.summary) → \(homeAfter.summary).",
+                    evidence: "restart-monitoring-home-lost")
+        note("RESTART-MONITORING PASS: saved selections and theme unchanged, black stones \(blackBefore) → \(describeCount(blackAfter)), Home study gems \(homeBefore.pebbles) → \(homeAfter.pebbles), monitoring resumed. Compare active run IDs and callback counters separately from the private diagnostics mirror.")
+    }
+
     func testLearningUsageAccruesExactlyOneGem() throws {
         try select(.usageLearning)
+        guard usageMinutes < 20 else {
+            try skipWithEvidence("usage-learning-needs-twenty-phase",
+                                 "The 10-minute phase expects +1; \(usageMinutes) minutes can correctly yield +2 or more. Use usage-learning-twenty with 20–29 minutes and a fresh monitoring run.")
+        }
         guard !usageBundleIDs.isEmpty else {
             throw XCTSkip("Set POMOGEM_REAL_SCREEN_TIME_USAGE_BUNDLE_IDS to the bundle ids of the learning apps.")
         }
@@ -883,10 +1000,68 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         note("USAGE-LEARNING NOTE: Home exposes device-wide totals only (jar value + メニュー summary). Per-theme attribution of this gem must be confirmed from 積み上がり or the record log by a human.")
     }
 
+    /// A separate window because the ten-minute phase intentionally expects
+    /// exactly one gem. This phase never resets a ledger or changes a picker:
+    /// the operator must confirm a new same-day run before opting in.
+    func testLearningUsageAccruesExactlyTwoGems() throws {
+        try select(.usageLearningTwenty)
+        try requireFreshTwentyMinuteRun()
+        guard !usageBundleIDs.isEmpty else {
+            throw XCTSkip("Set POMOGEM_REAL_SCREEN_TIME_USAGE_BUNDLE_IDS to the selected learning apps.")
+        }
+        let app = launchRealApplication()
+        try reachHome(app)
+        try openScreenTimeSettings(app)
+        let status = recordSettingsState(app, label: "usage-learning-twenty-before")
+        guard status.contains("許可済み") else {
+            try skipWithEvidence("usage-learning-twenty-not-authorized", "Screen Time access is not granted (\(status)).")
+        }
+        let learning = selectionCount(app, lane: .learning)
+        guard let learning, learning > 0 else {
+            try skipWithEvidence("usage-learning-twenty-no-selection",
+                                 "The learning lane holds \(describeCount(learning)) apps; choose and save them first.")
+        }
+        scrollSettingsToTop(app)
+        try require(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "自動記録中")).firstMatch.exists,
+                    "The learning lane must be monitoring before the 20-minute usage window.",
+                    evidence: "usage-learning-twenty-not-monitoring")
+        try require(!app.staticTexts["screen-time.monitoring-error"].exists,
+                    "The 20-minute baseline has a monitoring error.",
+                    evidence: "usage-learning-twenty-monitoring-error")
+        try returnToHome(app, from: "スクリーンタイム")
+
+        let before = readHomeTotals(app, label: "usage-learning-twenty-before")
+        note("USAGE-LEARNING-TWENTY baseline: \(before.summary)")
+        if before.isSettling || before.pebbles < 0 {
+            try skipWithEvidence("usage-learning-twenty-home-unsettled",
+                                 "Home has no settled, comparable pebble count before the 20-minute window.")
+        }
+        try burnUsage(app, label: "usage-learning-twenty")
+
+        let final = try pollForHomeTotalsTarget(app, baseline: before, expectedIncrease: 2, minutes: 20)
+        note("USAGE-LEARNING-TWENTY final +2 after \(Int(final.1)) s: \(final.0.summary)")
+        if before.gramsAreExact && final.0.gramsAreExact {
+            try require(final.0.grams == before.grams + 200,
+                        "Two ten-minute learning gems must weigh 200 g: \(before.grams) g → \(final.0.grams) g.",
+                        evidence: "usage-learning-twenty-wrong-mass")
+        } else {
+            note("USAGE-LEARNING-TWENTY: Home mass includes a rounded kg readout, so +200 g is recorded but not asserted (before=\(before.grams) after=\(final.0.grams)).")
+        }
+        let extra = try pollForHomeTotalsChange(app, baseline: final.0, minutes: 5, expectNone: true)
+        try require(extra == nil,
+                    "A fresh 20–29 minute window must stop at +2 gems; an additional change was \(extra?.0.summary ?? "<none>").",
+                    evidence: "usage-learning-twenty-third-gem")
+        note("USAGE-LEARNING-TWENTY PASS: final +2, no third gem in 5 minutes. The first visible update may have been +1 or +2 depending on callback delivery.")
+    }
+
     // MARK: - P5 usage (black gem lane)
 
     func testDistractionUsageAccruesExactlyOneBlackGem() throws {
         try select(.usageDistraction)
+        guard usageMinutes < 20 else {
+            try skipWithEvidence("usage-distraction-needs-twenty-phase",
+                                 "The 10-minute phase expects +1; \(usageMinutes) minutes can correctly yield +2 or more. Use usage-distraction-twenty with 20–29 minutes and a fresh monitoring run.")
+        }
         guard !usageBundleIDs.isEmpty else {
             throw XCTSkip("Set POMOGEM_REAL_SCREEN_TIME_USAGE_BUNDLE_IDS to the bundle ids of the black-gem apps.")
         }
@@ -959,6 +1134,69 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             capture("usage-distraction-home-changed-with-learning-armed")
             note("USAGE-DISTRACTION PENDING: Home study totals moved \(homeBaseline.pebbles) → \(homeAfter.pebbles) while \(learningSelected) learning app(s) were selected. This phase cannot tell a lane leak from a late learning delivery; re-run it with the learning lane cleared, or check the record log by hand.")
         }
+    }
+
+    func testDistractionUsageAccruesExactlyTwoBlackGems() throws {
+        try select(.usageDistractionTwenty)
+        try requireFreshTwentyMinuteRun()
+        guard !usageBundleIDs.isEmpty else {
+            throw XCTSkip("Set POMOGEM_REAL_SCREEN_TIME_USAGE_BUNDLE_IDS to the selected black-stone apps.")
+        }
+        let app = launchRealApplication()
+        try reachHome(app)
+        try openScreenTimeSettings(app)
+        let status = recordSettingsState(app, label: "usage-distraction-twenty-before")
+        guard status.contains("許可済み") else {
+            try skipWithEvidence("usage-distraction-twenty-not-authorized", "Screen Time access is not granted (\(status)).")
+        }
+        let distraction = selectionCount(app, lane: .distraction)
+        guard let distraction, distraction > 0 else {
+            try skipWithEvidence("usage-distraction-twenty-no-selection",
+                                 "The black-stone lane holds \(describeCount(distraction)) apps; choose and save them first.")
+        }
+        guard let baseline = negativeGemCount(app) else {
+            try skipWithEvidence("usage-distraction-twenty-no-total",
+                                 "screen-time.negative-total could not be read before the 20-minute window.")
+        }
+        scrollSettingsToTop(app)
+        try require(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "自動記録中")).firstMatch.exists,
+                    "The black-stone lane must be monitoring before the 20-minute usage window.",
+                    evidence: "usage-distraction-twenty-not-monitoring")
+        try require(!app.staticTexts["screen-time.monitoring-error"].exists,
+                    "The 20-minute baseline has a monitoring error.",
+                    evidence: "usage-distraction-twenty-monitoring-error")
+        let learningSelected = selectionCount(app, lane: .learning) ?? 0
+        try returnToHome(app, from: "スクリーンタイム")
+        let homeBaseline = readHomeTotals(app, label: "usage-distraction-twenty-home-before")
+        note("USAGE-DISTRACTION-TWENTY baseline: blackGems=\(baseline) home=\(homeBaseline.summary) learningApps=\(learningSelected)")
+        try burnUsage(app, label: "usage-distraction-twenty")
+
+        let final = try pollForNegativeTotalTarget(app, baseline: baseline, expectedIncrease: 2, minutes: 20)
+        note("USAGE-DISTRACTION-TWENTY final +2 after \(Int(final.1)) s: blackGems=\(final.0)")
+        let extra = try pollForNegativeTotalChange(app, baseline: final.0, minutes: 5, expectNone: true)
+        try require(extra == nil,
+                    "A fresh 20–29 minute window must stop at +2 black stones; an additional change was \(extra.map { String($0.0) } ?? "<none>").",
+                    evidence: "usage-distraction-twenty-third-stone")
+        try returnToHome(app, from: "スクリーンタイム")
+        let homeAfter = readHomeTotals(app, label: "usage-distraction-twenty-home-after")
+        let homeCountsAreComparable = !homeBaseline.isSettling && !homeAfter.isSettling
+            && homeBaseline.pebbles >= 0 && homeAfter.pebbles >= 0
+        if learningSelected == 0 && homeCountsAreComparable {
+            try require(homeAfter.pebbles == homeBaseline.pebbles,
+                        "Black stones must not change Home's study total: \(homeBaseline.pebbles) → \(homeAfter.pebbles).",
+                        evidence: "usage-distraction-twenty-home-changed")
+            if homeBaseline.gramsAreExact && homeAfter.gramsAreExact {
+                try require(homeAfter.grams == homeBaseline.grams,
+                            "Black stones must not change Home's study mass: \(homeBaseline.grams) g → \(homeAfter.grams) g.",
+                            evidence: "usage-distraction-twenty-home-mass-changed")
+            }
+        } else if homeCountsAreComparable
+                    && homeAfter.pebbles == homeBaseline.pebbles {
+            note("USAGE-DISTRACTION-TWENTY: Home study total stayed at \(homeAfter.pebbles) with the learning lane selected.")
+        } else {
+            note("USAGE-DISTRACTION-TWENTY: Home comparison is inconclusive with an unsettled baseline or a separately armed learning lane; inspect the record log for attribution.")
+        }
+        note("USAGE-DISTRACTION-TWENTY PASS: final +2, no third stone in 5 minutes.")
     }
 
     // MARK: - P6 timer pause
@@ -1722,6 +1960,47 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         note("TOGGLE: screen-time.enabled set to \(wanted).")
     }
 
+    /// Save the changed recording switch through the shipping settings UI.
+    /// The status row is absent while the worker is updating, so seeing the
+    /// requested status and a re-enabled Save button establishes completion.
+    private func saveRecordingState(
+        _ app: XCUIApplication,
+        expectedStatus: String,
+        label: String
+    ) throws {
+        let save = app.buttons["screen-time.save"]
+        _ = reveal(save)
+        try require(save.exists && save.isEnabled,
+                    "保存 must be available for \(label). Validation footer: \(validationFooter(app)).",
+                    evidence: "\(label)-save-unavailable")
+        save.tap()
+        try guardAgainstSystemAlert("\(label)-save")
+        let completed = saveToast(app)
+        try require(completed.waitForExistence(timeout: 180),
+                    "Saving \(label) did not show its completed-save toast within 180 seconds; alert=\(alertMessage(app)).",
+                    evidence: "\(label)-save-not-completed")
+        let status = app.staticTexts.matching(NSPredicate(format: "label == %@", expectedStatus)).firstMatch
+        try require(status.waitForExistence(timeout: 180),
+                    "Saving \(label) did not reach \(expectedStatus) within 180 seconds; alert=\(alertMessage(app)).",
+                    evidence: "\(label)-status-timeout")
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: save)
+        try require(XCTWaiter.wait(for: [ready], timeout: 30) == .completed,
+                    "保存 did not become operable again after \(label).",
+                    evidence: "\(label)-save-not-ready")
+        try require(!app.descendants(matching: .any)["screen-time.updating"].firstMatch.exists,
+                    "The monitoring worker still reports 反映中 after \(label).",
+                    evidence: "\(label)-still-updating")
+        try require(!app.alerts["設定を完了できませんでした"].exists,
+                    "Saving \(label) raised an error alert: \(alertMessage(app)).",
+                    evidence: "\(label)-error-alert")
+        try require(!app.staticTexts["screen-time.monitoring-error"].exists,
+                    "Saving \(label) left a monitoring error: \(labelIfPresent(app.staticTexts["screen-time.monitoring-error"])).",
+                    evidence: "\(label)-monitoring-error")
+        note("RESTART-MONITORING \(label): save completed; status=\(status.label).")
+        capture("\(label)-saved")
+        try waitForToastToClear(app)
+    }
+
     /// The toast a completed save shows. Its wording states the result
     /// (「保存しました。自動記録中です」, 「保存しました」 or
     /// 「保存しました。自動記録はオフです」) and its combined label may start with
@@ -2429,6 +2708,21 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
 
     // MARK: - usage windows
 
+    /// There is no private reset or ledger inspection in the shipping app.
+    /// Require an operator-confirmed new run so an earlier day's catch-up or
+    /// an already counted same-day threshold cannot masquerade as +2 here.
+    private func requireFreshTwentyMinuteRun() throws {
+        guard (20..<30).contains(usageMinutes) else {
+            try skipWithEvidence("usage-twenty-wrong-duration",
+                                 "Set POMOGEM_REAL_SCREEN_TIME_USAGE_MINUTES to 20–29 (22 recommended); \(usageMinutes) would test a different number of thresholds.")
+        }
+        guard freshUsageRunConfirmed else {
+            try skipWithEvidence("usage-twenty-fresh-run-unconfirmed",
+                                 "First confirm this lane has a new same-day monitoring run with no already reached threshold, then opt in with POMOGEM_REAL_SCREEN_TIME_FRESH_RUN=1. The test never resets the user's data or changes authorization.")
+        }
+        note("TWENTY-MINUTE PRECONDITION: operator confirmed a new same-day run with no already reached threshold; usage=\(usageMinutes) min.")
+    }
+
     /// Foregrounds each configured bundle id for an equal share of
     /// POMOGEM_REAL_SCREEN_TIME_USAGE_MINUTES, tapping a neutral point every
     /// 30 s so the screen never locks.
@@ -2510,6 +2804,50 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         return nil
     }
 
+    /// A 20-minute window may be delivered as threshold 1 then 2, or as a
+    /// single threshold 2 that catches up. Observe the FINAL total rather
+    /// than treating the first +1 as the result of the whole window.
+    private func pollForHomeTotalsTarget(
+        _ app: XCUIApplication,
+        baseline: HomeTotals,
+        expectedIncrease: Int,
+        minutes: Double
+    ) throws -> (HomeTotals, TimeInterval) {
+        let start = Date()
+        let deadline = start.addingTimeInterval(minutes * 60)
+        let target = baseline.pebbles + expectedIncrease
+        var cycle = 0
+        repeat {
+            cycle += 1
+            try guardAgainstSystemAlert("poll-home-target-\(cycle)")
+            if !app.buttons["メニュー"].exists { try? returnToHome(app, from: "unknown") }
+            let totals = readHomeTotals(app, label: "poll-target-\(cycle)")
+            if totals.isSettling || totals.pebbles < 0 {
+                note("POLL \(cycle): Home has no comparable settled count; waiting.")
+            } else if totals.pebbles == target {
+                capture("poll-target-reached-\(cycle)")
+                return (totals, Date().timeIntervalSince(start))
+            } else if totals.pebbles > target {
+                try require(false,
+                            "Fresh 20–29 minute usage exceeded +\(expectedIncrease): \(baseline.pebbles) → \(totals.pebbles).",
+                            evidence: "poll-home-target-overshot")
+            } else if totals.pebbles < baseline.pebbles {
+                try skipWithEvidence("poll-home-baseline-lost",
+                                     "Home decreased from \(baseline.pebbles) to \(totals.pebbles); this window cannot be compared to its baseline.")
+            } else {
+                note("POLL \(cycle): interim +\(totals.pebbles - baseline.pebbles); waiting for final +\(expectedIncrease).")
+            }
+            if Date() >= deadline { break }
+            cyclePomoGem(app)
+            let elapsed = Date().timeIntervalSince(start)
+            let nextTick = Double(cycle) * 60
+            if elapsed < nextTick { pause(min(nextTick - elapsed, max(0, deadline.timeIntervalSinceNow))) }
+        } while Date() < deadline
+        capture("poll-home-target-timeout")
+        XCTFail("Final +\(expectedIncrease) was not observed within \(Int(minutes)) minutes after \(usageMinutes) minutes of learning-app usage. Inspect the callback diagnostics before judging whether delivery or import failed.")
+        throw AuditFailure.stopped
+    }
+
     private func pollForHomeTotalsChange(
         _ app: XCUIApplication,
         baseline: HomeTotals,
@@ -2565,6 +2903,53 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         } while Date() < deadline
         capture("poll-black-timeout")
         XCTFail("No black-gem change was observed within \(Int(minutes)) minutes after \(usageMinutes) minutes of usage (baseline \(baseline)). DeviceActivity delivery may simply be late — re-run the poll before calling this a defect.")
+        throw AuditFailure.stopped
+    }
+
+    private func pollForNegativeTotalTarget(
+        _ app: XCUIApplication,
+        baseline: Int,
+        expectedIncrease: Int,
+        minutes: Double
+    ) throws -> (Int, TimeInterval) {
+        let start = Date()
+        let deadline = start.addingTimeInterval(minutes * 60)
+        let target = baseline + expectedIncrease
+        var cycle = 0
+        repeat {
+            cycle += 1
+            try guardAgainstSystemAlert("poll-black-target-\(cycle)")
+            if !app.navigationBars["スクリーンタイム"].exists {
+                try reachHome(app)
+                try openScreenTimeSettings(app)
+            }
+            if let current = negativeGemCount(app) {
+                if current == target {
+                    capture("poll-black-target-reached-\(cycle)")
+                    note("POLL \(cycle): screen-time.negative-total = \(app.staticTexts["screen-time.negative-total"].label)")
+                    return (current, Date().timeIntervalSince(start))
+                }
+                if current > target {
+                    try require(false,
+                                "Fresh 20–29 minute usage exceeded +\(expectedIncrease) black stones: \(baseline) → \(current).",
+                                evidence: "poll-black-target-overshot")
+                }
+                if current < baseline {
+                    try skipWithEvidence("poll-black-baseline-lost",
+                                         "Black-stone count decreased from \(baseline) to \(current); this window cannot be compared to its baseline.")
+                }
+                note("POLL \(cycle): interim black-stone increase=\(current - baseline); waiting for final +\(expectedIncrease).")
+            } else {
+                note("POLL \(cycle): black-stone count unreadable; waiting.")
+            }
+            if Date() >= deadline { break }
+            cyclePomoGem(app)
+            let elapsed = Date().timeIntervalSince(start)
+            let nextTick = Double(cycle) * 60
+            if elapsed < nextTick { pause(min(nextTick - elapsed, max(0, deadline.timeIntervalSinceNow))) }
+        } while Date() < deadline
+        capture("poll-black-target-timeout")
+        XCTFail("Final +\(expectedIncrease) black stones were not observed within \(Int(minutes)) minutes after \(usageMinutes) minutes of usage. Inspect the callback diagnostics before judging whether delivery failed.")
         throw AuditFailure.stopped
     }
 
