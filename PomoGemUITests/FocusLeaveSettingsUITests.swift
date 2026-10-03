@@ -70,9 +70,10 @@ final class FocusLeaveSettingsUITests: XCTestCase {
         assertAbove(music, leavePause, "The leave-pause card follows the 集中 card's music row")
 
         // Product default: both on, the older reminder superseded.
-        XCTAssertTrue(scrollUntilHittable(leavePause, attempts: 12))
+        XCTAssertTrue(reveal(leavePause))
         XCTAssertTrue(leavePause.label.contains("アプリを離れたら一時停止"), leavePause.label)
         XCTAssertEqual(leavePause.value as? String, "1")
+        XCTAssertTrue(reveal(nudges))
         XCTAssertTrue(nudges.waitForExistence(timeout: 3))
         XCTAssertTrue(nudges.label.contains("集中が切れたらお知らせ"), nudges.label)
         XCTAssertTrue(nudges.label.contains("離れてから20分までに最大5回"), nudges.label)
