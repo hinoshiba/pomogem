@@ -1335,6 +1335,150 @@ final class GemBrillianceTests: XCTestCase {
         XCTAssertLessThanOrEqual(tall.midY, interior.minY + 40 + 40 + 0.001)
     }
 
+    /// A landed gem can move again when the phone turns. Its departure
+    /// must remove the old pool in the physics frame, while another stable
+    /// gem still keeps its own pile light and all gem halos remain intact.
+    @MainActor
+    func testMovedLandedGemsClearTheirOldPileLightBeforeTheShapeRefresh() throws {
+        let scene = scaleScene()
+        scene.restore(pebbles: [
+            looseDescriptor(),
+            looseDescriptor(id: UUID(uuidString: "C0000000-0000-4000-8000-000000000002")!)
+        ])
+        scene.update(1)
+        let glow = try XCTUnwrap(scene.childNode(withName: "//jar.pileGlow") as? SKSpriteNode)
+        let pebbles = scenePebbles(scene)
+        XCTAssertEqual(pebbles.count, 2)
+        XCTAssertTrue(pebbles.allSatisfy(\.hasLanded))
+        XCTAssertGreaterThan(glow.alpha, 0)
+
+        pebbles[0].physicsBody?.velocity = CGVector(dx: 0, dy: -400)
+        scene.didSimulatePhysics()
+        XCTAssertGreaterThan(glow.alpha, 0, "The other stable gem still casts light")
+
+        pebbles[1].physicsBody?.velocity = CGVector(dx: 0, dy: -400)
+        scene.didSimulatePhysics()
+        XCTAssertEqual(glow.alpha, 0, "No half-second wait with the old pile light")
+        XCTAssertNil(glow.action(forKey: "jar.pileGlow.shape"))
+        XCTAssertNil(glow.action(forKey: "jar.pileGlow.visibility"), "Reduce Motion changes the static frame")
+        XCTAssertTrue(pebbles.allSatisfy { $0.gemHaloAlpha > 0 }, "Each gem keeps the light attached to its body")
+    }
+
+    /// Zero velocity at an apex, slow travel and an inactive stepping gap
+    /// cannot return the departed pool. Consecutive stable frames can.
+    @MainActor
+    func testMovedPileLightWaitsForStablePositionAcrossConsecutiveFrames() throws {
+        let scene = scaleScene()
+        scene.restore(pebbles: [looseDescriptor()])
+        scene.update(1)
+        let glow = try XCTUnwrap(scene.childNode(withName: "//jar.pileGlow") as? SKSpriteNode)
+        let pebble = try XCTUnwrap(scenePebbles(scene).first)
+        pebble.physicsBody?.velocity = CGVector(dx: 0, dy: -400)
+        scene.didSimulatePhysics()
+        XCTAssertEqual(glow.alpha, 0)
+
+        pebble.position.y += 150
+        pebble.physicsBody?.velocity = .zero
+        scene.update(1.6)
+        scene.didSimulatePhysics()
+        XCTAssertEqual(glow.alpha, 0, "A one-frame apex is not a settled pile")
+        for time in [1.71, 1.82] {
+            pebble.position.x += 10
+            scene.update(time)
+            scene.didSimulatePhysics()
+        }
+        scene.update(2.1)
+        scene.didSimulatePhysics()
+        XCTAssertEqual(glow.alpha, 0, "Travel and a stepping gap restart the stable interval")
+
+        for time in [2.21, 2.32, 2.45] {
+            scene.update(time)
+            scene.didSimulatePhysics()
+        }
+        scene.update(2.7)
+        XCTAssertGreaterThan(glow.alpha, 0, "A genuinely settled pile lights its new position")
+    }
+
+    /// A moving pile fades promptly, without an old landing pulse fighting
+    /// it. On return the new frame is already in place while still invisible,
+    /// and another departure can interrupt its reveal safely.
+    @MainActor
+    func testMovingPileFadesAndReappearsAtItsNewPosition() throws {
+        let scene = scaleScene()
+        scene.restore(pebbles: [looseDescriptor()])
+        scene.update(1)
+        let glow = try XCTUnwrap(scene.childNode(withName: "//jar.pileGlow") as? SKSpriteNode)
+        let pebble = try XCTUnwrap(scenePebbles(scene).first)
+        let oldPosition = glow.position
+        scene.reduceMotion = false
+        glow.run(.fadeAlpha(to: 1, duration: 1), withKey: "jar.pileGlow.pulse")
+        pebble.physicsBody?.velocity = CGVector(dx: 0, dy: 400)
+        scene.didSimulatePhysics()
+        XCTAssertNil(glow.action(forKey: "jar.pileGlow.pulse"))
+        XCTAssertEqual(try XCTUnwrap(glow.action(forKey: "jar.pileGlow.visibility")).duration, 0.16,
+                       accuracy: 0.001)
+
+        let interior = JarScene.interiorRect(sceneSize: scene.size)
+        scene.setGravityVector(CGVector(dx: 0, dy: 9.8), smoothing: false)
+        pebble.position = CGPoint(x: interior.midX, y: interior.maxY - pebble.radius)
+        pebble.physicsBody?.velocity = .zero
+        for time in [1.1, 1.2, 1.33] {
+            scene.update(time)
+            scene.didSimulatePhysics()
+        }
+        scene.update(1.6)
+        XCTAssertGreaterThan(glow.position.y, oldPosition.y + 100)
+        XCTAssertEqual(glow.alpha, 0, "Place the new pool before revealing it")
+        XCTAssertNil(glow.action(forKey: "jar.pileGlow.shape"), "No fog travels from the old floor to the cap")
+        XCTAssertEqual(try XCTUnwrap(glow.action(forKey: "jar.pileGlow.visibility")).duration, 0.22,
+                       accuracy: 0.001)
+
+        // A headless scene cannot advance an action; represent the reveal's
+        // intermediate alpha, then deliver another real departure condition.
+        glow.alpha = 0.1
+        pebble.physicsBody?.velocity = CGVector(dx: 0, dy: -400)
+        scene.didSimulatePhysics()
+        XCTAssertEqual(try XCTUnwrap(glow.action(forKey: "jar.pileGlow.visibility")).duration, 0.16,
+                       accuracy: 0.001, "A departure replaces the reveal with a fade-out")
+    }
+
+    /// A restore creates new physical bodies, even when their record IDs
+    /// match. Their light must be placed with the restored rows immediately,
+    /// without inheriting the previous body's movement or animation state.
+    @MainActor
+    func testRestoreResetsMovedPileLightAndClearsItWhenEmpty() throws {
+        let scene = scaleScene()
+        let descriptor = looseDescriptor()
+        scene.restore(pebbles: [descriptor])
+        scene.update(1)
+        let glow = try XCTUnwrap(scene.childNode(withName: "//jar.pileGlow") as? SKSpriteNode)
+        let pebble = try XCTUnwrap(scenePebbles(scene).first)
+        let interior = JarScene.interiorRect(sceneSize: scene.size)
+        scene.setGravityVector(CGVector(dx: 0, dy: 9.8), smoothing: false)
+        pebble.position = CGPoint(x: interior.midX, y: interior.maxY - pebble.radius)
+        scene.update(2)
+        let capLightPosition = glow.position
+        XCTAssertGreaterThan(glow.alpha, 0)
+
+        pebble.physicsBody?.velocity = CGVector(dx: 0, dy: -400)
+        scene.didSimulatePhysics()
+        XCTAssertEqual(glow.alpha, 0)
+        scene.setGravityVector(Constants.Jar.gravityVector, smoothing: false)
+        scene.restore(pebbles: [descriptor])
+        XCTAssertGreaterThan(glow.alpha, 0, "The same record ID does not inherit the removed body's waiting interval")
+        XCTAssertLessThan(glow.position.y, capLightPosition.y - 100,
+                          "The restored rows and their light appear together at the floor")
+
+        glow.run(.moveBy(x: 15, y: 20, duration: 1), withKey: "jar.pileGlow.shape")
+        glow.run(.fadeAlpha(to: 0.9, duration: 1), withKey: "jar.pileGlow.pulse")
+        glow.run(.fadeAlpha(to: 0.5, duration: 1), withKey: "jar.pileGlow.visibility")
+        scene.restore(pebbles: [])
+        XCTAssertEqual(glow.alpha, 0, "An empty restore cannot leave the old pool behind")
+        for key in ["jar.pileGlow.shape", "jar.pileGlow.pulse", "jar.pileGlow.visibility"] {
+            XCTAssertNil(glow.action(forKey: key), "Empty restore clears \(key)")
+        }
+    }
+
     // MARK: Jar-wide scale (D4)
 
     @MainActor
@@ -1723,30 +1867,24 @@ extension GemBrillianceTests {
         XCTAssertGreaterThanOrEqual(reachable ?? 0, JarPileClearance.namePlateMinimumScale - 0.000_1)
     }
 
-    /// Home keeps the pile under the core (down to 2.0), under the name
-    /// plate (optional) and under the HUD's value (down to 1.0).
-    func testPileClearancesCoverTheCoreThePlateAndTheHUD() {
+    /// The fixed rear relief never shrinks the physical pile to make a
+    /// window around its stone or label. Only Home's readout reserves room.
+    func testPileClearancesReserveOnlyTheHUDAndAllowCoreOcclusion() {
         let stage = CGSize(width: 402, height: 426)
         let clearances = JarSpriteView.pileClearances(
             stageSize: stage,
-            coreDisc: (center: CGPoint(x: 201, y: 150), radius: 36),
-            namePlate: (top: 192, height: 20, halfWidth: 42),
             hudBottom: 100
         )
-        XCTAssertEqual(clearances.count, 3)
-        let core = clearances[0]
-        XCTAssertEqual(core.ceiling, (426 - 150 - 36 * 0.45).rounded())
-        XCTAssertEqual(core.minimumScale, JarPileClearance.coreMinimumScale)
-        XCTAssertEqual(core.minX, 165)
-        XCTAssertEqual(core.maxX, 237)
-        XCTAssertFalse(core.isOptional)
-        let plate = clearances[1]
-        XCTAssertEqual(plate.ceiling, 426 - 192 - 20 - JarLifetimeCoreLabelLimits.clearance)
-        XCTAssertTrue(plate.isOptional)
-        let hud = clearances[2]
+        XCTAssertEqual(clearances.count, 1)
+        let hud = clearances[0]
         XCTAssertEqual(hud.ceiling, 426 - 100 - 8)
         XCTAssertEqual(hud.minimumScale, JarScalePolicy.minimumScale)
-        XCTAssertTrue(JarSpriteView.pileClearances(stageSize: .zero, coreDisc: nil, hudBottom: 100).isEmpty)
+        XCTAssertEqual(hud.minX, 101)
+        XCTAssertEqual(hud.maxX, 301)
+        XCTAssertFalse(hud.isOptional)
+        XCTAssertTrue(JarSpriteView.pileClearances(stageSize: stage, hudBottom: nil).isEmpty,
+                      "A jar without an overlaid readout lets the gems occlude its rear relief")
+        XCTAssertTrue(JarSpriteView.pileClearances(stageSize: .zero, hudBottom: 100).isEmpty)
     }
 
     /// The core is the jar's protagonist: never smaller than 1.25 loose

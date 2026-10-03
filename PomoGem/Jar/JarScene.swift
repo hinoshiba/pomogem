@@ -134,6 +134,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             guard reduceMotion != oldValue else { return }
             requestRedraw()
             allPebbleNodes.forEach { $0.setReduceMotion(reduceMotion) }
+            refreshLidPresentation(animated: false)
             // F3: a calm re-settle belongs to Reduce Motion only.
             if !reduceMotion { endCalmResettle() }
             if reduceMotion {
@@ -291,6 +292,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         static let tapSpecular = "jar.tapSpecular"
         static let reducedMotionHighlight = "jar.reducedMotionHighlight"
         static let pileGlowShape = "jar.pileGlow.shape"
+        static let pileGlowVisibility = "jar.pileGlow.visibility"
         static let glassCrossfade = "jar.glass.crossfade"
     }
 
@@ -367,6 +369,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private let reducedMotionHighlightNode = SKShapeNode()
     private let rimNode = SKShapeNode()
     private let innerRimNode = SKShapeNode()
+    /// A clear, seated lid makes the mouth's existing containment visible.
+    /// Only a new gem passing through the neck opens its presentation.
+    private let lidNode = SKNode()
+    private let lidFaceNode = SKShapeNode()
+    private let lidEdgeNode = SKShapeNode()
+    private let lidReflectionNode = SKShapeNode()
+    private let lidGripNode = SKShapeNode()
+    private var lidIsOpen = false
     private let tapCausticNode = SKShapeNode()
     /// Glass v2: moving additive highlights (reflection bands, shoulder
     /// light) over the pre-rendered front glass; ±6 pt with tilt.
@@ -399,6 +409,19 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// every node of this scene that can reach past the bottle.
     let lightEdgeFade = JarLightEdgeFade()
     private var pileGlowBaseAlpha: CGFloat = 0
+    private var pileGlowIsFadingOut = false
+    /// Only gems that have moved need to establish rest again. Restored
+    /// bodies can light the jar immediately; a falling pile cannot briefly
+    /// light its old position just because its velocity crosses zero.
+    private var movingPileLightIDs: Set<UUID> = []
+    private struct PileLightRestObservation {
+        let anchor: CGPoint
+        let since: TimeInterval
+        var lastObservedAt: TimeInterval
+    }
+    private var pileLightRestObservations: [UUID: PileLightRestObservation] = [:]
+    static let pileLightRestDelay: TimeInterval = 0.2
+    static let pileLightRestDisplacement: CGFloat = 1
     /// 「積み上がりの光」 as a gem bed: one baked sprite behind the physics
     /// bodies, set from lifetime grams and the lifetime theme mix only.
     private let gemBedNode = SKSpriteNode()
@@ -1563,6 +1586,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         tapPresentationMovedSecondaryCount = 0
         aboveEntryPebbleIDs.removeAll()
         enteringPhases.removeAll()
+        movingPileLightIDs.removeAll()
+        pileLightRestObservations.removeAll()
+        refreshLidPresentation(animated: false)
         slowNewGemSince.removeAll()
         completionDropTracking = nil
         trialDrop = nil
@@ -1684,6 +1710,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         // clears the core and the HUD: step down now, before the jar is
         // first drawn (the settled pile corrects it when it rests).
         enforcePileClearances(fromRestoreRows: true)
+        refreshPileLight(animated: false)
         resumeSimulation()
     }
 
@@ -3193,9 +3220,18 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         landRestingNewGemsIfNeeded()
         updateCompletionDropTrackingIfNeeded()
         advancePendingTapLaunchIfNeeded()
-        livePebbles.forEach {
-            $0.updatePresentationLighting(horizontal: opticalTiltFraction)
+        var hasRestingLightSource = false
+        livePebbles.forEach { pebble in
+            pebble.updatePresentationLighting(horizontal: opticalTiltFraction)
+            if !pebble.descriptor.isScreenTimeObstacle, !pebble.descriptor.isTutorial,
+               castsPileLight(pebble) {
+                hasRestingLightSource = true
+            }
         }
+        // Detect departure in the physics frame instead of leaving a ghost
+        // until the half-second shape refresh. Individual gem halos already
+        // move with their bodies; the pile light returns after they settle.
+        if !hasRestingLightSource { hidePileLight(animated: true) }
     }
 
 #if DEBUG && targetEnvironment(simulator)
@@ -3301,6 +3337,11 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         reducedMotionHighlightNode.name = "jar.reducedMotion.highlight"
         rimNode.name = "jar.glass.rim"
         innerRimNode.name = "jar.glass.innerRim"
+        lidNode.name = "jar.lid"
+        lidFaceNode.name = "jar.lid.face"
+        lidEdgeNode.name = "jar.lid.edge"
+        lidReflectionNode.name = "jar.lid.reflection"
+        lidGripNode.name = "jar.lid.grip"
         tapCausticNode.name = "jar.tap.caustic"
         floorGlowNode.name = "jar.floorGlow"
         pileGlowNode.name = "jar.pileGlow"
@@ -3331,6 +3372,11 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         collarNode.addChild(collarRightNode)
         worldNode.addChild(rimNode)
         worldNode.addChild(innerRimNode)
+        worldNode.addChild(lidNode)
+        lidNode.addChild(lidFaceNode)
+        lidNode.addChild(lidEdgeNode)
+        lidNode.addChild(lidReflectionNode)
+        lidNode.addChild(lidGripNode)
         worldNode.addChild(tapCausticNode)
         worldNode.addChild(floorGlowNode)
         worldNode.addChild(gemBedNode)
@@ -3454,11 +3500,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         backGlassNode.glowWidth = 0
         backGlassNode.zPosition = JarZPosition.background
 
+        // The aperture, rims and lid share one seated plane. A taller stage
+        // must not expose the old open mouth above the closed glass face.
+        let mouthCenterY = outer.maxY - 8
         let mouthRect = CGRect(
             x: outer.minX + neckInset - 1,
-            y: outer.maxY - 8,
+            y: mouthCenterY - 7,
             width: outer.width - neckInset * 2 + 2,
-            height: 18
+            height: 14
         )
         mouthDepthNode.path = CGPath(ellipseIn: mouthRect, transform: nil)
         mouthDepthNode.fillColor = JarPalette.mouthDepth
@@ -3509,13 +3558,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         rimNode.path = CGPath(
             ellipseIn: CGRect(
                 x: outer.minX + neckInset - 2,
-                y: outer.maxY - 6,
+                y: mouthCenterY - 6,
                 width: outer.width - neckInset * 2 + 4,
                 height: 12
             ),
             transform: nil
         )
-        rimNode.fillColor = JarPalette.mouthDepth.withAlphaComponent(0.42)
+        rimNode.fillColor = .clear
         rimNode.strokeColor = JarPalette.specular.withAlphaComponent(0.70)
         rimNode.lineWidth = 1.8
         rimNode.glowWidth = 0
@@ -3530,6 +3579,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         innerRimNode.lineWidth = 0.9
         innerRimNode.glowWidth = 0
         innerRimNode.zPosition = JarZPosition.glass + 1.35
+
+        rebuildLid()
 
         tapCausticNode.path = CGPath(
             ellipseIn: CGRect(
@@ -4702,6 +4753,65 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         updateCollarTilt(opticalTiltFraction)
     }
 
+    private func rebuildLid() {
+        let width = max(1, outerJarRect.width - neckInset * 2 - 4)
+        let face = CGRect(x: -width / 2, y: -7, width: width, height: 14)
+        // Home's bottle fills its viewport. Keep the whole pane and grip
+        // inside the top edge, seated over the containment boundary.
+        lidNode.position = CGPoint(x: outerJarRect.midX, y: outerJarRect.maxY - 8)
+        lidNode.zPosition = JarZPosition.glass + 1.6
+
+        lidFaceNode.path = CGPath(ellipseIn: face, transform: nil)
+        lidFaceNode.fillColor = JarPalette.color(hex: "#BED8EE").withAlphaComponent(0.30)
+        lidFaceNode.strokeColor = JarPalette.specular.withAlphaComponent(0.76)
+        lidFaceNode.lineWidth = 1.3
+        lidFaceNode.glowWidth = 0
+        lidFaceNode.zPosition = 0
+
+        // A lower lip shows the pane's thickness instead of an empty hole.
+        let edge = CGMutablePath()
+        edge.move(to: CGPoint(x: -width / 2, y: -1))
+        edge.addQuadCurve(to: CGPoint(x: width / 2, y: -1), control: CGPoint(x: 0, y: -13))
+        lidEdgeNode.path = edge
+        lidEdgeNode.fillColor = .clear
+        lidEdgeNode.strokeColor = JarPalette.warmSpecular.withAlphaComponent(0.80)
+        lidEdgeNode.lineWidth = 2.1
+        lidEdgeNode.glowWidth = 0
+        lidEdgeNode.zPosition = 0.1
+
+        // The reflection crosses the whole sealed face, not just its rim.
+        let reflection = CGMutablePath()
+        reflection.move(to: CGPoint(x: -width * 0.34, y: 0))
+        reflection.addQuadCurve(to: CGPoint(x: width * 0.28, y: 3), control: CGPoint(x: -width * 0.06, y: 6))
+        lidReflectionNode.path = reflection
+        lidReflectionNode.fillColor = .clear
+        lidReflectionNode.strokeColor = JarPalette.specular.withAlphaComponent(0.70)
+        lidReflectionNode.lineWidth = 1.8
+        lidReflectionNode.glowWidth = 0
+        lidReflectionNode.zPosition = 0.2
+
+        lidGripNode.path = CGPath(roundedRect: CGRect(x: -9, y: 3, width: 18, height: 4), cornerWidth: 2, cornerHeight: 2, transform: nil)
+        lidGripNode.fillColor = JarPalette.warmSpecular.withAlphaComponent(0.82)
+        lidGripNode.strokeColor = JarPalette.specular.withAlphaComponent(0.84)
+        lidGripNode.lineWidth = 0.6
+        lidGripNode.glowWidth = 0
+        lidGripNode.zPosition = 0.3
+        refreshLidPresentation(animated: false)
+    }
+
+    private func refreshLidPresentation(animated: Bool = true) {
+        let opensForEntry = enteringPhases.values.contains(where: \.isInTheNeck)
+        guard opensForEntry != lidIsOpen || !animated else { return }
+        lidIsOpen = opensForEntry
+        lidNode.removeAction(forKey: "jar.lid.entry")
+        let alpha: CGFloat = opensForEntry ? 0 : 1
+        guard animated, !reduceMotion, !isPaused else {
+            lidNode.alpha = alpha
+            return
+        }
+        lidNode.run(.fadeAlpha(to: alpha, duration: opensForEntry ? 0.10 : 0.18), withKey: "jar.lid.entry")
+    }
+
     /// Crossfades the three pre-rendered collar states; never more than two
     /// are drawn.
     private func updateCollarTilt(_ fraction: CGFloat) {
@@ -4963,6 +5073,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private func beginEntryRitual(for pebble: PebbleNode, phase: EntryPhase) {
         guard let body = pebble.physicsBody else { return }
         enteringPhases[pebble.descriptor.id] = phase
+        refreshLidPresentation()
         slowNewGemSince[pebble.descriptor.id] = nil
         body.affectedByGravity = false
         body.fieldBitMask = CompletionEntryPhysics.fieldCategory
@@ -4989,6 +5100,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         guard enteringPhases.removeValue(forKey: pebble.descriptor.id) != nil,
               let body = pebble.physicsBody
         else { return }
+        refreshLidPresentation()
         body.affectedByGravity = true
         body.fieldBitMask = 0
         body.categoryBitMask = JarPhysicsCategory.pebble
@@ -5064,6 +5176,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 }
             }
         }
+        refreshLidPresentation()
     }
 
     /// Review S2: where a gem entering through the mouth at `x` must wait in
@@ -5149,6 +5262,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             enteringPhases[id] = nil
             slowNewGemSince[id] = nil
         }
+        refreshLidPresentation()
     }
 
     /// The applied gravity's direction, or the jar's own down while it is
@@ -5938,13 +6052,11 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// crystal holding the most grams. O(n), a few times a second while
     /// awake and once when the jar settles.
     ///
-    /// Only the resting pile lights the jar: a gem that has not landed yet
-    /// (a completion falling from the mouth) or one moving faster than
-    /// `pileProfileRestingSpeed` never stretches the light, so a drop no
-    /// longer floods the core and the HUD with a haze. The light is also
-    /// bounded to a band seated on the floor (at most 0.45 of the jar width
-    /// across and 0.45 of the interior high, its centre no higher than the
-    /// gem bed's top + 40 pt) and eases to a new shape over 0.4 s.
+    /// Only the resting pile lights the jar. A moved gem must stay slow and
+    /// in place for 0.2 s before it casts this light again, so the apex of a
+    /// bounce cannot bring back a cloud at the old pile position. When every
+    /// source moves, the old pool fades away; its new shape is placed before
+    /// it fades in. A settled pile still eases small shape changes over 0.4 s.
     private func refreshPileLight(animated: Bool = true) {
         var minX = CGFloat.greatestFiniteMagnitude
         var maxX = -CGFloat.greatestFiniteMagnitude
@@ -5956,20 +6068,18 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         var weight: CGFloat = 0
         var heaviest: PebbleNode?
         var aggregates: [PebbleNode] = []
-        var hasUnsettledGem = false
+        var liveLightIDs: Set<UUID> = []
         for pebble in livePebbles where !pebble.isRemovedForBake
             && !pebble.descriptor.isScreenTimeObstacle
             && !pebble.descriptor.isTutorial {
+            liveLightIDs.insert(pebble.descriptor.id)
             if pebble.descriptor.isAggregate {
                 aggregates.append(pebble)
                 if heaviest == nil || pebble.descriptor.grams > heaviest?.descriptor.grams ?? 0 {
                     heaviest = pebble
                 }
             }
-            guard Self.castsPileLight(pebble) else {
-                hasUnsettledGem = true
-                continue
-            }
+            guard castsPileLight(pebble, confirmedRest: !animated) else { continue }
             let r = pebble.radius
             minX = min(minX, pebble.position.x - r)
             maxX = max(maxX, pebble.position.x + r)
@@ -5982,15 +6092,11 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             blue += tone.blue * w
             weight += w
         }
+        movingPileLightIDs.formIntersection(liveLightIDs)
+        pileLightRestObservations = pileLightRestObservations.filter { liveLightIDs.contains($0.key) }
         aggregates.forEach { $0.setPileEmphasis($0 === heaviest) }
         guard weight > 0 else {
-            // Nothing rests yet (an empty jar, or only a falling gem): keep
-            // the last resting light rather than flashing it off mid-drop.
-            if !hasUnsettledGem {
-                pileGlowNode.removeAction(forKey: ActionKey.pileGlowShape)
-                pileGlowNode.alpha = 0
-                pileGlowBaseAlpha = 0
-            }
+            hidePileLight(animated: animated)
             return
         }
         let mean = GemColor(red: red / weight, green: green / weight, blue: blue / weight)
@@ -6009,16 +6115,36 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         )
         // The lit interior (JarStageArtwork) already glows toward the
         // floor, so the pile adds a softer light than before.
+        let isReturningLight = pileGlowBaseAlpha == 0
+        let canAnimate = animated && !isPaused && !reduceMotion
         pileGlowBaseAlpha = 0.45 * (reduceTransparency ? 0.45 : 1)
-        if pileGlowNode.action(forKey: "jar.pileGlow.pulse") == nil {
+        if !canAnimate {
+            pileGlowNode.removeAction(forKey: ActionKey.pileGlowVisibility)
+            pileGlowNode.removeAction(forKey: "jar.pileGlow.pulse")
+            pileGlowIsFadingOut = false
+        }
+        if !canAnimate || (!isReturningLight
+            && pileGlowNode.action(forKey: "jar.pileGlow.pulse") == nil
+            && pileGlowNode.action(forKey: ActionKey.pileGlowVisibility) == nil) {
             pileGlowNode.alpha = pileGlowBaseAlpha
         }
         pileGlowNode.removeAction(forKey: ActionKey.pileGlowShape)
         let isFirstLight = pileGlowNode.size.width < 1
-        guard animated, !isFirstLight, !isPaused, !reduceMotion else {
+        guard canAnimate, !isFirstLight, !isReturningLight else {
             pileGlowNode.color = color
             pileGlowNode.size = target.size
             pileGlowNode.position = CGPoint(x: target.midX, y: target.midY)
+            if canAnimate, isReturningLight, !isFirstLight {
+                pileGlowNode.removeAction(forKey: ActionKey.pileGlowVisibility)
+                pileGlowNode.removeAction(forKey: "jar.pileGlow.pulse")
+                pileGlowIsFadingOut = false
+                pileGlowNode.alpha = 0
+                let reveal = SKAction.fadeAlpha(to: pileGlowBaseAlpha, duration: 0.22)
+                reveal.timingMode = .easeOut
+                pileGlowNode.run(reveal, withKey: ActionKey.pileGlowVisibility)
+            } else {
+                pileGlowNode.alpha = pileGlowBaseAlpha
+            }
             return
         }
         let duration: TimeInterval = 0.4
@@ -6034,15 +6160,69 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         pileGlowNode.run(.group([resize, move, tint]), withKey: ActionKey.pileGlowShape)
     }
 
-    /// Whether a body counts toward the pile light: it has landed and rests
-    /// (the same speed test as the settled pile profile).
-    private static func castsPileLight(_ pebble: PebbleNode) -> Bool {
+    /// A departure invalidates the prior light immediately. The fade is not
+    /// restarted on every physics frame, and a static/paused capture never
+    /// keeps a partly faded pool or a landing pulse.
+    private func hidePileLight(animated: Bool) {
+        pileGlowBaseAlpha = 0
+        pileGlowNode.removeAction(forKey: ActionKey.pileGlowShape)
+        pileGlowNode.removeAction(forKey: "jar.pileGlow.pulse")
+        guard animated, !reduceMotion, !isPaused, pileGlowNode.alpha > 0 else {
+            pileGlowNode.removeAction(forKey: ActionKey.pileGlowVisibility)
+            pileGlowIsFadingOut = false
+            pileGlowNode.alpha = 0
+            return
+        }
+        if pileGlowIsFadingOut,
+           pileGlowNode.action(forKey: ActionKey.pileGlowVisibility) != nil { return }
+        pileGlowNode.removeAction(forKey: ActionKey.pileGlowVisibility)
+        pileGlowIsFadingOut = true
+        let fade = SKAction.fadeOut(withDuration: 0.16)
+        fade.timingMode = .easeOut
+        pileGlowNode.run(fade, withKey: ActionKey.pileGlowVisibility)
+    }
+
+    /// Restored gems light immediately. Once a gem moves, both its speed and
+    /// its position must remain stable across consecutive physics frames.
+    /// `confirmedRest` is the final, nonanimated frame at the idle boundary.
+    private func castsPileLight(_ pebble: PebbleNode, confirmedRest: Bool = false) -> Bool {
         guard pebble.hasLanded else { return false }
+        let id = pebble.descriptor.id
+        var isSlow = pebble.position.x.isFinite && pebble.position.y.isFinite
         if let velocity = pebble.physicsBody?.velocity,
-           hypot(velocity.dx, velocity.dy) > pileProfileRestingSpeed {
+           !velocity.dx.isFinite || !velocity.dy.isFinite
+                || hypot(velocity.dx, velocity.dy) > Self.pileProfileRestingSpeed {
+            isSlow = false
+        }
+        guard isSlow else {
+            movingPileLightIDs.insert(id)
+            pileLightRestObservations.removeValue(forKey: id)
             return false
         }
-        return pebble.position.x.isFinite && pebble.position.y.isFinite
+        if confirmedRest {
+            movingPileLightIDs.remove(id)
+            pileLightRestObservations.removeValue(forKey: id)
+            return true
+        }
+        guard movingPileLightIDs.contains(id) else { return true }
+        let now = lastSceneUpdateTime
+        guard var observation = pileLightRestObservations[id],
+              now >= observation.lastObservedAt,
+              now - observation.lastObservedAt <= Self.steppingGap,
+              hypot(pebble.position.x - observation.anchor.x,
+                    pebble.position.y - observation.anchor.y) <= Self.pileLightRestDisplacement
+        else {
+            pileLightRestObservations[id] = PileLightRestObservation(
+                anchor: pebble.position, since: now, lastObservedAt: now
+            )
+            return false
+        }
+        observation.lastObservedAt = now
+        pileLightRestObservations[id] = observation
+        guard now - observation.since >= Self.pileLightRestDelay else { return false }
+        movingPileLightIDs.remove(id)
+        pileLightRestObservations.removeValue(forKey: id)
+        return true
     }
 
     /// The pile light's rectangle for resting bodies spanning `bodies`:
@@ -6217,7 +6397,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 .removeFromParent()
             ]))
         }
-        guard pileGlowBaseAlpha > 0 else { return }
+        guard pileGlowBaseAlpha > 0,
+              pileGlowNode.action(forKey: ActionKey.pileGlowVisibility) == nil else { return }
         let swell = SKAction.sequence([
             .fadeAlpha(to: min(1, pileGlowBaseAlpha * beat.pileSwell), duration: beat.pileSwellRise),
             .fadeAlpha(to: pileGlowBaseAlpha, duration: beat.pileSwellFall)
@@ -6580,6 +6761,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         awakePileLeftTheFloor = false
         // The frozen frame shows the glass whole, never mid-fade.
         finishGlassCrossfade()
+        refreshLidPresentation(animated: false)
         if !isIdlePaused {
             isIdlePaused = true
             onIdlePauseChanged?(true)
@@ -6596,6 +6778,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// the PNG is un-premultiplied). Returns the restore closure.
     func prepareForSnapshot() -> () -> Void {
         settleGlassForCapture()
+        refreshLidPresentation(animated: false)
         let pebbles = allPebbleNodes
         pebbles.forEach {
             $0.settleGemTwinkle()
