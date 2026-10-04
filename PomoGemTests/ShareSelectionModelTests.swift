@@ -319,12 +319,11 @@ final class ShareSelectionModelTests: XCTestCase {
     }
 
     func testScopedCrystalIsTheAuthoritativeSummaryWhenNothingIsFilteredOut() throws {
-        let members = (0..<10).map { index in
-            session(
-                endingAt: Date.now.addingTimeInterval(-Double(20 - index) * 3_600),
-                minutes: index == 0 ? 30 : 25,
-                source: index == 0 ? .manual : .timer
-            )
+        let members: [StudySession] = (0..<10).map { index -> StudySession in
+            let end = Date.now.addingTimeInterval(-Double(20 - index) * 3_600)
+            let minutes = index == 0 ? 30 : 25
+            let source: SessionSource = index == 0 ? .manual : .timer
+            return session(endingAt: end, minutes: minutes, source: source)
         }
         let root = AggregatePebble(
             createdAt: members.last!.endAt,

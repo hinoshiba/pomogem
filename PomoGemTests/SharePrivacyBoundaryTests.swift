@@ -354,8 +354,9 @@ final class SharePrivacyBoundaryTests: XCTestCase {
 
     private func caption(_ selection: ShareSelectionModel) -> String {
         ShareCopy.caption(
-            subject: "Public focus", grams: ShareMassFormatter.visual(selection.totalGrams),
-            focusTime: ShareMassFormatter.focusTime(selection.totalGrams),
+            subject: "Public focus", grams: MassText.grams(value: selection.totalGrams),
+            focusTime: DurationPresentation.focusMinutes(grams: selection.totalGrams) > 0
+                ? DurationPresentation.focusLabel(grams: selection.totalGrams) : nil,
             includesSelfReportedFocus: selection.includesSelfReportedFocus,
             achievementCount: selection.achievements.count, hashtags: []
         )
