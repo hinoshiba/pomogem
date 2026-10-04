@@ -8,7 +8,7 @@ store_localizations:
 app_store_id: 6809139517
 app_store_listing_status: public
 marketing_version: "1.1.0"
-build_number: "10"
+build_number: "11"
 candidate_status: preparation_not_uploaded
 published_version: "1.0.2"
 published_version_status: ready_for_distribution_verified_2026_09_22
