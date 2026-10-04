@@ -301,6 +301,59 @@ final class SharePrivacyBoundaryTests: XCTestCase {
         XCTAssertEqual(personalRoot.grams, 99_999, "Public projection must leave the personal summary intact")
     }
 
+    func testStoredMeasuredCountsCannotOverrideTheManualSharingToggle() throws {
+        let timers: [StudySession] = (0..<9).map { number in
+            session(number: 1_400 + number, seconds: 1_500, source: .timer,
+                    color: "#327AB8", endingAt: date.addingTimeInterval(Double(number) * 1_800))
+        }
+        let manual = session(number: 1_420, seconds: 1_800, source: .manual,
+                             color: "#28A475", endingAt: date.addingTimeInterval(18_000))
+        let members = timers + [manual]
+        let rootID = id(1_430)
+        func root(measuredCount: Int, manualCount: Int) -> AggregatePebble {
+            AggregatePebble(
+                id: rootID, createdAt: manual.endAt, level: 1, pebbleCount: 10,
+                grams: 2_550, measuredPebbleCount: measuredCount, manualPebbleCount: manualCount,
+                colorMixJSON: "[]", periodStart: timers.first!.startAt, periodEnd: manual.endAt,
+                sessionIDs: members.map(\.id)
+            )
+        }
+        let accurateRoot = root(measuredCount: 9, manualCount: 1)
+        let staleRoot = root(measuredCount: 10, manualCount: 0)
+        for scope in [ShareScope.aggregate(id: rootID, monthLabel: "Public focus"), .all] {
+            for includeManual in [false, true] {
+                func selection(_ aggregate: AggregatePebble) -> ShareSelectionModel {
+                    var candidate = input(
+                        sessions: members, aggregates: [aggregate],
+                        includeManual: includeManual, scope: scope
+                    )
+                    if scope == .all {
+                        // Exercise the lifetime-root shortcut separately from
+                        // the crystal-specific shortcut. All members are known.
+                        candidate.historyPageIsPartial = true
+                        candidate.looseSessions = []
+                        candidate.localRepresentedSessionIDs = Set(members.map(\.id))
+                    }
+                    return ShareSelectionModel.make(candidate)
+                }
+                let reference = selection(accurateRoot)
+                let shared = selection(staleRoot)
+                XCTAssertEqual(shared.totalGrams, includeManual ? 2_550 : 2_250, "\(scope)")
+                XCTAssertEqual(shared.includesSelfReportedFocus, includeManual, "\(scope)")
+                XCTAssertEqual(shared.hasExcludedSelfReportedContent, !includeManual, "\(scope)")
+                XCTAssertEqual(shared.usesCompactRootProjection, reference.usesCompactRootProjection)
+                XCTAssertEqual(caption(shared), caption(reference))
+                XCTAssertTrue(
+                    try raster(shared, format: .feed, animated: false)
+                        == raster(reference, format: .feed, animated: false),
+                    "Persisted composition cannot change the selected public bottle in \(scope)"
+                )
+            }
+        }
+        XCTAssertEqual(staleRoot.manualPebbleCount, 0, "Sharing must not rewrite personal metadata")
+        XCTAssertEqual(staleRoot.measuredPebbleCount, 10)
+    }
+
     private func assertSameRenderedOutput(
         _ reference: ShareSelectionModel,
         _ withPrivate: ShareSelectionModel,

@@ -161,7 +161,9 @@ final class PomoGemDataExporterTests: XCTestCase {
             colorMixJSON: "[{\"hex\":\"#12A0D0\",\"frac\":1}]",
             monthLabel: "2023-11",
             grams: 2_500,
-            sessionIDs: Array(sessionIDs.prefix(10)),
+            // The legacy summary's positive export case has ten supported
+            // timers; unsupported raw rows above remain serialized separately.
+            sessionIDs: Array(sessionIDs.enumerated().filter { !$0.offset.isMultiple(of: 3) }.prefix(10).map(\.element)),
             dataEpochID: epochID
         ))
         context.insert(Bedrock(hours: 40, importedAt: instant, dataEpochID: epochID))
