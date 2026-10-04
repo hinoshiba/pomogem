@@ -220,18 +220,22 @@ final class ShareSelectionModelTests: XCTestCase {
         XCTAssertEqual(model.achievements.map(\.id), [septemberStone.id])
     }
 
-    func testAggregateMembershipLookupMatchesTheFormerFullScanPerRoot() throws {
+    func testAggregateMembershipLookupMatchesAFullScanOfPublicMembersPerRoot() throws {
         let now = Date.now
         let subjects = ["#E85D4A", "#4AA8E8", "#7BD88F"].enumerated().map { index, hex in
             let subject = Subject(name: "テーマ\(index)", colorHex: hex, sortOrder: index)
             context.insert(subject)
             return subject
         }
-        let sessions: [StudySession] = (0..<1_000).map { index in
-            session(
-                endingAt: now.addingTimeInterval(-Double(1_000 - index) * 4 * 3_600),
-                minutes: index.isMultiple(of: 4) ? 60 : 25,
-                source: index.isMultiple(of: 7) ? .manual : .timer,
+        let sessions: [StudySession] = (0..<1_000).map { index -> StudySession in
+            let isManual = index.isMultiple(of: 7)
+            let source: SessionSource = isManual ? .manual : .timer
+            let minutes = index.isMultiple(of: 4) ? 60 : (isManual ? 30 : 25)
+            let end = now.addingTimeInterval(-Double(1_000 - index) * 4 * 3_600)
+            return session(
+                endingAt: end,
+                minutes: minutes,
+                source: source,
                 subject: subjects[index % subjects.count]
             )
         }
@@ -270,11 +274,13 @@ final class ShareSelectionModelTests: XCTestCase {
                 .compactMap { root -> ShareAggregateVisual? in
                     let resolved = AggregatePebblePolicy.descendantSessionIDs(of: root, in: roots)
                     let membership = Set(resolved)
+                    // A full scan provides the reference membership. Every
+                    // field, including the date when the last member is
+                    // excluded manual focus, follows the public projection.
                     return ShareAggregateVisual(
-                        reconstructing: root,
-                        resolvedSessionIDs: resolved,
-                        allMemberSessions: unique.filter { membership.contains($0.id) },
-                        includedMemberSessions: selected.filter { membership.contains($0.id) }
+                        externallySharing: root.id,
+                        members: selected.filter { membership.contains($0.id) },
+                        permitsPartialCrystal: true
                     )
                 }
                 .sorted { $0.createdAt < $1.createdAt }

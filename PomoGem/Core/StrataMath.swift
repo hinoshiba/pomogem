@@ -256,7 +256,7 @@ enum ExternalStudyDataPolicy {
         pebbleCount: Int
     ) -> Bool {
         !memberIDs.isEmpty
-            && StrataMath.decimalAggregateLevel(forPebbleCount: pebbleCount) > 0
+            && pebbleCount >= Constants.Jar.minimumAggregateFanIn
             && memberIDs.count == pebbleCount
             && Set(members.map(\.id)) == memberIDs
             && members.allSatisfy(allows)
@@ -298,7 +298,7 @@ struct ShareAggregateVisual: Identifiable, Equatable {
         }
         // Private members must not manufacture a crystal from fewer than the
         // normal public aggregation threshold; those allowed rows stay loose.
-        guard permitsPartialCrystal || StrataMath.decimalAggregateLevel(forPebbleCount: included.count) > 0,
+        guard permitsPartialCrystal || included.count >= Constants.Jar.minimumAggregateFanIn,
               let end = included.map(\.endAt).max() else { return nil }
         self.init(
             id: id,

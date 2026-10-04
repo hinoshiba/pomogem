@@ -349,6 +349,44 @@ class ScreenTimeCapabilityTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 self.check(self.screen_capabilities() | {"keychain-access-groups": value})
 
+    def test_apple_token_keychain_group_is_optional_profile_authorization_only(self):
+        for role in ("app", "widget", "monitor"):
+            base = self.role_capabilities(role) if role != "widget" else {}
+            for group in ("fixture-team.example.app", "fixture-team.*"):
+                for value in ([group, "com.apple.token"], ["com.apple.token", group]):
+                    with self.subTest(role=role, value=value):
+                        self.check(base | {"keychain-access-groups": value}, role, profile=True)
+                        with self.assertRaisesRegex(ValueError, "keychain access"):
+                            self.check(base | {"keychain-access-groups": value}, role)
+
+    def test_keychain_profile_rejects_unreviewed_or_malformed_authorizations(self):
+        for value in (None, True, "fixture-team.*", [], ["com.apple.token"],
+                      ["other-team.*", "com.apple.token"],
+                      ["fixture-team.other", "com.apple.token"],
+                      ["fixture-team.*", "com.apple.*"],
+                      ["fixture-team.*", "com.apple.token", "other.group"],
+                      ["fixture-team.*", "com.apple.token", "com.apple.token"],
+                      ["fixture-team.*", "fixture-team.*", "com.apple.token"],
+                      ["fixture-team.*", "fixture-team.example.app", "com.apple.token"]):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "keychain access"):
+                self.check(self.screen_capabilities() | {"keychain-access-groups": value}, profile=True)
+
+    def test_actual_verifier_accepts_unused_apple_token_profile_authorization(self):
+        signed = self.screen_capabilities() | {
+            "application-identifier": "fixture-team.example.app",
+            "com.apple.developer.team-identifier": "fixture-team", "get-task-allow": False,
+        }
+        for group in ("fixture-team.example.app", "fixture-team.*"):
+            with self.subTest(group=group):
+                profile = {"FixtureType": "app-store-connect", "Entitlements": signed |
+                           {"keychain-access-groups": [group, "com.apple.token"]}}
+                self.assertEqual(verifier_bundle_check()(label="fixture monitor", bundle_id="example.app",
+                    signed_entitlements=signed, profile=profile,
+                    identity="apple-distribution", certificate_path="unused",
+                    is_neutral_widget=False, is_screen_time_monitor=True),
+                    ("app-store-connect", False, None))
+                self.assertNotIn("keychain-access-groups", signed)
+
     def test_monitor_takes_non_cloud_branch_in_actual_verifier(self):
         entitlements = self.screen_capabilities() | {
             "application-identifier": "fixture-team.example.app",

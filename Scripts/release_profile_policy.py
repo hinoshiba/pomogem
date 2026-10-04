@@ -123,10 +123,17 @@ def validate_bundle_capability_allowlist(
     if set(entitlements) - allowed:
         raise ValueError("entitlement keys differ from the reviewed bundle capability allowlist")
     if "keychain-access-groups" in entitlements:
+        groups = entitlements["keychain-access-groups"]
         expected = [[f"{team_id}.{bundle_id}"]]
         if is_profile:
             expected.append([f"{team_id}.*"])
-        if entitlements["keychain-access-groups"] not in expected:
+            # TN3125's Apple-issued profile includes com.apple.token alongside
+            # the team wildcard. A profile is an authorization allowlist, not
+            # a claim by the app. Accept that one optional profile-only value;
+            # signed claims must still be absent or the exact reviewed group.
+            if isinstance(groups, list) and groups.count("com.apple.token") == 1:
+                groups = [group for group in groups if group != "com.apple.token"]
+        if groups not in expected:
             raise ValueError("keychain access differs from the reviewed bundle authorization")
     if "beta-reports-active" in entitlements and entitlements["beta-reports-active"] is not True:
         raise ValueError("beta reporting authorization is malformed")
