@@ -55,7 +55,7 @@ Apple teamの実際のaccess、mail運用を照合して最終回答します。
   端末内UserDefaultsだけに保存し、同期・送信しない。アラーム音は端末上で合成して`Library/Sounds`へ
   書き出し、backup対象外。AlarmKitのアラームはAppleが端末内で鳴らし、developer serverへ送らない
 - shareは利用者の明示操作でsystem share sheetへ渡すだけ
-- 全11種類の出荷対象SwiftData保存データのversioned JSON exportも、利用者の明示操作だけで生成し、
+- 全11種類の出荷対象SwiftData保存データのversioned JSON exportは、Screen Time由来の学習記録と構成を確認できない結晶・地層を除外し、利用者の明示操作だけで生成し、
   選択した保存・共有先へ渡す。JSON再importはなく、このファイルによる復元・移行には対応しない。
   設定の保存先切り替えもJSONを読み込む処理ではない
 - StoreKit transactionは端末上でApple署名をverifyし、developer serverへ送らない
@@ -144,7 +144,7 @@ App Managerが最終決定・Publishします。
 os.Loggerには件数・結果・時間だけを出力し、アプリ名、token、run ID、到達段数、黒い石の数を出しません。
 これらのログや診断ファイルを運営者へ自動送信する仕組みはありません。
 学習の確定済み10分/100gだけを通常記録へ取り込み、本人がiCloudを選んだ場合はそのprivate
-CloudKitへ同期する。運営者のサーバー、解析SDK、追跡処理の追加はない。
+CloudKitへ同期する。共有画像・GIF・本文・JSONには学習記録を含めず、構成を確認できない結晶・地層の集計も外部出力から除外する。運営者のサーバー、解析SDK、追跡処理の追加はない。
 
 WidgetのApp Group非使用は維持する。監視拡張のPrivacy Manifestもtracking=false、
 collected data types=[]とする。端末内処理だけではAppleのデータ収集に該当しないが、

@@ -47,7 +47,7 @@ final class PomoGemDataExporterTests: XCTestCase {
         return try ModelContainer(for: schema, configurations: [configuration])
     }
 
-    func testVersionedExportStreamsEveryStoredModelBeyondOneBatch() async throws {
+    func testVersionedExportStreamsExportableStoredModelsBeyondOneBatch() async throws {
         let container = try makeContainer()
         let context = container.mainContext
         let instant = Date(timeIntervalSince1970: 1_700_000_000)
@@ -340,7 +340,8 @@ final class PomoGemDataExporterTests: XCTestCase {
         }
 
         XCTAssertEqual(result.recordCounts.studySessions, sessionCount)
-        XCTAssertEqual(result.recordCounts.total, sessionCount + 12)
+        XCTAssertEqual(result.recordCounts.total, sessionCount + 11)
+        XCTAssertEqual(result.recordCounts.aggregatePebbles, 0, "Missing child membership cannot prove a public summary")
         XCTAssertTrue(FileManager.default.fileExists(atPath: result.fileURL.path))
 
         let data = try Data(contentsOf: result.fileURL)
@@ -351,7 +352,8 @@ final class PomoGemDataExporterTests: XCTestCase {
         XCTAssertEqual(object["schemaVersion"] as? Int, PomoGemDataExportPolicy.schemaVersion)
         XCTAssertEqual(object["dateEncoding"] as? String, "secondsSince1970")
         XCTAssertEqual(object["binaryEncoding"] as? String, "base64")
-        XCTAssertEqual(object["scope"] as? String, "locallyAvailableSwiftDataStore")
+        XCTAssertEqual(object["scope"] as? String, "locallyAvailableExternalData")
+        XCTAssertEqual(object["excludedSources"] as? [String], ["screenTime"])
 
         let records = try XCTUnwrap(object["records"] as? [String: Any])
         let expectedCollections: Set<String> = [
@@ -371,6 +373,7 @@ final class PomoGemDataExporterTests: XCTestCase {
         ]
         XCTAssertEqual(Set(records.keys), expectedCollections)
         for key in expectedCollections {
+            if key == "aggregatePebbles" { continue }
             XCTAssertFalse(try XCTUnwrap(records[key] as? [Any]).isEmpty, key)
         }
 
@@ -462,6 +465,110 @@ final class PomoGemDataExporterTests: XCTestCase {
             return false
         })
         XCTAssertEqual(progressValues.last?.phase, .finishing)
+    }
+
+    func testExternalExportExcludesScreenTimeAndUnverifiedSummariesWithoutChangingPersonalData() async throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let instant = Date(timeIntervalSince1970: 1_700_000_000)
+        func record(source: SessionSource, seconds: Int, offset: TimeInterval, name: String) -> StudySession {
+            let end = instant.addingTimeInterval(offset)
+            let value = StudySession(
+                startAt: end.addingTimeInterval(-Double(seconds)), endAt: end,
+                seconds: seconds, source: source,
+                deviceDayKey: FairnessPolicy.deviceDayKey(for: end),
+                subjectNameSnapshot: name,
+                subjectColorHexSnapshot: source == .timer ? "#327AB8" : "#28A475"
+            )
+            context.insert(value)
+            return value
+        }
+        let timer = record(source: .timer, seconds: 1_500, offset: 0, name: "Public timer theme")
+        let manual = record(source: .manual, seconds: 1_800, offset: 3_600, name: "Public manual theme")
+        let additionalTimers = (1...8).map { index in
+            record(source: .timer, seconds: 1_500, offset: -Double(index) * 2_000, name: "Public timer theme")
+        }
+        let publicRows = [timer, manual] + additionalTimers
+        let privateRow = record(source: .screenTime, seconds: 600, offset: 99_999, name: "PRIVATE_USAGE_SNAPSHOT")
+        let compatiblePrivate = record(source: .manual, seconds: 600, offset: -99_999, name: "PRIVATE_COMPATIBILITY_SNAPSHOT")
+        let conflictingPublicCopy = record(source: .timer, seconds: 1_500, offset: 99_999, name: "PRIVATE_CONFLICT_SNAPSHOT")
+        conflictingPublicCopy.id = privateRow.id
+        func aggregate(members: [UUID], count: Int, childIDs: [UUID] = []) -> AggregatePebble {
+            let value = AggregatePebble(
+                createdAt: privateRow.endAt, level: 8, pebbleCount: count,
+                childAggregateCount: childIDs.count, grams: 99_999,
+                measuredPebbleCount: count,
+                colorMixJSON: "[{\"hex\":\"#FF00F3\",\"fraction\":1}]",
+                subjectMixJSON: "[{\"name\":\"PRIVATE_SUMMARY_SNAPSHOT\",\"colorHex\":\"#FF00F3\",\"pebbleCount\":999}]",
+                periodStart: compatiblePrivate.startAt, periodEnd: privateRow.endAt,
+                sessionIDs: members, childAggregateIDs: childIDs
+            )
+            context.insert(value)
+            return value
+        }
+        let safe = aggregate(members: publicRows.map(\.id), count: 10)
+        let mixed = aggregate(members: [timer.id, privateRow.id], count: 2)
+        let unknown = aggregate(members: [], count: 999)
+        let parent = aggregate(members: [], count: 4, childIDs: [safe.id, mixed.id])
+        let safeLegacy = Stratum(
+            bakedAt: privateRow.endAt, pebbleCount: 10, heightPt: 99_999,
+            colorMixJSON: "[{\"hex\":\"#FF00F3\",\"fraction\":1}]",
+            monthLabel: "PRIVATE_MONTH_SNAPSHOT", grams: 99_999,
+            sessionIDs: publicRows.map(\.id)
+        )
+        let privateLegacy = Stratum(
+            bakedAt: privateRow.endAt, pebbleCount: 2, heightPt: 99_999,
+            colorMixJSON: "[]", monthLabel: "PRIVATE_MONTH_SNAPSHOT", grams: 99_999,
+            sessionIDs: [manual.id, privateRow.id]
+        )
+        let unknownLegacy = Stratum(
+            bakedAt: privateRow.endAt, pebbleCount: 999, heightPt: 99_999,
+            colorMixJSON: "[]", monthLabel: "PRIVATE_MONTH_SNAPSHOT", grams: 99_999
+        )
+        for value in [safeLegacy, privateLegacy, unknownLegacy] { context.insert(value) }
+        try context.save()
+
+        let result = try await PomoGemDataExportWorker(modelContainer: container).export(
+            appInfo: .init(version: "1.1.0", build: "10"), exportedAt: instant.addingTimeInterval(7_200)
+        )
+        addTeardownBlock { try? PomoGemDataExporter.removeExport(at: result.fileURL) }
+        let data = try Data(contentsOf: result.fileURL)
+        let text = try XCTUnwrap(String(data: data, encoding: .utf8))
+        let document = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let records = try XCTUnwrap(document["records"] as? [String: Any])
+        let sessions = try XCTUnwrap(records["studySessions"] as? [[String: Any]])
+        XCTAssertEqual(result.recordCounts.studySessions, 10)
+        XCTAssertEqual(Set(sessions.compactMap { $0["id"] as? String }), Set(publicRows.map { $0.id.uuidString }))
+        XCTAssertEqual(Set(sessions.compactMap { $0["source"] as? String }), Set(["timer", "manual"]))
+        XCTAssertEqual(sessions.compactMap { $0["grams"] as? Int }.reduce(0, +), 2_550)
+        for privateID in [privateRow.id, compatiblePrivate.id, mixed.id, unknown.id, parent.id, privateLegacy.id, unknownLegacy.id] {
+            XCTAssertFalse(text.contains(privateID.uuidString))
+        }
+        for marker in ["PRIVATE_USAGE_SNAPSHOT", "PRIVATE_COMPATIBILITY_SNAPSHOT", "PRIVATE_CONFLICT_SNAPSHOT", "PRIVATE_SUMMARY_SNAPSHOT", "PRIVATE_MONTH_SNAPSHOT", "#FF00F3"] {
+            XCTAssertFalse(text.contains(marker), marker)
+        }
+        let aggregates = try XCTUnwrap(records["aggregatePebbles"] as? [[String: Any]])
+        XCTAssertEqual(aggregates.count, 1)
+        XCTAssertEqual(aggregates.first?["id"] as? String, safe.id.uuidString)
+        XCTAssertEqual(aggregates.first?["grams"] as? Int, 2_550)
+        XCTAssertEqual(aggregates.first?["createdAt"] as? Double, manual.endAt.timeIntervalSince1970)
+        XCTAssertEqual(aggregates.first?["periodStart"] as? Double, publicRows.map(\.startAt).min()?.timeIntervalSince1970)
+        XCTAssertEqual(aggregates.first?["childAggregateCount"] as? Int, 0)
+        XCTAssertNil(aggregates.first?["parentAggregateID"])
+        let strata = try XCTUnwrap(records["legacyStrata"] as? [[String: Any]])
+        XCTAssertEqual(strata.count, 1)
+        XCTAssertEqual(strata.first?["grams"] as? Int, 2_550)
+        XCTAssertEqual(strata.first?["bakedAt"] as? Double, manual.endAt.timeIntervalSince1970)
+        XCTAssertNil(strata.first?["heightPt"], "Personal pile geometry is not an external field")
+
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<StudySession>()), 13)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<AggregatePebble>()), 4)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<Stratum>()), 3)
+        XCTAssertEqual(privateRow.effectiveSource, .screenTime)
+        XCTAssertEqual(compatiblePrivate.effectiveSource, .screenTime)
+        XCTAssertEqual(privateRow.subjectNameSnapshot, "PRIVATE_USAGE_SNAPSHOT")
+        XCTAssertEqual(safe.grams, 99_999, "The external projection must not rewrite personal totals")
+        XCTAssertEqual(safeLegacy.heightPt, 99_999)
     }
 
     func testCleanupOnlyRemovesOwnedExportDirectory() async throws {

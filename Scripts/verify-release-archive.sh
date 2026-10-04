@@ -927,7 +927,9 @@ def validate_signed_bundle(
     kind = profile_type(profile, profile_entitlements, label)
     if kind == "development":
         expected_identity = "apple-development"
-        expected_cloud_environment = "Development"
+        # Development signing can select either CloudKit environment when
+        # the provisioning profile authorizes the signed value.
+        expected_cloud_environment = None
         expected_aps_environment = "development"
     elif kind == "app-store-connect":
         expected_identity = "apple-distribution"
@@ -949,12 +951,14 @@ def validate_signed_bundle(
     if is_neutral_widget or is_screen_time_monitor:
         cloud_environment = None
     else:
-        cloud_environment = expected_cloud_environment
-        if signed_entitlements.get("com.apple.developer.icloud-container-environment") != expected_cloud_environment:
+        cloud_environment = signed_entitlements.get("com.apple.developer.icloud-container-environment")
+        if cloud_environment not in ("Development", "Production"):
+            fail(f"{label} signed CloudKit environment is missing or invalid")
+        if expected_cloud_environment is not None and cloud_environment != expected_cloud_environment:
             fail(f"{label} signed CloudKit environment does not match the profile class")
         profile_cloud_value = profile_entitlements.get("com.apple.developer.icloud-container-environment")
         try:
-            validate_profile_cloud_environment(profile_cloud_value, expected_cloud_environment)
+            validate_profile_cloud_environment(profile_cloud_value, cloud_environment)
         except ValueError as error:
             fail(f"{label} {error}")
         if signed_entitlements.get("aps-environment") != expected_aps_environment:

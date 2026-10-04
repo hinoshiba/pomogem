@@ -716,6 +716,23 @@
         }
       }
     },
+    "この結晶は、確認できた共有対象の記録だけを表示します。元記録を確認できない部分は含めません。" : {
+      "comment" : "Share composer coverage note: a partial crystal includes only verified public records, never unverified summary totals",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This crystal shows only verified records eligible for sharing. Parts whose source records cannot be verified are left out."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この結晶は、確認できた共有対象の記録だけを表示します。元記録を確認できない部分は含めません。"
+          }
+        }
+      }
+    },
     "この結晶は集計値で表示しています。元の全セッションはこの画面では展開しません。" : {
       "comment" : "Share composer coverage note: the crystal is shown from its totals",
       "localizations" : {
@@ -962,6 +979,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "シェアカード"
+          }
+        }
+      }
+    },
+    "スクリーンタイムの記録は個人用です。共有にはタイマー、選んだ自己申告、記念石を含めます。確認できない集計は含めません。" : {
+      "comment" : "Share privacy boundary: Screen Time and unverified summaries stay personal; the share jar is drawn only from allowed records",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screen Time records stay private. Shares include timers, self-reported focus you choose to include, and milestone stones. Unverified totals are left out."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイムの記録は個人用です。共有にはタイマー、選んだ自己申告、記念石を含めます。確認できない集計は含めません。"
           }
         }
       }
@@ -2288,6 +2322,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "画像を生成中…"
+          }
+        }
+      }
+    },
+    "確認できた記録" : {
+      "comment" : "Public period label when a crystal has no externally shareable records",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verified records"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "確認できた記録"
           }
         }
       }

@@ -41,6 +41,11 @@ struct StorageTransferExportControl: View {
             .font(.caption)
             .foregroundStyle(failure == nil ? PomoGemTheme.muted : .red)
             .accessibilityIdentifier(identifier + "-note")
+        Text(PomoGemDataExportPolicy.privacyDisclosure)
+            .font(.caption)
+            .foregroundStyle(PomoGemTheme.muted)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier(identifier + "-privacy")
     }
 
     private func run() {

@@ -200,6 +200,17 @@ struct ShareComposerView: View {
         )
     }
 
+    /// A mixed crystal's original formation month can be Screen Time data.
+    /// Public dates follow the allowed rendering projection, not that receipt.
+    private var publicPeriodLabel: String {
+        guard case .aggregate = scope else { return scope.periodLabel }
+        let date = selection.aggregates.map(\.createdAt).max()
+            ?? selection.sessions.map(\.endAt).max()
+        return date.map { StrataMath.displayMonthLabel(for: $0) }
+            ?? String(localized: "確認できた記録", table: "Share",
+                      comment: "Public period label when a crystal has no externally shareable records")
+    }
+
     private var activeHashtags: [String] {
         var values = ShareCopy.hashtagChoices.filter(selectedHashtags.contains)
         if let custom = ShareHashtagPolicy.normalized(customHashtagInput),
@@ -247,7 +258,7 @@ struct ShareComposerView: View {
                 : String(localized: "share.caption.subject.month", defaultValue: "\(scope.periodLabel)の集中", table: "Share",
                          comment: "Share caption subject (starts the caption's first sentence in en): a month's focus. Argument: the month (2026年9月)")
         case .aggregate:
-            return String(localized: "\(scope.periodLabel)の積み重ね", table: "Share",
+            return String(localized: "\(publicPeriodLabel)の積み重ね", table: "Share",
                           comment: "Share caption subject (starts the caption's first sentence in en): the focus in one crystal. Argument: the month it formed (2026年9月)")
         }
     }
@@ -279,7 +290,7 @@ struct ShareComposerView: View {
             return String(localized: "\(scope.periodLabel)・表示分", table: "Share",
                           comment: "Share card period label (small capsule): part of a month. Argument: the month (2026年9月)")
         default:
-            return scope.periodLabel
+            return publicPeriodLabel
         }
     }
 
@@ -327,6 +338,14 @@ struct ShareComposerView: View {
                 ScrollView {
                     VStack(spacing: 20) {
                         shareStudioHeader
+
+                        Text("スクリーンタイムの記録は個人用です。共有にはタイマー、選んだ自己申告、記念石を含めます。確認できない集計は含めません。", tableName: "Share",
+                             comment: "Share privacy boundary: Screen Time and unverified summaries stay personal; the share jar is drawn only from allowed records")
+                            .font(.caption)
+                            .foregroundStyle(PomoGemTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityIdentifier("share.screen-time-privacy-notice")
 
                         if let coverageNotice {
                             Label(coverageNotice, systemImage: "rectangle.stack.badge.exclamationmark")
@@ -1428,8 +1447,8 @@ struct ShareComposerView: View {
                 return String(localized: "この月は記録が多いため、最新\(Self.sessionLimitText)件の表示分です。カードにも「表示分」と明記します。", table: "Share",
                               comment: "Share composer coverage note: the month has many records, so the card shows the newest. Argument: how many records (a fixed number far above one). 「表示分」 quotes the card's period label")
             case .aggregate:
-                return String(localized: "この結晶は集計値で表示しています。元の全セッションはこの画面では展開しません。", table: "Share",
-                              comment: "Share composer coverage note: the crystal is shown from its totals")
+                return String(localized: "この結晶は、確認できた共有対象の記録だけを表示します。元記録を確認できない部分は含めません。", table: "Share",
+                              comment: "Share composer coverage note: a partial crystal includes only verified public records, never unverified summary totals")
             }
         }
         if achievementPageIsPartial {
@@ -1610,6 +1629,16 @@ struct ShareComposerView: View {
                 historyPageIsPartial = memberIDs.count > BoundedHistoryPolicy.aggregateMemberSessionLimit
                     || (storedAggregatePebbles.first?.childAggregateCount ?? 0) > 0
             }
+            // The history page already chose canonical winners. A private
+            // duplicate may have lost that choice, so inspect every physical
+            // copy before any winner is handed to an external projection.
+            let publicIDs = Set(try ExternalShareSessionLoader.publicCandidates(
+                from: storedSessions + looseSessions,
+                context: modelContext,
+                epochID: epochID
+            ).map(\.id))
+            storedSessions.removeAll { !publicIDs.contains($0.id) }
+            looseSessions.removeAll { !publicIDs.contains($0.id) }
             // Publish the aggregate page lease only after every bounded fetch
             // and structural validation above succeeded. This assignment is
             // needed for the scoped aggregates in the membership projection
@@ -1640,6 +1669,13 @@ struct ShareComposerView: View {
             refreshJarSnapshot()
         } catch {
             aggregateProjectionCacheStamp = nil
+            // A failed privacy read must not leave previously assigned
+            // canonical candidates available to the export buttons.
+            storedSessions = []
+            looseSessions = []
+            storedAchievementStones = []
+            storedAggregatePebbles = []
+            storedStrata = []
             shareRecordsGeneration &+= 1
             isLoadingData = false
             dataLoadError = String(localized: "記録を安全な範囲で読み込めませんでした。もう一度この画面を開いてください。", table: "Share",
@@ -1755,27 +1791,10 @@ struct ShareComposerView: View {
 
     @MainActor
     private func capturedJarSnapshot(includesSelfReportedFocus: Bool) -> (image: UIImage, motion: ShareJarMotion?)? {
-        guard !aggregateProjectionPresentation.isCloudVerificationPending,
-              aggregateProjectionPresentation.acceptsVerifiedAggregateCache(
-                  aggregateProjectionCacheStamp
-              ),
-              scope == .all,
-              let scene = router.jarScene else {
-            return nil
-        }
-        let options = JarSnapshotOptions.share(includesSelfReported: includesSelfReportedFocus)
-        // Hiding a pebble another gem rests on would leave that gem floating
-        // over a hole. The card then draws its own bottle from the shared
-        // records instead (jar-04, screentime-11).
-        // It does the same for a pile resting against a wall or the cap
-        // (F3): the upright bottle would show it hanging on its side or mouth.
-        guard !ShareJarSnapshotPolicy.livePileNeedsDrawnBottle(in: scene, options: options) else {
-            return nil
-        }
-        guard let image = try? JarSnapshotter.shared.image(of: scene, options: options) else {
-            return nil
-        }
-        return (image, JarSnapshotter.shared.shareMotion(of: scene, options: options))
+        // Personal geometry, compacted totals and TimeCore all include private
+        // Screen Time history. Hiding a few nodes cannot sanitize that image.
+        // Preview, PNG, GIF and Photos therefore use the drawn public bottle.
+        nil
     }
 
     @MainActor
@@ -2925,8 +2944,7 @@ struct ShareCardView: View {
             RareRewardCounts.saturatedSum(unlinkedAggregates.map(\.grams))
         ])
     }
-    /// Measured gems (timer or Screen Time). Counted in 粒, not 回: one hour
-    /// of Screen Time is six ten-minute gems, not six timer completions.
+    /// Public measured gems are timer records. Screen Time stays personal.
     private var measuredCount: Int {
         NonnegativeIntPolicy.sum(
             [sessions.filter { $0.source.isMeasured }.count]

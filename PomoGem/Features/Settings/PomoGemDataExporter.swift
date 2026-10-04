@@ -1,19 +1,29 @@
 import Foundation
 import SwiftData
 
-/// Stable, lossless export of every model stored by PomoGem.
+/// Versioned external export. Screen Time records stay in personal storage.
 ///
 /// The file is intentionally written one record at a time. A long-lived account
 /// can contain hundreds of thousands of sessions, so constructing a Codable
 /// object graph in memory would make the user-facing export action unreliable.
 enum PomoGemDataExportPolicy {
     static let format = "jp.hinoshiba.pomogem.user-data"
-    static let schemaVersion = 3
+    static let schemaVersion = 4
     static let batchSize = 256
     static let staleFileAge: TimeInterval = 24 * 60 * 60
 
     static let directoryPrefix = "pomogem-data-export-"
     fileprivate static let partialFilename = "pomogem-data.partial"
+
+    static var privacyDisclosure: String {
+        String(localized: "スクリーンタイムの記録と、記録元を確認できない結晶・地層は書き出しません。", table: "Settings",
+               comment: "External JSON export excludes Screen Time and unverifiable summaries; personal records and private iCloud stay intact")
+    }
+
+    fileprivate static func encodeSessionIDs(_ ids: [UUID]) -> String {
+        let data = try? JSONEncoder().encode(ids.map(\.uuidString))
+        return data.flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+    }
 }
 
 struct PomoGemDataExportAppInfo: Codable, Equatable, Sendable {
@@ -65,6 +75,7 @@ struct PomoGemDataExportProgress: Equatable, Sendable {
     let estimatedTotalRecords: Int
 
     var fractionCompleted: Double {
+        if phase == .finishing { return 1 }
         guard estimatedTotalRecords > 0 else {
             return phase == .finishing ? 1 : 0
         }
@@ -186,6 +197,7 @@ actor PomoGemDataExportWorker {
         let estimatedCounts = try fetchRecordCounts(
             includesRetainedRareRewardModels: shouldIncludeRetainedRareRewardModels
         )
+        let privateSessionIDs = try excludedLogicalSessionIDs()
         let estimatedTotal = estimatedCounts.total
         let manager = FileManager.default
         let root = (destinationRoot ?? manager.temporaryDirectory).standardizedFileURL
@@ -233,7 +245,9 @@ actor PomoGemDataExportWorker {
             try Self.writeEncoded(exportedAt, encoder: encoder, to: openedHandle)
             try Self.write(",\"dateEncoding\":\"secondsSince1970\"", to: openedHandle)
             try Self.write(",\"binaryEncoding\":\"base64\"", to: openedHandle)
-            try Self.write(",\"scope\":\"locallyAvailableSwiftDataStore\"", to: openedHandle)
+            try Self.write(",\"scope\":\"locallyAvailableExternalData\"", to: openedHandle)
+            try Self.write(",\"excludedSources\":[\"screenTime\"]", to: openedHandle)
+            try Self.write(",\"aggregatePolicy\":\"verifiedNonScreenTimeMembership\"", to: openedHandle)
             try Self.write(",\"app\":", to: openedHandle)
             try Self.writeEncoded(appInfo, encoder: encoder, to: openedHandle)
             try Self.write(",\"records\":{", to: openedHandle)
@@ -271,7 +285,10 @@ actor PomoGemDataExportWorker {
                 completed: &completed,
                 estimatedTotal: estimatedTotal,
                 progress: progress,
-                snapshot: StudySessionExportRecord.init
+                snapshot: { value in
+                    !privateSessionIDs.contains(value.id) && ExternalStudyDataPolicy.allows(value)
+                        ? StudySessionExportRecord(value) : nil
+                }
             )
             try Self.write(",", to: openedHandle)
             let achievementCount = try writeCollection(
@@ -301,7 +318,17 @@ actor PomoGemDataExportWorker {
                 completed: &completed,
                 estimatedTotal: estimatedTotal,
                 progress: progress,
-                snapshot: AggregatePebbleExportRecord.init
+                snapshot: { value -> AggregatePebbleExportRecord? in
+                    // A compact parent's totals do not retain record origins.
+                    // Export only complete leaf membership, never an estimate.
+                    guard value.childAggregateIDs.isEmpty, value.childAggregateCount == 0,
+                          let members = try publicSummaryMembers(
+                            value.sessionIDs, pebbleCount: value.pebbleCount
+                          ),
+                          let projection = ShareAggregateVisual(externallySharing: value.id, members: members)
+                    else { return nil }
+                    return AggregatePebbleExportRecord(value, publicProjection: projection, members: members)
+                }
             )
             try Self.write(",", to: openedHandle)
             let stratumCount = try writeCollection(
@@ -316,7 +343,14 @@ actor PomoGemDataExportWorker {
                 completed: &completed,
                 estimatedTotal: estimatedTotal,
                 progress: progress,
-                snapshot: StratumExportRecord.init
+                snapshot: { value -> StratumExportRecord? in
+                    guard let members = try publicSummaryMembers(
+                        value.sessionIDs, pebbleCount: value.pebbleCount
+                    ),
+                          let projection = ShareAggregateVisual(externallySharing: value.id, members: members)
+                    else { return nil }
+                    return StratumExportRecord(value, publicProjection: projection)
+                }
             )
             try Self.write(",", to: openedHandle)
             let bedrockCount = try writeCollection(
@@ -539,7 +573,7 @@ actor PomoGemDataExportWorker {
         completed: inout Int,
         estimatedTotal: Int,
         progress: ProgressHandler,
-        snapshot: (Model) -> Record
+        snapshot: (Model) throws -> Record?
     ) throws -> Int where Model: PersistentModel, Record: Encodable {
         try Self.write("\"\(key)\":[", to: handle)
         var collectionCount = 0
@@ -548,10 +582,11 @@ actor PomoGemDataExportWorker {
             batchSize: PomoGemDataExportPolicy.batchSize
         ) { model in
             try Task.checkCancellation()
+            guard let record = try snapshot(model) else { return }
             if collectionCount > 0 {
                 try Self.write(",", to: handle)
             }
-            try Self.writeEncoded(snapshot(model), encoder: encoder, to: handle)
+            try Self.writeEncoded(record, encoder: encoder, to: handle)
             collectionCount += 1
             completed += 1
             if collectionCount.isMultiple(of: PomoGemDataExportPolicy.batchSize) {
@@ -569,6 +604,40 @@ actor PomoGemDataExportWorker {
             estimatedTotalRecords: estimatedTotal
         ))
         return collectionCount
+    }
+
+    /// Bounded queries keep long exports streaming. Every physical copy must
+    /// be public; absent, conflicting private or truncated membership fails
+    /// closed. No row or personal aggregate is rewritten during this check.
+    private func publicSummaryMembers(
+        _ ids: [UUID], pebbleCount: Int
+    ) throws -> [StudySession]? {
+        let membership = Array(Set(ids))
+        guard !membership.isEmpty, membership.count == pebbleCount else { return nil }
+        var members: [StudySession] = []
+        for offset in stride(from: 0, to: membership.count, by: PomoGemDataExportPolicy.batchSize) {
+            try Task.checkCancellation()
+            let batch = Array(membership[offset..<min(offset + PomoGemDataExportPolicy.batchSize, membership.count)])
+            var descriptor = FetchDescriptor<StudySession>(predicate: #Predicate { batch.contains($0.id) })
+            let limit = batch.count * BoundedHistoryPolicy.maximumPhysicalRowsPerLogicalSession + 1
+            descriptor.fetchLimit = limit
+            let rows = try modelContext.fetch(descriptor)
+            guard rows.count < limit, Set(rows.map(\.id)) == Set(batch),
+                  rows.allSatisfy(ExternalStudyDataPolicy.allows) else { return nil }
+            members.append(contentsOf: StudySessionSyncPolicy.canonicalSessions(from: rows))
+        }
+        return members
+    }
+
+    private func excludedLogicalSessionIDs() throws -> Set<UUID> {
+        // One bounded pass retains only IDs, never the long-lived object graph.
+        // A conflicting public copy must not reopen a private logical record.
+        var excluded: Set<UUID> = []
+        try modelContext.enumerate(FetchDescriptor<StudySession>(), batchSize: PomoGemDataExportPolicy.batchSize) { value in
+            try Task.checkCancellation()
+            if !ExternalStudyDataPolicy.allows(value) { excluded.insert(value.id) }
+        }
+        return excluded
     }
 
     private static func makeEncoder() -> JSONEncoder {
@@ -740,25 +809,25 @@ private struct AggregatePebbleExportRecord: Encodable {
     let childAggregateIDsJSON: String
     let parentAggregateID: UUID?
 
-    init(_ value: AggregatePebble) {
+    init(_ value: AggregatePebble, publicProjection: ShareAggregateVisual, members: [StudySession]) {
         id = value.id
         dataEpochID = value.dataEpochID
-        createdAt = value.createdAt
-        level = value.level
-        pebbleCount = value.pebbleCount
-        childAggregateCount = value.childAggregateCount
-        grams = value.grams
-        measuredPebbleCount = value.measuredPebbleCount
-        manualPebbleCount = value.manualPebbleCount
-        goldPebbleCount = value.goldPebbleCount
-        prismPebbleCount = value.prismPebbleCount
-        colorMixJSON = value.colorMixJSON
-        subjectMixJSON = value.subjectMixJSON
-        periodStart = value.periodStart
-        periodEnd = value.periodEnd
-        sessionIDsJSON = value.sessionIDsJSON
-        childAggregateIDsJSON = value.childAggregateIDsJSON
-        parentAggregateID = value.parentAggregateID
+        createdAt = publicProjection.createdAt
+        level = publicProjection.level
+        pebbleCount = publicProjection.pebbleCount
+        childAggregateCount = 0
+        grams = publicProjection.grams
+        measuredPebbleCount = publicProjection.measuredPebbleCount
+        manualPebbleCount = publicProjection.manualPebbleCount
+        goldPebbleCount = publicProjection.goldPebbleCount
+        prismPebbleCount = publicProjection.prismPebbleCount
+        colorMixJSON = StrataMath.encodeColorMix(publicProjection.colorMix)
+        subjectMixJSON = StrataMath.encodeSubjectMix(publicProjection.subjectMix)
+        periodStart = members.map(\.startAt).min() ?? publicProjection.createdAt
+        periodEnd = publicProjection.createdAt
+        sessionIDsJSON = PomoGemDataExportPolicy.encodeSessionIDs(publicProjection.sessionIDs)
+        childAggregateIDsJSON = "[]"
+        parentAggregateID = nil
     }
 }
 
@@ -767,22 +836,20 @@ private struct StratumExportRecord: Encodable {
     let dataEpochID: UUID?
     let bakedAt: Date
     let pebbleCount: Int
-    let heightPt: Double
     let colorMixJSON: String
     let monthLabel: String
     let sessionIDsJSON: String
     let grams: Int
 
-    init(_ value: Stratum) {
+    init(_ value: Stratum, publicProjection: ShareAggregateVisual) {
         id = value.id
         dataEpochID = value.dataEpochID
-        bakedAt = value.bakedAt
-        pebbleCount = value.pebbleCount
-        heightPt = value.heightPt
-        colorMixJSON = value.colorMixJSON
-        monthLabel = value.monthLabel
-        sessionIDsJSON = value.sessionIDsJSON
-        grams = value.grams
+        bakedAt = publicProjection.createdAt
+        pebbleCount = publicProjection.pebbleCount
+        colorMixJSON = StrataMath.encodeColorMix(publicProjection.colorMix)
+        monthLabel = StrataMath.monthLabel(for: publicProjection.createdAt)
+        sessionIDsJSON = PomoGemDataExportPolicy.encodeSessionIDs(publicProjection.sessionIDs)
+        grams = publicProjection.grams
     }
 }
 

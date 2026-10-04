@@ -1665,6 +1665,23 @@
         }
       }
     },
+    "スクリーンタイムの記録と、記録元を確認できない結晶・地層は書き出しません。" : {
+      "comment" : "External JSON export excludes Screen Time and unverifiable summaries; personal records and private iCloud stay intact",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screen Time records, and crystals or strata whose record sources cannot be verified, are excluded from export."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スクリーンタイムの記録と、記録元を確認できない結晶・地層は書き出しません。"
+          }
+        }
+      }
+    },
     "スクリーンタイムの黒い石、まだ取り込んでいない勉強アプリの記録、10分に満たない途中の利用時間も消えます。アプリの選択と自動記録の設定は残ります。" : {
       "comment" : "Reset confirmation: extra paragraph shown only when Screen Time is set up on this iPhone",
       "localizations" : {
@@ -3554,36 +3571,36 @@
         }
       }
     },
-    "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにあるすべての記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このiPhoneのデータはアプリの削除で、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除できます。" : {
+    "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにある共有可能な記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このiPhoneのデータはアプリの削除で、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除できます。" : {
       "comment" : "Settings export footer in iCloud mode",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The exported file (JSON) contains your theme names, achievement notes and settings, every record on this iPhone (including records from before a reset), and a random device ID used to sync the timer. It is separate from the share images for social media. Be careful where you keep or send it. To delete the data on this iPhone, delete the app. To delete the data in iCloud, use iCloud storage management in the Settings app on your iPhone."
+            "value" : "The exported file (JSON) contains your theme names, achievement notes and settings, records eligible for export on this iPhone (including records from before a reset), and a random device ID used to sync the timer. It is separate from the share images for social media. Be careful where you keep or send it. To delete the data on this iPhone, delete the app. To delete the data in iCloud, use iCloud storage management in the Settings app on your iPhone."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにあるすべての記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このiPhoneのデータはアプリの削除で、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除できます。"
+            "value" : "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにある共有可能な記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このiPhoneのデータはアプリの削除で、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除できます。"
           }
         }
       }
     },
-    "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにあるすべての記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このファイルを読み込んで記録を戻したり、iCloudへ移したりすることはできません。リセットしてもテーマと設定は残ります。このiPhoneのデータは、アプリを削除すると消えます。" : {
+    "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにある共有可能な記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このファイルを読み込んで記録を戻したり、iCloudへ移したりすることはできません。リセットしてもテーマと設定は残ります。このiPhoneのデータは、アプリを削除すると消えます。" : {
       "comment" : "Settings export footer on a local-only iPhone",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The exported file (JSON) contains your theme names, achievement notes and settings, every record on this iPhone (including records from before a reset), and a random device ID used to sync the timer. It is separate from the share images for social media. Be careful where you keep or send it. You can't import this file to restore your records or to move them to iCloud. Resetting keeps your themes and settings. The data on this iPhone is erased when you delete the app."
+            "value" : "The exported file (JSON) contains your theme names, achievement notes and settings, records eligible for export on this iPhone (including records from before a reset), and a random device ID used to sync the timer. It is separate from the share images for social media. Be careful where you keep or send it. You can't import this file to restore your records or to move them to iCloud. Resetting keeps your themes and settings. The data on this iPhone is erased when you delete the app."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにあるすべての記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このファイルを読み込んで記録を戻したり、iCloudへ移したりすることはできません。リセットしてもテーマと設定は残ります。このiPhoneのデータは、アプリを削除すると消えます。"
+            "value" : "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにある共有可能な記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このファイルを読み込んで記録を戻したり、iCloudへ移したりすることはできません。リセットしてもテーマと設定は残ります。このiPhoneのデータは、アプリを削除すると消えます。"
           }
         }
       }

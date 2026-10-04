@@ -2,17 +2,16 @@ import SpriteKit
 import XCTest
 @testable import PomoGem
 
-/// jar-04 / screentime-11: a share image hides some pebbles of the live,
-/// settled pile. It may only use the live jar when no visible gem was
-/// resting on a hidden one; otherwise the card draws its own bottle.
+/// Pins the geometry helpers retained for internal jar rendering. External
+/// shares now draw from public records and reject a live personal snapshot.
 @MainActor
 final class ShareJarSnapshotPolicyTests: XCTestCase {
     private let measuredOnly = JarSnapshotOptions.share(includesSelfReported: false)
     private let withSelfReported = JarSnapshotOptions.share(includesSelfReported: true)
 
-    func testHideRuleKeepsStonesAndMeasuredFocusAndDropsBlackStones() {
+    func testExternalHideRuleKeepsStonesAndTimerFocusAndDropsPrivateScreenTime() {
         XCTAssertFalse(measuredOnly.hides(descriptor(source: .timer)))
-        XCTAssertFalse(measuredOnly.hides(descriptor(source: .screenTime)))
+        XCTAssertTrue(measuredOnly.hides(descriptor(source: .screenTime)))
         XCTAssertTrue(measuredOnly.hides(descriptor(source: .manual)))
         XCTAssertTrue(measuredOnly.hides(descriptor(source: .timerDemoted)))
         XCTAssertFalse(
@@ -22,6 +21,7 @@ final class ShareJarSnapshotPolicyTests: XCTestCase {
         XCTAssertTrue(measuredOnly.hides(obstacle()))
 
         XCTAssertFalse(withSelfReported.hides(descriptor(source: .manual)))
+        XCTAssertTrue(withSelfReported.hides(descriptor(source: .screenTime)))
         XCTAssertTrue(withSelfReported.hides(obstacle()))
         XCTAssertFalse(JarSnapshotOptions.widget.hides(descriptor(source: .manual)))
         XCTAssertTrue(JarSnapshotOptions.widget.hides(obstacle()))

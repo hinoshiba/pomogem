@@ -1693,7 +1693,10 @@ struct SettingsView: View {
         } header: {
             Text("データの書き出し", tableName: "Settings", comment: "Settings data export section header")
         } footer: {
-            Text(dataStorageDisclosure)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(dataStorageDisclosure)
+                Text(PomoGemDataExportPolicy.privacyDisclosure)
+            }
         }
     }
 
@@ -1842,13 +1845,13 @@ struct SettingsView: View {
     private var dataStorageDisclosure: String {
         if persistenceMode == .localOnly {
             return String(
-                localized: "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにあるすべての記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このファイルを読み込んで記録を戻したり、iCloudへ移したりすることはできません。リセットしてもテーマと設定は残ります。このiPhoneのデータは、アプリを削除すると消えます。",
+                localized: "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにある共有可能な記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このファイルを読み込んで記録を戻したり、iCloudへ移したりすることはできません。リセットしてもテーマと設定は残ります。このiPhoneのデータは、アプリを削除すると消えます。",
                 table: "Settings",
                 comment: "Settings export footer on a local-only iPhone"
             )
         }
         return String(
-            localized: "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにあるすべての記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このiPhoneのデータはアプリの削除で、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除できます。",
+            localized: "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにある共有可能な記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このiPhoneのデータはアプリの削除で、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除できます。",
             table: "Settings",
             comment: "Settings export footer in iCloud mode"
         )

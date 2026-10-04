@@ -136,7 +136,7 @@ entitlement反映後にtransactionをfinishすることをSandboxで検証しま
 
 ## Screen Time and storage review
 
-Settings → スクリーンタイムで個人認証後にアプリ・テーマ・記録を設定します。選択アプリの合計10分ごとに
+Settings → アプリの利用時間で個人認証後にアプリ・テーマ・記録を設定します。選択アプリの合計10分ごとに
 600秒／100gを取り込みます。OS通知の遅延を明記し、常時・即時計測や他アプリの強制起動を約束しません。
 黒い石は黒同士だけで結合し、学習集計・報酬・共有から除外します。tokenと未取込情報・黒い石は端末内、
 取り込み済み学習記録は通常の選択保存先という区別を、掲載文・Privacy・Review Notesで統一します。
@@ -157,7 +157,7 @@ database、4種類の瓶用projectionは端末内だけに保存します。運�
 なしで全基本機能を使え、iCloudへ自動uploadしません。share／exportは利用者の明示操作です。1.0は
 rare reward用operations containerもdirect CloudKit一括削除も提供せず、app削除とAppleのiCloud
 ストレージ管理を案内します。現在のJSON exportは全11種類の出荷対象SwiftData modelを対象にします。
-スクリーンタイムのtoken・未取込情報・黒い石・診断情報は端末内に限り、JSONには含めません。通常記録へ取り込み済みの学習分は選択した保存先の記録として同期・書き出し対象です。診断は件数・結果・時間に限り、運営者へ送信しません。
+スクリーンタイムのtoken・未取込情報・黒い石・診断情報は端末内に限り、JSONには含めません。通常記録へ取り込み済みの学習分は本人が選択した保存先へ保存・同期しますが、共有画像・GIF・本文・JSONへ含めません。構成を確認できない結晶・地層の集計も共有・書き出しから除外します。診断は件数・結果・時間に限り、運営者へ送信しません。
 JSONを再importする機能はなく、このファイルによる復元・移行には対応しません。明示的な保存先切り替えも、このJSONを読み込む処理ではありません。
 ただしsupport mailがAppleのoptional disclosure条件を満たさない運用なら、Email Addressを
 App Functionality（customer support）、linked to user、not trackingとして申告します。Publish直前に

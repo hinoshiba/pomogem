@@ -118,7 +118,8 @@ iCloudモードでオンボーディングを終える処理は、選ばなか�
 
 PomoGemは新Bundle ID・新CloudKit containerで始める別アプリです。旧製品のstore、購入権利、CloudKit
 recordを移行・共有しません。新containerに次のfieldを含む7-model schemaを初回production schemaとして
-固定します。JSONはformat=`jp.hinoshiba.pomogem.user-data`、schemaVersion 3で出力し、再importはありません。
+固定します。外部JSONはformat=`jp.hinoshiba.pomogem.user-data`、schemaVersion 4で出力し、再importはありません。
+Screen Time由来の記録と、記録元を確認できない集計は含めません。個人用の保存・同期モデルは変更しません。
 
 | Model | 最終RCで確認する追加field |
 |---|---|
