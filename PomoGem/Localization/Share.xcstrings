@@ -733,23 +733,6 @@
         }
       }
     },
-    "この結晶は集計値で表示しています。元の全セッションはこの画面では展開しません。" : {
-      "comment" : "Share composer coverage note: the crystal is shown from its totals",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This crystal is shown from its totals. Its original sessions aren't loaded on this screen."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "この結晶は集計値で表示しています。元の全セッションはこの画面では展開しません。"
-          }
-        }
-      }
-    },
     "これまで" : {
       "comment" : "Share card period label for the whole history",
       "localizations" : {
