@@ -240,6 +240,29 @@ struct ShareStratumVisual: Identifiable, Equatable {
 /// Immutable aggregate projection for share cards. It can reconstruct a
 /// measured-only subset from the original sessions without flattening the
 /// persisted hierarchy or counting a grouped session twice.
+/// Personal study totals may include Screen Time. External output must not.
+/// Resolve the compatibility encoding before deciding: a 600 s / 100 g
+/// `.manual` row can be a Screen Time record, rather than a manual entry.
+enum ExternalStudyDataPolicy {
+    static func allows(_ session: StudySession) -> Bool {
+        session.effectiveSource != .screenTime
+    }
+
+    /// A summary's measured count cannot distinguish timers from Screen Time.
+    /// Only complete, materialized membership proves its stored totals safe.
+    static func allowsSummary(
+        memberIDs: Set<UUID>,
+        members: [StudySession],
+        pebbleCount: Int
+    ) -> Bool {
+        !memberIDs.isEmpty
+            && pebbleCount >= Constants.Jar.minimumAggregateFanIn
+            && memberIDs.count == pebbleCount
+            && Set(members.map(\.id)) == memberIDs
+            && members.allSatisfy(allows)
+    }
+}
+
 struct ShareAggregateVisual: Identifiable, Equatable {
     let id: UUID
     let createdAt: Date
@@ -259,6 +282,35 @@ struct ShareAggregateVisual: Identifiable, Equatable {
     /// are already present on the card. A standalone summary has no materialized
     /// membership and therefore contributes its persisted totals itself.
     var contributesStandaloneTotals: Bool { sessionIDs.isEmpty }
+
+    /// Public rendering never estimates mass from a personal summary. Its
+    /// colors, theme snapshots and date also come only from allowed records.
+    /// This remains safe when private or unloaded members belong to the root.
+    init?(
+        externallySharing id: UUID,
+        members: [StudySession],
+        standalone: Bool = false,
+        permitsPartialCrystal: Bool = false
+    ) {
+        let privateIDs = Set(members.filter { !ExternalStudyDataPolicy.allows($0) }.map(\.id))
+        let included = Self.uniqueSessions(members).filter {
+            ExternalStudyDataPolicy.allows($0) && !privateIDs.contains($0.id)
+        }
+        // Private members must not manufacture a crystal from fewer than the
+        // normal public aggregation threshold; those allowed rows stay loose.
+        guard permitsPartialCrystal || included.count >= Constants.Jar.minimumAggregateFanIn,
+              let end = included.map(\.endAt).max() else { return nil }
+        self.init(
+            id: id,
+            createdAt: end,
+            fallbackPebbleCount: included.count,
+            fallbackGrams: NonnegativeIntPolicy.sum(included.map(\.grams)),
+            membership: included.map(\.id),
+            allMemberSessions: included,
+            includedMemberSessions: included,
+            standalone: standalone
+        )
+    }
 
     init(aggregate: AggregatePebble) {
         id = aggregate.id
@@ -400,7 +452,8 @@ struct ShareAggregateVisual: Identifiable, Equatable {
         fallbackGrams: Int,
         membership: [UUID],
         allMemberSessions: [StudySession],
-        includedMemberSessions: [StudySession]
+        includedMemberSessions: [StudySession],
+        standalone: Bool = false
     ) {
         let memberIDs = Set(membership)
         guard !memberIDs.isEmpty else { return nil }
@@ -414,7 +467,7 @@ struct ShareAggregateVisual: Identifiable, Equatable {
         pebbleCount = included.count
         level = StrataMath.decimalAggregateLevel(forPebbleCount: included.count)
         radius = StrataMath.aggregateRadius(level: level)
-        sessionIDs = included.map(\.id).sorted { $0.uuidString < $1.uuidString }
+        sessionIDs = standalone ? [] : included.map(\.id).sorted { $0.uuidString < $1.uuidString }
         colorMix = StrataMath.colorMix(hexColors: included.map(\.displaySubjectColorHex))
         subjectMix = StrataMath.mergedSubjectMix(included.map {
             [AggregateSubjectFraction(

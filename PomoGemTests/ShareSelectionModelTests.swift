@@ -104,6 +104,103 @@ final class ShareSelectionModelTests: XCTestCase {
         XCTAssertNil(model.excludedSelfReportedGrams)
     }
 
+    func testScreenTimeIsExcludedWithEitherManualChoiceAndPersonalRecordsStayIntact() throws {
+        let now = Date.now
+        let timer = session(endingAt: now.addingTimeInterval(-7_200), minutes: 25)
+        let manual = session(endingAt: now.addingTimeInterval(-3_600), minutes: 30, source: .manual)
+        let privateRows = [
+            session(endingAt: now.addingTimeInterval(-1_800), minutes: 10, source: .screenTime),
+            session(endingAt: now, minutes: 10, source: .manual)
+        ]
+        try context.save()
+        XCTAssertTrue(privateRows.allSatisfy { $0.effectiveSource == .screenTime })
+        for includeManual in [false, true] {
+            var input = makeInput(sessions: [timer, manual] + privateRows)
+            input.includeManual = includeManual
+            let shared = ShareSelectionModel.make(input)
+            XCTAssertEqual(Set(shared.sessions.map(\.id)), Set(includeManual ? [timer.id, manual.id] : [timer.id]))
+            XCTAssertEqual(shared.totalGrams, includeManual ? 550 : 250)
+            XCTAssertEqual(shared.excludedSelfReportedGrams, includeManual ? nil : 300)
+            XCTAssertTrue(shared.sessions.allSatisfy { $0.source != .screenTime })
+        }
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<StudySession>()), 4)
+        XCTAssertEqual(privateRows.map(\.grams), [100, 100])
+    }
+
+    func testConflictingPublicDuplicateDoesNotReopenAPrivateLogicalRecord() throws {
+        let privateRow = session(endingAt: .now, minutes: 10, source: .screenTime)
+        let duplicate = session(endingAt: .now, minutes: 25)
+        duplicate.id = privateRow.id
+        try context.save()
+        var input = makeInput(sessions: [privateRow, duplicate])
+        input.includeManual = true
+        let shared = ShareSelectionModel.make(input)
+        XCTAssertFalse(shared.hasShareableContent)
+        XCTAssertEqual(shared.totalGrams, 0)
+    }
+
+    func testScopedMixedCrystalRebuildsPublicFieldsWithoutPrivateSummaryFallback() throws {
+        let publicEnd = Date.now.addingTimeInterval(-86_400)
+        let timers = (0..<10).map { _ in session(endingAt: publicEnd, minutes: 25) }
+        let privateRow = session(endingAt: .now, minutes: 10, source: .screenTime)
+        privateRow.subjectNameSnapshot = "Private usage theme"
+        privateRow.subjectColorHexSnapshot = "#FF00F3"
+        let mixed = root(createdAt: .now, members: timers.map(\.id) + [privateRow.id, UUID()], grams: 99_999, measured: 10)
+        mixed.subjectMixJSON = "[{\"name\":\"Private usage theme\",\"colorHex\":\"#FF00F3\",\"pebbleCount\":10}]"
+        try context.save()
+        for includeManual in [false, true] {
+            var input = makeInput(sessions: timers + [privateRow], aggregates: [mixed])
+            input.scope = .aggregate(id: mixed.id, monthLabel: "2099年12月")
+            input.includeManual = includeManual
+            let shared = ShareSelectionModel.make(input)
+            let visual = try XCTUnwrap(shared.aggregates.first)
+            XCTAssertEqual(Set(shared.sessions.map(\.id)), Set(timers.map(\.id)))
+            XCTAssertEqual(shared.totalGrams, 2_500)
+            XCTAssertEqual(visual.grams, 2_500)
+            XCTAssertEqual(visual.createdAt, publicEnd)
+            XCTAssertEqual(Set(visual.sessionIDs), Set(timers.map(\.id)))
+            XCTAssertFalse(visual.subjectMix.contains { $0.name == "Private usage theme" })
+            XCTAssertFalse(visual.colorMix.contains { $0.hex == "#FF00F3" })
+        }
+        XCTAssertEqual(mixed.grams, 99_999)
+        XCTAssertEqual(privateRow.subjectNameSnapshot, "Private usage theme")
+    }
+
+    func testPrivateMembersCannotCreateACrystalBelowThePublicThreshold() throws {
+        let timers = (0..<5).map { index in
+            session(endingAt: Date.now.addingTimeInterval(-Double(20 - index) * 3_600), minutes: 25)
+        }
+        let privateRows = (0..<5).map { index in
+            session(endingAt: Date.now.addingTimeInterval(-Double(index) * 600), minutes: 10, source: .screenTime)
+        }
+        let aggregate = root(createdAt: .now, members: (timers + privateRows).map(\.id), grams: 1_750, measured: 10)
+        try context.save()
+        let shared = ShareSelectionModel.make(makeInput(sessions: timers + privateRows, aggregates: [aggregate]))
+        XCTAssertEqual(Set(shared.sessions.map(\.id)), Set(timers.map(\.id)))
+        XCTAssertTrue(shared.aggregates.isEmpty, "Five public rows remain loose even if private history made a personal crystal")
+        XCTAssertEqual(shared.totalGrams, 1_250)
+        XCTAssertEqual(aggregate.pebbleCount, 10)
+    }
+
+    func testVerifiedTimerRootKeepsCompactPublicAccounting() throws {
+        let rows = (0..<10).map { index in
+            session(endingAt: Date.now.addingTimeInterval(-Double(20 - index) * 3_600), minutes: 25)
+        }
+        let aggregate = root(createdAt: rows.last!.endAt, members: rows.map(\.id), grams: 2_500, measured: 10)
+        try context.save()
+        var input = makeInput(sessions: rows, aggregates: [aggregate])
+        input.historyPageIsPartial = true
+        input.localRepresentedSessionIDs = Set(rows.map(\.id))
+        for includeManual in [false, true] {
+            input.includeManual = includeManual
+            let shared = ShareSelectionModel.make(input)
+            XCTAssertTrue(shared.usesCompactRootProjection)
+            XCTAssertEqual(shared.totalGrams, 2_500)
+            XCTAssertTrue(shared.sessions.isEmpty)
+            XCTAssertEqual(shared.aggregates.map(\.id), [aggregate.id])
+        }
+    }
+
     func testMonthScopeKeepsOnlyThatMonthsFocusAndStones() throws {
         let september = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 9, day: 12, hour: 10)))
         let august = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 8, day: 20, hour: 10)))
@@ -123,18 +220,22 @@ final class ShareSelectionModelTests: XCTestCase {
         XCTAssertEqual(model.achievements.map(\.id), [septemberStone.id])
     }
 
-    func testAggregateMembershipLookupMatchesTheFormerFullScanPerRoot() throws {
+    func testAggregateMembershipLookupMatchesAFullScanOfPublicMembersPerRoot() throws {
         let now = Date.now
         let subjects = ["#E85D4A", "#4AA8E8", "#7BD88F"].enumerated().map { index, hex in
             let subject = Subject(name: "テーマ\(index)", colorHex: hex, sortOrder: index)
             context.insert(subject)
             return subject
         }
-        let sessions: [StudySession] = (0..<1_000).map { index in
-            session(
-                endingAt: now.addingTimeInterval(-Double(1_000 - index) * 4 * 3_600),
-                minutes: index.isMultiple(of: 4) ? 60 : 25,
-                source: index.isMultiple(of: 7) ? .manual : .timer,
+        let sessions: [StudySession] = (0..<1_000).map { index -> StudySession in
+            let isManual = index.isMultiple(of: 7)
+            let source: SessionSource = isManual ? .manual : .timer
+            let minutes = index.isMultiple(of: 4) ? 60 : (isManual ? 30 : 25)
+            let end = now.addingTimeInterval(-Double(1_000 - index) * 4 * 3_600)
+            return session(
+                endingAt: end,
+                minutes: minutes,
+                source: source,
                 subject: subjects[index % subjects.count]
             )
         }
@@ -173,11 +274,13 @@ final class ShareSelectionModelTests: XCTestCase {
                 .compactMap { root -> ShareAggregateVisual? in
                     let resolved = AggregatePebblePolicy.descendantSessionIDs(of: root, in: roots)
                     let membership = Set(resolved)
+                    // A full scan provides the reference membership. Every
+                    // field, including the date when the last member is
+                    // excluded manual focus, follows the public projection.
                     return ShareAggregateVisual(
-                        reconstructing: root,
-                        resolvedSessionIDs: resolved,
-                        allMemberSessions: unique.filter { membership.contains($0.id) },
-                        includedMemberSessions: selected.filter { membership.contains($0.id) }
+                        externallySharing: root.id,
+                        members: selected.filter { membership.contains($0.id) },
+                        permitsPartialCrystal: true
                     )
                 }
                 .sorted { $0.createdAt < $1.createdAt }
@@ -222,18 +325,17 @@ final class ShareSelectionModelTests: XCTestCase {
     }
 
     func testScopedCrystalIsTheAuthoritativeSummaryWhenNothingIsFilteredOut() throws {
-        let members = (0..<10).map { index in
-            session(
-                endingAt: Date.now.addingTimeInterval(-Double(20 - index) * 3_600),
-                minutes: 25,
-                source: index == 0 ? .manual : .timer
-            )
+        let members: [StudySession] = (0..<10).map { index -> StudySession in
+            let end = Date.now.addingTimeInterval(-Double(20 - index) * 3_600)
+            let minutes = index == 0 ? 30 : 25
+            let source: SessionSource = index == 0 ? .manual : .timer
+            return session(endingAt: end, minutes: minutes, source: source)
         }
         let root = AggregatePebble(
             createdAt: members.last!.endAt,
             level: 1,
             pebbleCount: 10,
-            grams: 2_500,
+            grams: 2_550,
             measuredPebbleCount: 9,
             manualPebbleCount: 1,
             colorMixJSON: "[]",
@@ -250,7 +352,7 @@ final class ShareSelectionModelTests: XCTestCase {
         let summary = ShareSelectionModel.make(input)
         XCTAssertTrue(summary.sessions.isEmpty, "The summary owns the mass; members are not added again")
         XCTAssertEqual(summary.aggregates.map(\.id), [root.id])
-        XCTAssertEqual(summary.totalGrams, 2_500)
+        XCTAssertEqual(summary.totalGrams, 2_550)
         XCTAssertTrue(summary.includesSelfReportedFocus)
 
         input.includeManual = false
@@ -268,9 +370,9 @@ final class ShareSelectionModelTests: XCTestCase {
 
     // MARK: - Branches that decide mass and the 自己申告 disclosure
 
-    func testCompactLifetimeRootsCarryTheMassWhenOnlyTheNewestRecordsAreLoaded() throws {
-        // A long history loads only its newest page; measured-only roots
-        // stand for everything older without expanding it.
+    func testUnloadedCompactRootsCannotBorrowTheirMeasuredCountAsPublicProvenance() throws {
+        // A measured count includes Screen Time. Unloaded summaries cannot
+        // substitute for the original records at an external boundary.
         let now = Date.now
         let roots: [AggregatePebble] = (0..<2).map { index in
             root(
@@ -289,12 +391,11 @@ final class ShareSelectionModelTests: XCTestCase {
         input.historyPageIsPartial = true
         input.allSessionRowCount = 23
         let complete = ShareSelectionModel.make(input)
-        XCTAssertTrue(complete.usesCompactRootProjection)
+        XCTAssertFalse(complete.usesCompactRootProjection)
         XCTAssertFalse(complete.compactProjectionIsIncomplete)
         XCTAssertEqual(complete.sessions.map(\.id), loose.map(\.id))
-        XCTAssertEqual(Set(complete.aggregates.map(\.id)), Set(roots.map(\.id)))
-        XCTAssertTrue(complete.aggregates.allSatisfy(\.contributesStandaloneTotals))
-        XCTAssertEqual(complete.totalGrams, 2 * 2_500 + 3 * 250)
+        XCTAssertTrue(complete.aggregates.isEmpty)
+        XCTAssertEqual(complete.totalGrams, 3 * 250)
         XCTAssertFalse(complete.includesSelfReportedFocus)
         XCTAssertFalse(complete.hasExcludedSelfReportedContent)
         XCTAssertNil(complete.excludedSelfReportedGrams)
@@ -302,10 +403,10 @@ final class ShareSelectionModelTests: XCTestCase {
         // Rows the roots and the loose page do not account for (or a
         // duplicate) make the card say 読み込み分 instead of lifetime.
         input.allSessionRowCount = 25
-        XCTAssertTrue(ShareSelectionModel.make(input).compactProjectionIsIncomplete)
+        XCTAssertFalse(ShareSelectionModel.make(input).compactProjectionIsIncomplete)
         input.allSessionRowCount = 23
         input.loosePageIsPartial = true
-        XCTAssertTrue(ShareSelectionModel.make(input).compactProjectionIsIncomplete)
+        XCTAssertFalse(ShareSelectionModel.make(input).compactProjectionIsIncomplete)
         input.loosePageIsPartial = false
 
         // A loose record the local projection already represents is not
@@ -313,8 +414,8 @@ final class ShareSelectionModelTests: XCTestCase {
         input.localRepresentedSessionIDs = [loose[0].id]
         input.allSessionRowCount = 22
         let represented = ShareSelectionModel.make(input)
-        XCTAssertEqual(represented.sessions.map(\.id), Array(loose.dropFirst()).map(\.id))
-        XCTAssertEqual(represented.totalGrams, 2 * 2_500 + 2 * 250)
+        XCTAssertEqual(represented.sessions.map(\.id), loose.map(\.id))
+        XCTAssertEqual(represented.totalGrams, 3 * 250, "An omitted root cannot hide the public rows it represented")
         XCTAssertFalse(represented.compactProjectionIsIncomplete)
     }
 
@@ -347,8 +448,8 @@ final class ShareSelectionModelTests: XCTestCase {
 
         input.includeManual = true
         let included = ShareSelectionModel.make(input)
-        XCTAssertTrue(included.usesCompactRootProjection)
-        XCTAssertEqual(included.totalGrams, 2_500 + 250 + 300)
+        XCTAssertFalse(included.usesCompactRootProjection)
+        XCTAssertEqual(included.totalGrams, 250 + 300)
         XCTAssertTrue(included.includesSelfReportedFocus)
         XCTAssertFalse(included.hasExcludedSelfReportedContent)
     }
@@ -393,7 +494,7 @@ final class ShareSelectionModelTests: XCTestCase {
         XCTAssertFalse(included.hasExcludedSelfReportedContent)
     }
 
-    func testLegacyStratumWithoutMembershipIsOnlySharedAsSelfReported() throws {
+    func testLegacyStratumWithoutMembershipIsNeverExternallyShared() throws {
         let measured = session(endingAt: .now, minutes: 25)
         let layer = Stratum(
             bakedAt: Date.now.addingTimeInterval(-90 * 86_400),
@@ -416,13 +517,13 @@ final class ShareSelectionModelTests: XCTestCase {
 
         input.includeManual = true
         let included = ShareSelectionModel.make(input)
-        XCTAssertEqual(included.aggregates.map(\.id), [layer.id])
-        XCTAssertEqual(included.totalGrams, 2_750, "A membership-less layer carries its own mass")
-        XCTAssertTrue(included.includesSelfReportedFocus, "Unknown composition is disclosed as self-reported")
+        XCTAssertTrue(included.aggregates.isEmpty)
+        XCTAssertEqual(included.totalGrams, 250, "A membership-less layer cannot prove it excludes Screen Time")
+        XCTAssertFalse(included.includesSelfReportedFocus)
         XCTAssertFalse(included.hasExcludedSelfReportedContent)
     }
 
-    func testUnattributedCompatibilityAggregateFollowsItsKnownComposition() throws {
+    func testUnattributedCompatibilityAggregateCannotProveScreenTimeIsAbsent() throws {
         let measured = session(endingAt: .now, minutes: 25)
         let unknownMix = root(
             createdAt: Date.now.addingTimeInterval(-60 * 86_400),
@@ -448,24 +549,24 @@ final class ShareSelectionModelTests: XCTestCase {
 
         input.includeManual = true
         let unknownOn = ShareSelectionModel.make(input)
-        XCTAssertEqual(unknownOn.aggregates.map(\.id), [unknownMix.id])
-        XCTAssertEqual(unknownOn.totalGrams, 2_750)
-        XCTAssertTrue(unknownOn.includesSelfReportedFocus, "Unknown composition is disclosed as self-reported")
+        XCTAssertTrue(unknownOn.aggregates.isEmpty)
+        XCTAssertEqual(unknownOn.totalGrams, 250)
+        XCTAssertFalse(unknownOn.includesSelfReportedFocus)
         XCTAssertFalse(unknownOn.hasExcludedSelfReportedContent)
 
         input = makeInput(sessions: [measured], aggregates: [allMeasured])
         let measuredOff = ShareSelectionModel.make(input)
-        XCTAssertEqual(measuredOff.aggregates.map(\.id), [allMeasured.id])
-        XCTAssertEqual(measuredOff.totalGrams, 2_750)
+        XCTAssertTrue(measuredOff.aggregates.isEmpty)
+        XCTAssertEqual(measuredOff.totalGrams, 250)
         XCTAssertFalse(measuredOff.includesSelfReportedFocus)
         XCTAssertFalse(
             measuredOff.hasExcludedSelfReportedContent,
-            "An all-measured summary stays on the card, so nothing was left out"
+            "No self-reported amount is inferred from the unverified summary"
         )
         input.includeManual = true
         let measuredOn = ShareSelectionModel.make(input)
-        XCTAssertEqual(measuredOn.totalGrams, 2_750)
-        XCTAssertTrue(measuredOn.includesSelfReportedFocus, "Its composition is still not attributed")
+        XCTAssertEqual(measuredOn.totalGrams, 250)
+        XCTAssertFalse(measuredOn.includesSelfReportedFocus)
     }
 
     func testMonthScopeTakesOnlyThatMonthsPartOfARootSpanningTwoMonths() throws {

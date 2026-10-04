@@ -1,4 +1,57 @@
 import Foundation
+import SwiftData
+
+/// Personal history resolves duplicate rows to a canonical value. Sharing
+/// needs the stronger guarantee that no physical copy has a private origin.
+/// Check loaded logical IDs only, without changing personal resolution rules.
+enum ExternalShareSessionLoader {
+    @MainActor
+    static func publicCandidates(
+        from candidates: [StudySession],
+        context: ModelContext,
+        epochID: UUID?
+    ) throws -> [StudySession] {
+        let ids = Array(Set(candidates.map(\.id)))
+        let batchSize = 64
+        let maximumCopies = BoundedHistoryPolicy.maximumPhysicalRowsPerLogicalSession
+        var publicIDs: Set<UUID> = []
+        for offset in stride(from: 0, to: ids.count, by: batchSize) {
+            try Task.checkCancellation()
+            let batch = Array(ids[offset..<min(offset + batchSize, ids.count)])
+            let predicate: Predicate<StudySession>
+            if let epochID {
+                predicate = #Predicate { batch.contains($0.id) && $0.dataEpochID == epochID }
+            } else {
+                predicate = #Predicate { batch.contains($0.id) && $0.dataEpochID == nil }
+            }
+            var descriptor = FetchDescriptor<StudySession>(predicate: predicate)
+            let sentinel = batch.count * maximumCopies + 1
+            descriptor.fetchLimit = sentinel
+            let rows = try context.fetch(descriptor)
+            guard rows.count < sentinel else {
+                throw BoundedHistoryPolicy.SessionResolutionError.logicalReplicaLimitExceeded
+            }
+            let groups = Dictionary(grouping: rows, by: \.id)
+            for id in batch {
+                guard let copies = groups[id], !copies.isEmpty else { continue }
+                guard copies.count <= maximumCopies else {
+                    throw BoundedHistoryPolicy.SessionResolutionError.logicalReplicaLimitExceeded
+                }
+                guard copies.allSatisfy({
+                    StudySessionIntegrityPolicy.isSupported($0)
+                        && ExternalStudyDataPolicy.allows($0)
+                }) else { continue }
+                publicIDs.insert(id)
+            }
+        }
+        return candidates.filter {
+            $0.dataEpochID == epochID
+                && StudySessionIntegrityPolicy.isSupported($0)
+                && ExternalStudyDataPolicy.allows($0)
+                && publicIDs.contains($0.id)
+        }
+    }
+}
 
 /// Everything a share card is built from, resolved once from the composer's
 /// bounded records.
@@ -171,8 +224,15 @@ extension ShareSelectionModel {
             from: input.looseSessions
         )
         .sorted { $0.endAt < $1.endAt }
+        // Any private copy of a logical record closes that ID to sharing,
+        // even if a conflicting duplicate would otherwise win resolution.
+        let privateSessionIDs = Set((sessions + input.looseSessions)
+            .filter { !ExternalStudyDataPolicy.allows($0) }.map(\.id))
+        func isPublic(_ session: StudySession) -> Bool {
+            ExternalStudyDataPolicy.allows(session) && !privateSessionIDs.contains(session.id)
+        }
         let compactLooseSessions = uniqueLooseSessions.filter {
-            !input.localRepresentedSessionIDs.contains($0.id)
+            !input.localRepresentedSessionIDs.contains($0.id) && isPublic($0)
         }
         let uniqueAggregates = Dictionary(grouping: aggregatePebbles, by: \.id)
             .values
@@ -203,6 +263,44 @@ extension ShareSelectionModel {
                 .compactMap { uniqueSessionPosition[$0] }
                 .sorted()
                 .map { uniqueSessions[$0] }
+        }
+        func members(of aggregate: AggregatePebble) -> [StudySession] {
+            uniqueMembers(Set(AggregatePebblePolicy.descendantSessionIDs(
+                of: aggregate, in: uniqueAggregates
+            )))
+        }
+        func allowsSummary(_ aggregate: AggregatePebble) -> Bool {
+            let membership = Set(AggregatePebblePolicy.descendantSessionIDs(
+                of: aggregate, in: uniqueAggregates
+            ))
+            return membership.isDisjoint(with: privateSessionIDs)
+                && ExternalStudyDataPolicy.allowsSummary(
+                    memberIDs: membership,
+                    members: uniqueMembers(membership),
+                    pebbleCount: aggregate.pebbleCount
+                )
+        }
+        func allowsLegacySummary(_ stratum: Stratum) -> Bool {
+            let membership = Set(stratum.sessionIDs)
+            return membership.isDisjoint(with: privateSessionIDs)
+                && ExternalStudyDataPolicy.allowsSummary(
+                    memberIDs: membership,
+                    members: uniqueMembers(membership),
+                    pebbleCount: stratum.pebbleCount
+                )
+        }
+        func hasSelfReportedMembers(_ aggregate: AggregatePebble) -> Bool {
+            if allowsSummary(aggregate) {
+                return members(of: aggregate).contains { $0.effectiveSource.isSelfReported }
+            }
+            // This remains a local disclosure about an omitted, unverified
+            // summary; it never admits that summary to external output.
+            return aggregate.manualPebbleCount > 0
+        }
+        func publicMembers(_ members: [StudySession]) -> [StudySession] {
+            members.filter {
+                isPublic($0) && (includeManual || !$0.effectiveSource.isSelfReported)
+            }
         }
 
         let scopedSessions: [StudySession]
@@ -282,11 +380,12 @@ extension ShareSelectionModel {
         let distinctLegacyStrata = scopedLegacyStrata.filter { !modernIDs.contains($0.id) }
 
         let scopedAggregateProjection: ScopedAggregateShareProjection?
-        if case .aggregate = scope, let aggregate = scopedAggregates.first {
-            scopedAggregateProjection = .mode(
-                for: aggregate,
-                includesSelfReportedFocus: includeManual
-            )
+        if case .aggregate = scope, let aggregate = scopedAggregates.first,
+           allowsSummary(aggregate) {
+            // Persisted composition may be stale after sync. The complete
+            // public membership, including the manual toggle, is authoritative.
+            scopedAggregateProjection = includeManual || !hasSelfReportedMembers(aggregate)
+                ? .authoritativeSummary : .filteredMembers
         } else {
             scopedAggregateProjection = nil
         }
@@ -295,14 +394,18 @@ extension ShareSelectionModel {
         if allowsSummaries,
            scope == .all,
            input.historyPageIsPartial,
-           !scopedAggregates.isEmpty || !distinctLegacyStrata.isEmpty {
+           !scopedAggregates.isEmpty || !distinctLegacyStrata.isEmpty,
+           scopedAggregates.allSatisfy(allowsSummary),
+           distinctLegacyStrata.allSatisfy(allowsLegacySummary) {
             usesCompactRootProjection = CompactShareProjectionPolicy.canUseLifetimeRoots(
                 includesSelfReportedFocus: includeManual,
-                modernSummaryComposition: scopedAggregates.map {
-                    .init(
-                        pebbleCount: $0.pebbleCount,
-                        measuredPebbleCount: $0.measuredPebbleCount,
-                        manualPebbleCount: $0.manualPebbleCount
+                modernSummaryComposition: scopedAggregates.map { aggregate in
+                    let actualMembers = members(of: aggregate)
+                    let manualCount = actualMembers.filter { $0.effectiveSource.isSelfReported }.count
+                    return .init(
+                        pebbleCount: actualMembers.count,
+                        measuredPebbleCount: actualMembers.count - manualCount,
+                        manualPebbleCount: manualCount
                     )
                 },
                 hasLegacySummaries: !distinctLegacyStrata.isEmpty,
@@ -345,8 +448,8 @@ extension ShareSelectionModel {
             selectedSessions = compactLooseSessions
         } else {
             selectedSessions = includeManual
-                ? scopedSessions
-                : scopedSessions.filter { $0.effectiveSource.isMeasured }
+                ? scopedSessions.filter(isPublic)
+                : scopedSessions.filter { isPublic($0) && $0.effectiveSource.isMeasured }
         }
 
         // A compatibility summary without membership has an unknown mix
@@ -360,12 +463,20 @@ extension ShareSelectionModel {
 
         let selectedAggregates: [ShareAggregateVisual]
         if usesCompactRootProjection {
-            let modern = scopedAggregates.map(ShareAggregateVisual.init(aggregateSummary:))
-            let legacy = distinctLegacyStrata.map(ShareAggregateVisual.init(legacySummary:))
+            let modern = scopedAggregates.compactMap { aggregate in
+                let membership = Set(AggregatePebblePolicy.descendantSessionIDs(of: aggregate, in: uniqueAggregates))
+                return ShareAggregateVisual(externallySharing: aggregate.id, members: publicMembers(uniqueMembers(membership)), standalone: true)
+            }
+            let legacy = distinctLegacyStrata.compactMap { layer in
+                ShareAggregateVisual(externallySharing: layer.id, members: publicMembers(uniqueMembers(Set(layer.sessionIDs))), standalone: true)
+            }
             selectedAggregates = (modern + legacy).sorted { $0.createdAt < $1.createdAt }
         } else if scopedAggregateProjection == .authoritativeSummary,
                   let aggregate = scopedAggregates.first {
-            selectedAggregates = [ShareAggregateVisual(aggregateSummary: aggregate)]
+            let membership = Set(AggregatePebblePolicy.descendantSessionIDs(of: aggregate, in: uniqueAggregates))
+            selectedAggregates = ShareAggregateVisual(
+                externallySharing: aggregate.id, members: publicMembers(uniqueMembers(membership)), standalone: true
+            ).map { [$0] } ?? []
         } else {
             // `selectedSessions` is an ordered subset of `uniqueSessions`
             // here, so filtering each root's members by these IDs yields the
@@ -377,35 +488,24 @@ extension ShareSelectionModel {
                     in: uniqueAggregates
                 )
                 let membership = Set(resolvedMembership)
-                if membership.isEmpty {
-                    // A compact parent arriving before its children is not a
-                    // membership-less legacy summary. Omitting that transient
-                    // visual prevents its full mass being added on top of sessions.
-                    guard AggregatePebblePolicy.isUnattributedCompatibility(aggregate) else {
-                        return nil
-                    }
-                    return includeManual || isExplicitlyAllMeasured(aggregate)
-                        ? ShareAggregateVisual(aggregate: aggregate)
-                        : nil
-                }
+                guard !membership.isEmpty else { return nil }
                 let members = uniqueMembers(membership)
+                let included = members.filter { selectedIDs.contains($0.id) }
+                // Every field comes from allowed rows. A verified all-public
+                // root retains the existing manual-subset preview policy.
                 return ShareAggregateVisual(
-                    reconstructing: aggregate,
-                    resolvedSessionIDs: resolvedMembership,
-                    allMemberSessions: members,
-                    includedMemberSessions: members.filter { selectedIDs.contains($0.id) }
+                    externallySharing: aggregate.id, members: included,
+                    permitsPartialCrystal: allowsSummary(aggregate)
                 )
             }
             let legacy = distinctLegacyStrata.compactMap { layer -> ShareAggregateVisual? in
                 let membership = Set(layer.sessionIDs)
-                if membership.isEmpty {
-                    return includeManual ? ShareAggregateVisual(legacy: layer) : nil
-                }
+                guard !membership.isEmpty else { return nil }
                 let members = uniqueMembers(membership)
+                let included = members.filter { selectedIDs.contains($0.id) }
                 return ShareAggregateVisual(
-                    reconstructing: layer,
-                    allMemberSessions: members,
-                    includedMemberSessions: members.filter { selectedIDs.contains($0.id) }
+                    externallySharing: layer.id, members: included,
+                    permitsPartialCrystal: allowsLegacySummary(layer)
                 )
             }
             selectedAggregates = (modern + legacy).sorted { $0.createdAt < $1.createdAt }
@@ -444,14 +544,12 @@ extension ShareSelectionModel {
         let scopedSelfReportedSessions = scopedSessions.filter {
             $0.effectiveSource.isSelfReported
         }
-        let scopedAggregateHasSelfReportedPebbles = scopedAggregates.contains {
-            $0.manualPebbleCount > 0
-        }
+        let scopedAggregateHasSelfReportedPebbles = scopedAggregates.contains(where: hasSelfReportedMembers)
         // An all-measured compatibility summary stays on a measured-only
         // card, so it hides nothing; saying 「自己申告は除外」 for it would
         // name an exclusion that did not happen.
         let summariesHideSelfReportedContent = scopedAggregates.contains {
-            $0.manualPebbleCount > 0
+            hasSelfReportedMembers($0)
                 || (AggregatePebblePolicy.isUnattributedCompatibility($0)
                     && !isExplicitlyAllMeasured($0))
         }

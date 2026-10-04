@@ -285,6 +285,23 @@
         }
       }
     },
+    "個人用の瓶は共有できません。共有対象の記録から瓶を描き直してください。" : {
+      "comment" : "Snapshot error: personal jar geometry and totals cannot be used as an external share image",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The personal jar cannot be shared. Draw a jar from records eligible for sharing instead."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "個人用の瓶は共有できません。共有対象の記録から瓶を描き直してください。"
+          }
+        }
+      }
+    },
     "勉強の積み上げには含まれません" : {
       "comment" : "VoiceOver, the jar's black stones, last sentence (no final period): they never count toward study",
       "localizations" : {

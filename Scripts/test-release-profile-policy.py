@@ -77,7 +77,7 @@ def verifier_bundle_check():
 
 
 class SignedCloudEnvironmentTests(unittest.TestCase):
-    def check_bundle(self, *, kind: str, signed_cloud: str, profile_cloud: object):
+    def check_bundle(self, *, kind: str, signed_cloud: object, profile_cloud: object):
         is_development = kind == "development"
         entitlements = {
             "application-identifier": "fixture-team.example.app",
@@ -114,13 +114,28 @@ class SignedCloudEnvironmentTests(unittest.TestCase):
                 self.check_bundle(kind="app-store-connect", signed_cloud="Production",
                                   profile_cloud=value)
 
-    def test_development_archive_still_requires_signed_development(self) -> None:
-        self.assertEqual(self.check_bundle(kind="development", signed_cloud="Development",
-                         profile_cloud=["Production", "Development"]),
-                         ("development", True, "Development"))
-        with self.assertRaisesRegex(ValueError, "signed CloudKit environment"):
-            self.check_bundle(kind="development", signed_cloud="Production",
-                              profile_cloud=["Production", "Development"])
+    def test_development_archive_can_select_either_authorized_cloud_environment(self) -> None:
+        for signed_cloud in ("Development", "Production"):
+            for profile_cloud in (signed_cloud, [signed_cloud], ["Production", "Development"]):
+                with self.subTest(signed_cloud=signed_cloud, profile_cloud=profile_cloud):
+                    self.assertEqual(self.check_bundle(kind="development", signed_cloud=signed_cloud,
+                                     profile_cloud=profile_cloud),
+                                     ("development", True, signed_cloud))
+
+    def test_development_archive_rejects_a_profile_without_the_selected_environment(self) -> None:
+        for signed_cloud, other_cloud in (("Production", "Development"), ("Development", "Production")):
+            for profile_cloud in (other_cloud, [other_cloud], None, [], [signed_cloud, "Unknown"]):
+                with self.subTest(signed_cloud=signed_cloud, profile_cloud=profile_cloud), \
+                        self.assertRaisesRegex(ValueError, "profile CloudKit environment"):
+                    self.check_bundle(kind="development", signed_cloud=signed_cloud,
+                                      profile_cloud=profile_cloud)
+
+    def test_development_archive_rejects_missing_or_invalid_signed_cloud_environment(self) -> None:
+        for signed_cloud in (None, True, 1, [], ["Production"], {}, "", "production", "Production "):
+            with self.subTest(signed_cloud=signed_cloud), \
+                    self.assertRaisesRegex(ValueError, "signed CloudKit environment is missing or invalid"):
+                self.check_bundle(kind="development", signed_cloud=signed_cloud,
+                                  profile_cloud=["Production", "Development"])
 
     def test_non_app_store_distribution_remains_rejected(self) -> None:
         for kind in ("ad-hoc", "enterprise"):
@@ -334,6 +349,44 @@ class ScreenTimeCapabilityTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 self.check(self.screen_capabilities() | {"keychain-access-groups": value})
 
+    def test_apple_token_keychain_group_is_optional_profile_authorization_only(self):
+        for role in ("app", "widget", "monitor"):
+            base = self.role_capabilities(role) if role != "widget" else {}
+            for group in ("fixture-team.example.app", "fixture-team.*"):
+                for value in ([group, "com.apple.token"], ["com.apple.token", group]):
+                    with self.subTest(role=role, value=value):
+                        self.check(base | {"keychain-access-groups": value}, role, profile=True)
+                        with self.assertRaisesRegex(ValueError, "keychain access"):
+                            self.check(base | {"keychain-access-groups": value}, role)
+
+    def test_keychain_profile_rejects_unreviewed_or_malformed_authorizations(self):
+        for value in (None, True, "fixture-team.*", [], ["com.apple.token"],
+                      ["other-team.*", "com.apple.token"],
+                      ["fixture-team.other", "com.apple.token"],
+                      ["fixture-team.*", "com.apple.*"],
+                      ["fixture-team.*", "com.apple.token", "other.group"],
+                      ["fixture-team.*", "com.apple.token", "com.apple.token"],
+                      ["fixture-team.*", "fixture-team.*", "com.apple.token"],
+                      ["fixture-team.*", "fixture-team.example.app", "com.apple.token"]):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "keychain access"):
+                self.check(self.screen_capabilities() | {"keychain-access-groups": value}, profile=True)
+
+    def test_actual_verifier_accepts_unused_apple_token_profile_authorization(self):
+        signed = self.screen_capabilities() | {
+            "application-identifier": "fixture-team.example.app",
+            "com.apple.developer.team-identifier": "fixture-team", "get-task-allow": False,
+        }
+        for group in ("fixture-team.example.app", "fixture-team.*"):
+            with self.subTest(group=group):
+                profile = {"FixtureType": "app-store-connect", "Entitlements": signed |
+                           {"keychain-access-groups": [group, "com.apple.token"]}}
+                self.assertEqual(verifier_bundle_check()(label="fixture monitor", bundle_id="example.app",
+                    signed_entitlements=signed, profile=profile,
+                    identity="apple-distribution", certificate_path="unused",
+                    is_neutral_widget=False, is_screen_time_monitor=True),
+                    ("app-store-connect", False, None))
+                self.assertNotIn("keychain-access-groups", signed)
+
     def test_monitor_takes_non_cloud_branch_in_actual_verifier(self):
         entitlements = self.screen_capabilities() | {
             "application-identifier": "fixture-team.example.app",
@@ -371,11 +424,13 @@ class ArchiveSigningCoherenceTests(unittest.TestCase):
                     validate_archive_signing_classes(self.distribution() | {role: value}, distribution=True)
 
     def test_raw_development_is_never_distribution_ready(self):
-        development = {"app": ("development", True, "Development"),
-                       "widget": ("development", True, None), "monitor": ("development", True, None)}
-        validate_archive_signing_classes(development, distribution=False)
-        with self.assertRaises(ValueError):
-            validate_archive_signing_classes(development, distribution=True)
+        for cloud_environment in ("Development", "Production"):
+            with self.subTest(cloud_environment=cloud_environment):
+                development = {"app": ("development", True, cloud_environment),
+                               "widget": ("development", True, None), "monitor": ("development", True, None)}
+                validate_archive_signing_classes(development, distribution=False)
+                with self.assertRaises(ValueError):
+                    validate_archive_signing_classes(development, distribution=True)
 
 
 class SourceReleaseVersionTests(unittest.TestCase):

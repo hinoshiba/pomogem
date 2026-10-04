@@ -11,8 +11,8 @@ Historical image: `AppStore/screenshots/history/iap-review-20260906.png`
 The current 1.1.0 (10) Simulator image shows the actual StoreKit `Product.displayPrice`
 `$0.99`, including the unlimited learning-app benefit. The storefront country was not
 independently read; this is not evidence of a US storefront or a Japanese-yen price.
-No purchase or restore was performed. The 2026-09-22 image remains in App Store Connect
-until the current local candidate is compared with the signed build and uploaded.
+No purchase or restore was performed. The current candidate image was uploaded and
+its saved replacement verified in App Store Connect on 2026-10-04.
 See `screenshots/README.md` for capture provenance.
 
 Type: Non-Consumable
@@ -37,7 +37,7 @@ Review steps:
 5. The paywall displays the storefront price returned by StoreKit. The link labeled
    “価格・提供条件・販売者情報を確認” opens the pre-purchase terms and seller information.
 6. “購入を復元” (Restore Purchases) is at the bottom of the same screen.
-7. On an authorized iPhone, Settings → “スクリーンタイム” → “勉強アプリの粒” accepts up to five
+7. On an authorized iPhone, Settings → “アプリの利用時間” → “勉強アプリの粒” accepts up to five
    learning apps for free. After purchase or restore, more than five can be selected and saved.
    Category and website selections are not accepted. “黒い石” app selection is unlimited without purchase.
 
@@ -65,7 +65,7 @@ The current review image above includes the added Pro feature and live StoreKit 
 5. PaywallはStoreKitから取得したlocal priceを表示し、「価格・提供条件・販売者情報を確認」から
    購入前の販売条件を開けます。
 6. 「購入を復元」は同じ画面の下部にあります。
-7. 許可済みiPhoneで設定 →「スクリーンタイム」→「勉強アプリの粒」を開き、無料では5アプリまで、
+7. 許可済みiPhoneで設定 →「アプリの利用時間」→「勉強アプリの粒」を開き、無料では5アプリまで、
    購入・復元後は6アプリ以上を選択・保存できることを確認します。「黒い石」は購入不要で無制限です。
 
 スクリーンタイム追加は1.1.0候補です。提出前に本体・Monitor拡張のFamily Controls配布権限承認と

@@ -1480,7 +1480,7 @@ origin/main（`acdcb1f`）を、履歴を書き換えずにマージコミット
 
 - CloudKit の同期モデル7つと、端末内モデル4つ
 - `PomoGemStorageSnapshot.validateSchema`
-- 書き出しの schemaVersion 3
+- 外部書き出しの schemaVersion 4（Screen Time由来の記録と、記録元を確認できない集計を除外）
 - Reward Receipt の形式
 - Live Activity の `ContentState` と attributes
 - 同期している Prefs の enum（`TimerDisplayMode` など）

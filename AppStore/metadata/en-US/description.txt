@@ -1,6 +1,6 @@
 Turn focused time into colorful gems.
 
-PomoGem turns study and work time into a jar of visible progress. Taking a day off never removes the gems you earned. The app interface is available in English and Japanese. Customer support is currently provided in Japanese.
+Study and work time becomes visible progress. Earned gems stay when you take a day off. The app is in English and Japanese. Support is currently provided in Japanese.
 
 CHOOSE A THEME AND START
 
@@ -9,10 +9,10 @@ Choose a theme and a free 25-, 45-, 60-, or 90-minute timer. Finish a session an
 • Custom themes for study and work
 • A tactile jar that responds to taps, tilt, and gentle shaking
 • Ten gems combine into a larger crystal
-• Weekly and lifetime views, milestone stones, and optional manual records kept separate from timed focus
+• Weekly and lifetime views, milestones, and manual records separate from timed focus
 • Weight Journey shows your next milestone and compares your total with the approximate weights of familiar objects
 • Focus and break-end alarms with a choice of sound and strength
-• Images and short GIFs for sharing, always with PomoGem branding and its official website
+• Images and short GIFs for sharing eligible records, always with PomoGem branding and its official website
 • Home and Lock Screen widgets that start a focus without displaying your records
 
 OPTIONAL SCREEN TIME GEMS
@@ -27,7 +27,7 @@ A one-time, non-consumable In-App Purchase unlocks custom timers from 1 minute 0
 
 YOUR STORAGE CHOICE
 
-At first launch, choose private iCloud sync or this iPhone only. Device-only storage supports basic features without an Apple Account or network and never uploads automatically. If you confirm iCloud, theme names, achievement notes, records, settings, and the active timer use your Apple Account's private CloudKit storage. Initial loading and resuming sync require online checks.
+At first launch, choose private iCloud sync or this iPhone only. Device-only mode works without an Apple Account or network and never uploads automatically. If you confirm iCloud, theme names, achievement notes, records, settings, and the active timer use your Apple Account's private CloudKit storage. Initial loading and resuming sync require online checks.
 
 An eligible, previously verified local copy can be used offline in iCloud mode; changes wait on this iPhone for sync. Verified account changes or conflicting history can block access to protect data. Reopening the app may be required. A connection check does not prove all records have uploaded.
 
@@ -35,4 +35,4 @@ Settings lets you enable iCloud using its data to replace device-only records, o
 
 Transfers require a connection and restarts as instructed. Do not uninstall during a transfer. Uninstalling loses device-only records and unsent changes. Exported JSON cannot be reimported for restoration or migration.
 
-Screen Time app selections, pending thresholds, and black gems stay on this iPhone and are excluded from JSON export and storage transfers. Imported learning records follow your chosen storage, including private iCloud sync. Diagnostics stay on-device without app tokens or gem counts. No advertising, tracking, analytics SDK, or developer server.
+Screen Time app selections, pending thresholds, and black gems stay on this iPhone and are excluded from JSON export and storage transfers. Imported learning records follow your chosen storage, including private iCloud sync, but are excluded from shared images, GIFs, captions, and JSON export. Unverified summaries are excluded from sharing and export. Diagnostics stay on-device without app tokens or gem counts. No advertising, tracking, analytics SDK, or developer server.

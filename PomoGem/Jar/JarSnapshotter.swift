@@ -2,12 +2,16 @@ import SpriteKit
 import UIKit
 
 enum JarSnapshotError: LocalizedError {
+    case personalDataCannotBeShared
     case sceneNotPresented
     case textureUnavailable
     case imageUnavailable
 
     var errorDescription: String? {
         switch self {
+        case .personalDataCannotBeShared:
+            String(localized: "個人用の瓶は共有できません。共有対象の記録から瓶を描き直してください。", table: "Jar",
+                   comment: "Snapshot error: personal jar geometry and totals cannot be used as an external share image")
         case .sceneNotPresented:
             String(localized: "瓶の描画がまだ準備できていません。", table: "Jar",
                    comment: "Jar snapshot error: the jar is not on screen yet, so it cannot be drawn into a share card")
@@ -22,6 +26,7 @@ enum JarSnapshotError: LocalizedError {
 }
 
 struct JarSnapshotOptions {
+    private(set) var isExternalShare = false
     var includesSelfReported = true
     var includesTransientEffects = false
     var outputSize: CGSize?
@@ -38,6 +43,7 @@ struct JarSnapshotOptions {
 
     static func share(includesSelfReported: Bool, outputSize: CGSize? = nil) -> Self {
         Self(
+            isExternalShare: true,
             includesSelfReported: includesSelfReported,
             includesTransientEffects: false,
             outputSize: outputSize,
@@ -54,6 +60,7 @@ struct JarSnapshotOptions {
     /// hiding leaves no gem resting on a hole (`ShareJarSnapshotPolicy`).
     func hides(_ descriptor: PebbleDescriptor) -> Bool {
         descriptor.isScreenTimeObstacle
+            || (isExternalShare && (descriptor.source == .screenTime || descriptor.isAggregate))
             || (!includesSelfReported && !descriptor.isMeasured && !descriptor.isAchievement)
     }
 }
@@ -71,6 +78,9 @@ final class JarSnapshotter {
         of scene: JarScene,
         options: JarSnapshotOptions = .widget
     ) throws -> UIImage {
+        // Live geometry and TimeCore are personal projections. Even hiding
+        // private nodes leaves their effect on the pile and core visible.
+        guard !options.isExternalShare else { throw JarSnapshotError.personalDataCannotBeShared }
         guard let view = scene.view else { throw JarSnapshotError.sceneNotPresented }
 
         let originalCameraPosition = scene.camera?.position
@@ -162,6 +172,7 @@ final class JarSnapshotter {
     /// returns for the same `options` (normalised to it): the centrepiece's
     /// stone and glints on the highest resting gems the image shows.
     func shareMotion(of scene: JarScene, options: JarSnapshotOptions) -> ShareJarMotion? {
+        guard !options.isExternalShare else { return nil }
         let crop = scene.snapshotRect
         guard crop.width > 0, crop.height > 0 else { return nil }
         let stageTop = scene.size.height - crop.maxY
