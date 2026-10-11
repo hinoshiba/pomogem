@@ -503,12 +503,12 @@ struct AccumulationPlanView: View {
                     achievementCount: 0,
                     aggregateCount: projection.aggregateBodyCount,
                     representedPebbleCount: projection.completionCount,
-                    accentHex: Constants.Color.auroraWarm
+                    accentHex: TimeFusionPolicy.colorHex
                 )
                 .frame(height: 260)
                 .accessibilityIdentifier("planning.accumulation.jar")
 
-                Text("星図と瓶は、今日からこの計画で積む分の見え方の予測です。今日までの瓶は含めません。粒と結晶は予定した完走リズムを、上の時間・質量は集中時間の累計を表します。記念石・実際の休止日は含めません。", tableName: "Planning")
+                Text("星図と瓶は、今日からこの計画で積む集中時間の予測です。250分が1つの結晶になり、残り時間も次へ引き継ぎます。同じ合計時間なら、1回の長さによらず同じ結晶になります。今日までの瓶・記念石・実際の休止日は含めません。", tableName: "Planning")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -553,7 +553,7 @@ struct AccumulationPlanView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Label(String(localized: "試算の前提", table: "Planning", comment: "Plan card title: the assumptions behind the numbers"), systemImage: "info.circle.fill")
                     .font(.subheadline.weight(.bold))
-                Text("1年を平均365.25日として週回数を換算し、1回の完走を1粒、集中1分を\(MassText.grams(value: Constants.Mass.gramsPerMinute))として計算します。2.50kgごとの瓶の満杯、長期の質量段階、瓶の光は実画面と同じ計算です。10個ずつまとめるため、長期間でも描画する可動体は\(Constants.Jar.maxPhysicsBodies)体以内です。", tableName: "Planning", comment: "Plan: calculation assumptions; the arguments are the mass of one minute (10g) and the physics body limit")
+                Text("1年を平均365.25日として週回数を換算し、集中1分を\(MassText.grams(value: Constants.Mass.gramsPerMinute))として計算します。結晶は合計250分から生まれ、2500分、25000分へと時間でまとまります。余りも含めた瓶の表示は実画面と同じ計算です。完走回数の予測は、結晶の大きさや数に影響しません。", tableName: "Planning", comment: "Plan assumptions: credited time determines crystals independently of the estimated session count")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -797,7 +797,11 @@ struct AccumulationPlanView: View {
         // it triggers no landing feedback or persistence callback. Avoid
         // mutating `soundEnabled` / `hapticsEnabled` here because JarScene's
         // default dependencies are app-wide shared instances.
-        previewScene.restore(pebbles: projection.descriptors)
+        previewScene.configureTimeFusion(
+            totalGrams: projection.grams,
+            colorMix: [StratumColorFraction(hex: TimeFusionPolicy.colorHex, fraction: 1)]
+        )
+        previewScene.restore(pebbles: [])
     }
 
     /// jar-05: a drag across the timeline changes `previewMonth` on every

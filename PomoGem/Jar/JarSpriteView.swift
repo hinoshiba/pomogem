@@ -64,7 +64,8 @@ enum JarAccessibilityPresentation {
         projectionIsLowerBound: Bool,
         projectionIsUnverified: Bool = false,
         pendingMass: PendingMass? = nil,
-        isCloudOfflineSession: Bool = false
+        isCloudOfflineSession: Bool = false,
+        timeSnapshot: TimeFusionSnapshot? = nil
     ) -> String {
         let totalGrams = max(0, rawTotalGrams)
         let pebbleCount = max(0, rawPebbleCount)
@@ -80,8 +81,26 @@ enum JarAccessibilityPresentation {
         )
         // Three sentences: the mass, what the jar holds (one list item per
         // fact, ListText: ja 「、」), then the milestone stones.
-        var organization = [CountText.gems(pebbleCount)]
-        if aggregateCount > 0 {
+        var organization: [String]
+        if timeSnapshot != nil, projectionIsUnverified {
+            organization = []
+        } else if let timeSnapshot {
+            let time = DurationPresentation.focusLabel(grams: timeSnapshot.totalGrams)
+            let count = timeSnapshot.visibleCrystals.count
+            organization = [
+                time,
+                String(localized: "時間の結晶\(count)個", table: "Jar",
+                       comment: "VoiceOver, number of canonical focus-time crystals")
+            ]
+            if timeSnapshot.remainderGrams > 0 {
+                let remainder = DurationPresentation.focusLabel(grams: timeSnapshot.remainderGrams)
+                organization.append(String(localized: "結晶になる途中、\(remainder)", table: "Jar",
+                                           comment: "VoiceOver for focus time carried toward the next crystal"))
+            }
+        } else {
+            organization = [CountText.gems(pebbleCount)]
+        }
+        if timeSnapshot == nil, aggregateCount > 0 {
             // Two keys so each count takes its own plural form in English.
             let crystals = String(localized: "結晶\(aggregateCount)個", table: "Jar",
                                   comment: "VoiceOver, jar contents: the number of crystals")
@@ -90,7 +109,7 @@ enum JarAccessibilityPresentation {
             organization.append(String(localized: "jar.value.crystals", defaultValue: "\(crystals)、\(heldGems)", table: "Jar",
                                        comment: "VoiceOver, jar contents item: the crystals (結晶1個), then the gems they hold (合計10粒分). en: '%1$@ %2$@'"))
         }
-        if legacyAggregateCount > 0 {
+        if timeSnapshot == nil, legacyAggregateCount > 0 {
             organization.append(String(localized: "旧形式の結晶\(legacyAggregateCount)個（保存済み情報を確認できます）", table: "Jar",
                                        comment: "VoiceOver, jar contents item: crystals saved in the old format; their saved details can be opened"))
         }
@@ -131,10 +150,13 @@ enum JarAccessibilityPresentation {
             massDescription = String(localized: "記録した集中時間の質量：\(formattedMass(totalGrams))。", table: "Jar",
                                      comment: "VoiceOver, jar: the lifetime mass of recorded focus. Argument: spoken mass")
         }
+        let organizationDescription = organization.isEmpty ? "" : String(
+            localized: "瓶の整理：\(ListText.inSentence(organization))。", table: "Jar",
+            comment: "VoiceOver, jar: what the jar holds. Argument: the items (3粒、結晶1個、合計10粒分)"
+        )
         return SentenceText.join([
             massDescription,
-            String(localized: "瓶の整理：\(ListText.inSentence(organization))。", table: "Jar",
-                   comment: "VoiceOver, jar: what the jar holds. Argument: the items (3粒、結晶1個、合計10粒分)"),
+            organizationDescription,
             String(localized: "記念石\(achievementCount)個", table: "Jar",
                    comment: "VoiceOver, jar, last sentence (no final period): how many milestone stones")
         ])
@@ -670,9 +692,11 @@ struct JarSpriteView: View {
         .modifier(JarAccessibilityInteractionModifier(
             scene: scene,
             isInteractive: hasPhysicalContent,
-            aggregateID: inspectableAggregateID,
+            aggregateID: effectiveInspectableAggregateID,
             onInspectAggregate:
-                onAggregateAccessibilityAction ?? onAggregateTapped
+                scene.timeFusionSnapshot == nil
+                    ? (onAggregateAccessibilityAction ?? onAggregateTapped)
+                    : onAggregateTapped
         ))
         .onChange(of: reduceMotion) { _, enabled in
             updateMotionBehavior(reduceMotion: enabled)
@@ -865,7 +889,10 @@ struct JarSpriteView: View {
                 projectionIsLowerBound: projectionIsLowerBound,
                 projectionIsUnverified: projectionIsUnverified,
                 pendingMass: pendingMass,
-                isCloudOfflineSession: isCloudOfflineSession
+                isCloudOfflineSession: isCloudOfflineSession,
+                timeSnapshot: scene.timeFusionSnapshot.map { _ in
+                    TimeFusionPolicy.snapshot(totalGrams: totalGrams)
+                }
             )
         }
         guard let obstacles = scene.screenTimeObstacleAccessibilityDescription else {
@@ -889,12 +916,21 @@ struct JarSpriteView: View {
         let base = String(localized: "瓶をタップすると数秒だけ1粒が大きく跳ね、ぶつかった周囲の粒も自然に動いて止まります。その間はiPhoneを傾けたり、軽く振ったりして動かせます", table: "Jar",
                           comment: "VoiceOver hint of the jar: tapping bounces one gem for a few seconds; tilting or shaking the iPhone moves the gems meanwhile")
 #endif
-        guard inspectableAggregateID != nil else { return base }
+        guard effectiveInspectableAggregateID != nil else { return base }
+        if scene.timeFusionSnapshot != nil {
+            return String(localized: "\(base)。結晶のアクションで集中時間の内訳を確認できます", table: "Jar",
+                          comment: "VoiceOver jar hint for canonical time crystals")
+        }
         return String(
             localized: "\(base)。「最新の結晶の内訳を見る」アクションで、保存されている粒数や質量などを確認できます",
             table: "Jar",
             comment: "VoiceOver jar hint: the tap/tilt hint, then the custom action that opens the newest crystal"
         )
+    }
+
+    private var effectiveInspectableAggregateID: UUID? {
+        guard let snapshot = scene.timeFusionSnapshot else { return inspectableAggregateID }
+        return snapshot.visibleCrystals.last?.id
     }
 
     private func performSpatialTap(at point: CGPoint) {

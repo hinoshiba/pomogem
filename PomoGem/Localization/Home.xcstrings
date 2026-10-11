@@ -273,19 +273,19 @@
         }
       }
     },
-    "%@。瓶の整理：%@" : {
-      "comment" : "VoiceOver announcement after a focus: time-core progress, then the count toward the next crystal",
+    "%@が、\nひとつの結晶に。" : {
+      "comment" : "Time-fusion celebration headline: a precise duration represented by the new crystal",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$@. Tidying the jar: %2$@"
+            "value" : "%@,\nin one crystal."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@。瓶の整理：%@"
+            "value" : "%@が、\nひとつの結晶に。"
           }
         }
       }
@@ -494,6 +494,23 @@
         }
       }
     },
+    "%@を表す結晶" : {
+      "comment" : "VoiceOver: the amount of saved focus time represented by this crystal",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A crystal representing %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@を表す結晶"
+          }
+        }
+      }
+    },
     "%@以上" : {
       "comment" : "Home menu and VoiceOver: at least this lifetime mass (the argument is 12 kg)",
       "localizations" : {
@@ -545,8 +562,8 @@
         }
       }
     },
-    "%lld+粒" : {
-      "comment" : "Jar readout pill: at least this many gems (the count is still being tallied)",
+    "%lld件" : {
+      "comment" : "Home menu: original record count",
       "localizations" : {
         "en" : {
           "variations" : {
@@ -554,13 +571,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld+ gems"
+                  "value" : "%lld record"
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld+ gems"
+                  "value" : "%lld records"
                 }
               }
             }
@@ -569,7 +586,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld+粒"
+            "value" : "%lld件"
           }
         }
       }
@@ -768,57 +785,6 @@
         }
       }
     },
-    "%lld粒ぶんの時間が、\nひとつの結晶に。" : {
-      "comment" : "Fusion sheet headline, two lines. %lld is the gems the new crystal holds (10). en: 'The time of %lld gems,\\nin one crystal.'",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The time of %lld gems,\nin one crystal."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld粒ぶんの時間が、\nひとつの結晶に。"
-          }
-        }
-      }
-    },
-    "10粒がそろうと、瓶の中でひとつの結晶にまとまります。瓶を軽く保つための整理で、一粒ずつの時間も、%@の重さも、記録にそのまま残ります。" : {
-      "comment" : "Fusion sheet 「しくみ」: fusing ten gems keeps the jar light and loses nothing. %@ is the crystal's mass",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "When 10 gems are ready, they combine into one crystal in the jar. This keeps the jar light. The time from each gem and the full %@ of mass remain in your records."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "10粒がそろうと、瓶の中でひとつの結晶にまとまります。瓶を軽く保つための整理で、一粒ずつの時間も、%@の重さも、記録にそのまま残ります。"
-          }
-        }
-      }
-    },
-    "10粒で、時間の核が生まれました。これからは核が、積み上げた時間の重さを表します。" : {
-      "comment" : "Fusion sheet, only when the first crystal and the first time core arrive together",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ten gems made your first time core. From now on, the core shows the weight of the time you have built up."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "10粒で、時間の核が生まれました。これからは核が、積み上げた時間の重さを表します。"
-          }
-        }
-      }
-    },
     "1分0秒〜360分0秒" : {
       "comment" : "Custom focus length sheet: the shortest and longest lengths",
       "localizations" : {
@@ -849,6 +815,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "360分にする場合は、秒を0にしてください。"
+          }
+        }
+      }
+    },
+    "4時間10分を積み上げ、時間の核が生まれました。これからも、集中した時間で育ちます。" : {
+      "comment" : "Fusion sheet, only when the first crystal and the first time core arrive together",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "After 4 hr 10 min, your time core is born. It will keep growing with your focus time."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "4時間10分を積み上げ、時間の核が生まれました。これからも、集中した時間で育ちます。"
           }
         }
       }
@@ -917,23 +900,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "iCloudを確認中"
-          }
-        }
-      }
-    },
-    "×10の結晶が10個そろうと、×100の結晶になります。" : {
-      "comment" : "Fusion sheet 「しくみ」: ten ×10 crystals make a ×100 crystal",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ten ×10 crystals become one ×100 crystal."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "×10の結晶が10個そろうと、×100の結晶になります。"
           }
         }
       }
@@ -1297,8 +1263,8 @@
         }
       }
     },
-    "この端末で確認済み %lld粒" : {
-      "comment" : "Jar readout pill while iCloud is checked: gems this device has confirmed",
+    "この端末で確認済みの記録%lld件" : {
+      "comment" : "VoiceOver, menu metrics while iCloud is checked: original records this device has confirmed",
       "localizations" : {
         "en" : {
           "variations" : {
@@ -1306,13 +1272,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld gem confirmed on this device"
+                  "value" : "%lld record confirmed on this device"
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld gems confirmed on this device"
+                  "value" : "%lld records confirmed on this device"
                 }
               }
             }
@@ -1321,70 +1287,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "この端末で確認済み %lld粒"
-          }
-        }
-      }
-    },
-    "この端末で確認済みの集中%lld粒" : {
-      "comment" : "VoiceOver, menu metrics while iCloud is checked: focus gems this device has confirmed",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld focus gem confirmed on this device"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld focus gems confirmed on this device"
-                }
-              }
-            }
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "この端末で確認済みの集中%lld粒"
-          }
-        }
-      }
-    },
-    "この結晶の内訳を見る" : {
-      "comment" : "Fusion sheet primary action: opens the new crystal's breakdown",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "See This Crystal's Details"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "この結晶の内訳を見る"
-          }
-        }
-      }
-    },
-    "この結晶をカードにする" : {
-      "comment" : "Fusion sheet action: makes a share card of the new crystal",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Make a Card of This Crystal"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "この結晶をカードにする"
+            "value" : "この端末で確認済みの記録%lld件"
           }
         }
       }
@@ -2921,6 +2824,81 @@
         }
       }
     },
+    "元の記録" : {
+      "comment" : "Home menu metric caption: original records, not visible crystals",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Original records"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "元の記録"
+          }
+        }
+      }
+    },
+    "元の記録 %lld+件" : {
+      "comment" : "Jar readout pill: at least this many original records, not visible crystals",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld+ original record"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld+ original records"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "元の記録 %lld+件"
+          }
+        }
+      }
+    },
+    "元の記録 %lld件" : {
+      "comment" : "Jar readout pill: original records, not visible crystals\nVoiceOver, menu metrics: original records, not visible crystals",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld original record"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld original records"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "元の記録 %lld件"
+          }
+        }
+      }
+    },
     "先にテーマを追加してください" : {
       "comment" : "Toast: add a theme before adding time",
       "localizations" : {
@@ -3125,23 +3103,6 @@
         }
       }
     },
-    "刻印" : {
-      "comment" : "Fusion sheet tile title for Pro: the month engraved on the crystal. en: 'Engraving'",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Engraving"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "刻印"
-          }
-        }
-      }
-    },
     "前回使った時間として保存できませんでした" : {
       "comment" : "Toast: the length of the focus just started could not be saved as the last-used length",
       "localizations" : {
@@ -3240,6 +3201,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "取り消しました。瓶には積んでいません"
+          }
+        }
+      }
+    },
+    "合計4時間10分で結晶1個。10個分の時間で、次の大きさにまとまります。途中の時間も繰り越すので、短く分けても同じ時間なら同じ結晶になります。" : {
+      "comment" : "Time-based fusion rules: exact remainder and split-invariant crystal sizes and counts",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Every 4 hr 10 min forms a crystal. Ten crystals’ worth of time forms the next size. All remaining time carries forward, so the same total time forms the same crystals, even in shorter sessions."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合計4時間10分で結晶1個。10個分の時間で、次の大きさにまとまります。途中の時間も繰り越すので、短く分けても同じ時間なら同じ結晶になります。"
+          }
+        }
+      }
+    },
+    "合計時間" : {
+      "comment" : "Time-fusion receipt: all saved focus time",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Total time"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合計時間"
           }
         }
       }
@@ -3460,40 +3455,6 @@
         }
       }
     },
-    "新しい結晶。その下に、もとになった%lld個の結晶" : {
-      "comment" : "VoiceOver: the fusion sheet art, a larger crystal over its source crystals. %lld is 10",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "A new crystal, with its %lld source crystals below it"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "新しい結晶。その下に、もとになった%lld個の結晶"
-          }
-        }
-      }
-    },
-    "新しい結晶。その下に、もとになった%lld粒" : {
-      "comment" : "VoiceOver: the fusion sheet art, a new ×10 crystal over its source gems. %lld is 10",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "A new crystal, with its %lld source gems below it"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "新しい結晶。その下に、もとになった%lld粒"
-          }
-        }
-      }
-    },
     "明日もこの時間に？" : {
       "comment" : "First completion card: optional offer of a daily reminder at this time. en: 'Same time tomorrow?'",
       "localizations" : {
@@ -3512,7 +3473,7 @@
       }
     },
     "時間" : {
-      "comment" : "Fusion sheet tile title: the focus time the crystal holds. en: 'Time'\nManual entry confirmation row: the self-reported time",
+      "comment" : "Manual entry confirmation row: the self-reported time",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3524,6 +3485,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "時間"
+          }
+        }
+      }
+    },
+    "時間のまとまりと元の記録を見る" : {
+      "comment" : "Home link below the jar: opens time-based crystals and original records",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View time crystals and original records"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間のまとまりと元の記録を見る"
           }
         }
       }
@@ -3609,40 +3587,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "時間の核の進みを確認しています"
-          }
-        }
-      }
-    },
-    "時間の核は、粒の数ではなく積み上げた時間で進みます。次へ急ぐ必要はありません。" : {
-      "comment" : "Fusion sheet 「しくみ」: the time core counts time, not gems; no need to hurry",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The time core grows with the time you have built up, not the number of gems. There is no need to hurry."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "時間の核は、粒の数ではなく積み上げた時間で進みます。次へ急ぐ必要はありません。"
-          }
-        }
-      }
-    },
-    "時間の核は、粒の数ではなく集中した時間で進みます。25分が1.0標準単位で、今回は%@標準単位です。" : {
-      "comment" : "Completion card 「しくみ」: the time core counts time, not gems; 25 minutes is one standard unit. %@ is this focus in standard units (1.0)",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The time core grows with focus time, not the number of gems. Twenty-five minutes is one standard unit; this session was %@ standard units."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "時間の核は、粒の数ではなく集中した時間で進みます。25分が1.0標準単位で、今回は%@標準単位です。"
           }
         }
       }
@@ -3796,6 +3740,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "本日の手動追加上限です"
+          }
+        }
+      }
+    },
+    "次の結晶まで あと%@" : {
+      "comment" : "Exact remaining saved focus time to the next 250-minute crystal",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ until the next crystal"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "次の結晶まで あと%@"
           }
         }
       }
@@ -4084,8 +4045,8 @@
         }
       }
     },
-    "確認済み %lld粒" : {
-      "comment" : "Home menu metric while iCloud is checked and no lifetime total can be shown: gems this device has confirmed",
+    "確認済み %lld件" : {
+      "comment" : "Home menu metric while iCloud is checked: original records this device has confirmed",
       "localizations" : {
         "en" : {
           "variations" : {
@@ -4093,13 +4054,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld gem confirmed"
+                  "value" : "%lld confirmed record"
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld gems confirmed"
+                  "value" : "%lld confirmed records"
                 }
               }
             }
@@ -4108,7 +4069,36 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "確認済み %lld粒"
+            "value" : "確認済み %lld件"
+          }
+        }
+      }
+    },
+    "確認済みの記録 %lld件" : {
+      "comment" : "Jar readout pill while iCloud is checked: original records this device has confirmed",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld confirmed record"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld confirmed records"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "確認済みの記録 %lld件"
           }
         }
       }
@@ -4181,6 +4171,23 @@
         }
       }
     },
+    "積み上がりをカードにする" : {
+      "comment" : "Fusion sheet action: makes a share card of the new crystal",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Make a Card of Your Progress"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "積み上がりをカードにする"
+          }
+        }
+      }
+    },
     "積み上がりを見る" : {
       "comment" : "Home menu row: open the Progress overview",
       "localizations" : {
@@ -4211,6 +4218,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "積み上がり計画"
+          }
+        }
+      }
+    },
+    "積み上げた時間と記録を見る" : {
+      "comment" : "Fusion sheet primary action: opens the new crystal's breakdown",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View Your Time and Records"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "積み上げた時間と記録を見る"
           }
         }
       }
@@ -4300,74 +4324,6 @@
         }
       }
     },
-    "粒" : {
-      "comment" : "Fusion sheet tile title: how many gems the crystal holds. en: 'Gems'",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gems"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "粒"
-          }
-        }
-      }
-    },
-    "粒は1回の完走につき1つです。10粒そろうと、瓶の中でひとつの結晶にまとまります（記録と重さはそのまま）。次の結晶まで あと%lld粒。" : {
-      "comment" : "Completion card 「しくみ」: ten gems fuse into one crystal; %lld gems to the next crystal",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Each completed focus adds one gem. Ten gems combine into a crystal in the jar; the records and mass stay the same. %lld gems to the next crystal."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "粒は1回の完走につき1つです。10粒そろうと、瓶の中でひとつの結晶にまとまります（記録と重さはそのまま）。次の結晶まで あと%lld粒。"
-          }
-        }
-      }
-    },
-    "粒は1回の完走につき1つです。この一粒で10粒がそろい、瓶の中でひとつの結晶になります。記録と重さはそのままです。" : {
-      "comment" : "Completion card 「しくみ」: this gem completes ten, which fuse into one crystal; nothing is lost",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Each completed focus adds one gem. This gem makes ten, which combine into a crystal in the jar. The records and mass stay the same."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "粒は1回の完走につき1つです。この一粒で10粒がそろい、瓶の中でひとつの結晶になります。記録と重さはそのままです。"
-          }
-        }
-      }
-    },
-    "粒は1回の完走につき1つです。結晶までの数は、確認が済むと表示します。" : {
-      "comment" : "Completion card 「しくみ」 while the gem count is being checked",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Each completed focus adds one gem. The count to the next crystal appears after verification."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "粒は1回の完走につき1つです。結晶までの数は、確認が済むと表示します。"
-          }
-        }
-      }
-    },
     "粒数・質量など、保存済みの内訳" : {
       "comment" : "VoiceOver, crystal card of an older crystal without colors: what its details hold",
       "localizations" : {
@@ -4436,23 +4392,6 @@
         }
       }
     },
-    "結晶" : {
-      "comment" : "Fusion sheet tile title: the crystal's size (×10). en: 'Crystal'",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Crystal"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "結晶"
-          }
-        }
-      }
-    },
     "結晶の保存を再試行します" : {
       "localizations" : {
         "en" : {
@@ -4465,6 +4404,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "結晶の保存を再試行します"
+          }
+        }
+      }
+    },
+    "結晶の時間を確認中" : {
+      "comment" : "Time-fusion progress while the total is unverified",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking crystal time"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結晶の時間を確認中"
           }
         }
       }
@@ -4501,6 +4457,23 @@
         }
       }
     },
+    "結晶は記録済みの合計時間を表します。ひとつずつの学習記録は、元のまま残ります。" : {
+      "comment" : "Time crystals are a total-time display; original study records remain intact",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crystals represent your total recorded focus time. Each original study record stays intact."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結晶は記録済みの合計時間を表します。ひとつずつの学習記録は、元のまま残ります。"
+          }
+        }
+      }
+    },
     "結晶をつくっています" : {
       "comment" : "Jar capsule while ten gems fuse",
       "localizations" : {
@@ -4514,23 +4487,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "結晶をつくっています"
-          }
-        }
-      }
-    },
-    "結晶をタップすると、内訳を見られます" : {
-      "comment" : "Hint under the jar until a crystal's detail has been opened once",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tap a crystal to see its details"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "結晶をタップすると、内訳を見られます"
           }
         }
       }
@@ -4564,6 +4520,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "続けた先の瓶と質量を予測"
+          }
+        }
+      }
+    },
+    "繰り越し" : {
+      "comment" : "Time-fusion receipt: exact focus time carried toward the next crystal",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Carried forward"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "繰り越し"
           }
         }
       }
@@ -5352,52 +5325,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "開いています"
-          }
-        }
-      }
-    },
-    "集中" : {
-      "comment" : "Home menu metric caption: gems from focus sessions",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Focus"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "集中"
-          }
-        }
-      }
-    },
-    "集中%lld粒" : {
-      "comment" : "VoiceOver, menu metrics: gems from focus sessions",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld focus gem"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld focus gems"
-                }
-              }
-            }
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "集中%lld粒"
           }
         }
       }

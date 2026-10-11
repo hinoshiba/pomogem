@@ -1,275 +1,145 @@
 import XCTest
 
-/// Proves the first decimal fusion through the real UI and persistence path.
-///
-/// The first nine demo focuses are deliberately completed instead of inserting
-/// model objects from the test runner. That keeps the seed on the same path as
-/// a user's measured focus, while DEBUG's 12-second duration makes every source
-/// a deterministic 250g pebble. The tenth completion then exercises SpriteKit
-/// landing, aggregate persistence, celebration, scoped sharing and overview.
+/// Ten real DEBUG completions each credit the standard 25-minute record.
+/// The jar shows their conserved total, including the unfinished time unit,
+/// and opens the total-time view without inventing a source subset.
 @MainActor
 final class DecimalFusionEndToEndUITests: XCTestCase {
     private var app: XCUIApplication!
 
     override func setUpWithError() throws {
         continueAfterFailure = false
-        executionTimeAllowance = 360
-
+        executionTimeAllowance = 420
         app = XCUIApplication()
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
         PomoGemUITestLanguage.configureJapanese(app)
-        app.launchArguments += [
-            // Ten completions intentionally cross the review threshold. Keep
-            // the App Store review controller outside this aggregation test.
-            "-review.requested-version", "1.0"
-        ]
+        app.launchArguments += ["-review.requested-version", "1.0"]
+    }
+
+    func testTenMeasuredCompletionsConserveTimeAndOpenTheOriginalRecords() throws {
         app.launch()
+        let probe = app.descendants(matching: .any)["jar.presentation.probe"]
+        XCTAssertTrue(probe.waitForExistence(timeout: 12))
 
-        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
-        selectDemoDuration()
-    }
+        for index in 1...10 {
+            selectDemoDuration()
+            let start = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "12秒集中する")).firstMatch
+            XCTAssertTrue(wait(timeout: 8) { start.exists && start.isEnabled })
+            start.tap()
+            stopCompletionAlertIfPresented(in: app)
+            let dismiss = app.buttons["休憩の提案を閉じる"]
+            XCTAssertTrue(dismiss.waitForExistence(timeout: 28), "Completion \(index)")
+            XCTAssertFalse(app.staticTexts["fusion.celebration.title"].exists,
+                           "The immediate reward must be acknowledged before time fusion")
+            dismiss.tap()
 
-    func testTenthMeasuredPebbleBecomesOneReversibleDecimalCrystal() throws {
-        let presentationProbe = app.descendants(matching: .any)["jar.presentation.probe"]
-        XCTAssertTrue(presentationProbe.waitForExistence(timeout: 4))
-
-        for expectedCount in 1 ... 9 {
-            completeDemoFocusAndDismissBreak()
-            let sample = try waitForPresentationCount(
-                expectedCount,
-                from: presentationProbe,
-                timeout: 5
-            )
-            assertLooseMeasuredPebbles(sample, expectedCount: expectedCount)
+            if index < 10 {
+                try waitForTotal(index * 250, probe: probe)
+                XCTAssertFalse(app.staticTexts["fusion.celebration.title"].exists,
+                               "Less than 250 minutes cannot create a time crystal")
+            }
         }
 
-        let seeded = try presentationSample(from: presentationProbe)
-        let sourceIDs = try parsedSourceIDs(from: seeded)
-        XCTAssertEqual(sourceIDs.count, 9)
-        XCTAssertEqual(Set(sourceIDs).count, 9, "The nine source records must be unique")
-        // The jar counts a completed focus when its gem lands (dev-D7), a
-        // moment after the probe, whose count includes a gem still falling.
-        let nineGemJar = app.buttons["瓶"]
-        XCTAssertTrue(
-            waitForCondition(timeout: 6) { (nineGemJar.value as? String)?.contains("9粒") == true },
-            (nineGemJar.value as? String) ?? ""
-        )
-
-        startDemoFocus()
-        stopCompletionAlertIfPresented(in: app)
-        let celebrationTitle = app.staticTexts["fusion.celebration.title"]
-        let dismissBreak = app.buttons["休憩の提案を閉じる"]
-
-        XCTAssertTrue(
-            dismissBreak.waitForExistence(timeout: 28),
-            "The tenth effort must present its immediate reward before the larger fusion beat"
-        )
-        XCTAssertFalse(
-            celebrationTitle.exists,
-            "The fusion sheet must wait until the immediate completion reward is acknowledged"
-        )
-        let completedFusion = app.descendants(matching: .any)["reward.fusion-progress"]
-        XCTAssertTrue(completedFusion.waitForExistence(timeout: 3))
-        XCTAssertTrue(
-            completedFusion.label.contains("×10完成 10/10"),
-            "The tenth effort must hold the completed 10/10 beat before advancing: \(completedFusion.label)"
-        )
-        dismissBreak.tap()
-
-        XCTAssertTrue(
-            celebrationTitle.waitForExistence(timeout: 10),
-            "Ten landed level-zero pebbles must present the first decimal-fusion celebration"
-        )
-        XCTAssertTrue(app.staticTexts["重さはそのまま 2.50kg"].waitForExistence(timeout: 3))
-        // product-05: the first ×10 made the time core too, so this sheet
-        // (and no later one) teaches it once.
+        let title = app.staticTexts["fusion.celebration.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 12))
+        XCTAssertTrue(title.label.contains("4時間10分"), title.label)
         XCTAssertTrue(app.staticTexts["fusion.celebration.core-birth"].exists)
-        XCTAssertFalse(app.staticTexts["LOSSLESS STORAGE"].exists)
-        // The mechanics sit behind 「しくみ」, and VoiceOver reads them whether
-        // it is open or not.
-        let continuityCopy = app.buttons["fusion.celebration.mechanics"]
-        XCTAssertTrue(continuityCopy.waitForExistence(timeout: 3))
-        for phrase in ["一粒ずつの時間", "2.50kg", "急ぐ必要はありません"] {
-            XCTAssertTrue(
-                continuityCopy.label.contains(phrase),
-                "The fusion explanation must preserve each effort, exact mass, and an unhurried next step: \(continuityCopy.label)"
-            )
-        }
+        XCTAssertFalse(app.buttons["fusion.celebration.month-label-hint"].exists,
+                       "A total-time crystal cannot promise the month of arbitrary source records")
+        let mechanics = app.buttons["fusion.celebration.mechanics"]
+        XCTAssertTrue(mechanics.exists)
+        XCTAssertTrue(mechanics.label.contains("合計時間"), mechanics.label)
+        XCTAssertTrue(mechanics.label.contains("元のまま"), mechanics.label)
+        capture("Ten measured completions — 250 minutes conserved")
+        app.buttons["fusion.celebration.close"].tap()
+        try waitForTotal(2_500, probe: probe)
 
-        app.buttons["この結晶をカードにする"].tap()
-        XCTAssertTrue(app.navigationBars["カードにする"].waitForExistence(timeout: 8))
-        let scopedShareCard = app.descendants(matching: .any).matching(
-            NSPredicate(
-                format: "label CONTAINS %@ AND label CONTAINS %@ AND label CONTAINS %@ AND label CONTAINS %@",
-                "2,500グラム、4時間10分",
-                "10粒",
-                "うち実測10粒",
-                "結晶1個"
-            )
-        ).firstMatch
-        XCTAssertTrue(
-            scopedShareCard.waitForExistence(timeout: 12),
-            "The celebration share route must preserve the aggregate's exact mass, its focus time and source counts"
-        )
-        XCTAssertFalse(
-            app.descendants(matching: .any)["share.partial-coverage-notice"].exists,
-            "A ten-source aggregate must be fully reconstructable"
-        )
-
-        let shareAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        shareAttachment.name = "First ×10 crystal — scoped 2500g share card"
-        shareAttachment.lifetime = .keepAlways
-        add(shareAttachment)
-
-        app.navigationBars["カードにする"].buttons["閉じる"].tap()
-        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 6))
-        dismissBreakOfferIfPresent()
-
-        let fused = try waitForPresentationCount(1, from: presentationProbe, timeout: 8)
-        XCTAssertEqual(fused.recordEntries.count, 1)
-        let aggregateEntry = try XCTUnwrap(fused.recordEntries.first)
-        XCTAssertEqual(aggregateEntry.grams, 2_500)
-        let aggregateID = try XCTUnwrap(UUID(uuidString: aggregateEntry.id))
-        XCTAssertFalse(
-            Set(sourceIDs).contains(aggregateID),
-            "The aggregate must have its own identity rather than reusing a source ID"
-        )
-
-        let jarValue = try XCTUnwrap(app.buttons["瓶"].value as? String)
-        XCTAssertTrue(jarValue.contains("0粒"), jarValue)
-        XCTAssertTrue(jarValue.contains("結晶1個"), jarValue)
-        XCTAssertTrue(jarValue.contains("合計10粒分"), jarValue)
-        XCTAssertTrue(jarValue.contains("2.50キログラム"), jarValue)
-        XCTAssertTrue(
-            jarValue.contains("×100へ 1/10"),
-            "After ×10 forms, the durable ×100 horizon must remain explicit: \(jarValue)"
-        )
-        XCTAssertTrue(
-            jarValue.contains("次の結晶まであと10粒"),
-            "The next reachable crystal must remain explicit beside the long horizon: \(jarValue)"
-        )
-
-        // Tap the crystal where it is on screen. The jar's accessibility frame
-        // is wider than the SpriteKit view, so a normalized offset in it lands
-        // up to ~25 pt right of the gem, enough to miss depending on where
-        // the new crystal came to rest.
-        let resting = try waitForRestingTarget(from: presentationProbe)
-        XCTAssertGreaterThanOrEqual(resting.targetWindowX, 0, "The probe must report the crystal's window position")
-        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
-            dx: resting.targetWindowX,
-            dy: resting.targetWindowY
-        )).tap()
-        let inspectAggregate = app.buttons["jar.aggregate.inspect"]
-        XCTAssertTrue(
-            inspectAggregate.waitForExistence(timeout: 3),
-            "Tapping the physical aggregate must reveal its non-obstructing detail affordance"
-        )
-        let jarHeightWithTip = app.buttons["瓶"].frame.height
-        inspectAggregate.tap()
-        XCTAssertTrue(app.navigationBars["結晶の内訳"].waitForExistence(timeout: 4))
-        XCTAssertTrue(
-            app.descendants(matching: .any)["overview.cluster.preservation"]
-                .waitForExistence(timeout: 3)
-        )
-        XCTAssertTrue(app.staticTexts["10粒分の積み重ね"].exists)
-        app.buttons["overview.cluster.close"].tap()
-        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
-        // home-11: once a crystal's detail has been opened, the tip row under
-        // the jar goes away and the jar gets its 72 pt back.
-        XCTAssertTrue(
-            waitForCondition(timeout: 4) { self.app.buttons["瓶"].frame.height > jarHeightWithTip + 40 },
-            "The jar must regain the tip row's height: before=\(jarHeightWithTip) after=\(app.buttons["瓶"].frame.height)"
-        )
-        // The next tap shows the card under the jar, hanging under the
-        // bottle's base: over the jar it covered the time core and the pile
-        // (#47). The jar keeps its size, and the start button stays clear
-        // (`CrystalCardPlacementUITests` pins it on every phone).
-        let jarHeightAfterDetail = app.buttons["瓶"].frame.height
-        tapCrystal(from: presentationProbe)
-        XCTAssertTrue(
-            inspectAggregate.waitForExistence(timeout: 3),
-            "After its detail, a tap shows the crystal's card under the jar"
-        )
-        XCTAssertTrue(waitForCondition(timeout: 3) { inspectAggregate.isHittable })
-        let jarFrame = app.buttons["瓶"].frame
-        let launcherFrame = app.buttons["home.focus-launcher"].frame
-        // The stage can be taller than the bottle (17 Pro); every gem rests
-        // inside the bottle, so the card belongs under its base.
-        let bottle = try XCTUnwrap(probeRect("bottle", from: presentationProbe), "The probe reports the bottle")
-        XCTAssertGreaterThanOrEqual(
-            inspectAggregate.frame.minY,
-            bottle.maxY,
-            "Under the bottle: card=\(inspectAggregate.frame) bottle=\(bottle) jar=\(jarFrame)"
-        )
-        XCTAssertLessThanOrEqual(
-            inspectAggregate.frame.maxY,
-            launcherFrame.minY + 0.5,
-            "Above the start button: card=\(inspectAggregate.frame) start=\(launcherFrame)"
-        )
-        XCTAssertEqual(jarFrame.height, jarHeightAfterDetail, accuracy: 0.5, "The card never resizes the jar")
-        saveScreenshot("crystal-card-under-jar")
-        XCTAssertTrue(
-            waitForCondition(timeout: 9) { !inspectAggregate.exists },
-            "The card still closes by itself"
-        )
-
-        let afterDirectInspection = try waitForPresentationCount(
-            1,
-            from: presentationProbe,
-            timeout: 3
-        )
-        XCTAssertEqual(afterDirectInspection.rawRecords, fused.rawRecords)
-        XCTAssertEqual(afterDirectInspection.recordEntries.first?.grams, 2_500)
-
-        openMenuAction(containing: "積み上がりを見る")
+        try tapRestingCrystal(probe)
         XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 8))
-        let lenses = app.segmentedControls["overview.lens"]
-        XCTAssertTrue(lenses.waitForExistence(timeout: 4))
-        lenses.buttons["結晶"].tap()
-
-        let lifetimeCore = app.descendants(matching: .any)["overview.constellation.core"]
-        XCTAssertTrue(
-            lifetimeCore.waitForExistence(timeout: 4),
-            "The lifetime core must first materialize after the tenth persisted effort"
-        )
-        XCTAssertEqual(lifetimeCore.label, "時間の核")
-        let lifetimeCoreValue = try XCTUnwrap(lifetimeCore.value as? String)
-        XCTAssertTrue(lifetimeCoreValue.contains("集中2.50kg"), lifetimeCoreValue)
-        XCTAssertTrue(lifetimeCoreValue.contains("、10粒、"), lifetimeCoreValue)
-        XCTAssertFalse(lifetimeCoreValue.contains("標準単位"), lifetimeCoreValue)
-        XCTAssertFalse(
-            app.descendants(matching: .any)["overview.constellation.destination"].exists
-        )
-
-        let aggregateSummary = app.buttons.matching(
-            NSPredicate(
-                format: "label CONTAINS %@ AND label CONTAINS %@ AND label CONTAINS %@",
-                "×10の結晶",
-                "10粒",
-                "2.5キログラム"
-            )
-        ).firstMatch
-        XCTAssertTrue(
-            scrollUntilHittable(aggregateSummary),
-            "The overview must expose exactly one ×10 aggregate with the conserved 2500g mass"
-        )
-        aggregateSummary.tap()
-
-        XCTAssertTrue(app.navigationBars["結晶の内訳"].waitForExistence(timeout: 6))
-        XCTAssertTrue(app.staticTexts["10粒分の積み重ね"].waitForExistence(timeout: 4))
-        XCTAssertTrue(app.staticTexts["2.5kg"].exists)
-        XCTAssertTrue(app.staticTexts["タイマー"].exists)
-        XCTAssertTrue(app.staticTexts["手動"].exists)
-        XCTAssertTrue(app.staticTexts["0粒"].exists)
-
-        let overviewAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        overviewAttachment.name = "First ×10 crystal — reversible overview detail"
-        overviewAttachment.lifetime = .keepAlways
-        add(overviewAttachment)
+        XCTAssertFalse(app.navigationBars["結晶の内訳"].exists,
+                       "A time unit is not an arbitrary group of the original sessions")
+        try openOriginalRecords()
+        capture("Ten measured completions — original records remain reachable")
     }
 
-    private func waitForCondition(timeout: TimeInterval, _ condition: () -> Bool) -> Bool {
+    func testTimeCrystalTapOpensTimeAndRecordsAtAccessibilitySize() throws {
+        app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1"
+        app.launchEnvironment["POMOGEM_UI_TEST_GEM_SHOWCASE"] = "timeLong"
+        app.launch()
+        let probe = app.descendants(matching: .any)["jar.presentation.probe"]
+        XCTAssertTrue(probe.waitForExistence(timeout: 12))
+        try waitForTotal(5_000, probe: probe)
+        try tapRestingCrystal(probe)
+        XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.buttons["jar.aggregate.inspect"].exists)
+        try openOriginalRecords()
+        capture("AX5 — time crystal opens original records")
+    }
+
+    private func selectDemoDuration() {
+        let picker = app.buttons["home.duration-picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 8))
+        picker.tap()
+        let demo = app.buttons["12秒、DEMO"]
+        XCTAssertTrue(demo.waitForExistence(timeout: 4))
+        demo.tap()
+    }
+
+    private func openOriginalRecords() throws {
+        let segments = app.segmentedControls["overview.lens"]
+        if segments.waitForExistence(timeout: 2) {
+            segments.buttons["結晶"].tap()
+        } else {
+            let menu = app.buttons["overview.lens"]
+            XCTAssertTrue(menu.waitForExistence(timeout: 4))
+            menu.tap()
+            app.buttons.matching(NSPredicate(format: "label == %@ AND identifier != %@", "結晶", "overview.lens")).firstMatch.tap()
+        }
+        let records = app.buttons["overview.time-crystals.records"]
+        for _ in 0..<12 where !(records.exists && records.isHittable) { app.swipeUp() }
+        XCTAssertTrue(records.exists && records.isHittable)
+        records.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["overview.timeline.year-list"].waitForExistence(timeout: 8))
+    }
+
+    private func waitForTotal(_ grams: Int, probe: XCUIElement) throws {
+        XCTAssertTrue(wait(timeout: 12) {
+            let fields = self.probeFields(probe)
+            let entries = (fields["records"] ?? "").split(separator: ",")
+            let masses = entries.compactMap { $0.split(separator: ":").last.flatMap { Int($0) } }
+            return masses.reduce(0, +) == grams && masses.count == (grams < 5_000 ? 1 : 2)
+        }, probe.value as? String ?? "")
+    }
+
+    private func tapRestingCrystal(_ probe: XCUIElement) throws {
+        var last = CGPoint(x: -1, y: -1)
+        var resting: CGPoint?
+        var stillSince = Date()
+        XCTAssertTrue(wait(timeout: 12) {
+            let fields = self.probeFields(probe)
+            guard let x = fields["crystalWindowX"].flatMap(Double.init),
+                  let y = fields["crystalWindowY"].flatMap(Double.init), x >= 0, y >= 0 else { return false }
+            let point = CGPoint(x: x, y: y)
+            if abs(point.x - last.x) > 0.5 || abs(point.y - last.y) > 0.5 { stillSince = Date() }
+            last = point
+            guard Date().timeIntervalSince(stillSince) >= 0.6 else { return false }
+            resting = point
+            return true
+        }, "A projected time crystal must settle inside the jar")
+        let point = try XCTUnwrap(resting)
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: point.x, dy: point.y)).tap()
+    }
+
+    private func probeFields(_ probe: XCUIElement) -> [String: String] {
+        Dictionary(uniqueKeysWithValues: (probe.value as? String ?? "").split(separator: ";").compactMap {
+            let fields = $0.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            guard fields.count == 2 else { return nil }
+            return (String(fields[0]), String(fields[1]))
+        })
+    }
+
+    private func wait(timeout: TimeInterval, condition: () -> Bool) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         repeat {
             if condition() { return true }
@@ -278,428 +148,10 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         return condition()
     }
 
-    /// settings-04. A free user's first fusion offers one quiet link to Pro's
-    /// month label, below every celebration action. Tapping it closes the
-    /// sheet first; the paywall then opens on its own, leading with the
-    /// month-label row. The "offered once" flag is pinned to NO through the
-    /// argument domain so the link is deterministic on a reused Simulator.
-    func testFreeFusionOffersAQuietMonthLabelLinkThatOpensThePaywallAfterTheSheet() throws {
-        app.terminate()
-        app.launchArguments += ["-pro.month-label-hint.offered", "NO"]
-        app.launch()
-        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
-        selectDemoDuration()
-
-        for _ in 1 ... 9 {
-            completeDemoFocusAndDismissBreak()
-        }
-        startDemoFocus()
-        stopCompletionAlertIfPresented(in: app)
-        let dismissBreak = app.buttons["休憩の提案を閉じる"]
-        XCTAssertTrue(dismissBreak.waitForExistence(timeout: 28))
-        dismissBreak.tap()
-
-        let celebrationTitle = app.staticTexts["fusion.celebration.title"]
-        XCTAssertTrue(celebrationTitle.waitForExistence(timeout: 10))
-        let hint = app.buttons["fusion.celebration.month-label-hint"]
-        XCTAssertTrue(hint.waitForExistence(timeout: 4))
-        XCTAssertTrue(hint.label.contains("Proなら、この結晶に"), hint.label)
-        let rest = app.buttons["ここで休む"]
-        XCTAssertTrue(rest.exists)
-        for _ in 0 ..< 4 where !hint.isHittable {
-            app.swipeUp()
-        }
-        XCTAssertTrue(hint.isHittable)
-        XCTAssertGreaterThan(hint.frame.minY, rest.frame.minY, "The link sits below every celebration action")
-        let hintAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        hintAttachment.name = "First ×10 crystal — free user's month-label link"
-        hintAttachment.lifetime = .keepAlways
-        add(hintAttachment)
-
-        hint.tap()
-        let close = app.buttons["paywall.close"]
-        XCTAssertTrue(close.waitForExistence(timeout: 8), "The paywall opens once the fusion sheet has closed")
-        XCTAssertFalse(celebrationTitle.exists)
-        let monthRow = app.descendants(matching: .any)["paywall.feature.monthLabel"].firstMatch
-        let timerRow = app.descendants(matching: .any)["paywall.feature.customDuration"].firstMatch
-        XCTAssertTrue(monthRow.waitForExistence(timeout: 4))
-        XCTAssertLessThan(monthRow.frame.minY, timerRow.frame.minY, "The month label leads when it was the reason")
-        let paywallAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        paywallAttachment.name = "Paywall — opened from the fusion sheet's month-label link"
-        paywallAttachment.lifetime = .keepAlways
-        add(paywallAttachment)
-
-        close.tap()
-        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
-    }
-
-    /// home-11 at AX5 (review of PR #50). Once a crystal's detail has been
-    /// opened, the next tap shows its card in the row under the jar, whole
-    /// and above the pinned start button. Over the short AX5 jar the card
-    /// covered the readout, lost its title and spilled onto the start button.
-    /// The time core's labels are #47's, placed below the measured readout.
-    func testCrystalCardStaysUnderTheJarAtAccessibilitySizeAfterItsDetail() throws {
-        executionTimeAllowance = 900
-        app.terminate()
-        app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1"
-        app.launch()
-        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
-        selectDemoDurationAtAccessibilitySize()
-        let probe = app.descendants(matching: .any)["jar.presentation.probe"]
-        XCTAssertTrue(probe.waitForExistence(timeout: 4))
-
-        let dismissReward = app.buttons["reward.dismiss"]
-        for index in 1 ... 10 {
-            startDemoFocus()
-            stopCompletionAlertIfPresented(in: app)
-            XCTAssertTrue(dismissReward.waitForExistence(timeout: 28), "Completion \(index) must show its card")
-            tapRevealing(dismissReward)
-            if index < 10 {
-                // Like `completeDemoFocusAndDismissBreak`: the debug-only
-                // demo length is not a saved preference and can be reset
-                // when Home reappears; choose it again then.
-                if !demoLauncher.waitForExistence(timeout: 3) {
-                    selectDemoDurationAtAccessibilitySize()
-                }
-                let launcher = app.buttons["home.focus-launcher"]
-                XCTAssertTrue(
-                    waitForCondition(timeout: 15) { self.demoLauncher.exists && self.demoLauncher.isEnabled },
-                    "Completion \(index): the demo start button must come back once the gem lands; "
-                        + "launcher=\(launcher.exists ? launcher.label : "none") enabled=\(launcher.exists && launcher.isEnabled)"
-                )
-            }
-        }
-        let close = app.buttons["fusion.celebration.close"]
-        XCTAssertTrue(close.waitForExistence(timeout: 12), "Ten gems fuse into the first crystal")
-        close.tap()
-        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
-        _ = try waitForPresentationCount(1, from: probe, timeout: 10)
-        scrollHomeToTop()
-        let jar = app.buttons["瓶"]
-        XCTAssertTrue(
-            waitForCondition(timeout: 6) { (jar.value as? String)?.contains("結晶1個") == true },
-            (jar.value as? String) ?? ""
-        )
-        saveScreenshot("ax5-core-home")
-
-        // The first detail, from the card that sits in the tip's row.
-        tapCrystal(from: probe)
-        let inspect = app.buttons["jar.aggregate.inspect"]
-        XCTAssertTrue(inspect.waitForExistence(timeout: 3))
-        tapRevealing(inspect)
-        XCTAssertTrue(app.navigationBars["結晶の内訳"].waitForExistence(timeout: 6))
-        app.buttons["overview.cluster.close"].tap()
-        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 6))
-        XCTAssertTrue(waitForCondition(timeout: 6) { !inspect.exists })
-        scrollHomeToTop()
-
-        // Afterwards: the card comes back under the jar, only while it is up.
-        tapCrystal(from: probe)
-        XCTAssertTrue(inspect.waitForExistence(timeout: 3), "The tap must show the crystal's card")
-        let launcher = app.buttons["home.focus-launcher"]
-        XCTAssertTrue(
-            waitForCondition(timeout: 3) {
-                inspect.isHittable && inspect.frame.maxY <= launcher.frame.minY + 0.5
-            },
-            "The whole card is brought into view above the start button: card=\(inspect.frame) launcher=\(launcher.frame)"
-        )
-        XCTAssertGreaterThanOrEqual(
-            inspect.frame.minY,
-            jar.frame.maxY - 1,
-            "Under the jar, not over its readout: card=\(inspect.frame) jar=\(jar.frame)"
-        )
-        XCTAssertTrue(launcher.isHittable, "The start button stays uncovered")
-        saveScreenshot("ax5-crystal-card-after-detail")
-        XCTAssertTrue(
-            waitForCondition(timeout: 9) { !inspect.exists },
-            "The card still closes by itself"
-        )
-        // Showing the whole card moved the jar up; Home comes back to it.
-        let window = app.windows.firstMatch.frame
-        XCTAssertTrue(
-            waitForCondition(timeout: 3) {
-                jar.frame.minY >= window.minY && jar.frame.maxY <= launcher.frame.minY + 0.5
-            },
-            "The jar is back in view once the card closes: jar=\(jar.frame) launcher=\(launcher.frame)"
-        )
-        saveScreenshot("ax5-crystal-card-closed")
-    }
-
-    private func selectDemoDurationAtAccessibilitySize() {
-        let picker = app.buttons["home.duration-picker"]
-        XCTAssertTrue(picker.waitForExistence(timeout: 5))
-        for _ in 0 ..< 6 where !picker.isHittable {
-            app.scrollViews.firstMatch.swipeUp()
-        }
-        picker.tap()
-        let demoDuration = app.buttons["12秒、DEMO"]
-        XCTAssertTrue(demoDuration.waitForExistence(timeout: 4))
-        for _ in 0 ..< 4 where !demoDuration.isHittable {
-            app.swipeUp()
-        }
-        demoDuration.tap()
-        XCTAssertTrue(demoLauncher.waitForExistence(timeout: 4))
-    }
-
-    /// Taps where the crystal rests on screen (see `waitForRestingTarget`).
-    private func tapCrystal(from probe: XCUIElement) {
-        guard let resting = try? waitForRestingTarget(from: probe) else { return }
-        XCTAssertGreaterThanOrEqual(resting.targetWindowX, 0)
-        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
-            dx: resting.targetWindowX,
-            dy: resting.targetWindowY
-        )).tap()
-    }
-
-    /// At AX5 the reward card and Home scroll; swipe inside the scroll view
-    /// that holds the element until it can be tapped.
-    private func tapRevealing(_ element: XCUIElement) {
-        for _ in 0 ..< 6 where !(element.exists && element.isHittable) {
-            let container = app.scrollViews.containing(
-                NSPredicate(format: "identifier == %@", element.identifier)
-            ).firstMatch
-            (container.exists ? container : app).swipeUp()
-        }
-        element.tap()
-    }
-
-    private func scrollHomeToTop() {
-        let home = app.scrollViews.firstMatch
-        for _ in 0 ..< 3 where home.exists {
-            home.swipeDown()
-        }
-        usleep(500_000)
-    }
-
-    /// Keeps a screenshot with the result bundle and, when the runner is
-    /// given POMOGEM_SHOTS_DIR, also as a PNG for review.
-    private func saveScreenshot(_ name: String) {
-        let screenshot = XCUIScreen.main.screenshot()
-        let attachment = XCTAttachment(screenshot: screenshot)
+    private func capture(_ name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
-        guard let directory = ProcessInfo.processInfo.environment["POMOGEM_SHOTS_DIR"] else { return }
-        let device = app.windows.firstMatch.frame.height < 700 ? "se" : "17pro"
-        let url = URL(fileURLWithPath: directory).appendingPathComponent("\(name)-\(device).png")
-        try? screenshot.pngRepresentation.write(to: url)
     }
-
-    private func selectDemoDuration() {
-        app.buttons["home.duration-picker"].tap()
-        let demoDuration = app.buttons["12秒、DEMO"]
-        XCTAssertTrue(demoDuration.waitForExistence(timeout: 4))
-        demoDuration.tap()
-        XCTAssertTrue(demoLauncher.waitForExistence(timeout: 4))
-    }
-
-    private var demoLauncher: XCUIElement {
-        app.buttons.matching(
-            NSPredicate(format: "label CONTAINS %@", "12秒集中する")
-        ).firstMatch
-    }
-
-    private func startDemoFocus() {
-        XCTAssertTrue(demoLauncher.waitForExistence(timeout: 5))
-        XCTAssertTrue(demoLauncher.isHittable)
-        // Home enables the start button only once the last gem's landing has
-        // settled; a tap before that is ignored and no focus starts.
-        XCTAssertTrue(
-            waitForCondition(timeout: 10) { self.demoLauncher.exists && self.demoLauncher.isEnabled },
-            "The start button must come back once the last gem has landed"
-        )
-        demoLauncher.tap()
-    }
-
-    private func completeDemoFocusAndDismissBreak() {
-        startDemoFocus()
-        stopCompletionAlertIfPresented(in: app)
-        let dismissBreak = app.buttons["休憩の提案を閉じる"]
-        XCTAssertTrue(
-            dismissBreak.waitForExistence(timeout: 25),
-            "Each deterministic seed focus must commit, land and return Home"
-        )
-        dismissBreak.tap()
-        if !demoLauncher.waitForExistence(timeout: 2) {
-            // The debug-only duration menu intentionally isn't a persisted
-            // product preference. Re-select it after a process/UI refresh so
-            // this end-to-end test remains about aggregation, not demo state.
-            selectDemoDuration()
-        }
-        XCTAssertTrue(demoLauncher.waitForExistence(timeout: 5))
-    }
-
-    private func dismissBreakOfferIfPresent() {
-        let dismissBreak = app.buttons["休憩の提案を閉じる"]
-        guard dismissBreak.waitForExistence(timeout: 3) else { return }
-        if dismissBreak.isHittable {
-            dismissBreak.tap()
-        }
-    }
-
-    private func openMenuAction(containing title: String) {
-        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
-        app.buttons["メニュー"].tap()
-        let action = app.buttons.matching(
-            NSPredicate(format: "label CONTAINS %@", title)
-        ).firstMatch
-        XCTAssertTrue(scrollUntilHittable(action), "Missing menu action: \(title)")
-        action.tap()
-    }
-
-    private func scrollUntilHittable(
-        _ element: XCUIElement,
-        attempts: Int = 8
-    ) -> Bool {
-        for _ in 0 ..< attempts {
-            if element.exists, element.isHittable { return true }
-            app.swipeUp()
-        }
-        return element.exists && element.isHittable
-    }
-
-    private func waitForPresentationCount(
-        _ expectedCount: Int,
-        from probe: XCUIElement,
-        timeout: TimeInterval
-    ) throws -> PresentationSample {
-        let deadline = Date().addingTimeInterval(timeout)
-        var latest = try presentationSample(from: probe)
-        while latest.count != expectedCount, Date() < deadline {
-            usleep(50_000)
-            latest = try presentationSample(from: probe)
-        }
-        XCTAssertEqual(
-            latest.count,
-            expectedCount,
-            "Expected \(expectedCount) live jar bodies; latest records=\(latest.rawRecords)"
-        )
-        return latest
-    }
-
-    /// The new crystal enters the jar from above once Home is visible again
-    /// and keeps falling and rolling for a moment. A single probe read can
-    /// catch it mid-fall, and a tap placed there lands where the crystal used
-    /// to be. Wait until its window position has held still before tapping.
-    private func waitForRestingTarget(
-        from probe: XCUIElement,
-        timeout: TimeInterval = 10,
-        stillFor: TimeInterval = 0.6,
-        tolerance: Double = 0.5
-    ) throws -> PresentationSample {
-        let deadline = Date().addingTimeInterval(timeout)
-        var latest = try presentationSample(from: probe)
-        var stillSince = Date()
-        while Date() < deadline {
-            usleep(100_000)
-            let next = try presentationSample(from: probe)
-            let moved = abs(next.targetWindowX - latest.targetWindowX) > tolerance
-                || abs(next.targetWindowY - latest.targetWindowY) > tolerance
-            if moved || next.targetWindowX < 0 {
-                stillSince = Date()
-            } else if Date().timeIntervalSince(stillSince) >= stillFor {
-                return next
-            }
-            latest = next
-        }
-        XCTFail(
-            "The crystal did not come to rest within \(timeout) s; last window position "
-                + "(\(latest.targetWindowX), \(latest.targetWindowY))"
-        )
-        return latest
-    }
-
-    private func assertLooseMeasuredPebbles(
-        _ sample: PresentationSample,
-        expectedCount: Int,
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) {
-        XCTAssertEqual(sample.recordEntries.count, expectedCount, file: file, line: line)
-        XCTAssertEqual(Set(sample.recordEntries.map(\.id)).count, expectedCount, file: file, line: line)
-        XCTAssertTrue(sample.recordEntries.allSatisfy { $0.grams == 250 }, file: file, line: line)
-    }
-
-    private func parsedSourceIDs(from sample: PresentationSample) throws -> [UUID] {
-        try sample.recordEntries.map { entry in
-            guard let id = UUID(uuidString: entry.id) else {
-                throw PresentationProbeError.malformedRecord(entry.id)
-            }
-            return id
-        }
-    }
-
-    /// A frame the probe reports as "minX,minY,maxX,maxY" in window points.
-    private func probeRect(_ key: String, from probe: XCUIElement) -> CGRect? {
-        guard let rawValue = probe.value as? String,
-              let field = rawValue.split(separator: ";").first(where: { $0.hasPrefix("\(key)=") })
-        else { return nil }
-        let numbers = field.dropFirst(key.count + 1).split(separator: ",").compactMap { Double($0) }
-        guard numbers.count == 4 else { return nil }
-        return CGRect(x: numbers[0], y: numbers[1], width: numbers[2] - numbers[0], height: numbers[3] - numbers[1])
-    }
-
-    private func presentationSample(from probe: XCUIElement) throws -> PresentationSample {
-        guard let rawValue = probe.value as? String else {
-            throw PresentationProbeError.missingValue
-        }
-        let fields = Dictionary(uniqueKeysWithValues: rawValue.split(separator: ";").compactMap {
-            field -> (String, String)? in
-            let pieces = field.split(
-                separator: "=",
-                maxSplits: 1,
-                omittingEmptySubsequences: false
-            ).map(String.init)
-            guard pieces.count == 2 else { return nil }
-            return (pieces[0], pieces[1])
-        })
-        guard let countRaw = fields["count"],
-              let count = Int(countRaw),
-              let rawRecords = fields["records"],
-              let targetXRaw = fields["targetX"],
-              let targetX = Double(targetXRaw),
-              let targetYRaw = fields["targetY"],
-              let targetY = Double(targetYRaw)
-        else {
-            throw PresentationProbeError.malformedValue(rawValue)
-        }
-
-        let entries = try rawRecords.split(separator: ",").map { rawEntry -> RecordEntry in
-            let pieces = rawEntry.split(separator: ":", maxSplits: 1).map(String.init)
-            guard pieces.count == 2, let grams = Int(pieces[1]) else {
-                throw PresentationProbeError.malformedRecord(String(rawEntry))
-            }
-            return RecordEntry(id: pieces[0], grams: grams)
-        }
-        return PresentationSample(
-            count: count,
-            rawRecords: rawRecords,
-            recordEntries: entries,
-            targetX: targetX,
-            targetY: targetY,
-            targetWindowX: fields["targetWindowX"].flatMap(Double.init) ?? -1,
-            targetWindowY: fields["targetWindowY"].flatMap(Double.init) ?? -1
-        )
-    }
-}
-
-private struct PresentationSample {
-    let count: Int
-    let rawRecords: String
-    let recordEntries: [RecordEntry]
-    let targetX: Double
-    let targetY: Double
-    let targetWindowX: Double
-    let targetWindowY: Double
-}
-
-private struct RecordEntry: Hashable {
-    let id: String
-    let grams: Int
-}
-
-private enum PresentationProbeError: Error {
-    case missingValue
-    case malformedValue(String)
-    case malformedRecord(String)
 }

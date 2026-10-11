@@ -3,25 +3,26 @@ import XCTest
 @testable import PomoGem
 
 /// settings-04. The paywall leads with what the person came for, says what
-/// stays free, and the fusion sheet's month-label link is offered once.
+/// stays free. Legacy month-label contexts do not sell an unavailable feature.
 final class PaywallPresentationTests: XCTestCase {
     func testTheEntryPointsFeatureComesFirstAndOnlyThenIsHighlighted() {
         XCTAssertEqual(
             PaywallFeatureKind.ordered(for: .settings),
-            [.customDuration, .monthLabel, .studyApps]
+            [.customDuration, .studyApps]
         )
         XCTAssertFalse(PaywallFeatureKind.highlights(.settings))
 
         XCTAssertEqual(PaywallFeatureKind.ordered(for: .customTimer).first, .customDuration)
         XCTAssertEqual(
             PaywallFeatureKind.ordered(for: .aggregateLabels),
-            [.monthLabel, .customDuration, .studyApps]
+            [.customDuration, .studyApps]
         )
         XCTAssertEqual(
             PaywallFeatureKind.ordered(for: .screenTimeApps),
-            [.studyApps, .customDuration, .monthLabel]
+            [.studyApps, .customDuration]
         )
-        for context in [PaywallContext.customTimer, .aggregateLabels, .screenTimeApps] {
+        XCTAssertFalse(PaywallFeatureKind.highlights(.aggregateLabels))
+        for context in [PaywallContext.customTimer, .screenTimeApps] {
             XCTAssertTrue(PaywallFeatureKind.highlights(context))
             XCTAssertEqual(Set(PaywallFeatureKind.ordered(for: context)), Set(PaywallFeatureKind.allCases))
         }

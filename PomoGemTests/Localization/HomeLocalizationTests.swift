@@ -110,11 +110,11 @@ final class HomeLocalizationTests: XCTestCase {
         XCTAssertEqual(try english("記念石 \(1)"), "1 milestone stone")
         XCTAssertEqual(try english("記念石 \(3)"), "3 milestone stones")
         XCTAssertEqual(try english("記念石 \(12)+"), "12+ milestone stones")
-        XCTAssertEqual(try english("\(1)+粒"), "1+ gems")
-        XCTAssertEqual(try english("この端末で確認済み \(1)粒"), "1 gem confirmed on this device")
-        XCTAssertEqual(try english("この端末で確認済み \(1_234)粒"), "1,234 gems confirmed on this device")
-        XCTAssertEqual(try english("集中\(1)粒"), "1 focus gem")
-        XCTAssertEqual(try english("集中\(40)粒"), "40 focus gems")
+        XCTAssertEqual(try english("元の記録 \(1)+件"), "1+ original record")
+        XCTAssertEqual(try english("確認済みの記録 \(1)件"), "1 confirmed record")
+        XCTAssertEqual(try english("確認済みの記録 \(1_234)件"), "1,234 confirmed records")
+        XCTAssertEqual(try english("元の記録 \(1)件"), "1 original record")
+        XCTAssertEqual(try english("元の記録 \(40)件"), "40 original records")
         XCTAssertEqual(try english("記念石\(1)個"), "1 milestone stone")
         XCTAssertEqual(try english("\(1)粒が、ひとつの結晶になった"), "1 gem became one crystal")
         XCTAssertEqual(try english("\(10)粒が、ひとつの結晶になった"), "10 gems became one crystal")
@@ -162,11 +162,11 @@ final class HomeLocalizationTests: XCTestCase {
         XCTAssertEqual(try english("\("Math") +\("250 g")（\("1.0 standard units")）"), "Math +250 g (1.0 standard units)")
         XCTAssertEqual(try english("\("Math") +\("1,125 g") 積んだ"), "Added 1,125 g to Math")
         XCTAssertEqual(try english("ここで休む"), "Rest Here")
-        XCTAssertEqual(try english("この結晶をカードにする"), "Make a Card of This Crystal")
+        XCTAssertEqual(try english("積み上がりをカードにする"), "Make a Card of Your Progress")
         XCTAssertEqual(try english("時間の核の進み"), "Time Core Progress")
         XCTAssertEqual(
-            try english("時間の核は、粒の数ではなく積み上げた時間で進みます。次へ急ぐ必要はありません。"),
-            "The time core grows with the time you have built up, not the number of gems. There is no need to hurry."
+            try english("結晶は記録済みの合計時間を表します。ひとつずつの学習記録は、元のまま残ります。"),
+            "Crystals represent your total recorded focus time. Each original study record stays intact."
         )
     }
 

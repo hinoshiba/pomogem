@@ -1,7 +1,10 @@
 import XCTest
 
-/// Exercises the first decimal fusion through a real dirty-model rollback,
-/// explicit retry and cold relaunch against a CloudKit-free persistent store.
+/// Time crystals are a projection of saved source time, independent of a
+/// foreground aggregate write. The legacy save fault is armed throughout;
+/// original records and canonical display must survive a cold relaunch.
+/// Internal rollback/retry behavior remains covered by HomeProjectionTests
+/// and StrataMathTests.
 @MainActor
 final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
     private var storeName = ""
@@ -21,9 +24,8 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
         cleanDedicatedStore()
     }
 
-    func testFailedAggregateRestoresExactSourcesThenRetriesAndRelaunchesOnce() throws {
+    func testTimeCrystalAndOriginalRecordsSurviveWithoutForegroundAggregatePersistence() throws {
         cleanDedicatedStore()
-
         let app = configuredApp(injectsAggregateSaveFailure: true)
         activeApp = app
         app.launch()
@@ -31,166 +33,52 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
         assertNoRewardCardFromAnEarlierTest(in: app)
         selectDemoDuration(in: app)
 
-        for expectedCount in 1 ... 9 {
-            completeDemoFocusAndDismissReward(in: app)
-            let sample = try waitForJarProbe(
-                in: app,
-                expectedCount: expectedCount,
-                timeout: 8
-            )
-            assertLooseMeasuredPebbles(sample, expectedCount: expectedCount)
+        for completion in 1...10 {
+            startDemoFocus(in: app)
+            stopCompletionAlertIfPresented(in: app)
+            let dismiss = app.buttons["休憩の提案を閉じる"]
+            XCTAssertTrue(dismiss.waitForExistence(timeout: 60))
+            XCTAssertFalse(app.staticTexts["fusion.celebration.title"].exists,
+                           "A saved session waits for its acknowledged landing")
+            dismiss.tap()
+            if completion == 10 {
+                let celebration = app.staticTexts["fusion.celebration.title"]
+                XCTAssertTrue(celebration.waitForExistence(timeout: 12))
+                XCTAssertTrue(celebration.label.contains("4時間10分"), celebration.label)
+                let close = app.buttons["fusion.celebration.close"]
+                XCTAssertTrue(close.waitForExistence(timeout: 4))
+                close.tap()
+            }
+            _ = try waitForJarProbe(in: app, expectedGrams: completion * 250, timeout: 10)
+            XCTAssertTrue(waitForEnabled(app.buttons["home.focus-launcher"], timeout: 10))
+            XCTAssertFalse(app.buttons["jar.aggregate.persistence.retry"].exists,
+                           "A time display must not depend on a foreground aggregate save")
         }
 
-        let firstNine = try waitForJarProbe(in: app, expectedCount: 9, timeout: 4)
-        let firstNineIDs = Set(firstNine.entries.map(\.id))
-        XCTAssertEqual(firstNineIDs.count, 9)
-
-        startDemoFocus(in: app)
-        stopCompletionAlertIfPresented(in: app)
-        let dismissReward = app.buttons["休憩の提案を閉じる"]
-        XCTAssertTrue(
-            dismissReward.waitForExistence(timeout: 60),
-            "The tenth completion must commit before aggregate persistence is injected"
-        )
-        let completedFusion = app.descendants(matching: .any)["reward.fusion-progress"]
-        XCTAssertTrue(completedFusion.waitForExistence(timeout: 3))
-        XCTAssertTrue(completedFusion.label.contains("×10完成 10/10"), completedFusion.label)
-        dismissReward.tap()
-
-        let retry = app.buttons["jar.aggregate.persistence.retry"]
-        XCTAssertTrue(
-            waitForHittable(retry, timeout: 12),
-            "The post-mutation injected failure must reach Home's existing retry affordance"
-        )
-        XCTAssertFalse(
-            app.staticTexts["fusion.celebration.title"].exists,
-            "An uncommitted aggregate must never be celebrated"
-        )
-
-        let restored = try waitForJarProbe(in: app, expectedCount: 10, timeout: 10)
-        assertLooseMeasuredPebbles(restored, expectedCount: 10)
-        let sourceIDs = Set(restored.entries.map(\.id))
-        XCTAssertEqual(sourceIDs.count, 10)
-        XCTAssertTrue(firstNineIDs.isSubset(of: sourceIDs))
-        XCTAssertEqual(restored.entries.reduce(0) { $0 + $1.grams }, 2_500)
-
+        let formed = try waitForJarProbe(in: app, expectedGrams: 2_500, timeout: 10)
+        XCTAssertEqual(formed.entries.count, 1)
         _ = try waitForProbe(
-            "fixture.40y.probe",
-            in: app,
-            expected: [
-                "grams": "2500", "roots": "0", "loose": "10", "bodies": "10",
-                "sessionRows": "10", "uniqueSessionIDs": "10"
-            ],
-            timeout: 10
-        )
-        _ = try waitForProbe(
-            "aggregate.persistence.probe",
-            in: app,
-            expected: [
-                "sessionRows": "10", "uniqueSessionIDs": "10",
-                "legacyBakedSessionRows": "0", "looseSessionRows": "10",
-                "aggregateRows": "0", "uniqueAggregateIDs": "0",
-                "rootRows": "0", "uniqueRootIDs": "0", "logicalGrams": "2500"
-            ],
-            timeout: 10
-        )
-
-        // The fault is one-shot. If SpriteKit were not suspended after the
-        // failure, an automatic second attempt would now succeed without the
-        // user pressing the retry button.
-        usleep(1_000_000)
-        XCTAssertTrue(retry.exists)
-        _ = try waitForProbe(
-            "aggregate.persistence.probe",
-            in: app,
-            expected: ["aggregateRows": "0", "rootRows": "0", "looseSessionRows": "10"],
-            timeout: 3
-        )
-
-        let failureAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        failureAttachment.name = "Aggregate save failure — exact ten sources restored"
-        failureAttachment.lifetime = .keepAlways
-        add(failureAttachment)
-
-        retry.tap()
-        let celebration = app.staticTexts["fusion.celebration.title"]
-        XCTAssertTrue(
-            celebration.waitForExistence(timeout: 12),
-            "The explicit retry must persist before presenting the fusion celebration"
-        )
-        let continueButton = app.buttons["ここで休む"]
-        XCTAssertTrue(continueButton.waitForExistence(timeout: 4))
-        continueButton.tap()
-        XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 8))
-        XCTAssertTrue(waitForNonExistence(retry, timeout: 4))
-
-        let fused = try waitForJarProbe(in: app, expectedCount: 1, timeout: 10)
-        let aggregateEntry = try XCTUnwrap(fused.entries.first)
-        XCTAssertEqual(aggregateEntry.grams, 2_500)
-        XCTAssertFalse(sourceIDs.contains(aggregateEntry.id))
-
-        let committed = try waitForProbe(
-            "aggregate.persistence.probe",
-            in: app,
-            expected: [
-                "sessionRows": "10", "uniqueSessionIDs": "10",
-                "legacyBakedSessionRows": "0", "looseSessionRows": "0",
-                "aggregateRows": "1", "uniqueAggregateIDs": "1",
-                "rootRows": "1", "uniqueRootIDs": "1",
-                "rootID": aggregateEntry.id,
-                "rootGrams": "2500", "rootPebbles": "10",
-                "rootMeasured": "10", "rootManual": "0",
-                "rootSourceIDCount": "10", "uniqueRootSourceIDs": "10",
-                "logicalGrams": "2500"
-            ],
+            "aggregate.persistence.probe", in: app,
+            expected: ["sessionRows": "10", "uniqueSessionIDs": "10", "logicalGrams": "2500"],
             timeout: 12
         )
-        XCTAssertEqual(sourceIDSet(from: committed["rootSourceIDs"]), sourceIDs)
-        _ = try waitForProbe(
-            "fixture.40y.probe",
-            in: app,
-            expected: ["grams": "2500", "roots": "1", "loose": "0", "bodies": "1"],
-            timeout: 10
-        )
-
-        let persistedJarRecords = fused.records
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = "Time crystal — original ten records preserved with legacy save fault armed"
+        attachment.lifetime = .keepAlways
+        add(attachment)
         app.terminate()
-
-        // Relaunch with the one-shot environment key armed again. Correctly
-        // persisted state has no ten loose sources, so no second request should
-        // consume it or expose the failure UI in the fresh process.
         app.launch()
         XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 15))
-        XCTAssertFalse(
-            retry.waitForExistence(timeout: 2),
-            "A committed deterministic aggregate must not be requested again after relaunch"
-        )
-        XCTAssertFalse(app.staticTexts["fusion.celebration.title"].exists)
-
-        let relaunched = try waitForJarProbe(in: app, expectedCount: 1, timeout: 10)
-        XCTAssertEqual(relaunched.records, persistedJarRecords)
-        let relaunchedAudit = try waitForProbe(
-            "aggregate.persistence.probe",
-            in: app,
-            expected: [
-                "sessionRows": "10", "uniqueSessionIDs": "10",
-                "legacyBakedSessionRows": "0", "looseSessionRows": "0",
-                "aggregateRows": "1", "uniqueAggregateIDs": "1",
-                "rootRows": "1", "uniqueRootIDs": "1",
-                "rootID": aggregateEntry.id,
-                "rootGrams": "2500", "rootPebbles": "10",
-                "rootSourceIDCount": "10", "uniqueRootSourceIDs": "10",
-                "logicalGrams": "2500"
-            ],
+        XCTAssertFalse(app.buttons["jar.aggregate.persistence.retry"].exists)
+        XCTAssertFalse(app.staticTexts["fusion.celebration.title"].exists,
+                       "Restoring saved time must not replay its celebration")
+        let restored = try waitForJarProbe(in: app, expectedGrams: 2_500, timeout: 10)
+        XCTAssertEqual(restored.records, formed.records)
+        _ = try waitForProbe(
+            "aggregate.persistence.probe", in: app,
+            expected: ["sessionRows": "10", "uniqueSessionIDs": "10", "logicalGrams": "2500"],
             timeout: 12
         )
-        XCTAssertEqual(sourceIDSet(from: relaunchedAudit["rootSourceIDs"]), sourceIDs)
-
-        let relaunchAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        relaunchAttachment.name = "Aggregate retry relaunch — one stable 2500g root"
-        relaunchAttachment.lifetime = .keepAlways
-        add(relaunchAttachment)
-
         app.terminate()
         activeApp = nil
     }
@@ -260,18 +148,6 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
         launcher.tap()
     }
 
-    private func completeDemoFocusAndDismissReward(in app: XCUIApplication) {
-        startDemoFocus(in: app)
-        stopCompletionAlertIfPresented(in: app)
-        let dismissReward = app.buttons["休憩の提案を閉じる"]
-        XCTAssertTrue(
-            dismissReward.waitForExistence(timeout: 60),
-            "Each seed completion must commit through the real focus UI"
-        )
-        dismissReward.tap()
-        XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 6))
-    }
-
     /// The app drops the reward receipts an earlier test's store left in
     /// UserDefaults whenever it opens a new or cleaned store
     /// (`UITestLocalStateIsolation`). Draining them here used to acknowledge
@@ -285,7 +161,7 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
 
     private func waitForJarProbe(
         in app: XCUIApplication,
-        expectedCount: Int,
+        expectedGrams: Int,
         timeout: TimeInterval
     ) throws -> JarProbeSample {
         let probe = app.descendants(matching: .any)["jar.presentation.probe"]
@@ -296,7 +172,9 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
         var latest = ""
         repeat {
             latest = (probe.value as? String) ?? probe.label
-            if let sample = JarProbeSample(rawValue: latest), sample.count == expectedCount {
+            if let sample = JarProbeSample(rawValue: latest),
+               sample.entries.count == 1,
+               sample.entries.first?.grams == expectedGrams {
                 return sample
             }
             usleep(50_000)
@@ -305,17 +183,6 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
             identifier: "jar.presentation.probe",
             latest: latest
         )
-    }
-
-    private func assertLooseMeasuredPebbles(
-        _ sample: JarProbeSample,
-        expectedCount: Int,
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) {
-        XCTAssertEqual(sample.entries.count, expectedCount, file: file, line: line)
-        XCTAssertEqual(Set(sample.entries.map(\.id)).count, expectedCount, file: file, line: line)
-        XCTAssertTrue(sample.entries.allSatisfy { $0.grams == 250 }, file: file, line: line)
     }
 
     private func waitForProbe(
@@ -354,11 +221,6 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
         })
     }
 
-    private func sourceIDSet(from rawValue: String?) -> Set<String> {
-        guard let rawValue, !rawValue.isEmpty else { return [] }
-        return Set(rawValue.split(separator: ",").map(String.init))
-    }
-
     private func waitForHittable(
         _ element: XCUIElement,
         timeout: TimeInterval
@@ -382,17 +244,7 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
         return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }
 
-    private func waitForNonExistence(
-        _ element: XCUIElement,
-        timeout: TimeInterval
-    ) -> Bool {
-        let predicate = NSPredicate { candidate, _ in
-            guard let candidate = candidate as? XCUIElement else { return true }
-            return !candidate.exists
-        }
-        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
-        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
-    }
+
 }
 
 private struct JarProbeSample {

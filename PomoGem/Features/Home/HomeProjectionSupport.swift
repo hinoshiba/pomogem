@@ -465,10 +465,11 @@ enum HomeProjectionPolicy {
     static func pendingRewardSessionCandidates(
         for receipts: [PendingRewardReceipt],
         context: ModelContext,
-        resetMarkers: [ActivityResetSnapshot]
+        resetMarkers: [ActivityResetSnapshot],
+        completionMarker: String? = nil
     ) throws -> [StudySession] {
         var seen = Set<UUID>()
-        let pendingIDs = receipts
+        var pendingIDs = receipts
             .filter(\.requiresDrop)
             .sorted {
                 if $0.createdAt != $1.createdAt { return $0.createdAt < $1.createdAt }
@@ -477,6 +478,13 @@ enum HomeProjectionPolicy {
             .filter { seen.insert($0.id).inserted }
             .prefix(PendingRewardReceiptStore.maximumPendingCount)
             .map(\.id)
+        // Older completions can have only the device-local marker, before a
+        // durable receipt exists. Resolve that one exact ID even when an
+        // aggregate already owns it and Home's normal page no longer does.
+        if let completionMarker, let markerID = UUID(uuidString: completionMarker),
+           !pendingIDs.contains(markerID) {
+            pendingIDs.append(markerID)
+        }
         let epochID = ActivityResetPolicy.currentEpochID(from: resetMarkers)
         return try pendingIDs.compactMap { id in
             guard let session = try BoundedHistoryPolicy.resolvedSession(
@@ -910,6 +918,7 @@ enum HomeProjectionPolicy {
         let acceptedAggregateRootIDs: Set<UUID>
         let rootProjectionIsComplete: Bool
         let aggregateProjectionNeedsMaintenance: Bool
+        let unresolvedLegacyStratumIDs: Set<UUID>
         let cacheStamp: AggregateProjectionCacheStamp
     }
 
@@ -954,6 +963,10 @@ enum HomeProjectionPolicy {
         let rootProjectionIsComplete = persistedRootCount <= aggregateRootLimit
             && (fetchedAggregateRoots.count < aggregateRootLimit
                 || aggregateRoots.count == fetchedAggregateRoots.count)
+        let unresolvedLegacyIDs = try unresolvedLegacyCompatibilityIDs(
+            legacyStrata: legacyStrata, acceptedRootIDs: acceptedRootIDs,
+            context: context, resetMarkers: resetMarkers
+        )
 
         return RefreshedAggregatePresentationPage(
             aggregateRoots: aggregateRoots,
@@ -961,8 +974,86 @@ enum HomeProjectionPolicy {
             acceptedAggregateRootIDs: acceptedRootIDs,
             rootProjectionIsComplete: rootProjectionIsComplete,
             aggregateProjectionNeedsMaintenance: needsMaintenance,
+            unresolvedLegacyStratumIDs: unresolvedLegacyIDs,
             cacheStamp: cacheStamp
         )
+    }
+
+    /// Old summaries are never added beside raw time. They only keep the
+    /// readout conservative until their modern index reaches a root that the
+    /// existing version/equation preflight already accepted. That index may
+    /// now be a non-root descendant; a root-only ID comparison is insufficient.
+    @MainActor
+    static func unresolvedLegacyCompatibilityIDs(
+        legacyStrata: [Stratum],
+        acceptedRootIDs: Set<UUID>,
+        context: ModelContext,
+        resetMarkers: [ActivityResetSnapshot]
+    ) throws -> Set<UUID> {
+        let legacyIDs = Set(legacyStrata.filter {
+            ActivityResetPolicy.isCurrent($0.dataEpochID, markers: resetMarkers)
+        }.map(\.id))
+        guard !acceptedRootIDs.isEmpty else { return legacyIDs }
+        let epochID = ActivityResetPolicy.currentEpochID(from: resetMarkers)
+        let version = AggregateProjectionValidation.currentVersion
+        enum Lookup { case missing, value(AggregatePebble) }
+        var cache: [UUID: Lookup] = [:]
+
+        func exact(_ id: UUID) throws -> AggregatePebble? {
+            if let result = cache[id] {
+                if case .value(let value) = result { return value }
+                return nil
+            }
+            let predicate: Predicate<AggregatePebble>
+            if let epochID {
+                predicate = #Predicate { $0.id == id && $0.dataEpochID == epochID }
+            } else {
+                predicate = #Predicate { $0.id == id && $0.dataEpochID == nil }
+            }
+            var descriptor = FetchDescriptor<AggregatePebble>(predicate: predicate)
+            descriptor.fetchLimit = maximumPhysicalAggregateRowsPerExactLookup + 1
+            let rows = try context.fetch(descriptor)
+            cache[id] = .missing
+            guard !rows.isEmpty, rows.count <= maximumPhysicalAggregateRowsPerExactLookup,
+                  rows.allSatisfy({ $0.projectionValidationVersion == version }) else { return nil }
+            let parented = rows.filter { $0.parentAggregateID != nil }
+            let candidates = parented.isEmpty ? rows : parented
+            let highestLevel = candidates.map(\.level).max() ?? 1
+            let atLevel = candidates.filter { $0.level == highestLevel }
+            let newest = atLevel.map(\.createdAt).max() ?? .distantPast
+            let winners = atLevel.filter { $0.createdAt == newest }
+            guard let value = winners.first, winners.allSatisfy({
+                $0.parentAggregateID == value.parentAggregateID
+                    && $0.grams == value.grams && $0.pebbleCount == value.pebbleCount
+                    && $0.childAggregateCount == value.childAggregateCount
+                    && Set($0.childAggregateIDs) == Set(value.childAggregateIDs)
+                    && Set($0.sessionIDs) == Set(value.sessionIDs)
+            }) else { return nil }
+            cache[id] = .value(value)
+            return value
+        }
+
+        var unresolved = legacyIDs
+        for legacyID in legacyIDs {
+            var cursor = legacyID
+            var visited = Set<UUID>()
+            for _ in 0..<24 {
+                guard visited.insert(cursor).inserted,
+                      let current = try exact(cursor) else { break }
+                guard let parentID = current.parentAggregateID else {
+                    if acceptedRootIDs.contains(current.id) { unresolved.remove(legacyID) }
+                    break
+                }
+                guard current.level >= 1, current.level < Int.max,
+                      let parent = try exact(parentID), parent.level == current.level + 1,
+                      Set(parent.childAggregateIDs).contains(current.id),
+                      Set(parent.childAggregateIDs).count == parent.childAggregateCount,
+                      (1...Constants.Jar.aggregateFanIn).contains(parent.childAggregateCount)
+                else { break }
+                cursor = parentID
+            }
+        }
+        return unresolved
     }
 
     /// Any migrated or invalidated descendant makes the current aggregate
@@ -1096,17 +1187,45 @@ enum HomeProjectionPolicy {
     static func landedTotals(
         roots: [AggregatePebble],
         looseSessions: [StudySession],
-        unlandedSessionIDs: Set<UUID>
+        unlandedSessionIDs: Set<UUID>,
+        representedPendingSessions: [StudySession] = []
     ) -> Totals {
-        guard !unlandedSessionIDs.isEmpty,
-              looseSessions.contains(where: { unlandedSessionIDs.contains($0.id) })
-        else {
-            return totals(roots: roots, looseSessions: looseSessions)
-        }
-        return totals(
-            roots: roots,
-            looseSessions: looseSessions.filter { !unlandedSessionIDs.contains($0.id) }
+        let saved = totals(roots: roots, looseSessions: looseSessions)
+        // A background index can already contain a receipt waiting behind
+        // the completion card. Its exact raw session still has to wait for
+        // landing; index membership is not evidence of a visible arrival.
+        let pending = StudySessionSyncPolicy.canonicalSessions(
+            from: looseSessions + representedPendingSessions
+        ).filter { unlandedSessionIDs.contains($0.id) }
+        guard !pending.isEmpty else { return saved }
+        return Totals(
+            grams: max(0, saved.grams - saturatingNonnegativeSum(pending.map(\.grams))),
+            pebbleCount: max(0, saved.pebbleCount - pending.count)
         )
+    }
+
+    static func timeFusionPendingContributions(
+        looseSessions: [StudySession],
+        representedPendingSessions: [StudySession],
+        unlandedSessionIDs: Set<UUID>
+    ) -> [UUID: Int] {
+        Dictionary(StudySessionSyncPolicy.canonicalSessions(
+            from: looseSessions + representedPendingSessions
+        ).filter { unlandedSessionIDs.contains($0.id) }
+            .map { ($0.id, $0.grams) }, uniquingKeysWith: max)
+    }
+
+    /// A pending/held headline may already include saved completions. Only
+    /// the verified landed baseline authorizes an incremental visual credit.
+    /// Other presentations absorb the transient gem and await an exact total.
+    static func timeFusionLandingContributions(
+        pending: [UUID: Int],
+        displayedGrams: Int?,
+        landedGrams: Int,
+        allowsLiveCredit: Bool
+    ) -> [UUID: Int] {
+        guard allowsLiveCredit, displayedGrams == landedGrams else { return [:] }
+        return pending
     }
 
     /// Saved sessions whose gem is not in the jar yet, for `landedTotals`

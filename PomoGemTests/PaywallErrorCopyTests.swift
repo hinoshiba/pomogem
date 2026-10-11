@@ -118,7 +118,11 @@ final class PaywallErrorCopyTests: XCTestCase {
     func testPurchaseSuccessNamesTheFeatureThePersonCameFor() {
         XCTAssertTrue(PaywallAlert.purchased(context: .customTimer).message.contains("集中時間を選ぶ画面が開きます"))
         XCTAssertTrue(PaywallAlert.purchased(context: .screenTimeApps).message.contains("勉強アプリ"))
-        XCTAssertTrue(PaywallAlert.purchased(context: .aggregateLabels).message.contains("作った月"))
+        XCTAssertEqual(
+            PaywallAlert.purchased(context: .aggregateLabels),
+            PaywallAlert.purchased(context: .settings),
+            "A legacy entry point must not promise a month label on time crystals"
+        )
         for context in [PaywallContext.settings, .customTimer, .screenTimeApps, .aggregateLabels] {
             XCTAssertEqual(PaywallAlert.purchased(context: context).title, Constants.UIStrings.paywallTitle)
         }

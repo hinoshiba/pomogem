@@ -324,23 +324,6 @@
         }
       }
     },
-    "ポモジェムProが使えるようになりました。結晶に、作った月が表示されます。" : {
-      "comment" : "Paywall alert after buying from the crystal month-label hint",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "PomoGem Pro is ready to use. Crystals now show the month they were made."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ポモジェムProが使えるようになりました。結晶に、作った月が表示されます。"
-          }
-        }
-      }
-    },
     "ポモジェムProが使えるようになりました。閉じると、集中時間を選ぶ画面が開きます。" : {
       "comment" : "Paywall alert after buying from the custom duration control; the editor opens next",
       "localizations" : {
@@ -613,57 +596,6 @@
         }
       }
     },
-    "粒が10個集まってできる結晶に、作った月を刻みます" : {
-      "comment" : "Paywall feature detail: what the month label is",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Each crystal, made from 10 gems, is stamped with the month it was made"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "粒が10個集まってできる結晶に、作った月を刻みます"
-          }
-        }
-      }
-    },
-    "結晶に、作った月を刻めます。" : {
-      "comment" : "Paywall subtitle when opened from the crystal month-label hint",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Stamp crystals with the month they were made."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "結晶に、作った月を刻めます。"
-          }
-        }
-      }
-    },
-    "結晶に月を刻む" : {
-      "comment" : "Paywall feature title: crystals show the month they were made",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Month Stamps on Crystals"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "結晶に月を刻む"
-          }
-        }
-      }
-    },
     "自動更新・無料トライアルはありません。" : {
       "comment" : "Paywall: no auto-renewal and no free trial",
       "localizations" : {
@@ -711,23 +643,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "自由な集中時間を選べます。"
-          }
-        }
-      }
-    },
-    "表示の例：%@" : {
-      "comment" : "VoiceOver: an example month label; the argument is a month such as 2026年9月",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Example: %@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "表示の例：%@"
           }
         }
       }

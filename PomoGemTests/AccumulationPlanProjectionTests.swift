@@ -43,8 +43,8 @@ final class AccumulationPlanProjectionTests: XCTestCase {
         XCTAssertEqual(halfway.completionCount, 130)
         XCTAssertEqual(halfway.focusMinutes, 7_827)
         XCTAssertEqual(halfway.grams, 78_270)
-        XCTAssertEqual(halfway.bodiesByLevel, [1: 3, 2: 1])
-        XCTAssertEqual(halfway.aggregateCreationCount, 14)
+        XCTAssertEqual(halfway.bodiesByLevel, [0: 1, 1: 1, 2: 3])
+        XCTAssertEqual(halfway.aggregateCreationCount, 34)
         XCTAssertEqual(halfway.representedGrams, halfway.grams)
         XCTAssertTrue(halfway.isInternallyConsistent)
 
@@ -52,8 +52,8 @@ final class AccumulationPlanProjectionTests: XCTestCase {
         XCTAssertEqual(endpoint.completionCount, 261)
         XCTAssertEqual(endpoint.focusMinutes, 15_654)
         XCTAssertEqual(endpoint.grams, 156_540)
-        XCTAssertEqual(endpoint.bodiesByLevel, [0: 1, 1: 6, 2: 2])
-        XCTAssertEqual(endpoint.aggregateCreationCount, 28)
+        XCTAssertEqual(endpoint.bodiesByLevel, [0: 1, 1: 2, 2: 6])
+        XCTAssertEqual(endpoint.aggregateCreationCount, 68)
         XCTAssertEqual(endpoint.representedGrams, endpoint.grams)
         XCTAssertTrue(endpoint.isInternallyConsistent)
     }
@@ -172,6 +172,11 @@ final class AccumulationPlanProjectionTests: XCTestCase {
 
                 XCTAssertEqual(first.focusMinutes, second.focusMinutes, context)
                 XCTAssertEqual(first.grams, second.grams, context)
+                XCTAssertEqual(first.bodiesByLevel, second.bodiesByLevel, context)
+                XCTAssertEqual(first.bodies.map(\.grams), second.bodies.map(\.grams), context)
+                XCTAssertEqual(first.bodies.map(\.id), second.bodies.map(\.id), context)
+                XCTAssertEqual(first.descriptors.map(\.radius), second.descriptors.map(\.radius), context)
+                XCTAssertEqual(first.aggregateCreationCount, second.aggregateCreationCount, context)
                 XCTAssertEqual(first.representedGrams, first.grams, context)
                 XCTAssertEqual(second.representedGrams, second.grams, context)
                 XCTAssertTrue(first.isInternallyConsistent, context)

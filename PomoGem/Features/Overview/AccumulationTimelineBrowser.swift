@@ -827,44 +827,35 @@ private struct AccumulationTimelineMonthSheet: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 13) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("この月の代表瓶", tableName: "Overview", comment: "Section title: a jar drawn from this month's latest gems")
+                Text("この月の時間の瓶", tableName: "Overview")
                     .pomogemSectionTitle()
                 Text(representativeDisclosure(detail))
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            AccumulationTimelineRepresentativeBottle(
-                records: detail.representativeRecords
-            )
-            .frame(height: 260)
-            .accessibilityIdentifier(AccumulationTimelineAccessibilityID.monthPreview)
-            .accessibilityLabel(Text(
-                "最新\(detail.representativeRecords.count)粒の代表瓶",
-                tableName: "Overview",
-                comment: "VoiceOver: a jar drawn from this many of the month's latest gems"
-            ))
+            TimeFusionPileArtwork(totalGrams: Int(clamping: detail.summary.exactLocalGrams))
+                .frame(height: 260)
         }
         .padding(16)
         .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 20))
+        // The reusable artwork is decorative and hides itself from VoiceOver.
+        // Expose this section's verified total and preservation explanation
+        // together, rather than attaching a label to a hidden drawing.
+        .accessibilityElement(children: .ignore)
+        .accessibilityIdentifier(AccumulationTimelineAccessibilityID.monthPreview)
+        .accessibilityLabel(Text(
+            "この月の集中\(DurationPresentation.focusLabel(grams: detail.summary.exactLocalGrams))を表す瓶",
+            tableName: "Overview",
+            comment: "VoiceOver monthly jar: total confirmed duration represented by time crystals"
+        ))
+        .accessibilityValue(representativeDisclosure(detail))
     }
 
     private func representativeDisclosure(
         _ detail: AccumulationTimelineMonthDetail
     ) -> String {
-        let mass = formattedMass(detail.summary.exactLocalGrams)
-        if detail.previewIsRepresentative {
-            return String(
-                localized: "全\(detail.summary.exactLocalCount)粒・\(mass)。瓶は最新\(detail.representativeRecords.count)粒の代表表示です。",
-                table: "Overview",
-                comment: "Month jar disclosure: all gems of the month and their mass; the jar draws only the latest %3$lld"
-            )
-        }
-        return String(
-            localized: "この端末に届いている全\(detail.summary.exactLocalCount)粒・\(mass)を表示しています。",
-            table: "Overview",
-            comment: "Month jar disclosure: every gem of the month on this iPhone and their mass"
-        )
+        String(localized: "この端末で確認できた合計\(DurationPresentation.focusLabel(grams: detail.summary.exactLocalGrams))を、時間の結晶と育つ粒で表示します。元の記録は一回ずつ残っています。", table: "Overview", comment: "Month jar disclosure: exact confirmed duration; original records remain intact")
     }
 
     @MainActor

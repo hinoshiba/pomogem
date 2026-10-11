@@ -2821,12 +2821,26 @@ private func shareHiddenContent(
     achievements: [ShareAchievementVisual],
     format: ShareComposerView.Format
 ) -> ShareHiddenContent {
+    // All time denominations are drawn. Only milestone stones may be capped.
     ShareJarVisibilityPolicy.hiddenContent(
-        loosePebbleCount: shareDrawableSessions(sessions: sessions, aggregates: aggregates).count,
-        aggregateCount: aggregates.count,
+        loosePebbleCount: 0,
+        aggregateCount: 0,
         achievementCount: achievements.count,
         format: format
     )
+}
+
+/// Runs after the share selection's privacy and self-report filters. Linked
+/// summaries are indexes, so their grams never count a second time.
+enum ShareTimeFusionPresentation {
+    static func snapshot(
+        sessions: [ShareSessionVisual],
+        aggregates: [ShareAggregateVisual]
+    ) -> TimeFusionSnapshot {
+        TimeFusionPolicy.snapshot(totalGrams: NonnegativeIntPolicy.sum(
+            sessions.map(\.grams) + aggregates.filter(\.contributesStandaloneTotals).map(\.grams)
+        ))
+    }
 }
 
 private func shareRewardSemantics(
@@ -3081,17 +3095,17 @@ struct ShareCardView: View {
                     VStack(spacing: story ? 8 : 5) {
                         Text(
                             pebbleCount > 0
-                                ? String(localized: "\(pebbleCount)粒の積み重ね", table: "Share",
-                                         comment: "Share card line under the jar: how many gems the card holds")
+                                ? String(localized: "\(DurationPresentation.focusLabel(grams: totalGrams))の積み重ね", table: "Share",
+                                         comment: "Share card line under the jar: the total time represented by its time crystals")
                                 : String(localized: "\(achievements.count)個の記念石", table: "Share",
                                          comment: "Share card line under the jar when it holds only milestone stones: how many")
                         )
                             .font(.system(size: story ? 13 : 10, weight: .heavy, design: .rounded))
                             .foregroundStyle(PomoGemTheme.text)
                         HStack(spacing: 6) {
-                            Text("実測 \(measuredCount)粒", tableName: "Share", comment: "Share card: measured gems (timer or Screen Time)")
+                            Text("元の実測記録 \(measuredCount)件", tableName: "Share", comment: "Share card: measured source records, independent of visible time crystals")
                             Text(Self.statSeparator)
-                            Text("結晶 \(aggregates.count)", tableName: "Share", comment: "Share card stat: crystal count")
+                            Text("結晶 \(TimeFusionPolicy.snapshot(totalGrams: totalGrams).visibleCrystals.count)", tableName: "Share", comment: "Share card stat: time crystal count")
                             if goldCount > 0 {
                                 Text(Self.statSeparator)
                                 Label {
@@ -3198,10 +3212,10 @@ struct ShareCardView: View {
             massSentence,
             // One list item per count, so each can take its plural form.
             ShareCopy.sentence(ListText.inSentence([
-                CountText.gems(pebbleCount),
-                String(localized: "うち実測\(measuredCount)粒", table: "Share",
-                       comment: "VoiceOver, share card: how many of the card's gems are timed (follows the gem count in a list)"),
-                String(localized: "結晶\(aggregates.count)個", table: "Share",
+                String(localized: "元の記録\(pebbleCount)件", table: "Share", comment: "VoiceOver share card: original record count"),
+                String(localized: "うち実測\(measuredCount)件", table: "Share",
+                       comment: "VoiceOver share card: measured original records"),
+                String(localized: "結晶\(TimeFusionPolicy.snapshot(totalGrams: totalGrams).visibleCrystals.count)個", table: "Share",
                        comment: "Share caption disclosure and VoiceOver item: a number of crystals"),
                 String(localized: "記念石\(achievements.count)個", table: "Share",
                        comment: "Share caption disclosure and VoiceOver item: a number of milestone stones")
@@ -3501,42 +3515,17 @@ private struct ShareJarGraphic: View {
     }
 
     private func jar(size: CGSize) -> some View {
-        let story = format == .story
-        let sessionColumnCount = story ? 9 : 8
-        let compactSessionSize: CGFloat = min(
-            size.width / CGFloat(sessionColumnCount + 2),
-            story ? 23.0 : 20.0
-        )
-        let expandedSessionSize: CGFloat = min(
-            story ? 31.0 : 27.0,
-            compactSessionSize * 1.34
-        )
-        let sessionSize = visibleSessions.count <= 3 ? expandedSessionSize : compactSessionSize
-        let highlightsSingleAggregate = visibleAggregates.count == 1
-            && visibleSessions.isEmpty
-            && visibleAchievements.isEmpty
-        let stoneSize: CGFloat = min(size.width / 7.2, 34)
-        let stoneBottoms = achievementBottoms(
-            availableWidth: size.width,
-            stoneSize: stoneSize,
-            sessionColumnCount: sessionColumnCount,
-            sessionSize: sessionSize,
-            story: story
-        )
-
+        let projection = ShareTimeFusionPresentation.snapshot(sessions: sessions, aggregates: aggregates)
+        let stoneSize = min(size.width / 7.2, 34.0)
+        let stoneBottoms = visibleAchievements.indices.map { index in
+            Self.floorHeight + CGFloat(index / 4) * stoneSize * 0.74
+        }
+        let stoneBand = visibleAchievements.isEmpty ? 0 : CGFloat((visibleAchievements.count + 3) / 4) * stoneSize
         return ZStack(alignment: .bottom) {
             bottleBackground(size: size)
             bottomGlow(size: size)
-            if highlightsSingleAggregate, let hero = visibleAggregates.first {
-                heroBed(hero, size: size)
-            }
-            aggregateLayer(
-                availableWidth: size.width,
-                jarHeight: size.height,
-                highlightsSingleAggregate: highlightsSingleAggregate,
-                story: story
-            )
-            sessionLayer(columnCount: sessionColumnCount, sessionSize: sessionSize)
+            TimeFusionPileArtwork(totalGrams: projection.totalGrams, showsVessel: false)
+                .padding(.bottom, stoneBand)
             achievementLayer(stoneSize: stoneSize, bottoms: stoneBottoms)
             leadingGlassHighlight(size: size)
             trailingGlassHighlight(size: size)
@@ -4313,7 +4302,7 @@ private struct ShareAggregatePebble: View {
                 }
                 if let rareLabel = rewardIdentity.compactLabel {
                     VStack(spacing: -1) {
-                        Text(verbatim: "×\(aggregate.pebbleCount.formatted())")
+                        Text(DurationPresentation.focusLabel(grams: aggregate.grams))
                             .font(.system(size: aggregate.pebbleCount >= 100 ? 7 : 8, weight: .heavy, design: .rounded))
                         Text(rareLabel)
                             .font(.system(size: 5.5, weight: .black, design: .rounded))
@@ -4337,7 +4326,7 @@ private struct ShareAggregatePebble: View {
     }
 
     private func countTag(size: CGFloat) -> some View {
-        let text = AggregatePresentation.countLabel(aggregate.pebbleCount)
+        let text = DurationPresentation.focusLabel(grams: aggregate.grams)
         let fontSize = GemArtwork.countTagFontSize(sceneRadius: size / 2)
         let tagSize = GemArtwork.countEngravingSize(text: text, fontSize: fontSize, style: .copperTag)
         // Below the theme marks when they show (round 14), as in the jar.

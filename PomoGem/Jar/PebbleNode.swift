@@ -318,6 +318,8 @@ struct PebbleDescriptor: Identifiable {
     let radius: CGFloat
     let createdAt: Date
     let isTutorial: Bool
+    /// Canonical time portions are visual only and own no StudySession rows.
+    let isTimeProjection: Bool
     /// Rendering-only obstacle metadata never enters the study data model.
     let screenTimeObstacle: ScreenTimeObstacleDescriptor?
 
@@ -335,6 +337,7 @@ struct PebbleDescriptor: Identifiable {
         radius: CGFloat? = nil,
         createdAt: Date = .now,
         isTutorial: Bool = false,
+        isTimeProjection: Bool = false,
         screenTimeObstacle: ScreenTimeObstacleDescriptor? = nil
     ) {
         self.id = id
@@ -359,9 +362,14 @@ struct PebbleDescriptor: Identifiable {
         // membership. Do not let an older count-only caller bypass it by passing
         // the former hierarchy radius explicitly. Loose/tutorial fixtures may
         // still provide a deliberate radius override.
-        self.radius = aggregate == nil ? (radius ?? massDerivedRadius) : massDerivedRadius
+        if isTimeProjection {
+            self.radius = Self.timeProjectionRadius(grams: grams)
+        } else {
+            self.radius = aggregate == nil ? (radius ?? massDerivedRadius) : massDerivedRadius
+        }
         self.createdAt = createdAt
         self.isTutorial = isTutorial
+        self.isTimeProjection = isTimeProjection
         self.screenTimeObstacle = screenTimeObstacle
     }
 
@@ -414,7 +422,9 @@ struct PebbleDescriptor: Identifiable {
     var isAggregate: Bool { aggregate != nil }
     var isScreenTimeObstacle: Bool { screenTimeObstacle != nil }
     var aggregateLevel: Int { aggregate?.level ?? 0 }
-    var participatesInAggregation: Bool { !isAchievement && !isTutorial && !isScreenTimeObstacle }
+    var participatesInAggregation: Bool {
+        !isAchievement && !isTutorial && !isScreenTimeObstacle && !isTimeProjection
+    }
     var participatesInBake: Bool { participatesInAggregation }
 
     /// UUID identifies the stored row, not an immutable rendering snapshot.
@@ -440,6 +450,7 @@ struct PebbleDescriptor: Identifiable {
             && radius == other.radius
             && createdAt == other.createdAt
             && isTutorial == other.isTutorial
+            && isTimeProjection == other.isTimeProjection
             && screenTimeObstacle == other.screenTimeObstacle
     }
 
@@ -468,6 +479,14 @@ struct PebbleDescriptor: Identifiable {
     var accessibilityDescription: String {
         if let screenTimeObstacle {
             return screenTimeObstacle.accessibilityDescription
+        }
+        if isTimeProjection {
+            let time = DurationPresentation.focusLabel(grams: grams)
+            return isAggregate
+                ? String(localized: "時間の結晶、\(time)", table: "Jar",
+                         comment: "VoiceOver for a visual crystal representing an exact amount of focus time")
+                : String(localized: "結晶になる途中、\(time)", table: "Jar",
+                         comment: "VoiceOver for focus time carried toward the next crystal")
         }
         // l10n: VoiceOver text only (see AggregateMetadata.accessibilityFacts).
         if let aggregate {
@@ -602,6 +621,54 @@ struct PebbleDescriptor: Identifiable {
             default: Constants.Jar.manualOneTwentyRadius
             }
         }
+    }
+
+    static func timeProjectionRadius(grams: Int) -> CGFloat {
+        guard grams >= TimeFusionPolicy.firstCrystalGrams else {
+            let fraction = CGFloat(max(0, grams)) / CGFloat(TimeFusionPolicy.firstCrystalGrams)
+            return 10 + 8 * fraction.squareRoot()
+        }
+        var level = 1
+        var value = grams / TimeFusionPolicy.firstCrystalGrams
+        while value >= 10 { value /= 10; level += 1 }
+        return CGFloat(StrataMath.aggregateRadius(level: level))
+    }
+
+    static func timeProjection(
+        unit: TimeFusionUnit,
+        colorMix: [StratumColorFraction],
+        subjectMix: [AggregateSubjectFraction] = []
+    ) -> PebbleDescriptor {
+        let resolvedColors = colorMix.isEmpty
+            ? [StratumColorFraction(hex: TimeFusionPolicy.colorHex, fraction: 1)]
+            : colorMix
+        let metadata = AggregateMetadata(
+            level: max(1, unit.level), pebbleCount: 0, childAggregateCount: 0,
+            colorMix: resolvedColors, subjectMix: subjectMix,
+            periodStart: .distantPast, periodEnd: .distantPast, sessionIDs: [],
+            measuredPebbleCount: 0, manualPebbleCount: 0,
+            goldPebbleCount: 0, prismPebbleCount: 0
+        )
+        return PebbleDescriptor(
+            id: unit.id, subjectName: metadata.primarySubjectName,
+            colorHex: metadata.dominantColorHex, source: .timer, kind: .normal,
+            aggregate: metadata, grams: unit.grams, createdAt: .distantPast,
+            isTimeProjection: true
+        )
+    }
+
+    static func timeRemainder(
+        grams: Int,
+        colorMix: [StratumColorFraction],
+        subjectMix: [AggregateSubjectFraction] = []
+    ) -> PebbleDescriptor {
+        PebbleDescriptor(
+            id: TimeFusionUnit(level: 0, grams: 0, ordinal: 0).id,
+            subjectName: subjectMix.first?.name ?? String(localized: "集中時間", table: "Jar"),
+            colorHex: colorMix.first?.hex ?? TimeFusionPolicy.colorHex,
+            source: .timer, kind: .normal, grams: max(0, grams),
+            createdAt: .distantPast, isTimeProjection: true
+        )
     }
 }
 
@@ -1751,6 +1818,7 @@ final class PebbleNode: SKShapeNode {
     }
 
     private static func monthEngraving(for descriptor: PebbleDescriptor, enabled: Bool) -> String? {
+        guard !descriptor.isTimeProjection else { return nil }
         guard enabled, descriptor.isAggregate else { return nil }
         return GemArtwork.monthHallmark(for: descriptor.createdAt)
     }
@@ -2140,7 +2208,9 @@ final class PebbleNode: SKShapeNode {
         tag.position = CGPoint(x: 0, y: -localRadius * Self.aggregatePlateDrop)
         addChild(tag)
         aggregateTagNode = tag
-        aggregateTagText = AggregatePresentation.countLabel(aggregate.pebbleCount)
+        aggregateTagText = descriptor.isTimeProjection
+            ? DurationPresentation.focusLabel(grams: descriptor.grams)
+            : AggregatePresentation.countLabel(aggregate.pebbleCount)
         aggregateTagMonth = Self.monthEngraving(for: descriptor, enabled: showsMonthEngraving)
         showAggregateTag()
         // The body was baked before the tag existed: read its marks now.
@@ -2157,6 +2227,7 @@ final class PebbleNode: SKShapeNode {
     /// splitting the same focus into many one-minute sessions cannot buy a
     /// brighter crystal.
     private func aggregateHaloStrength(_ aggregate: AggregateMetadata) -> CGFloat {
+        if descriptor.isTimeProjection { return 1 }
         let nominal = CGFloat(max(1, aggregate.pebbleCount))
             * CGFloat(max(1, Constants.Mass.measuredPebbleGrams))
         let ratio = CGFloat(max(0, descriptor.grams)) / nominal

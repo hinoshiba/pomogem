@@ -1,13 +1,9 @@
 import XCTest
 
-/// Where a tapped crystal's card goes once its detail has been opened before
-/// (home-11; the #50 follow-up). It shows in the row under the jar at every
-/// text size, never over the jar: over the jar it covered the readout, the
-/// time core or the pile, which since #47 reaches higher (adaptive gem
-/// scale), and at AX5 it also spilled onto the start button.
-///
-/// The jar is the `midload` showcase: 39 completions stored as three ×10
-/// crystals and nine loose gems under a 9.75 kg time core.
+/// Tapping a time crystal opens the total-time overview directly. Closing it
+/// returns to an unobstructed Home at standard and accessibility text sizes.
+/// The midload fixture's 975 minutes produces three 250-minute crystals and
+/// a 225-minute growing gem, independently of its 39 source records.
 @MainActor
 final class CrystalCardPlacementUITests: XCTestCase {
     private var app: XCUIApplication!
@@ -20,8 +16,8 @@ final class CrystalCardPlacementUITests: XCTestCase {
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_GEM_SHOWCASE"] = "midload"
         app.launchArguments += [
-            // A crystal's detail has been opened before, so the tip row under
-            // the jar is gone, and the one-time jar tip has been seen too.
+            // The old detail tip has already been seen; it must not revive
+            // the obsolete per-aggregate inspection card.
             "-jar.aggregate-detail-seen", "YES",
             "-jar.tap-hint-seen", "YES",
             // 39 completions cross the review threshold.
@@ -34,18 +30,17 @@ final class CrystalCardPlacementUITests: XCTestCase {
         app?.terminate()
     }
 
-    func testTappedCrystalCardStaysClearOfTheReadoutCoreAndStartButton() throws {
-        try checkCrystalCard(accessibility5: false, screenshot: "crystal-card-default")
+    func testTappedTimeCrystalOpensOverviewAndReturnsToHome() throws {
+        try checkCrystalNavigation(accessibility5: false, screenshot: "crystal-card-default")
     }
 
-    func testTappedCrystalCardStaysClearOfTheReadoutCoreAndStartButtonAtAccessibilitySize() throws {
-        try checkCrystalCard(accessibility5: true, screenshot: "crystal-card-ax5")
+    func testTappedTimeCrystalOpensOverviewAndReturnsToHomeAtAccessibilitySize() throws {
+        try checkCrystalNavigation(accessibility5: true, screenshot: "crystal-card-ax5")
     }
 
-    private func checkCrystalCard(accessibility5: Bool, screenshot: String) throws {
+    private func checkCrystalNavigation(accessibility5: Bool, screenshot: String) throws {
         app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = accessibility5 ? "1" : "0"
         app.launch()
-        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 10))
         let probe = app.descendants(matching: .any)["jar.presentation.probe"]
         XCTAssertTrue(probe.waitForExistence(timeout: 5))
         let jar = app.buttons["瓶"]
@@ -54,14 +49,10 @@ final class CrystalCardPlacementUITests: XCTestCase {
         XCTAssertTrue(launcher.waitForExistence(timeout: 5))
 
         let resting = try waitForRestingCrystal(probe)
-        XCTAssertGreaterThanOrEqual(
-            Int(resting["count"] ?? "") ?? 0, 10,
-            "The jar must hold at least ten bodies: \(resting)"
-        )
+        XCTAssertEqual(Int(resting["count"] ?? ""), 4,
+                       "975 minutes has three crystals and one growing gem: \(resting)")
         let jarBefore = jar.frame
         let launcherBefore = launcher.frame
-        let picker = app.buttons["home.subject-picker"]
-        let pickerBefore = picker.frame
         saveScreenshot("\(screenshot)-resting")
 
         let crystalX = try XCTUnwrap(resting["crystalWindowX"].flatMap(Double.init))
@@ -69,73 +60,28 @@ final class CrystalCardPlacementUITests: XCTestCase {
         app.coordinate(withNormalizedOffset: .zero)
             .withOffset(CGVector(dx: crystalX, dy: crystalY))
             .tap()
-        let card = app.buttons["jar.aggregate.inspect"]
-        XCTAssertTrue(card.waitForExistence(timeout: 3), "Tapping a crystal shows its card")
-        // The card settles in (and at accessibility sizes Home scrolls it
-        // into view) before its frame is read.
-        XCTAssertTrue(
-            waitUntil(timeout: 3) { card.isHittable },
-            "The whole card is brought into view: card=\(card.frame)"
-        )
-        pause(0.8)
+        XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 6),
+                      "A time crystal opens the whole time overview")
+        XCTAssertFalse(app.buttons["jar.aggregate.inspect"].exists,
+                       "There is no per-crystal membership card over Home")
+        let close = app.buttons["overview.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 4))
+        XCTAssertTrue(close.isHittable)
         saveScreenshot(screenshot)
+        close.tap()
 
-        var fields = probeFields(probe)
-        _ = waitUntil(timeout: 3) {
-            fields = self.probeFields(probe)
-            return fields["hud"] != "none" && fields["core"] != "none" && fields["bottle"] != "none"
-        }
-        let cardFrame = card.frame
-        let jarFrame = jar.frame
-        let launcherFrame = launcher.frame
-        let window = app.windows.firstMatch.frame
-        let hud = try XCTUnwrap(rect(fields["hud"]), "The probe reports the readout: \(fields)")
-        let core = try XCTUnwrap(rect(fields["core"]), "A 9.75 kg jar has a time core: \(fields)")
-        let bottle = try XCTUnwrap(rect(fields["bottle"]), "The probe reports the bottle: \(fields)")
-        let context = "card=\(cardFrame) bottle=\(bottle) jar=\(jarFrame) hud=\(hud) core=\(core) start=\(launcherFrame)"
-
-        XCTAssertFalse(cardFrame.intersects(hud), "The card covers the readout: \(context)")
-        XCTAssertFalse(cardFrame.intersects(core), "The card covers the time core: \(context)")
-        XCTAssertFalse(cardFrame.intersects(launcherFrame), "The card covers the start button: \(context)")
-        // Every gem rests inside the bottle: under its base, the card covers none.
-        XCTAssertGreaterThanOrEqual(cardFrame.minY, bottle.maxY, "The card sits under the bottle: \(context)")
-        XCTAssertLessThanOrEqual(cardFrame.maxY, launcherFrame.minY + 0.5, "Above the start button: \(context)")
-        XCTAssertTrue(launcher.isHittable, "The start button stays uncovered: \(context)")
-        XCTAssertGreaterThanOrEqual(cardFrame.minY, window.minY, context)
-        XCTAssertLessThanOrEqual(cardFrame.maxY, window.maxY, context)
-
-        if !accessibility5 {
-            // The first screen holds still: the jar keeps its size, and the
-            // start button stays on screen.
-            XCTAssertEqual(jarFrame.height, jarBefore.height, accuracy: 0.5, context)
-            XCTAssertLessThanOrEqual(launcherFrame.maxY, window.maxY, "The start button stays on screen: \(context)")
-            XCTAssertEqual(launcherFrame.minY, launcherBefore.minY, accuracy: 0.5, context)
-            // Where the card reaches the theme and time pickers, they give
-            // way to it (never drawn under it, never tapped through it).
-            if cardFrame.intersects(pickerBefore) {
-                XCTAssertFalse(picker.exists && picker.isHittable, "The pickers give way: \(context) picker=\(pickerBefore)")
-            }
-        }
-
-        XCTAssertTrue(
-            waitUntil(timeout: 9) { !card.exists },
-            "The card still closes by itself"
-        )
+        XCTAssertTrue(launcher.waitForExistence(timeout: 6))
         if accessibility5 {
-            // Home comes back to the jar once the card closes.
-            XCTAssertTrue(
-                waitUntil(timeout: 3) {
-                    jar.frame.minY >= window.minY && jar.frame.maxY <= launcher.frame.minY + 0.5
-                },
-                "The jar is back in view: jar=\(jar.frame) start=\(launcher.frame)"
-            )
-        } else {
-            XCTAssertEqual(jar.frame.minY, jarBefore.minY, accuracy: 0.5, "Nothing moved: jar=\(jar.frame)")
-            XCTAssertTrue(
-                waitUntil(timeout: 3) { picker.exists && picker.isHittable },
-                "The pickers are back once the card closes"
-            )
+            for _ in 0..<6 where !launcher.isHittable { app.swipeUp() }
         }
+        XCTAssertTrue(waitUntil(timeout: 4) { launcher.isHittable && launcher.isEnabled },
+                      "Closing the overview leaves the focus action usable")
+        XCTAssertFalse(app.buttons["jar.aggregate.inspect"].exists)
+        if !accessibility5 {
+            XCTAssertEqual(jar.frame.height, jarBefore.height, accuracy: 0.5)
+            XCTAssertEqual(launcher.frame.minY, launcherBefore.minY, accuracy: 0.5)
+        }
+        saveScreenshot("\(screenshot)-returned-home")
     }
 
     /// The crystal is placed when Home first lays out the jar and may still
@@ -169,13 +115,6 @@ final class CrystalCardPlacementUITests: XCTestCase {
             guard pieces.count == 2 else { return nil }
             return (String(pieces[0]), String(pieces[1]))
         }, uniquingKeysWith: { $1 })
-    }
-
-    private func rect(_ value: String?) -> CGRect? {
-        guard let value, value != "none" else { return nil }
-        let numbers = value.split(separator: ",").compactMap { Double($0) }
-        guard numbers.count == 4 else { return nil }
-        return CGRect(x: numbers[0], y: numbers[1], width: numbers[2] - numbers[0], height: numbers[3] - numbers[1])
     }
 
     private func pause(_ seconds: TimeInterval) {

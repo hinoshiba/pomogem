@@ -83,6 +83,15 @@ enum JarCapacityEvent {
 @MainActor
 final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     var onLanding: ((JarLandingEvent) -> Void)?
+    var onTimeFusionFormed: ((TimeFusionTransition) -> Void)?
+    private(set) var timeFusionSnapshot: TimeFusionSnapshot?
+    private var timeFusionColorMix: [StratumColorFraction] = []
+    private var timeFusionSubjectMix: [AggregateSubjectFraction] = []
+    private var pendingTimeContributions: [UUID: Int] = [:]
+    private var absorbedTimeSessionIDs = Set<UUID>()
+    private var absorbedTimeSessionOrder: [UUID] = []
+    private var timeFusionGeneration = 0
+    private var timeFusionEpochID: UUID?
     var onAggregateRequested: ((JarAggregateRequest) -> Void)?
     /// Compatibility callback for screens that have not yet adopted the new
     /// AggregatePebble model. Only one persistence callback is invoked.
@@ -889,7 +898,128 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
     func hasLandedPebble(withID id: UUID) -> Bool {
-        livePebbles.contains { $0.descriptor.id == id && $0.hasLanded }
+        absorbedTimeSessionIDs.contains(id)
+            || livePebbles.contains { $0.descriptor.id == id && $0.hasLanded }
+    }
+
+    /// Installs an authoritative, already-landed time total. Pending receipts
+    /// are explicitly excluded by Home and may contribute once, on landing.
+    /// Storage aggregates remain history indexes and never enter this scene.
+    func configureTimeFusion(
+        totalGrams: Int,
+        colorMix: [StratumColorFraction],
+        subjectMix: [AggregateSubjectFraction] = [],
+        pendingContributions: [UUID: Int] = [:],
+        epochID: UUID? = nil
+    ) {
+        let enteringTimeMode = timeFusionSnapshot == nil
+        let epochChanged = !enteringTimeMode && timeFusionEpochID != epochID
+        let resetToEmpty = (timeFusionSnapshot?.totalGrams ?? 0) > 0
+            && totalGrams == 0 && pendingContributions.isEmpty
+        if epochChanged || resetToEmpty {
+            timeFusionGeneration &+= 1
+            absorbedTimeSessionIDs.removeAll()
+            absorbedTimeSessionOrder.removeAll()
+            let obsoleteIDs = Set(dropQueue.map { $0.descriptor.id })
+                .union(livePebbles.filter { !$0.descriptor.isScreenTimeObstacle }.map { $0.descriptor.id })
+            dropQueue.removeAll()
+            livePebbles.filter { !$0.descriptor.isScreenTimeObstacle }.forEach { $0.removeFromParent() }
+            acceptedPebbleIDs.subtract(obsoleteIDs)
+            aboveEntryPebbleIDs.removeAll()
+            enteringPhases.removeAll()
+            slowNewGemSince.removeAll()
+            completionDropTracking = nil
+            completionDropHasLanded = false
+            refreshLidPresentation(animated: false)
+        }
+        timeFusionEpochID = epochID
+        if let previous = timeFusionSnapshot, totalGrams < previous.totalGrams {
+            timeFusionGeneration &+= 1
+        }
+        if enteringTimeMode { cancelActiveBakeForRestore() }
+        timeFusionSnapshot = TimeFusionPolicy.snapshot(totalGrams: totalGrams)
+        timeFusionColorMix = colorMix
+        timeFusionSubjectMix = subjectMix
+        pendingTimeContributions = pendingContributions.filter {
+            $0.value > 0 && !absorbedTimeSessionIDs.contains($0.key)
+        }
+        if totalGrams == 0, pendingContributions.isEmpty {
+            absorbedTimeSessionIDs.removeAll()
+            absorbedTimeSessionOrder.removeAll()
+        }
+        if enteringTimeMode {
+            for node in livePebbles where !node.descriptor.isAchievement
+                && !node.descriptor.isTutorial && !node.descriptor.isScreenTimeObstacle {
+                node.removeFromParent()
+            }
+            acceptedPebbleIDs.subtract(installedHistoryIDs)
+            persistedBakedPebbleIDs.removeAll()
+            persistedStratumIDs.removeAll()
+        }
+        refreshTimeFusionBodies()
+        if enteringTimeMode { publishPhysicalContentChangeIfNeeded(force: true) }
+    }
+
+    private func refreshTimeFusionBodies() {
+        guard let snapshot = timeFusionSnapshot else { return }
+        historyDescriptors = snapshot.visibleCrystals.map {
+            PebbleDescriptor.timeProjection(
+                unit: $0, colorMix: timeFusionColorMix, subjectMix: timeFusionSubjectMix
+            )
+        }
+        if snapshot.remainderGrams > 0 {
+            historyDescriptors.append(PebbleDescriptor.timeRemainder(
+                grams: snapshot.remainderGrams,
+                colorMix: timeFusionColorMix, subjectMix: timeFusionSubjectMix
+            ))
+        }
+        if synchronizeHistoryBodies() { resumeSimulation() }
+    }
+
+    private func absorbTimeLanding(_ pebble: PebbleNode) {
+        let descriptor = pebble.descriptor
+        guard let previous = timeFusionSnapshot,
+              !descriptor.isTimeProjection, !descriptor.isAchievement,
+              !descriptor.isTutorial, !descriptor.isScreenTimeObstacle,
+              !descriptor.isAggregate,
+              absorbedTimeSessionIDs.insert(descriptor.id).inserted
+        else { return }
+        absorbedTimeSessionOrder.append(descriptor.id)
+        // These IDs bridge a short animation to Home's persisted receipt, not
+        // a second lifetime history index. Keep recent landings bounded.
+        if absorbedTimeSessionOrder.count > 512 {
+            let expired = absorbedTimeSessionOrder.removeFirst()
+            absorbedTimeSessionIDs.remove(expired)
+            acceptedPebbleIDs.remove(expired)
+        }
+        let contribution = pendingTimeContributions.removeValue(forKey: descriptor.id) ?? 0
+        let next = NonnegativeIntPolicy.sum([previous.totalGrams, contribution])
+        timeFusionSnapshot = TimeFusionPolicy.snapshot(totalGrams: next)
+        let transition = TimeFusionPolicy.transition(from: previous.totalGrams, to: next)
+        let generation = timeFusionGeneration
+        // Never replace physics bodies inside a contact callback. Keep the
+        // just-landed gem visible briefly, then absorb it into the exact time
+        // projection. Home receives its original session ID in onLanding.
+        run(.sequence([
+            .wait(forDuration: reduceMotion ? 0.01 : 0.22),
+            .run { [weak self, weak pebble] in
+                guard let self else { return }
+                pebble?.removeFromParent()
+                self.refreshTimeFusionBodies()
+                if let transition, generation == self.timeFusionGeneration,
+                   (self.timeFusionSnapshot?.totalGrams ?? 0) >= transition.afterGrams {
+                    if let formed = self.livePebbles.first(where: {
+                        $0.descriptor.isTimeProjection
+                            && $0.descriptor.aggregateLevel == transition.destinationLevel
+                    }) {
+                        self.presentFusionFinale(for: formed)
+                    }
+                    self.onTimeFusionFormed?(transition)
+                }
+                self.publishPhysicalContentChangeIfNeeded()
+                self.resumeSimulation()
+            }
+        ]))
     }
 
     /// Establishes a quiet baseline when Home loads its device-local ledger.
@@ -1524,6 +1654,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         _ aggregates: [AggregatePebble],
         legacyStrata: [JarStratumVisual] = []
     ) {
+        guard timeFusionSnapshot == nil else { return }
         let previouslyPersistedIDs = persistedBakedPebbleIDs
         let previousHistory = historyDescriptors
         let previousQueuedDrops = dropQueue.count
@@ -1609,6 +1740,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
         let combinedDescriptors = historyDescriptors + descriptors.filter {
             !persistedBakedPebbleIDs.contains($0.id) && !$0.isScreenTimeObstacle
+                && (timeFusionSnapshot == nil || $0.isAchievement || $0.isTutorial)
         } + ScreenTimeObstacleProjection.visibleDescriptors(
             totalUnits: screenTimeObstacleUnitCount
         ).map(PebbleDescriptor.init(screenTimeObstacle:))
@@ -5311,6 +5443,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         aboveEntryPebbleIDs.remove(pebble.descriptor.id)
         slowNewGemSince[pebble.descriptor.id] = nil
         updateCompletionDropTrackingIfNeeded()
+        absorbTimeLanding(pebble)
         if mutedLandingIDs.remove(pebble.descriptor.id) != nil { return }
         deliverLandingFeedback(
             for: pebble,
@@ -5621,6 +5754,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
     private var needsAggregation: Bool {
+        guard timeFusionSnapshot == nil else { return false }
         let countsByLevel = Dictionary(grouping: bakeEligiblePebbles) {
             $0.descriptor.aggregateLevel
         }
@@ -5636,6 +5770,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         from pebbles: [PebbleNode],
         force _: Bool
     ) -> [PebbleNode]? {
+        guard timeFusionSnapshot == nil else { return nil }
         let groups = Dictionary(grouping: pebbles) { $0.descriptor.aggregateLevel }
         let rollUpLevel = groups.keys
             .filter { (groups[$0]?.count ?? 0) >= Constants.Jar.aggregateFanIn }

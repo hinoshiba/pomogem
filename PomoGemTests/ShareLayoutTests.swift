@@ -59,7 +59,7 @@ final class ShareLayoutTests: XCTestCase {
         for format in ShareComposerView.Format.allCases {
             let size = ShareCardLayoutPolicy.canvasSize(for: format)
             let card = ShareCardView(
-                sessions: sampleSessions(count: 3),
+                sessions: sampleSessions(count: 24),
                 aggregates: [],
                 achievements: [sampleStone()],
                 includesSelfReportedFocus: false,
@@ -136,6 +136,46 @@ final class ShareLayoutTests: XCTestCase {
             footprints: [neighbour]
         )
         XCTAssertEqual(bottoms, [7])
+    }
+
+    func testTimeCrystalsIgnoreHowTheSharedFocusWasSplit() {
+        func shared(_ minutes: [Int]) -> [ShareSessionVisual] {
+            minutes.enumerated().map { index, value in
+                ShareSessionVisual(
+                    id: UUID(), grams: value * 10, source: .timer, kind: .normal,
+                    rewardCounts: .init(drawCount: 0, goldCount: 0, prismCount: 0),
+                    colorHex: Constants.Color.mathematics,
+                    endAt: Date(timeIntervalSinceReferenceDate: Double(index))
+                )
+            }
+        }
+        let short = ShareTimeFusionPresentation.snapshot(sessions: shared(Array(repeating: 10, count: 60)), aggregates: [])
+        let long = ShareTimeFusionPresentation.snapshot(sessions: shared(Array(repeating: 120, count: 5)), aggregates: [])
+        XCTAssertEqual(short, long)
+        XCTAssertEqual(short.crystals.count, 2)
+        XCTAssertEqual(short.remainderGrams, 1_000)
+    }
+
+    func testTimeProjectionCountsLinkedHistoryOnlyOnceAndKeepsStandaloneTime() {
+        let sessions = sampleSessions(count: 10)
+        let date = Date(timeIntervalSinceReferenceDate: 0)
+        let linked = AggregatePebble(
+            level: 1, pebbleCount: 10, grams: 2_500,
+            colorMixJSON: "[]", periodStart: date, periodEnd: date,
+            sessionIDs: sessions.map(\.id)
+        )
+        let standalone = AggregatePebble(
+            level: 1, pebbleCount: 10, grams: 6_000,
+            colorMixJSON: "[]", periodStart: date, periodEnd: date
+        )
+        let projection = ShareTimeFusionPresentation.snapshot(
+            sessions: sessions,
+            aggregates: [ShareAggregateVisual(aggregate: linked), ShareAggregateVisual(aggregateSummary: standalone)]
+        )
+        XCTAssertEqual(projection.totalGrams, 8_500)
+        XCTAssertEqual(projection.representedGrams, 8_500)
+        XCTAssertEqual(projection.crystals.count, 3)
+        XCTAssertEqual(projection.remainderGrams, 1_000)
     }
 
     // MARK: - Fixtures

@@ -129,17 +129,17 @@ final class ShareJarLocalizationTests: XCTestCase {
     func testEnglishPluralsOnTheCardAndInTheComposer() throws {
         XCTAssertEqual(try english("タグ%lld個", 1), "1 hashtag")
         XCTAssertEqual(try english("タグ%lld個", 3), "3 hashtags")
-        XCTAssertEqual(try english("%lld粒の積み重ね", 1), "1 gem added")
-        XCTAssertEqual(try english("%lld粒の積み重ね", 1_250), "1,250 gems added")
+        XCTAssertEqual(try english("%@の積み重ね", "25 min"), "25 min built up")
+        XCTAssertEqual(try english("%@の積み重ね", "4 hr 10 min"), "4 hr 10 min built up")
         XCTAssertEqual(try english("%lld個の記念石", 1), "1 milestone stone")
-        XCTAssertEqual(try english("実測 %lld粒", 1), "1 timed gem")
-        XCTAssertEqual(try english("実測 %lld粒", 12), "12 timed gems")
+        XCTAssertEqual(try english("元の実測記録 %lld件", 1), "1 measured record")
+        XCTAssertEqual(try english("元の実測記録 %lld件", 12), "12 measured records")
         XCTAssertEqual(try english("結晶 %lld", 1), "1 crystal")
         XCTAssertEqual(try english("記念石 %lld", 2), "2 milestone stones")
         XCTAssertEqual(try english("集中粒%lld粒", 48), "48 focus gems")
         XCTAssertEqual(try english("結晶%lld個", 1), "1 crystal")
         XCTAssertEqual(try english("記念石%lld個", 9), "9 milestone stones")
-        XCTAssertEqual(try english("うち実測%lld粒", 1), "including 1 timed gem")
+        XCTAssertEqual(try english("うち実測%lld件", 1), "including 1 measured record")
         XCTAssertEqual(try english("金のレア粒%lld粒", 1), "1 gold rare gem")
         XCTAssertEqual(try english("文字・数字・_ のみ、%lld文字まで。本文やURLは追加しません。", ShareHashtagPolicy.maximumBodyLength),
                        "Letters, numbers and _ only, up to 30 characters. Text and links can't be added here.")
@@ -189,7 +189,7 @@ final class ShareJarLocalizationTests: XCTestCase {
         )
         XCTAssertEqual(
             card.accessibilityDescription,
-            "ポモジェムシェアカード。これまで。瓶に積んだ集中、750グラム、1時間15分。3粒、うち実測3粒、結晶0個、記念石1個。"
+            "ポモジェムシェアカード。これまで。瓶に積んだ集中、750グラム、1時間15分。元の記録3件、うち実測3件、結晶0個、記念石1個。"
                 + "記念石の内訳、100点1個。すべての石を表示。記念石は自己申告。公式サイト、pomogem.hinoshiba.com。"
                 + "ハッシュタグ、#ポモジェム、#ポモドーロ"
         )

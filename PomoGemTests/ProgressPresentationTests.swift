@@ -799,7 +799,7 @@ final class ProgressPresentationTests: XCTestCase {
                 totalNodeCount: 2,
                 visibleNodeCount: 2
             ),
-            "時間の核、集中2.75kg、11粒、時間 4時間35分 / 41時間40分、核まであと37時間5分、表示中の結晶2個のうち代表2個を配置"
+            "時間の核、集中2.75kg、元の記録11件、時間 4時間35分 / 41時間40分、核まであと37時間5分、表示中の結晶2個のうち代表2個を配置"
         )
         XCTAssertEqual(
             EffortConstellationPresentation.materializedCoreAccessibilityLabel(
@@ -809,7 +809,7 @@ final class ProgressPresentationTests: XCTestCase {
                 totalNodeCount: 18,
                 visibleNodeCount: 8
             ),
-            "時間の核、集中24.8kg、99粒、時間 41時間15分 / 41時間40分、核まであと25分、表示中の結晶18個のうち代表8個を配置"
+            "時間の核、集中24.8kg、元の記録99件、時間 41時間15分 / 41時間40分、核まであと25分、表示中の結晶18個のうち代表8個を配置"
         )
     }
 
@@ -824,7 +824,7 @@ final class ProgressPresentationTests: XCTestCase {
 
         XCTAssertEqual(
             label,
-            "時間の核、集中24.8kg以上、99粒以上、進捗を整理中、表示中の結晶18個のうち代表8個を配置"
+            "時間の核、集中24.8kg以上、元の記録99件以上、進捗を整理中、表示中の結晶18個のうち代表8個を配置"
         )
         XCTAssertFalse(label.contains("×100へ"))
         XCTAssertFalse(label.contains("あと1粒"))

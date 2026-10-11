@@ -104,12 +104,12 @@
       }
     },
     "%@の積み重ね" : {
-      "comment" : "Share caption subject (starts the caption's first sentence in en): the focus in one crystal. Argument: the month it formed (2026年9月)",
+      "comment" : "Share caption subject (starts the caption's first sentence in en): the focus in one crystal. Argument: the month it formed (2026年9月)\nShare card line under the jar: the total time represented by its time crystals",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "My crystal from %@"
+            "value" : "%@ built up"
           }
         },
         "ja" : {
@@ -281,35 +281,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld個の記念石"
-          }
-        }
-      }
-    },
-    "%lld粒の積み重ね" : {
-      "comment" : "Share card line under the jar: how many gems the card holds",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld gem added"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld gems added"
-                }
-              }
-            }
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld粒の積み重ね"
           }
         }
       }
@@ -569,8 +540,8 @@
         }
       }
     },
-    "うち実測%lld粒" : {
-      "comment" : "VoiceOver, share card: how many of the card's gems are timed (follows the gem count in a list)",
+    "うち実測%lld件" : {
+      "comment" : "VoiceOver share card: measured original records",
       "localizations" : {
         "en" : {
           "variations" : {
@@ -578,13 +549,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "including %lld timed gem"
+                  "value" : "including %lld measured record"
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "including %lld timed gems"
+                  "value" : "including %lld measured records"
                 }
               }
             }
@@ -593,7 +564,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "うち実測%lld粒"
+            "value" : "うち実測%lld件"
           }
         }
       }
@@ -1301,6 +1272,64 @@
         }
       }
     },
+    "元の実測記録 %lld件" : {
+      "comment" : "Share card: measured source records, independent of visible time crystals",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld measured record"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld measured records"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "元の実測記録 %lld件"
+          }
+        }
+      }
+    },
+    "元の記録%lld件" : {
+      "comment" : "VoiceOver share card: original record count",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld original record"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld original records"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "元の記録%lld件"
+          }
+        }
+      }
+    },
     "全履歴を一括展開しないため、最新%@件の記録から選んだ表示分です。カードにも範囲を明記します。" : {
       "comment" : "Share composer coverage note: the card shows part of the history, from the newest records. Argument: how many records (a fixed number far above one)",
       "localizations" : {
@@ -1720,35 +1749,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "完了"
-          }
-        }
-      }
-    },
-    "実測 %lld粒" : {
-      "comment" : "Share card: measured gems (timer or Screen Time)",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld timed gem"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld timed gems"
-                }
-              }
-            }
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "実測 %lld粒"
           }
         }
       }
@@ -2377,7 +2377,7 @@
       }
     },
     "結晶 %lld" : {
-      "comment" : "Share card stat: crystal count",
+      "comment" : "Share card stat: time crystal count",
       "localizations" : {
         "en" : {
           "variations" : {
