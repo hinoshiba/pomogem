@@ -107,15 +107,15 @@ final class HomeLocalizationTests: XCTestCase {
     }
 
     func testHomeCountsHaveEnglishPluralForms() throws {
-        XCTAssertEqual(try english("記念石 \(1)"), "1 milestone stone")
-        XCTAssertEqual(try english("記念石 \(3)"), "3 milestone stones")
-        XCTAssertEqual(try english("記念石 \(12)+"), "12+ milestone stones")
-        XCTAssertEqual(try english("元の記録 \(1)+件"), "1+ original record")
-        XCTAssertEqual(try english("確認済みの記録 \(1)件"), "1 confirmed record")
-        XCTAssertEqual(try english("確認済みの記録 \(1_234)件"), "1,234 confirmed records")
+        XCTAssertEqual(try english("\(1)件"), "1 record")
+        XCTAssertEqual(try english("\(40)件"), "40 records")
+        XCTAssertEqual(try english("確認済み \(1)件"), "1 confirmed record")
+        XCTAssertEqual(try english("確認済み \(1_234)件"), "1,234 confirmed records")
         XCTAssertEqual(try english("元の記録 \(1)件"), "1 original record")
         XCTAssertEqual(try english("元の記録 \(40)件"), "40 original records")
         XCTAssertEqual(try english("記念石\(1)個"), "1 milestone stone")
+        XCTAssertEqual(try english("記念石\(3)個"), "3 milestone stones")
+        XCTAssertEqual(try english("記念石\(12)+個"), "12+ milestone stones")
         XCTAssertEqual(try english("\(1)粒が、ひとつの結晶になった"), "1 gem became one crystal")
         XCTAssertEqual(try english("\(10)粒が、ひとつの結晶になった"), "10 gems became one crystal")
         XCTAssertEqual(try english("\(100)粒が、ひとつの結晶になった"), "100 gems became one crystal")
@@ -133,10 +133,6 @@ final class HomeLocalizationTests: XCTestCase {
         let twelveGems = CountText.gems(12, bundle: bundle, locale: en)
         XCTAssertEqual(try english("\("English")\(oneGem)"), "English 1 gem")
         XCTAssertEqual(try english("\("English")\(twelveGems)"), "English 12 gems")
-        XCTAssertEqual(
-            try english("\(CountText.gems(100, bundle: bundle, locale: en))の結晶、\("details")"),
-            "A crystal of 100 gems, details"
-        )
         XCTAssertEqual(try english("今週の実測は\("1.25 kg")。"), "This week: 1.25 kg timed.")
         XCTAssertEqual(
             try english("今週のタイマー完走は\(1)回です。回数は時間の価値とは別です。"),

@@ -278,6 +278,14 @@ struct JarSpriteView: View {
     /// behind the scene and its labels in front, so both use one layout;
     /// the width tells which columns of the pile lie under the labels).
     @State private var coreLabelMetrics = JarLifetimeCoreLabelMetrics.estimated
+    /// A stable side position for a dial hidden by the settled pile in a
+    /// compact Home jar. It stays put through subsequent gem motion.
+    @State private var retainedGaugeDock: JarHUDScrimPolicy.Body?
+    private struct GaugeDockCommit: Equatable {
+        let candidate: JarHUDScrimPolicy.Body?
+        let stageSize: CGSize
+        let needsCommit: Bool
+    }
     /// Low Power Mode and the thermal state, followed live (round 14), so
     /// an awake jar drops to 30 fps the moment either changes.
     @State private var allowsAmbientSparkle = JarScene.allowsAmbientSparkle
@@ -468,7 +476,7 @@ struct JarSpriteView: View {
                     ) { _ in layout }
                 } ?? .full
                 let coreLabelsBuried = coreLabelFit == .hidden
-                let coreDisc = Self.coreDisc(
+                let centralCoreDisc = Self.coreDisc(
                     stageSize: proxy.size,
                     coreState: lifetimeCoreState,
                     coreLayout: coreLayout,
@@ -477,6 +485,18 @@ struct JarSpriteView: View {
                     bottomLimit: coreBottomLimit,
                     labelBottomLimit: coreLabelBottomLimit
                 )
+                let proposedGaugeDock = centralCoreDisc.flatMap { disc in
+                    JarLifetimeGaugePlacement.dock(
+                        stageSize: proxy.size,
+                        topClearance: coreTopClearance,
+                        bottomLimit: coreBottomLimit,
+                        core: .init(center: disc.center, radius: disc.radius),
+                        settledBodies: scene.settledPileStandsUpright ? stageBodies : [],
+                        retained: retainedGaugeDock
+                    )
+                }
+                let gaugeDock = retainedGaugeDock == nil ? nil : proposedGaugeDock
+                let coreDisc = gaugeDock.map { (center: $0.center, radius: $0.radius) } ?? centralCoreDisc
                 let pileClearances = Self.pileClearances(
                     stageSize: proxy.size,
                     hudBottom: coreTopClearance
@@ -499,11 +519,13 @@ struct JarSpriteView: View {
                         state: coreState,
                         colorHex: lifetimeCoreColorHex,
                         colorShares: lifetimeCoreColorShares,
+                        showsGaugeProgress: !projectionIsUnverified,
                         topClearance: coreTopClearance,
                         bottomLimit: coreBottomLimit,
                         labelBottomLimit: coreLabelBottomLimit,
                         labelHeight: coreLabelHeight,
-                        effectsInEffect: effects
+                        effectsInEffect: effects,
+                        gaugeDock: gaugeDock
                     )
                     // The whole block, laid out but never drawn, measures
                     // the labels (their measured size keeps the layout
@@ -521,16 +543,34 @@ struct JarSpriteView: View {
                     )
                     .opacity(0)
                 } else if totalGrams > 0, totalGrams < GemCutLadder.firstCrystalTierGrams {
-                    // Where the core will be born: a colourless vessel whose
-                    // facets light up one per 250 g.
+                    // The same time dial before the first milestone; partial
+                    // or unverified totals never imply a known fraction.
                     JarLifetimeCoreVessel(
                         totalGrams: totalGrams,
+                        projectionIsLowerBound: projectionIsLowerBound,
+                        projectionIsUnverified: projectionIsUnverified,
                         topClearance: coreTopClearance,
                         bottomLimit: coreBottomLimit,
                         labelBottomLimit: coreLabelBottomLimit,
-                        effectsInEffect: effects
+                        effectsInEffect: effects,
+                        gaugeDock: gaugeDock
                     )
                 }
+                Color.clear
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                    .task(id: GaugeDockCommit(
+                        candidate: proposedGaugeDock,
+                        stageSize: proxy.size,
+                        needsCommit: retainedGaugeDock == nil
+                    )) {
+                        guard retainedGaugeDock == nil, let proposedGaugeDock else { return }
+                        // A bounce can momentarily have zero speed; require
+                        // the same clear side for a short settled interval.
+                        try? await Task.sleep(for: .milliseconds(450))
+                        guard !Task.isCancelled else { return }
+                        retainedGaugeDock = proposedGaugeDock
+                    }
 
                 // jar-01: the scene stops this SKView's render loop itself
                 // while it rests (`JarScene.isRenderLoopPaused`), because
@@ -603,7 +643,11 @@ struct JarSpriteView: View {
                     scene.pileClearances = clearances
                 }
                 .onChange(of: proxy.size) { _, newSize in
+                    retainedGaugeDock = nil
                     scene.size = newSize
+                }
+                .onChange(of: totalGrams) { _, grams in
+                    if grams <= 0 { retainedGaugeDock = nil }
                 }
                 // A new frame rate updates the SKView: whatever SwiftUI
                 // re-applies there, the resting jar's loop stays as the
@@ -640,7 +684,7 @@ struct JarSpriteView: View {
                 // the scene (like the HUD): the bed can never hide them, and
                 // they may overlap its soft top edge. While ten gems fuse
                 // under them they step aside (0.9 s), so the flash is seen.
-                if let coreState = lifetimeCoreState, !coreLabelsBuried {
+                if let coreState = lifetimeCoreState, !coreLabelsBuried, gaugeDock == nil {
                     JarLifetimeCoreLabels(
                         state: coreState,
                         topClearance: coreTopClearance,
@@ -661,9 +705,9 @@ struct JarSpriteView: View {
                 // crystal's card must stay clear of it.
                 if coreTopClearance != nil || reportsCoreFrame, let coreDisc {
                     let labelBottom = coreLayout.map {
-                        $0.labelTop + (coreLabelsBuried ? 0 : coreLabelMetrics.size.height)
+                        gaugeDock == nil ? $0.labelTop + (coreLabelsBuried ? 0 : coreLabelMetrics.size.height) : 0
                     } ?? 0
-                    let halfWidth = max(coreDisc.radius, coreLayout == nil ? 0 : coreLabelMetrics.size.width / 2)
+                    let halfWidth = max(coreDisc.radius, coreLayout == nil || gaugeDock != nil ? 0 : coreLabelMetrics.size.width / 2)
                     let top = coreDisc.center.y - coreDisc.radius
                     let bottom = max(coreDisc.center.y + coreDisc.radius, labelBottom)
                     Color.clear
@@ -793,10 +837,9 @@ struct JarSpriteView: View {
             labelHeight: JarLifetimeCoreBackdrop.estimatedLabelHeight,
             minimumStoneDiameter: JarLifetimeCoreBackdrop.minimumStoneDiameter(jarWidth: jarWidth)
         )
-        // The vessel is drawn at 0.92 of the core frame.
         return (
             CGPoint(x: stageSize.width / 2, y: layout.centerY),
-            core * 0.92 * JarLifetimeCoreLayout.stoneRadiusFactor
+            core * layout.stoneScale * JarLifetimeCoreLayout.stoneRadiusFactor
         )
     }
 

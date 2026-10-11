@@ -54,6 +54,19 @@ final class CrystalCardPlacementUITests: XCTestCase {
         let jarBefore = jar.frame
         let launcherBefore = launcher.frame
         saveScreenshot("\(screenshot)-resting")
+        if !accessibility5, app.windows.firstMatch.frame.height < 700 {
+            let core = try XCTUnwrap(rect(resting["core"]), "The probe reports the total-time meter: \(resting)")
+            let hud = try XCTUnwrap(rect(resting["hud"]), "The probe reports the total readout: \(resting)")
+            let bottle = try XCTUnwrap(rect(resting["bottle"]), "The probe reports the bottle: \(resting)")
+            let context = "core=\(core); hud=\(hud); bottle=\(bottle)"
+            let geometry = XCTAttachment(string: context)
+            geometry.name = "Small jar — total-time meter beside the crystal pile"
+            geometry.lifetime = .keepAlways
+            add(geometry)
+            XCTAssertTrue(core.maxX < bottle.midX || core.minX > bottle.midX,
+                          "The 9.75 kg pile leaves the total-time meter visible beside the bottle's center: \(context)")
+            XCTAssertFalse(core.intersects(hud), "The total-time meter must remain clear of the readout: \(context)")
+        }
 
         let crystalX = try XCTUnwrap(resting["crystalWindowX"].flatMap(Double.init))
         let crystalY = try XCTUnwrap(resting["crystalWindowY"].flatMap(Double.init))
@@ -71,9 +84,7 @@ final class CrystalCardPlacementUITests: XCTestCase {
         close.tap()
 
         XCTAssertTrue(launcher.waitForExistence(timeout: 6))
-        if accessibility5 {
-            for _ in 0..<6 where !launcher.isHittable { app.swipeUp() }
-        }
+        XCTAssertTrue(waitUntilFrameSettles(launcher))
         XCTAssertTrue(waitUntil(timeout: 4) { launcher.isHittable && launcher.isEnabled },
                       "Closing the overview leaves the focus action usable")
         XCTAssertFalse(app.buttons["jar.aggregate.inspect"].exists)
@@ -82,10 +93,84 @@ final class CrystalCardPlacementUITests: XCTestCase {
             XCTAssertEqual(launcher.frame.minY, launcherBefore.minY, accuracy: 0.5)
         }
         saveScreenshot("\(screenshot)-returned-home")
+
+        let durationPicker = app.buttons["home.duration-picker"]
+        let subjectPicker = app.buttons["home.subject-picker"]
+        XCTAssertTrue(durationPicker.waitForExistence(timeout: 4))
+        XCTAssertTrue(subjectPicker.waitForExistence(timeout: 4))
+        if accessibility5 {
+            XCTAssertTrue(revealFocusPickers(durationPicker, subjectPicker, above: launcher),
+                          "Both focus pickers fit in Home's scroll area above the pinned launcher")
+        }
+        XCTAssertTrue(waitUntilFrameSettles(durationPicker))
+        XCTAssertTrue(waitUntilFrameSettles(subjectPicker))
+        XCTAssertTrue(durationPicker.isHittable,
+                      "The duration picker stays uncovered after crystal inspection")
+        XCTAssertTrue(subjectPicker.isHittable,
+                      "The theme picker stays uncovered after crystal inspection")
+        tapSettledFrame(durationPicker)
+        let fortyFiveMinutes = app.buttons["45分"].firstMatch
+        XCTAssertTrue(fortyFiveMinutes.waitForExistence(timeout: 4))
+        XCTAssertTrue(waitUntilFrameSettles(fortyFiveMinutes))
+        XCTAssertTrue(fortyFiveMinutes.isHittable)
+        XCTAssertFalse(app.buttons["jar.aggregate.inspect"].exists)
+        saveScreenshot("\(screenshot)-duration-menu")
+        tapSettledFrame(fortyFiveMinutes)
+        XCTAssertTrue(waitUntil(timeout: 4) {
+            durationPicker.label.contains("45分") && launcher.label.contains("45分集中する")
+        }, "The duration menu remains functional after returning from a crystal")
     }
 
-    /// The crystal is placed when Home first lays out the jar and may still
-    /// settle for a moment; wait until it has held still.
+    /// Keep the gesture inside the scrollable viewport. A whole-app swipe
+    /// starts on the pinned launcher at AX5 and can fail to move the pickers.
+    private func revealFocusPickers(
+        _ duration: XCUIElement,
+        _ subject: XCUIElement,
+        above launcher: XCUIElement
+    ) -> Bool {
+        let scrollView = app.scrollViews.containing(.button, identifier: "home.duration-picker").firstMatch
+        guard scrollView.waitForExistence(timeout: 5) else { return false }
+        for _ in 0..<8 {
+            let window = app.windows.firstMatch.frame
+            let viewport = scrollView.frame
+            let navigationBottom = app.navigationBars.allElementsBoundByIndex
+                .filter { $0.exists && $0.frame.intersects(window) }
+                .map { $0.frame.maxY }.max() ?? window.minY
+            let top = max(viewport.minY, window.minY, navigationBottom) + 8
+            let bottom = min(viewport.maxY, window.maxY, launcher.frame.minY) - 8
+            let pickers = duration.frame.union(subject.frame)
+            if pickers.minY >= top, pickers.maxY <= bottom { return true }
+            let room = bottom - top
+            guard room > 60, pickers.height <= room else { return false }
+            let moveUp = pickers.maxY > bottom
+            let correction = moveUp ? pickers.maxY - bottom : top - pickers.minY
+            let distance = min(room * 0.65, max(40, correction + 12))
+            let startY = moveUp ? bottom - 12 : top + 12
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            let start = origin.withOffset(CGVector(dx: viewport.midX, dy: startY))
+            let end = origin.withOffset(CGVector(dx: viewport.midX,
+                                                 dy: startY + (moveUp ? -distance : distance)))
+            start.press(forDuration: 0.05, thenDragTo: end)
+            guard waitUntilFrameSettles(duration), waitUntilFrameSettles(subject) else { return false }
+        }
+        return false
+    }
+
+    /// Use the measured control center once stable; the surrounding
+    /// assertions still verify actual menu behavior after sheet dismissal.
+    private func tapSettledFrame(_ element: XCUIElement) {
+        XCTAssertTrue(waitUntilFrameSettles(element))
+        let frame = element.frame
+        let center = CGPoint(x: frame.midX, y: frame.midY)
+        XCTAssertTrue(app.windows.firstMatch.frame.contains(center))
+        app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: center.x, dy: center.y))
+            .tap()
+    }
+
+    /// Wait for the crystal and the measured readouts to hold still. The
+    /// compact meter chooses its clear side after a 450 ms settle, so its
+    /// final frame must be stable too before checking the crowded jar.
     private func waitForRestingCrystal(_ probe: XCUIElement) throws -> [String: String] {
         let deadline = Date().addingTimeInterval(15)
         var latest = probeFields(probe)
@@ -97,14 +182,17 @@ final class CrystalCardPlacementUITests: XCTestCase {
             let y = next["crystalWindowY"].flatMap(Double.init) ?? -1
             let lastX = latest["crystalWindowX"].flatMap(Double.init) ?? -1
             let lastY = latest["crystalWindowY"].flatMap(Double.init) ?? -1
-            if x < 0 || abs(x - lastX) > 0.5 || abs(y - lastY) > 0.5 {
+            let framesChanged = ["core", "hud", "bottle"].contains {
+                rect(next[$0]) == nil || next[$0] != latest[$0]
+            }
+            if x < 0 || abs(x - lastX) > 0.5 || abs(y - lastY) > 0.5 || framesChanged {
                 stillSince = Date()
             } else if Date().timeIntervalSince(stillSince) >= 0.8 {
                 return next
             }
             latest = next
         }
-        XCTFail("No crystal came to rest: \(latest)")
+        XCTFail("The crystal and readout frames did not come to rest: \(latest)")
         return latest
     }
 
@@ -115,6 +203,15 @@ final class CrystalCardPlacementUITests: XCTestCase {
             guard pieces.count == 2 else { return nil }
             return (String(pieces[0]), String(pieces[1]))
         }, uniquingKeysWith: { $1 })
+    }
+
+    private func rect(_ value: String?) -> CGRect? {
+        guard let value, value != "none" else { return nil }
+        let numbers = value.split(separator: ",").compactMap { Double($0) }
+        guard numbers.count == 4 else { return nil }
+        let frame = CGRect(x: numbers[0], y: numbers[1],
+                           width: numbers[2] - numbers[0], height: numbers[3] - numbers[1])
+        return frame.isEmpty ? nil : frame
     }
 
     private func pause(_ seconds: TimeInterval) {
