@@ -252,6 +252,17 @@ final class AccessibilityAdversarialUITests: XCTestCase {
                 "overview.fusion-disclosure"
             ]
         )
+        let records = app.buttons["overview.time-crystals.records"]
+        XCTAssertTrue(scrollUntilFullyVisibleInContent(records, attempts: 18),
+                      "The original-record route must fit inside the AX5 content viewport")
+        XCTAssertEqual(records.label, "元の記録を見る")
+        XCTAssertGreaterThanOrEqual(records.frame.width, app.windows.firstMatch.frame.width * 0.70)
+        XCTAssertGreaterThanOrEqual(records.frame.height, 44)
+        XCTAssertTrue(records.isHittable)
+        records.tap()
+        let timeline = app.descendants(matching: .any)["overview.timeline.coverage-notice"]
+        XCTAssertTrue(scrollUntilHittable(timeline, attempts: 18),
+                      "The original-record route must open the dated history")
     }
 
     func testAX5TimelineBrowserRemainsReachableAndAuditable() throws {
@@ -826,15 +837,10 @@ final class AccessibilityAdversarialUITests: XCTestCase {
             "AX5 level count must stack after the hierarchy copy"
         )
 
-        for label in ["10分 = 100g", "25分 = 250g", "60分 = 600g", "時間の核"] {
-            let step = app.staticTexts["overview.fusion-step.\(label)"]
-            XCTAssertTrue(step.exists, "Missing fusion legend step: \(label)")
-            XCTAssertGreaterThan(
-                step.frame.width,
-                step.frame.height,
-                "AX5 fusion legend steps must not collapse into vertical text"
-            )
-        }
+        XCTAssertEqual(
+            explanation.label,
+            "結晶は合計時間を表す目盛りです。一回ごとの記録を分割したり、削除したりすることはありません。"
+        )
     }
 
     private func scrollUntilHittable(

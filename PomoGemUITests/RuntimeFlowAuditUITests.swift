@@ -1604,7 +1604,9 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(waitForHittable(productionLauncher, timeout: 6))
         let jar = app.buttons["瓶"]
         XCTAssertTrue(jar.waitForExistence(timeout: 5))
-        XCTAssertTrue(((jar.value as? String) ?? "").contains("1粒"), String(describing: jar.value))
+        XCTAssertTrue(waitForValue(of: jar, containing: "結晶になる途中、25分", timeout: 6),
+                      String(describing: jar.value))
+        XCTAssertTrue(((jar.value as? String) ?? "").contains("250グラム"), String(describing: jar.value))
         // Let the ordinary landing toast disappear before retaining the image.
         waitForUISettle(4_000_000)
         retainScreenshot(named: "ASC_01_home-with-first-pebble")
@@ -1716,7 +1718,9 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(waitForHittable(launcher, timeout: 6))
         let jar = app.buttons["Jar"]
         XCTAssertTrue(jar.waitForExistence(timeout: 5))
-        XCTAssertTrue(((jar.value as? String) ?? "").contains("1"), String(describing: jar.value))
+        XCTAssertTrue(waitForValue(of: jar, containing: "25 min", timeout: 6), String(describing: jar.value))
+        XCTAssertTrue(normalizedSpacing((jar.value as? String) ?? "").contains("250 grams"),
+                      String(describing: jar.value))
         waitForUISettle(4_000_000)
         retainScreenshot(named: "ASC_EN_01_home-with-first-pebble")
 
@@ -2235,10 +2239,15 @@ final class RuntimeFlowAuditUITests: XCTestCase {
     ) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         repeat {
-            if ((element.value as? String) ?? "").contains(fragment) { return true }
+            if normalizedSpacing((element.value as? String) ?? "").contains(fragment) { return true }
             usleep(50_000)
         } while Date() < deadline
-        return ((element.value as? String) ?? "").contains(fragment)
+        return normalizedSpacing((element.value as? String) ?? "").contains(fragment)
+    }
+
+    private func normalizedSpacing(_ value: String) -> String {
+        value.replacingOccurrences(of: "\u{00a0}", with: " ")
+            .replacingOccurrences(of: "\u{202f}", with: " ")
     }
 
     private func waitForHittable(
