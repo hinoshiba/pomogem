@@ -104,7 +104,7 @@ final class OverviewLocalizationTests: XCTestCase {
         )
         XCTAssertEqual(try english("時間の核"), "Time Core")
         XCTAssertEqual(try english("生涯の瓶"), "Lifetime Jar")
-        XCTAssertEqual(try english("結晶の段"), "Crystal Tiers")
+        XCTAssertEqual(try english("時間で育つ結晶の段"), "Crystal levels built from time")
         XCTAssertEqual(try english("記念石"), "Milestone Stones")
     }
 
@@ -143,15 +143,15 @@ final class OverviewLocalizationTests: XCTestCase {
         )
         XCTAssertEqual(try english("%lld段", 1), "1 tier")
         XCTAssertEqual(try english("%lld段", 4), "4 tiers")
-        XCTAssertEqual(try english("%lld粒分の積み重ね", 1), "1 Gem of Focus")
-        XCTAssertEqual(try english("%lld粒分の積み重ね", 1_234), "1,234 Gems of Focus")
-        XCTAssertEqual(try english("いま瓶で動く粒、%lld粒", 1), "1 gem moving in your jar now")
+        XCTAssertEqual(try english("%@の積み重ね", "4 hr 10 min"), "4 hr 10 min built up")
+        XCTAssertEqual(try english("%lld件", 1_234), "1,234 records")
+        XCTAssertEqual(try english("いま、瓶にある時間"), "Time in your jar")
         XCTAssertEqual(try englishCommon("%lld粒", 350_640), "350,640 gems", "gem counters come from Common")
     }
 
     func testCrystalDetailInEnglish() throws {
         XCTAssertEqual(try english("結晶の内訳"), "Crystal Details")
-        XCTAssertEqual(try english("%@の結晶", "×10"), "×10 crystal")
+        XCTAssertEqual(try english("%@の結晶", "4 hr 10 min"), "4 hr 10 min crystal")
         XCTAssertEqual(try english("結晶になっても情報は削除されません"), "Nothing is deleted when gems become a crystal")
         XCTAssertEqual(
             try ["朱色", "瑠璃", "紅藤", "緑青", "菫", "金色"].map { try english($0) },
@@ -164,8 +164,8 @@ final class OverviewLocalizationTests: XCTestCase {
         XCTAssertEqual(try english("%lld粒・%@", 12, "40%"), "12 gems · 40%")
         XCTAssertEqual(try english("まとめた日：%@ 〜 %@", "Sep 1, 2026", "Sep 24, 2026"), "Combined Sep 1, 2026 – Sep 24, 2026")
         XCTAssertEqual(
-            try english("%@の%@、%lld個、%lld粒を保持、%@", "×10", "Crystal", 4, 40, "10,000 grams"),
-            "×10 Crystal, 4 in this tier, holding 40 gems, 10,000 grams"
+            try english("%@の%@、%lld個、合計%@、%@", "4 hr 10 min", "Crystal", 4, "16 hr 40 min", "10,000 grams"),
+            "Crystal of 4 hr 10 min, 4 in the jar, 16 hr 40 min in total, 10,000 grams"
         )
     }
 
@@ -209,14 +209,14 @@ final class OverviewLocalizationTests: XCTestCase {
         )
         XCTAssertEqual(try english("、"), ", ")
         XCTAssertEqual(try english("集中%@", "2.75 kg"), "2.75 kg of focus")
-        XCTAssertEqual(try english("%lld粒以上", 99), "at least 99 gems")
+        XCTAssertEqual(try english("元の記録%lld件以上", 99), "at least 99 original records")
         XCTAssertEqual(
             try english("表示中の結晶%lld個のうち代表%lld個を配置", 18, 8),
             "showing 8 of the crystals on this page (18 in all)"
         )
         XCTAssertEqual(
-            try english("集中%@。最初の結晶まで、あと%lld粒です", "25 min", 1),
-            "25 min of focus. 1 more gem until the first crystal"
+            try english("集中%@。最初の結晶まで、あと%@です", "25 min", "3 hr 45 min"),
+            "25 min of focus. 3 hr 45 min until the first crystal"
         )
     }
 
@@ -232,8 +232,8 @@ final class OverviewLocalizationTests: XCTestCase {
             "September 2026, 42 gems on this device, 1,050 grams"
         )
         XCTAssertEqual(
-            try english("全%lld粒・%@。瓶は最新%lld粒の代表表示です。", 120, "3.0 kg", 96),
-            "120 gems in all · 3.0 kg. The jar shows only the latest 96 as a sample."
+            try english("この端末で確認できた合計%@を、時間の結晶と育つ粒で表示します。元の記録は一回ずつ残っています。", "5 hr"),
+            "Time crystals and a growing gem show the 5 hr confirmed on this device. Every original record is kept."
         )
         XCTAssertEqual(try english("この月を振り返る"), "Review This Month")
     }

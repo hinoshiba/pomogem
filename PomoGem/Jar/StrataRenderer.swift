@@ -195,7 +195,7 @@ struct JarAggregateRequest: Identifiable {
         innerWidth: CGFloat,
         calendar: Calendar = .current
     ) {
-        guard !pebbles.contains(where: \.isScreenTimeObstacle) else { return nil }
+        guard !pebbles.contains(where: { $0.isScreenTimeObstacle || $0.isTimeProjection }) else { return nil }
         let sources = pebbles.map(\.aggregateSource)
         guard let calculation = StrataMath.aggregate(sources: sources) else { return nil }
         self.id = id ?? Self.deterministicID(

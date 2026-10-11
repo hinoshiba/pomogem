@@ -81,12 +81,12 @@ final class JarInteractionUITests: XCTestCase {
 
         let jar = app.buttons["瓶"]
         XCTAssertTrue(jar.waitForExistence(timeout: 3))
-        // The jar counts a completed focus when its gem lands (dev-D7), a
+        // The jar adds the completed focus time when its gem lands, a
         // moment after the card closes and the gem starts to fall.
         XCTAssertTrue(
             waitForCondition(timeout: 6) {
                 let value = (jar.value as? String) ?? ""
-                return value.contains("1粒") && value.contains("250グラム")
+                return value.contains("結晶になる途中、25分") && value.contains("250グラム")
             },
             (jar.value as? String) ?? ""
         )
@@ -139,7 +139,7 @@ final class JarInteractionUITests: XCTestCase {
             beforeTap.records,
             "Tap presentation must preserve the represented record IDs and grams"
         )
-        XCTAssertTrue((jar.value as? String)?.contains("1粒") == true)
+        XCTAssertTrue((jar.value as? String)?.contains("結晶になる途中、25分") == true)
         XCTAssertTrue((jar.value as? String)?.contains("250グラム") == true)
     }
 

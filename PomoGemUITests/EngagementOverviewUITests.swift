@@ -52,8 +52,8 @@ final class EngagementOverviewUITests: XCTestCase {
         )
         let fusionProgress = app.descendants(matching: .any)["reward.fusion-progress"]
         XCTAssertTrue(fusionProgress.waitForExistence(timeout: 3))
-        XCTAssertTrue(fusionProgress.label.contains("×10へ 1/10"), fusionProgress.label)
-        XCTAssertTrue(fusionProgress.label.contains("あと9粒"), fusionProgress.label)
+        XCTAssertTrue(fusionProgress.label.contains("次の結晶まで あと3時間45分"), fusionProgress.label)
+        XCTAssertFalse(fusionProgress.label.contains("あと9粒"), fusionProgress.label)
         // The weekly timer count stays, but only inside 「しくみ」, as a
         // frequency cue apart from time value (walk-std-08, product-05).
         XCTAssertTrue(fusionProgress.label.contains("今週のタイマー完走は1回"), fusionProgress.label)
@@ -150,32 +150,24 @@ final class EngagementOverviewUITests: XCTestCase {
         XCTAssertTrue(
             app.descendants(matching: .any)["overview.fusion-hierarchy"]
                 .waitForExistence(timeout: 4),
-            "The crystal lens must expose the decimal fusion ladder"
+            "The crystal lens must expose time denominations"
         )
         XCTAssertTrue(
             app.descendants(matching: .any)["overview.lifetime-constellation"]
                 .waitForExistence(timeout: 4)
         )
-        let destination = app.descendants(matching: .any)[
-            "overview.constellation.destination"
-        ]
-        XCTAssertTrue(destination.waitForExistence(timeout: 4))
-        XCTAssertTrue(destination.label.contains("最初の時間の核"), destination.label)
-        XCTAssertTrue(
-            String(describing: destination.value).contains("あと9粒"),
-            String(describing: destination.value)
-        )
-        XCTAssertFalse(
-            app.descendants(matching: .any)["overview.constellation.core"].exists,
-            "A single effort must expose only the destination vessel, not a completed core"
-        )
-        XCTAssertTrue(
-            scrollUntilVisible(app.staticTexts["結晶"], in: app),
-            "The cluster section must remain reachable below the constellation"
-        )
+        let remainder = app.descendants(matching: .any)["overview.fusion-level.0"]
+        XCTAssertTrue(scrollUntilVisible(remainder, in: app))
+        XCTAssertTrue(remainder.label.contains("育つ粒"), remainder.label)
+        XCTAssertTrue(remainder.label.contains("25分"), remainder.label)
+        XCTAssertFalse(app.descendants(matching: .any)["overview.fusion-level.1"].exists,
+                       "One 25-minute completion has not reached a 250-minute crystal")
+        let records = app.buttons["overview.time-crystals.records"]
+        XCTAssertTrue(scrollUntilVisible(records, in: app),
+                      "The original records must remain reachable from the time display")
 
         let destinationAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        destinationAttachment.name = "One effort — outlined constellation destination"
+        destinationAttachment.name = "25 minutes — growing gem and original records"
         destinationAttachment.lifetime = .keepAlways
         add(destinationAttachment)
 
@@ -216,7 +208,7 @@ final class EngagementOverviewUITests: XCTestCase {
         add(attachment)
     }
 
-    func testFortyYearTimelineBrowsesOldestYearAndLatest96RepresentativePebbles() {
+    func testFortyYearTimelineBrowsesOldestYearAndShowsTheWholeMonthsTime() {
         let app = XCUIApplication()
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
@@ -271,12 +263,14 @@ final class EngagementOverviewUITests: XCTestCase {
             monthSummary.label
         )
         let preview = app.descendants(matching: .any)["overview.timeline.month.preview"]
-        XCTAssertTrue(preview.waitForExistence(timeout: 8))
-        XCTAssertTrue(preview.label.contains("最新96粒"), preview.label)
+        XCTAssertTrue(scrollUntilVisible(preview, in: app))
+        XCTAssertTrue(preview.label.contains("45時間50分"), preview.label)
+        XCTAssertFalse(preview.label.contains("最新96粒"), preview.label)
+        XCTAssertTrue((preview.value as? String ?? "").contains("元の記録は一回ずつ残っています"))
         XCTAssertTrue(app.buttons["overview.timeline.month.close"].isHittable)
 
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        attachment.name = "40-year timeline — oldest month exact and representative"
+        attachment.name = "40-year timeline — oldest month exact time jar"
         attachment.lifetime = .keepAlways
         add(attachment)
     }
@@ -490,7 +484,7 @@ final class EngagementOverviewUITests: XCTestCase {
         XCTAssertTrue(firstBridge.waitForExistence(timeout: 25))
         let firstProgress = app.descendants(matching: .any)["reward.fusion-progress"]
         XCTAssertTrue(firstProgress.waitForExistence(timeout: 3))
-        XCTAssertTrue(firstProgress.label.contains("×10へ 1/10"), firstProgress.label)
+        XCTAssertTrue(firstProgress.label.contains("次の結晶まで あと3時間45分"), firstProgress.label)
 
         app.terminate()
         app.launch()
@@ -502,7 +496,7 @@ final class EngagementOverviewUITests: XCTestCase {
         )
         let recoveredProgress = app.descendants(matching: .any)["reward.fusion-progress"]
         XCTAssertTrue(recoveredProgress.waitForExistence(timeout: 3))
-        XCTAssertTrue(recoveredProgress.label.contains("×10へ 1/10"), recoveredProgress.label)
+        XCTAssertTrue(recoveredProgress.label.contains("次の結晶まで あと3時間45分"), recoveredProgress.label)
         // The saved gem waits above the jar while its card is up, and closing
         // the card drops it (RuntimeFlowAuditUITests pins that order). A
         // relaunch keeps the order: nothing in the jar yet, then one drop.
@@ -756,7 +750,7 @@ final class EngagementOverviewUITests: XCTestCase {
         app.terminate()
     }
 
-    func testAggregateDetailMakesRetainedColorThemeAndAchievementSeparationExplicit() {
+    func testTimeCrystalsLeadToOriginalRecordsWithoutInventingMembership() {
         let app = XCUIApplication()
         app.terminate()
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
@@ -772,34 +766,19 @@ final class EngagementOverviewUITests: XCTestCase {
             lenses.buttons["結晶"].tap()
         }
 
-        let cluster = app.buttons.matching(
-            NSPredicate(
-                format: "label CONTAINS %@ AND label CONTAINS %@",
-                "の結晶、",
-                "グラム"
-            )
-        ).firstMatch
-        XCTAssertTrue(
-            scrollUntilVisible(cluster, in: app),
-            "The crystal lens must expose an inspectable aggregate summary"
-        )
-        XCTAssertTrue(cluster.isHittable)
-        cluster.tap()
-
-        XCTAssertTrue(app.navigationBars["結晶の内訳"].waitForExistence(timeout: 4))
-        let preservation = app.descendants(matching: .any)[
-            "overview.cluster.preservation"
-        ]
-        XCTAssertTrue(preservation.waitForExistence(timeout: 3))
-        XCTAssertTrue(preservation.label.contains("情報は削除されません"), preservation.label)
-        XCTAssertTrue(preservation.label.contains("記念石"), preservation.label)
-
-        let colorBreakdown = app.staticTexts["粒数による色の内訳"]
-        XCTAssertTrue(scrollUntilVisible(colorBreakdown, in: app))
-        XCTAssertTrue(app.staticTexts["テーマの内訳"].exists)
+        let explanation = app.descendants(matching: .any)["overview.fusion-hierarchy.explanation"]
+        XCTAssertTrue(scrollUntilVisible(explanation, in: app))
+        XCTAssertTrue(explanation.label.contains("合計時間"), explanation.label)
+        let records = app.buttons["overview.time-crystals.records"]
+        XCTAssertTrue(scrollUntilVisible(records, in: app))
+        records.tap()
+        XCTAssertTrue(lenses.buttons["年月"].isSelected)
+        XCTAssertTrue(app.descendants(matching: .any)["overview.timeline.year-list"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.navigationBars["結晶の内訳"].exists,
+                       "A time denomination must not imply ownership of particular source sessions")
 
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        attachment.name = "Aggregate detail — lossless color and theme breakdown"
+        attachment.name = "Time crystals — original records preserved by date"
         attachment.lifetime = .keepAlways
         add(attachment)
     }
@@ -826,7 +805,7 @@ final class EngagementOverviewUITests: XCTestCase {
         let levelFive = app.descendants(matching: .any)["overview.fusion-level.5"]
         XCTAssertTrue(scrollUntilVisible(levelFive, in: app))
         XCTAssertTrue(levelFive.label.contains("3個"), levelFive.label)
-        XCTAssertTrue(normalizedNumbers(in: levelFive).contains("300000粒"), levelFive.label)
+        XCTAssertTrue(normalizedNumbers(in: levelFive).contains("合計125000時間"), levelFive.label)
         XCTAssertTrue(normalizedNumbers(in: levelFive).contains("75000000グラム"), levelFive.label)
 
         let upper = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -837,19 +816,19 @@ final class EngagementOverviewUITests: XCTestCase {
         let levelFour = app.descendants(matching: .any)["overview.fusion-level.4"]
         XCTAssertTrue(scrollUntilVisible(levelFour, in: app))
         XCTAssertTrue(levelFour.label.contains("5個"), levelFour.label)
-        XCTAssertTrue(normalizedNumbers(in: levelFour).contains("50000粒"), levelFour.label)
+        XCTAssertTrue(normalizedNumbers(in: levelFour).contains("合計20833時間20分"), levelFour.label)
         XCTAssertTrue(normalizedNumbers(in: levelFour).contains("12500000グラム"), levelFour.label)
 
         let levelTwo = app.descendants(matching: .any)["overview.fusion-level.2"]
         XCTAssertTrue(scrollUntilVisible(levelTwo, in: app))
         XCTAssertTrue(levelTwo.label.contains("6個"), levelTwo.label)
-        XCTAssertTrue(levelTwo.label.contains("600粒"), levelTwo.label)
+        XCTAssertTrue(levelTwo.label.contains("合計250時間"), levelTwo.label)
         XCTAssertTrue(normalizedNumbers(in: levelTwo).contains("150000グラム"), levelTwo.label)
 
         let levelOne = app.descendants(matching: .any)["overview.fusion-level.1"]
         XCTAssertTrue(scrollUntilVisible(levelOne, in: app))
         XCTAssertTrue(levelOne.label.contains("4個"), levelOne.label)
-        XCTAssertTrue(levelOne.label.contains("40粒"), levelOne.label)
+        XCTAssertTrue(levelOne.label.contains("合計16時間40分"), levelOne.label)
         XCTAssertTrue(normalizedNumbers(in: levelOne).contains("10000グラム"), levelOne.label)
 
         let lower = XCTAttachment(screenshot: XCUIScreen.main.screenshot())

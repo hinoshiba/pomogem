@@ -242,7 +242,7 @@ struct AccumulationClusterSummary: Identifiable, Equatable, Sendable {
     }
 
     var scaleLabel: String {
-        pebbleCount > 1 ? AggregatePresentation.countLabel(pebbleCount) : Self.singleGemLabel
+        DurationPresentation.focusLabel(grams: grams)
     }
 
     /// A scale or form of exactly one gem, as opposed to a crystal (×10 …).
@@ -769,7 +769,8 @@ struct AccumulationOverviewView: View {
             lifetimePebbleCount: lifetimePebbleCount
         )
         guard let initialClusterID else { return }
-        selectedCluster = clusters.first { $0.id == initialClusterID }
+        // Display crystals represent time denominations, not stored record groups.
+        _ = initialClusterID
     }
 
     private var uniqueRecords: [AccumulationRecord] {
@@ -887,67 +888,28 @@ struct AccumulationOverviewView: View {
         )
     }
 
-    /// Active decimal roots rendered without another bottle metaphor. Each
-    /// aggregate is a digit in a base-ten hierarchy: ten roots at one level
-    /// become one root at the next level, while their exact particles and mass
-    /// remain available here. Loose values are recovered from the lifetime
-    /// counters rather than the bounded history page, so a long-lived account
-    /// does not appear to lose its oldest ungrouped effort.
-    private var fusionHierarchyLevels: [FusionHierarchyLevelSummary] {
-        let clusteredPebbles = NonnegativeIntPolicy.sum(clusters.map(\.pebbleCount))
-        let clusteredGrams = NonnegativeIntPolicy.sum(clusters.map(\.grams))
-        let loosePebbles = max(0, lifetimePebbleCount - clusteredPebbles)
-        let looseGrams = max(0, lifetimeGrams - clusteredGrams)
-
-        var levels: [FusionHierarchyLevelSummary] = []
-        if loosePebbles > 0 {
-            levels.append(FusionHierarchyLevelSummary(
-                level: 0,
-                unitCount: loosePebbles,
-                unitPebbleCount: 1,
-                representedPebbleCount: loosePebbles,
-                grams: looseGrams,
-                containsRare: false
-            ))
-        }
-
-        for (level, values) in Dictionary(grouping: clusters, by: { max(1, $0.level) }) {
-            let representedPebbles = NonnegativeIntPolicy.sum(
-                values.map(\.pebbleCount)
-            )
-            let fallbackUnit = values.map(\.pebbleCount).filter { $0 > 0 }.min() ?? 1
-            levels.append(FusionHierarchyLevelSummary(
-                level: level,
-                unitCount: values.count,
-                unitPebbleCount: decimalUnit(for: level, fallback: fallbackUnit),
-                representedPebbleCount: representedPebbles,
-                grams: NonnegativeIntPolicy.sum(values.map(\.grams)),
-                containsRare: values.contains {
-                    RareRewardPresentationPolicy.containsRare(
-                        goldCount: $0.goldPebbleCount,
-                        prismCount: $0.prismPebbleCount
-                    )
-                }
-            ))
-        }
-
-        return levels.sorted { lhs, rhs in
-            if lhs.level == rhs.level {
-                return lhs.representedPebbleCount > rhs.representedPebbleCount
-            }
-            return lhs.level > rhs.level
-        }
+    /// Canonical time units come from the confirmed lifetime total, not the
+    /// membership or number of persisted history indexes. The exact remainder
+    /// is carried in one growing gem independently of session boundaries.
+    private var timeFusion: TimeFusionSnapshot {
+        TimeFusionPolicy.snapshot(totalGrams: lifetimeGrams)
     }
 
-    private func decimalUnit(for level: Int, fallback: Int) -> Int {
-        guard level > 0 else { return 1 }
-        var unit = 1
-        for _ in 0 ..< level {
-            let (next, overflow) = unit.multipliedReportingOverflow(by: 10)
-            guard !overflow else { return max(1, fallback) }
-            unit = next
+    private var fusionHierarchyLevels: [FusionHierarchyLevelSummary] {
+        guard !lifetimeIsCloudUnverified else { return [] }
+        var rows = Dictionary(grouping: timeFusion.crystals, by: \.level).map { level, units in
+            FusionHierarchyLevelSummary(
+                level: level, unitCount: units.count, unitGrams: units[0].grams,
+                grams: NonnegativeIntPolicy.sum(units.map(\.grams))
+            )
         }
-        return unit
+        if timeFusion.remainderGrams > 0 {
+            rows.append(FusionHierarchyLevelSummary(
+                level: 0, unitCount: 1, unitGrams: timeFusion.remainderGrams,
+                grams: timeFusion.remainderGrams
+            ))
+        }
+        return rows.sorted { $0.level > $1.level }
     }
 
     private var introduction: some View {
@@ -1150,186 +1112,69 @@ struct AccumulationOverviewView: View {
     private var currentJar: some View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 14) {
-                currentJarHeader
-                OverviewBottleGraphic(
-                    records: Array(currentRecords.suffix(40)),
-                    clusters: [],
-                    milestones: []
-                )
-                .frame(height: 240)
+                Text("いま、瓶にある時間", tableName: "Overview")
+                    .pomogemSectionTitle()
+                Text(AggregateProjectionPresentationPolicy.overviewLifetimeValue(
+                    verifiedValue: DurationPresentation.focusLabel(grams: lifetimeGrams),
+                    isLocalLowerBound: lifetimeIsLowerBound,
+                    context: lifetimePresentationContext
+                ))
+                .font(.title3.bold().monospacedDigit())
+                TimeFusionPileArtwork(totalGrams: lifetimeGrams)
+                    .frame(height: 240)
+                Text(timeFusionExplanation)
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.text)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .combine)
         .accessibilityIdentifier("overview.current-jar")
-        .accessibilityLabel(Text(
-            "いま瓶で動く粒、\(currentRecords.count)粒",
-            tableName: "Overview",
-            comment: "VoiceOver: the number of loose gems moving in the jar now"
-        ))
     }
 
-    @ViewBuilder
-    private var currentJarHeader: some View {
-        if dynamicTypeSize.isAccessibilitySize {
-            VStack(alignment: .leading, spacing: 6) {
-                currentJarHeading
-                Text(CountText.gems(currentRecords.count))
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(PomoGemTheme.muted)
-            }
-        } else {
-            HStack(alignment: .firstTextBaseline) {
-                currentJarHeading
-                Spacer()
-                Text(CountText.gems(currentRecords.count))
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(PomoGemTheme.muted)
-            }
+    private var timeFusionExplanation: String {
+        if lifetimeIsCloudUnverified || lifetimeIsLowerBound {
+            return String(localized: "確認できた時間を表示しています。結晶の進みは、集計の確認が終わると表示します。", table: "Overview")
         }
-    }
-
-    private var currentJarHeading: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text("いま、瓶で動く粒", tableName: "Overview", comment: "Card title: the loose gems moving in the jar now")
-                .font(PomoGemTheme.brand(20))
-            Text("最新の粒を近くで見る", tableName: "Overview")
-                .font(.caption)
-                .foregroundStyle(PomoGemTheme.muted)
-        }
+        return String(localized: "次の結晶まで、あと\(DurationPresentation.focusLabel(grams: timeFusion.nextCrystalRemainingGrams))。短く分けても、同じ合計時間なら同じ結晶になります。", table: "Overview", comment: "Time until the next 250-minute crystal; equal total time has the same crystals regardless of session length")
     }
 
     private var lifetimeBottle: some View {
         PomoGemCard {
-            VStack(spacing: 18) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("生涯の瓶", tableName: "Overview", comment: "Card title: the jar of everything so far")
-                            .font(PomoGemTheme.brand(22))
-                        Text("すべての積み重ねを、一歩引いて見る", tableName: "Overview")
-                            .font(.caption)
-                            .foregroundStyle(PomoGemTheme.muted)
-                    }
-                    Spacer(minLength: 12)
-                    Image(systemName: "scope")
-                        .font(.title2)
-                        .foregroundStyle(PomoGemTheme.amber)
-                        .accessibilityHidden(true)
-                }
-
-                OverviewBottleGraphic(
-                    records: bottleGraphicRecords,
-                    clusters: bottleGraphicClusters,
-                    milestones: bottleGraphicMilestones
-                )
-                .frame(height: dynamicTypeSize.isAccessibilitySize ? 330 : 290)
-
-                Text(pageScope.bottleRepresentativeDisclosure(
-                    displayedRecordCount: bottleGraphicRecords.count,
-                    displayedClusterCount: bottleGraphicClusters.count,
-                    displayedAchievementCount: bottleGraphicMilestones.count
-                ))
-                .font(.caption2)
-                .foregroundStyle(PomoGemTheme.muted)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
+            VStack(alignment: .leading, spacing: 18) {
+                Text("生涯の瓶", tableName: "Overview", comment: "Card title: the jar of everything so far")
+                    .pomogemSectionTitle()
+                TimeFusionPileArtwork(totalGrams: lifetimeGrams)
+                    .frame(height: 290)
+                Text(timeFusionExplanation)
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.text)
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 10) { lifetimeStats }
                     VStack(spacing: 10) { lifetimeStats }
                 }
             }
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("生涯の瓶", tableName: "Overview", comment: "Card title: the jar of everything so far"))
-        .accessibilityValue(lifetimeBottleAccessibilityValue)
+        .accessibilityElement(children: .combine)
     }
 
     private var lifetimeConstellation: some View {
         PomoGemCard {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(EffortConstellationPresentation.timeCoreTitle)
-                            .pomogemSectionTitle(size: 22)
-                        Text("価値は集中時間、粒の階層は瓶を整理する形として見る", tableName: "Overview")
-                            .font(.caption)
-                            .foregroundStyle(PomoGemTheme.muted)
-                    }
-                    Spacer(minLength: 12)
-                    Image(systemName: "sparkles")
-                        .font(.title2)
-                        .foregroundStyle(PomoGemTheme.amber)
-                        .accessibilityHidden(true)
-                }
-
-                if lifetimeIsCloudUnverified {
-                    Label(
-                        isCloudOfflineSession
-                            ? String(localized: "このiPhoneの集計を確認中です", table: "Overview")
-                            : String(localized: "iCloudを確認中です", table: "Overview"),
-                        systemImage: isCloudOfflineSession ? "checklist" : "arrow.triangle.2.circlepath.icloud"
-                    )
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(PomoGemTheme.muted)
-                    .frame(maxWidth: .infinity, minHeight: 180)
-                } else {
-                    EffortConstellationView(
-                        nodes: constellationNodes,
-                        totalGrams: lifetimeGrams,
-                        totalPebbleCount: lifetimePebbleCount,
-                        projectionIsLowerBound: lifetimeIsLowerBound,
-                        coreColorShares: lifetimeCoreColorShares
-                    ) { id in
-                        selectedCluster = clusters.first { $0.id == id }
-                    }
-                    .frame(height: dynamicTypeSize.isAccessibilitySize ? 360 : 320)
-                }
-
-                Text(pageScope.constellationRepresentativeDisclosure(
-                    displayedClusterCount: clusters.count,
-                    representativeCount: EffortConstellationPresentation
-                        .representativeNodes(constellationNodes).count
-                ))
-                .font(.caption2)
-                .foregroundStyle(PomoGemTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-
+            VStack(alignment: .leading, spacing: 16) {
+                Text("積み上げた時間の結晶", tableName: "Overview")
+                    .pomogemSectionTitle(size: 22)
+                TimeFusionPileArtwork(totalGrams: lifetimeGrams)
+                    .frame(height: dynamicTypeSize.isAccessibilitySize ? 320 : 260)
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 10) { lifetimeStats }
                     VStack(spacing: 10) { lifetimeStats }
                 }
-
-                Group {
-                    if dynamicTypeSize.isAccessibilitySize {
-                        VStack(spacing: 7) { fusionLegendSteps(stacked: true) }
-                    } else {
-                        // Side by side only while every chip can wrap between
-                        // whole words. Japanese may break between any two
-                        // words; English may not, and at xLarge on a 375 pt
-                        // screen the chips split into "10 / min" and
-                        // "Tim / e Cor / e". Then the chips stack as at AX sizes.
-                        ViewThatFits(in: .horizontal) {
-                            HStack(spacing: 7) { fusionLegendSteps(stacked: false) }
-                            VStack(spacing: 7) { fusionLegendSteps(stacked: true) }
-                        }
-                    }
-                }
-                .accessibilityElement(children: .ignore)
-                // The legend counts in the grams the jar already shows, not in
-                // the internal 「標準単位」 (25分 = 1.0).
-                .accessibilityLabel(Text("時間の核は集中した時間で進みます。10分で100グラム、25分で250グラム、60分で600グラムです", tableName: "Overview"))
-                .accessibilityIdentifier("overview.fusion-legend")
-
-                // Two short paragraphs, not one: at AX5 a single 74-character
-                // caption grew taller than the sheet's viewport, so it could
-                // never be read in one piece (testAX5CrystalHierarchy…).
-                Text("10粒がひとつの結晶になるのは、瓶を整理するためです。時間の価値は変わりません。", tableName: "Overview",
-                     comment: "Overview crystal section: why 10 gems become one crystal")
+                Text("合計4時間10分でひとつの結晶に。結晶10個分の時間は、ひとつ上の段にまとまります。余った時間も次の粒に残ります。", tableName: "Overview")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.text)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("overview.fusion-disclosure")
-                Text("結晶をタップすると、内訳を見られます。", tableName: "Overview",
-                     comment: "Overview crystal section: tapping a crystal opens its details")
+                Text(timeFusionExplanation)
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.text)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1380,7 +1225,7 @@ struct AccumulationOverviewView: View {
                         : String(localized: "iCloudの確認が終わるまで、古い階層は表示しません。この端末で確認できた記録だけを年月の棚に表示します。", table: "Overview"))
                     : (lifetimeIsLowerBound
                         ? String(localized: "保存領域から確認できた範囲の階層です。整理が終わるまで、生涯値は減らさず「以上」で扱います。", table: "Overview")
-                        : String(localized: "段は瓶を整理するための形です。10個そろうと次の段にまとまりますが、時間の核は集中した時間だけで進みます。", table: "Overview")))
+                        : String(localized: "結晶の段も、次の粒も、合計時間で決まります。10分を繰り返しても、同じ合計時間なら結晶の数や大きさは変わりません。", table: "Overview")))
                     .font(.caption2)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1393,9 +1238,9 @@ struct AccumulationOverviewView: View {
     private var fusionHierarchyHeading: some View {
         VStack(alignment: .leading, spacing: 4) {
             // Not 「瓶の整理階層」: the section counts the crystal's steps.
-            Text("結晶の段", tableName: "Overview", comment: "Overview section title: the ×10, ×100 … crystal steps")
+            Text("時間で育つ結晶の段", tableName: "Overview")
                 .pomogemSectionTitle(size: 22)
-            Text("10粒をひとつの結晶にまとめます。価値の段階ではなく、記録と質量をそのまま残して瓶に余白をつくる仕組みです。", tableName: "Overview")
+            Text("結晶は合計時間を表す目盛りです。一回ごとの記録を分割したり、削除したりすることはありません。", tableName: "Overview")
                 .font(.caption)
                 .foregroundStyle(PomoGemTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1503,12 +1348,12 @@ struct AccumulationOverviewView: View {
         OverviewStat(
             title: lifetimeIsCloudUnverified
                 ? String(localized: "この端末で確認済み", table: "Overview", comment: "Lifetime stat title: gems confirmed on this device while sync is checked")
-                : String(localized: "積んだ粒", table: "Overview", comment: "Lifetime stat title: gems stacked so far"),
-            value: CountText.gems(lifetimePebbleCount)
+                : String(localized: "元の記録", table: "Overview", comment: "Lifetime stat title: source records, independent of the visible time crystals"),
+            value: String(localized: "\(lifetimePebbleCount)件", table: "Overview", comment: "Number of original focus records")
         )
         OverviewStat(
             title: String(localized: "表示中の結晶", table: "Overview", comment: "Lifetime stat title: crystals on this page"),
-            value: clusters.count.formatted(.number.grouping(.automatic))
+            value: timeFusion.visibleCrystals.count.formatted(.number.grouping(.automatic))
         )
     }
 
@@ -1658,78 +1503,28 @@ struct AccumulationOverviewView: View {
         }
     }
 
-    @ViewBuilder
     private var clusterSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            if layoutPolicy.stacksSummaryCards {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(AccumulationLens.crystals.title)
-                        .pomogemSectionTitle()
-                    Text("表示中 \(clusters.count)個", tableName: "Overview", comment: "Crystal section: how many crystals this page shows")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(PomoGemTheme.muted)
+        PomoGemCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("元の記録", tableName: "Overview", comment: "The original records behind the total time")
+                    .pomogemSectionTitle()
+                Text("結晶は時間総額の表示です。どの結晶から見ても、元の一回ごとの時間・テーマ・日付は記録に残っています。", tableName: "Overview")
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button {
+                    selectedLens = .timeline
+                } label: {
+                    Label(String(localized: "元の記録を見る", table: "Overview"), systemImage: "calendar")
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 }
-            } else {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(AccumulationLens.crystals.title)
-                        .pomogemSectionTitle()
-                    Spacer()
-                    Text("表示中 \(clusters.count)個", tableName: "Overview", comment: "Crystal section: how many crystals this page shows")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(PomoGemTheme.muted)
-                }
-            }
-
-            if clusters.isEmpty {
-                PomoGemCard {
-                    Label {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(lifetimeIsCloudUnverified
-                                ? projectionVerificationTitle
-                                : String(localized: "10粒ごとに生まれます", table: "Overview", comment: "Empty crystal section: one crystal forms from every 10 gems"))
-                                .font(.subheadline.weight(.bold))
-                            Text(lifetimeIsCloudUnverified
-                                ? String(localized: "確認が終わるまで古い結晶は表示しません。", table: "Overview")
-                                : String(localized: "粒の色と数を内側に残したまま、大きな一粒になります。", table: "Overview"))
-                                .font(.caption)
-                                .foregroundStyle(PomoGemTheme.muted)
-                        }
-                    } icon: {
-                        Image(systemName: "circle.hexagongrid.fill")
-                            .foregroundStyle(PomoGemTheme.amber)
-                    }
-                }
-            } else if layoutPolicy.stacksSummaryCards {
-                LazyVStack(spacing: 12) {
-                    ForEach(clusters.sorted { $0.periodEnd > $1.periodEnd }) { cluster in
-                        Button {
-                            selectedCluster = cluster
-                        } label: {
-                            ClusterSummaryCard(cluster: cluster)
-                        }
-                        .buttonStyle(PomoGemBareButtonStyle())
-                        .frame(maxWidth: .infinity)
-                    }
-                }
-            } else {
-                ScrollView(.horizontal) {
-                    LazyHStack(spacing: 12) {
-                        ForEach(clusters.sorted { $0.periodEnd > $1.periodEnd }) { cluster in
-                            Button {
-                                selectedCluster = cluster
-                            } label: {
-                                ClusterSummaryCard(cluster: cluster)
-                            }
-                            .buttonStyle(PomoGemBareButtonStyle())
-                        }
-                    }
-                    .scrollTargetLayout()
-                }
-                .scrollIndicators(.hidden)
-                .scrollTargetBehavior(.viewAligned)
+                .buttonStyle(PomoGemBareButtonStyle())
+                .foregroundStyle(PomoGemTheme.amber)
+                .accessibilityIdentifier("overview.time-crystals.records")
             }
         }
     }
+
 
     @ViewBuilder
     private var bottleShelf: some View {
@@ -1888,19 +1683,17 @@ enum FusionLegendStep: CaseIterable, Hashable {
 private struct FusionHierarchyLevelSummary: Identifiable, Equatable {
     let level: Int
     let unitCount: Int
-    let unitPebbleCount: Int
-    let representedPebbleCount: Int
+    let unitGrams: Int
     let grams: Int
-    let containsRare: Bool
 
     var id: Int { level }
 
     var scaleLabel: String {
-        "×\(max(1, unitPebbleCount).formatted(.number.grouping(.automatic)))"
+        DurationPresentation.focusLabel(grams: unitGrams)
     }
 
     var formTitle: String {
-        level == 0 ? AccumulationClusterSummary.singleGemLabel : AggregatePresentation.title(level: level)
+        level == 0 ? String(localized: "育つ粒", table: "Overview", comment: "Remainder gem growing toward the next time crystal") : AggregatePresentation.title(level: level)
     }
 
     var quantityLabel: String {
@@ -1909,37 +1702,14 @@ private struct FusionHierarchyLevelSummary: Identifiable, Equatable {
             : String(localized: "\(unitCount)個", table: "Overview", comment: "How many crystals of one tier (×10, ×100 …) there are")
     }
 
-    /// VoiceOver: the form, how many there are, the gems they hold and their mass.
+    /// Every row describes time, never a stored count-tree denomination.
     var accessibilityLabel: String {
-        let mass = MassText.spoken(grams: grams)
-        if level == 0 {
-            return String(
-                localized: "\(scaleLabel)の\(formTitle)、\(unitCount)粒、\(representedPebbleCount)粒を保持、\(mass)",
-                table: "Overview",
-                comment: "VoiceOver, loose gems in the tier list: scale (×1), form name, gem count, gems held, spoken mass"
-            )
-        }
-        return String(
-            localized: "\(scaleLabel)の\(formTitle)、\(unitCount)個、\(representedPebbleCount)粒を保持、\(mass)",
-            table: "Overview",
-            comment: "VoiceOver, one crystal tier: scale such as ×10, form name such as 結晶, how many there are, gems held, spoken mass"
-        )
+        String(localized: "\(scaleLabel)の\(formTitle)、\(unitCount)個、合計\(DurationPresentation.focusLabel(grams: grams))、\(MassText.spoken(grams: grams))", table: "Overview", comment: "VoiceOver time tier: unit time, crystal name, displayed count, total time, mass")
     }
 
-    /// One accent per decimal form. No gold: a ×10 must not read as a
-    /// medal or a coin (Docs/GemExperienceDesign.md §7.14).
-    var accentHex: String {
-        let palette = [
-            Constants.Color.auroraWarm,
-            "#D56B82",
-            Constants.Color.auroraCool,
-            Constants.Color.auroraViolet,
-            "#E96DDB",
-            "#55E2C5",
-            "#FF799C"
-        ]
-        return palette[min(max(0, level), palette.count - 1)]
-    }
+
+    /// Shared with Home and Share; a time unit owns no source theme or rarity.
+    var accentHex: String { TimeFusionPolicy.colorHex }
 
     var symbol: String {
         switch level {
@@ -2010,11 +1780,7 @@ private struct FusionHierarchyLevelRow: View {
                 VStack(alignment: .leading, spacing: 8) { exactMetrics }
             }
 
-            if summary.containsRare {
-                Label(String(localized: "レア粒の光も内側に保持", table: "Overview"), systemImage: "sparkles")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(PomoGemTheme.text)
-            }
+
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -2070,8 +1836,8 @@ private struct FusionHierarchyLevelRow: View {
     @ViewBuilder
     private var exactMetrics: some View {
         FusionHierarchyMetric(
-            title: String(localized: "保持する粒", table: "Overview", comment: "Tier metric title: the gems this tier holds"),
-            value: CountText.gems(summary.representedPebbleCount)
+            title: String(localized: "合計時間", table: "Overview", comment: "Total time represented by this tier"),
+            value: DurationPresentation.focusLabel(grams: summary.grams)
         )
         FusionHierarchyMetric(
             title: String(localized: "保持する質量", table: "Overview", comment: "Tier metric title: the mass this tier holds"),
@@ -2108,7 +1874,7 @@ private struct FusionHierarchyGlyph: View {
             }
 
             ProgressCrystalGlyph(
-                completionCount: max(1, summary.unitPebbleCount),
+                completionCount: 0,
                 colorHex: summary.accentHex,
                 level: max(1, summary.level),
                 grams: summary.grams / max(1, summary.unitCount)
@@ -2182,7 +1948,7 @@ enum AccumulationLens: String, CaseIterable, Identifiable {
         case .now:
             String(localized: "一回ずつの手触りと、今週積み上げた時間を見ます。", table: "Overview")
         case .crystals:
-            String(localized: "生涯の時間と、瓶を整理する結晶を見ます。", table: "Overview")
+            String(localized: "合計時間で育つ結晶と、次の粒に残る時間を見ます。", table: "Overview")
         case .timeline:
             String(localized: "月ごとの瓶で、離れていた時期も含む歩みを見ます。", table: "Overview")
         }
@@ -2426,7 +2192,7 @@ struct ClusterDetailSheet: View {
                         .frame(width: 132, height: 132)
                         .padding(.top, 8)
                     VStack(spacing: 6) {
-                        Text("\(cluster.pebbleCount)粒分の積み重ね", tableName: "Overview", comment: "Crystal detail title: how many gems this crystal holds")
+                        Text("\(cluster.scaleLabel)の積み重ね", tableName: "Overview", comment: "Original record group detail title, showing its total time")
                             .pomogemSectionTitle(size: 24)
                             .multilineTextAlignment(.center)
                         Text(cluster.detailSubtitle)
@@ -2708,7 +2474,7 @@ struct ClusterDetailSheet: View {
     @ViewBuilder
     private var clusterStats: some View {
         OverviewStat(
-            title: String(localized: "縮尺", table: "Overview", comment: "Crystal detail stat title: its scale, such as ×10"),
+            title: String(localized: "合計時間", table: "Overview", comment: "Total time in the original record group"),
             value: cluster.scaleLabel
         )
         OverviewStat(
@@ -2817,7 +2583,7 @@ private struct AggregateGlyph: View {
                 completionCount: cluster.pebbleCount,
                 colorHex: dominantColorHex,
                 level: cluster.level,
-                showsCount: true,
+                showsCount: false,
                 grams: cluster.grams,
                 colorShares: GemArtworkSpec.aggregateColors(cluster.colorMix, fallbackHex: dominantColorHex)
             )
@@ -3011,6 +2777,79 @@ private struct OverviewBottleGraphic: View {
                     at: CGPoint(x: x, y: y)
                 )
             }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+/// A time-only display shared by the overview and public cards. The gems are
+/// denominations of the total, not claims that particular records belong to
+/// a particular crystal. No session IDs or count-tree levels reach this view.
+struct TimeFusionPileArtwork: View {
+    let totalGrams: Int
+    var showsVessel = true
+
+    private struct Gem: Identifiable {
+        let id: String
+        let grams: Int
+        let isRemainder: Bool
+    }
+
+    private var gems: [Gem] {
+        let projection = TimeFusionPolicy.snapshot(totalGrams: totalGrams)
+        var result = projection.visibleCrystals.map {
+            Gem(id: $0.id.uuidString, grams: $0.grams, isRemainder: false)
+        }
+        if projection.remainderGrams > 0 {
+            result.append(Gem(id: "time-remainder", grams: projection.remainderGrams, isRemainder: true))
+        }
+        return result
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let values = gems
+            let columns = max(1, Int(ceil(sqrt(Double(max(1, values.count)) * 1.4))))
+            let rows = max(1, (values.count + columns - 1) / columns)
+            let step = min(88, proxy.size.width * 0.86 / CGFloat(columns), proxy.size.height * 0.72 / CGFloat(rows))
+            ZStack(alignment: .bottom) {
+                if showsVessel {
+                    RoundedRectangle(cornerRadius: 34)
+                        .fill(PomoGemTheme.raised.opacity(0.36))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 34)
+                                .stroke(PomoGemTheme.glassEdge.opacity(0.55), lineWidth: 1.5)
+                        }
+                        .padding(.horizontal, 8)
+                }
+                ForEach(Array(values.enumerated()), id: \.element.id) { index, gem in
+                    let row = index / columns
+                    let rowCount = min(columns, values.count - row * columns)
+                    let column = index % columns
+                    let size = step * (gem.isRemainder ? 0.72 : 0.96)
+                    VStack(spacing: 0) {
+                        GemArtworkStone(spec: GemArtworkStone.aggregateSpec(
+                            grams: gem.grams,
+                            colors: [GemColorShare(hex: TimeFusionPolicy.colorHex, fraction: 1)]
+                        ))
+                        .frame(width: size, height: size)
+                        if step >= 32 {
+                            Text(DurationPresentation.focusLabel(grams: gem.grams))
+                                .font(.system(size: min(10, step * 0.12), weight: .bold, design: .rounded))
+                                .foregroundStyle(PomoGemTheme.text)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.5)
+                                .frame(width: step)
+                        }
+                    }
+                    .frame(width: step, height: step)
+                    .offset(
+                        x: (CGFloat(column) - CGFloat(rowCount - 1) / 2) * step,
+                        y: -CGFloat(row) * step - 10
+                    )
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .accessibilityHidden(true)
     }

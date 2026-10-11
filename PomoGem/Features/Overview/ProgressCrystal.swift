@@ -3468,7 +3468,7 @@ struct GemArtworkStone: View {
 
 /// The Overview's crystal: the Home jar's own gem art at the rung of the
 /// grams it holds (an achievement shows the copper-set step cut), with the
-/// "×N" count on the same dark plate as in the jar. It breathes gently and
+/// time label on the same dark plate as in the jar. It breathes gently and
 /// stays still with Reduce Motion.
 struct ProgressCrystalGlyph: View {
     let completionCount: Int
@@ -3519,9 +3519,9 @@ struct ProgressCrystalGlyph: View {
                     .scaleEffect(breath ? 1.018 : 0.99)
 
                 if showsCount {
-                    // The jar's own count tag (D26): a small engraved copper
-                    // tag below the table, the same text as Home.
-                    let text = AggregatePresentation.countLabel(completionCount)
+                    // Shared engraving geometry carries time; source-session
+                    // count is never a crystal denomination.
+                    let text = DurationPresentation.focusLabel(grams: grams ?? NonnegativeIntPolicy.multiplying(max(0, completionCount), Constants.Mass.measuredPebbleGrams))
                     let fontSize = GemArtwork.countTagFontSize(sceneRadius: side * 0.40)
                     let tag = GemArtwork.countEngravingSize(text: text, fontSize: fontSize, style: .copperTag)
                     // Below the theme marks when they show (round 14).

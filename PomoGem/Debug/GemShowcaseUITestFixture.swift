@@ -43,6 +43,10 @@ enum GemShowcaseUITestFixture {
         case nine
         case nineteen
         case corecard
+        /// The same 500 minutes split into fifty short or five long focuses.
+        /// Their stored session counts and index shapes deliberately differ.
+        case timeShort
+        case timeLong
         case gallery
         /// Worst case for rendering: the study body ceiling plus the maximum
         /// visible achievements and Screen Time obstacles, all at once.
@@ -104,6 +108,8 @@ enum GemShowcaseUITestFixture {
         case .nine: 9
         case .nineteen: 19
         case .corecard: 5
+        case .timeShort: 50
+        case .timeLong: 5
         case .heavy: 1_004
         case .veteran: 10_006
         case .edge: edgeGrams / Constants.Mass.measuredPebbleGrams
@@ -126,6 +132,10 @@ enum GemShowcaseUITestFixture {
         switch modeForCurrentProcess {
         case .corecard where index < 4:
             return 3_000
+        case .timeShort:
+            return 600
+        case .timeLong:
+            return 6_000
         default:
             return 1_500
         }
@@ -240,7 +250,7 @@ enum GemShowcaseUITestFixture {
                     level: level,
                     pebbleCount: size,
                     childAggregateCount: level == 1 ? 0 : fanIn,
-                    grams: size * 250,
+                    grams: range.reduce(0) { $0 + sessionSeconds(index: $1) / 6 },
                     measuredPebbleCount: size,
                     colorMixJSON: colorMix,
                     subjectMixJSON: subjectMix,

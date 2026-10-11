@@ -495,6 +495,7 @@ struct HomeView: View {
         !rootProjectionIsComplete
             || aggregateProjectionNeedsMaintenance
             || !localMembershipProjectionIsComplete
+            || !(currentAggregatePresentationPage?.unresolvedLegacyStratumIDs.isEmpty ?? false)
             || !sessionBackfillIsComplete
             || acceptedAggregateRootIDs.count
                 != AggregatePebblePolicy.activeRoots(from: aggregates).count
@@ -570,7 +571,10 @@ struct HomeView: View {
             roots: roots,
             looseSessions: looseSessions,
             pendingOnHomePass: receiptUnlandedSessionIDs,
-            savedTotals: savedTotals
+            savedTotals: savedTotals,
+            representedPendingSessions: currentRewardSessionBackfill.filter {
+                representedSessionIDs.contains($0.id)
+            }
         )
     }
     /// sync-03 after review. What the headline says while iCloud is checked.
@@ -782,17 +786,7 @@ struct HomeView: View {
         ).filter { !modernIDs.contains($0.id) }
     }
     private var latestInspectableAggregateID: UUID? {
-        let candidates = activeAggregateRoots.map {
-            (id: $0.id, date: $0.createdAt)
-        } + activeLegacyStratumVisuals.map {
-            (id: $0.id, date: $0.bakedAt)
-        }
-        return candidates.max { lhs, rhs in
-            if lhs.date == rhs.date {
-                return lhs.id.uuidString < rhs.id.uuidString
-            }
-            return lhs.date < rhs.date
-        }?.id
+        TimeFusionPolicy.snapshot(totalGrams: totalGrams).crystals.last?.id
     }
     private var aggregateInspectionSummary: AccumulationClusterSummary? {
         guard let aggregateInspectionID else { return nil }
@@ -991,7 +985,9 @@ struct HomeView: View {
                                 }
                             }
                         if showsAggregateInspectionSlot(cardPlacement) {
-                            aggregateInspectionSlot
+                            JarStageReader(state: jarStageState, stage: stage) { readout in
+                                aggregateInspectionSlot(readout)
+                            }
                                 .padding(.top, 8)
                                 .id(Self.aggregateInspectionSlotID)
                         }
@@ -1561,36 +1557,13 @@ struct HomeView: View {
     private func stratumCelebrationSheet(_ request: PendingStratumCelebration) -> some View {
         let sheet = StratumCelebrationView(
             request: request,
-            // The crystal's own colour mix, as the jar paints the same ×10
-            // (the receipt keeps only its dominant colour).
-            colorShares: storedAggregates.first { $0.id == request.id }.map {
-                GemArtworkSpec.aggregateColors(
-                    $0.colorMix,
-                    fallbackHex: request.colorHex ?? Constants.Color.amberLamp
-                )
-            } ?? [],
-            showsMonthLabel: purchase.isPro,
+            colorShares: [],
+            showsMonthLabel: false,
             teachesCoreBirth: presentedStratumTeachesCoreBirth,
             onExplore: exploreCompletedStratum,
             onShare: { shareCompletedStratum(request) },
             onContinue: dismissCompletedStratum,
-            monthLabelHint: MonthLabelHintPolicy.offersHint(
-                isPro: purchase.isPro,
-                entitlementsResolved: purchase.hasResolvedEntitlements,
-                alreadyOffered: didOfferMonthLabelHint,
-                hintCelebrationID: monthLabelHintCelebrationID,
-                celebrationID: request.id
-            ) ? MonthLabelHint(
-                onShown: {
-                    monthLabelHintCelebrationID = request.id
-                    didOfferMonthLabelHint = true
-                },
-                onOpen: {
-                    dropFocusStartWaitingOnCelebration()
-                    opensMonthLabelPaywallAfterCelebration = true
-                    dismissCompletedStratum()
-                }
-            ) : nil
+            monthLabelHint: nil
         )
         // A decimal carry is secondary, lossless storage maintenance. Open it
         // at full height so the organization result and mass-preservation
@@ -1690,7 +1663,7 @@ struct HomeView: View {
                 inspectableAggregateID: stage.inspectableAggregateID,
                 onJarTapAccepted: invalidateAggregateInspectionCard,
                 onAggregateTapped: revealAggregateInspection,
-                onAggregateAccessibilityAction: presentAggregateDetail
+                onAggregateAccessibilityAction: revealAggregateInspection
             )
                 .onGeometryChange(for: CGRect.self) { geometry in
                     geometry.frame(in: .named(Self.jarCardCoordinateSpace))
@@ -2194,7 +2167,7 @@ struct HomeView: View {
         )
     }
 
-    /// The jar count and achievement stones share a compact localized pill.
+    /// Original records and achievement stones share a compact localized pill.
     private func jarMetricSummary(
         _ readout: LifetimeReadoutContinuityPolicy.Readout,
         stage: JarStageSnapshot
@@ -2203,18 +2176,18 @@ struct HomeView: View {
         let gems: String
         if readout.isCloudVerificationPending {
             gems = String(
-                localized: "この端末で確認済み \(count)粒",
+                localized: "確認済みの記録 \(count)件",
                 table: "Home",
-                comment: "Jar readout pill while iCloud is checked: gems this device has confirmed"
+                comment: "Jar readout pill while iCloud is checked: original records this device has confirmed"
             )
         } else if readout.isLowerBound {
             gems = String(
-                localized: "\(count)+粒",
+                localized: "元の記録 \(count)+件",
                 table: "Home",
-                comment: "Jar readout pill: at least this many gems (the count is still being tallied)"
+                comment: "Jar readout pill: at least this many original records, not visible crystals"
             )
         } else {
-            gems = CountText.gems(count)
+            gems = String(localized: "元の記録 \(count)件", table: "Home", comment: "Jar readout pill: original records, not visible crystals")
         }
         guard stage.uniqueAchievementCount > 0 else { return gems }
         let stones = achievementCountIsLowerBound
@@ -2291,16 +2264,16 @@ struct HomeView: View {
     private func homeMenuCountValue(_ readout: LifetimeReadoutContinuityPolicy.Readout) -> String {
         guard !readout.isLoading else { return "—" }
         guard readout.isCloudVerificationPending else {
-            return CountText.gems(readout.menuPebbles)
+            return String(localized: "\(readout.menuPebbles)件", table: "Home", comment: "Home menu: original record count")
         }
         // A bare device count beside the pending status could read as the lifetime total.
         return readout.menuGrams == nil
             ? String(
-                localized: "確認済み \(readout.menuPebbles)粒",
+                localized: "確認済み \(readout.menuPebbles)件",
                 table: "Home",
-                comment: "Home menu metric while iCloud is checked and no lifetime total can be shown: gems this device has confirmed"
+                comment: "Home menu metric while iCloud is checked: original records this device has confirmed"
             )
-            : CountText.gems(readout.menuPebbles)
+            : String(localized: "\(readout.menuPebbles)件", table: "Home", comment: "Home menu: original record count")
     }
 
     /// Says what the strip shows, held readouts included.
@@ -2323,9 +2296,9 @@ struct HomeView: View {
                     ),
                     Self.spokenPhrases([
                         String(
-                            localized: "この端末で確認済みの集中\(readout.menuPebbles)粒",
+                            localized: "この端末で確認済みの記録\(readout.menuPebbles)件",
                             table: "Home",
-                            comment: "VoiceOver, menu metrics while iCloud is checked: focus gems this device has confirmed"
+                            comment: "VoiceOver, menu metrics while iCloud is checked: original records this device has confirmed"
                         ),
                         spokenAchievementStoneCount
                     ])
@@ -2352,7 +2325,7 @@ struct HomeView: View {
     }
 
     private func spokenFocusGemCount(_ count: Int) -> String {
-        String(localized: "集中\(count)粒", table: "Home", comment: "VoiceOver, menu metrics: gems from focus sessions")
+        String(localized: "元の記録 \(count)件", table: "Home", comment: "VoiceOver, menu metrics: original records, not visible crystals")
     }
 
     private var spokenAchievementStoneCount: String {
@@ -2443,15 +2416,10 @@ struct HomeView: View {
         if let line = stage.journey.line(readout: readout, now: .now) {
             components.append(line.text)
         }
-        if let physicalState = JarLifetimeCorePresentation.state(
-            totalPebbleCount: totals.pebbleCount,
-            projectionIsLowerBound: readout.isLowerBound
-        ) {
-            // The count toward the next crystal, after the time value. It was
-            // prefixed 「瓶の物理整理：」, an accounting term.
-            components.append(contentsOf: [physicalState.progressLabel, physicalState.nextFusionLabel]
-                .compactMap { $0 })
-        }
+        components.append(TimeFusionPresentation.progress(
+            totalGrams: totals.grams,
+            isLowerBound: readout.isLowerBound || readout.isCloudVerificationPending
+        ))
         let filledJarCount = JarAccumulationPresencePresentation
             .state(totalGrams: totals.grams).completedCycleCount
         if filledJarCount > 0 {
@@ -2696,7 +2664,7 @@ struct HomeView: View {
     /// crystal's card in its place. Afterwards the tip's 72 pt row goes away
     /// and the jar keeps its full height.
     private var showsAggregateTipRow: Bool {
-        latestInspectableAggregateID != nil && !didSeeAggregateDetail
+        totalGrams > 0
     }
 
     /// The row under the jar: the tip's, or a tapped crystal's card that
@@ -3500,7 +3468,7 @@ struct HomeView: View {
     }
 
     private static var menuFocusCaption: String {
-        String(localized: "集中", table: "Home", comment: "Home menu metric caption: gems from focus sessions")
+        String(localized: "元の記録", table: "Home", comment: "Home menu metric caption: original records, not visible crystals")
     }
 
     private static var menuAchievementCaption: String {
@@ -4733,11 +4701,12 @@ struct HomeView: View {
 
     private func configureScene() {
         router.jarScene = scene
-        scene.onAggregateRequested = { request in
-            Task { @MainActor in persistAggregate(request) }
-        }
-        scene.onCapacityEvent = { event in
-            Task { @MainActor in handleCapacity(event) }
+        // Storage compaction remains a background history index. The jar's
+        // visible fusion is derived only from conserved study time.
+        scene.onAggregateRequested = nil
+        scene.onCapacityEvent = nil
+        scene.onTimeFusionFormed = { transition in
+            Task { @MainActor in celebrateTimeFusion(transition) }
         }
         scene.onLanding = { event in
 #if DEBUG
@@ -4754,6 +4723,7 @@ struct HomeView: View {
     }
 
     private func clearSceneCallbacks() {
+        scene.onTimeFusionFormed = nil
         scene.onAggregateRequested = nil
         scene.onBakeRequested = nil
         scene.onCapacityEvent = nil
@@ -4777,12 +4747,15 @@ struct HomeView: View {
         // first visible descent. The landing callback applies the latest page.
         guard !scene.hasCompletionDropInFlight else { return }
         guard refreshRewardSessionBackfill() else { return }
+        let markedLocalCompletions = StudySessionSyncPolicy.canonicalSessions(
+            from: looseSessions + currentRewardSessionBackfill
+        ).filter(hasLocalCompletionMarker)
         // Bodies bake at this view's scale; set it before the first restore
         // so a 2× device never bakes (and keeps) 3× textures.
         scene.artworkScale = displayScale
         syncBaseLayers()
 
-        let localCompletions = looseSessions.filter(hasLocalCompletionMarker)
+        let localCompletions = markedLocalCompletions
         for session in localCompletions {
             _ = prepareRewardReceipt(
                 for: PebbleDescriptor(session: session),
@@ -4798,8 +4771,7 @@ struct HomeView: View {
         // without dropping the same saved gem again.
         for receipt in PendingRewardReceiptStore.load()
         where receipt.dropPhase == .awaitingLanding {
-            if scene.hasLandedPebble(withID: receipt.id)
-                || representedSessionIDs.contains(receipt.id) {
+            if scene.hasLandedPebble(withID: receipt.id) {
                 finishRewardDrop(sessionID: receipt.id)
             }
         }
@@ -4808,7 +4780,7 @@ struct HomeView: View {
             && breakOffer == nil
             && !rewardDropSurfaceIsObscured
         for id in ScreenTimeGemDropStore.load()
-        where scene.hasLandedPebble(withID: id) || representedSessionIDs.contains(id) {
+        where scene.hasLandedPebble(withID: id) {
             ScreenTimeGemDropStore.remove(id)
             jarStageState.screenTimeDropRevision &+= 1
         }
@@ -4817,9 +4789,13 @@ struct HomeView: View {
         }.map(\.id)).union(ScreenTimeGemDropStore.load())
         let heldIDs = Set(pendingReceipts.filter {
             $0.isAwaitingAcknowledgement || ($0.requiresDrop && !canRevealDrop)
-        }.map(\.id)).union(looseSessions.filter(hasLocalCompletionMarker).map(\.id))
+        }.map(\.id)).union(markedLocalCompletions.filter(hasLocalCompletionMarker).map(\.id))
         let current = (
             looseSessions.map(PebbleDescriptor.init(session:))
+                + currentRewardSessionBackfill.filter {
+                    representedSessionIDs.contains($0.id)
+                        && (awaitingDropIDs.contains($0.id) || heldIDs.contains($0.id))
+                }.map(PebbleDescriptor.init(session:))
                 + visibleAchievementStones.map(PebbleDescriptor.init(achievement:))
         ).filter { !heldIDs.contains($0.id) }
             .sorted { $0.createdAt < $1.createdAt }
@@ -4919,13 +4895,16 @@ struct HomeView: View {
     private func refreshRewardSessionBackfill() -> Bool {
         let receipts = PendingRewardReceiptStore.load().filter(\.requiresDrop)
         let screenTimeIDs = ScreenTimeGemDropStore.load()
-        guard !receipts.isEmpty || !screenTimeIDs.isEmpty else { return true }
+        let completionMarker = UserDefaults.standard.string(forKey: FocusPersistence.localCompletionIDKey)
+        guard !receipts.isEmpty || !screenTimeIDs.isEmpty
+                || completionMarker.flatMap(UUID.init(uuidString:)) != nil else { return true }
         let orphanedReceiptIDs: [UUID]
         do {
             var resolved = try HomeProjectionPolicy.pendingRewardSessionCandidates(
                 for: receipts,
                 context: modelContext,
-                resetMarkers: resetSnapshots
+                resetMarkers: resetSnapshots,
+                completionMarker: completionMarker
             )
             orphanedReceiptIDs = try HomeProjectionPolicy
                 .orphanedPendingRewardReceiptIDs(
@@ -4959,7 +4938,7 @@ struct HomeView: View {
                 !resolvedIDs.contains($0.id)
             }
             rewardSessionBackfill = Array(
-                (resolved + retained).prefix(PendingRewardReceiptStore.maximumPendingCount + ScreenTimeGemDropStore.maximumCount)
+                (resolved + retained).prefix(PendingRewardReceiptStore.maximumPendingCount + ScreenTimeGemDropStore.maximumCount + 1)
             )
             rewardSessionBackfillGeneration = HomeSceneSessionSnapshotGeneration(
                 aggregateProjectionPresentation
@@ -4994,7 +4973,10 @@ struct HomeView: View {
             let membership = try HomeProjectionPolicy.localMembershipProjection(
                 for: sessions,
                 representedAggregateRoots: validatedAggregateRoots,
-                legacyStrata: activeLegacyStrata,
+                // Time display counts supported original rows until legacy
+                // strata have a verified modern index. Never hide raw time
+                // behind a legacy summary excluded from the total.
+                legacyStrata: [],
                 context: modelContext,
                 resetMarkers: resetSnapshots
             )
@@ -5010,6 +4992,40 @@ struct HomeView: View {
             conflictedAggregateRootIDs = Set(validatedAggregateRoots.map(\.id))
         }
         scene.showsMonthLabels = purchase.isPro
+        let pendingIDs = jarStageState.unlandedSessionIDs(
+            pendingOnHomePass: receiptUnlandedSessionIDs
+        )
+        let representedPending = currentRewardSessionBackfill.filter {
+            representedSessionIDs.contains($0.id)
+        }
+        let pending = HomeProjectionPolicy.timeFusionPendingContributions(
+            looseSessions: looseSessions,
+            representedPendingSessions: representedPending,
+            unlandedSessionIDs: pendingIDs
+        )
+        let landed = HomeProjectionPolicy.landedTotals(
+            roots: acceptedAggregateRoots,
+            looseSessions: looseSessions,
+            unlandedSessionIDs: pendingIDs,
+            representedPendingSessions: representedPending
+        )
+        // Use the same held or provisional total as the headline while a
+        // cloud generation is being verified. A bounded local suffix must
+        // not replace a previously shown lifetime jar behind that headline.
+        let readout = jarStageSnapshot.presentedReadout(with: jarStageState)
+        let landingContributions = HomeProjectionPolicy.timeFusionLandingContributions(
+            pending: pending,
+            displayedGrams: readout.jarGrams,
+            landedGrams: landed.grams,
+            allowsLiveCredit: !readout.isCloudVerificationPending
+                && lifetimeInputsAreSettled && !sessionPageReadFailed
+        )
+        scene.configureTimeFusion(
+            totalGrams: readout.jarGrams ?? landed.grams,
+            colorMix: [],
+            pendingContributions: landingContributions,
+            epochID: currentActivityEpochID
+        )
         scene.configureAggregates(
             acceptedAggregateRoots,
             legacyStrata: activeLegacyStrata.map(
@@ -5208,15 +5224,13 @@ struct HomeView: View {
                 try? await Task.sleep(for: .milliseconds(360))
             }
             guard !Task.isCancelled else { return }
-            router.presentShare(
-                scope: .aggregate(id: request.id, monthLabel: request.monthLabel)
-            )
+            router.presentShare()
         }
     }
 
     private func exploreCompletedStratum() {
         dropFocusStartWaitingOnCelebration()
-        overviewInitialClusterID = completedStratum?.id
+        overviewInitialClusterID = nil
         completedStratum = nil
         Task { @MainActor in
             if !reduceMotion {
@@ -5437,6 +5451,27 @@ struct HomeView: View {
         ))
     }
 
+    private func celebrateTimeFusion(_ transition: TimeFusionTransition) {
+        guard !localProjectionNeedsMaintenance,
+              !aggregateProjectionPresentation.isCloudVerificationPending,
+              let crystal = TimeFusionPolicy.snapshot(totalGrams: transition.afterGrams)
+                .crystals.first(where: { $0.level == transition.destinationLevel })
+        else { return }
+        let request = PendingStratumCelebration(
+            id: UUID(),
+            createdAt: .now,
+            pebbleCount: 0,
+            grams: crystal.grams,
+            monthLabel: "",
+            colorHex: TimeFusionPolicy.colorHex,
+            level: transition.destinationLevel,
+            projectionCacheStamp: aggregateProjectionPresentation.verifiedCacheStamp,
+            timeFusionTotalGrams: transition.afterGrams
+        )
+        PendingStratumCelebrationStore.insert(request)
+        enqueueStratumCelebration(request)
+    }
+
     private func enqueueStratumCelebration(_ request: PendingStratumCelebration) {
         guard canPublishCelebrationSnapshot(request) else {
             PendingStratumCelebrationStore.remove(id: request.id)
@@ -5477,6 +5512,10 @@ struct HomeView: View {
     /// is no root any more; then it is the first ten-gem crystal baked
     /// after that acknowledgement.
     private func stratumTeachesCoreBirth(_ request: PendingStratumCelebration) -> Bool {
+        if request.timeFusionTotalGrams != nil {
+            return coreBirthTeaching?.epochID == currentActivityEpochID
+                && coreBirthTeaching != nil
+        }
         guard let pending = coreBirthTeaching,
               pending.epochID == currentActivityEpochID,
               StratumCelebrationTeaching.isTenGemCrystal(request)
@@ -5541,10 +5580,11 @@ struct HomeView: View {
     private func canPublishCelebrationSnapshot(
         _ request: PendingStratumCelebration
     ) -> Bool {
-        !aggregateProjectionPresentation.usesCloudPersistence
+        request.timeFusionTotalGrams != nil
+            && (!aggregateProjectionPresentation.usesCloudPersistence
             || aggregateProjectionPresentation.acceptsVerifiedAggregateCache(
                 request.projectionCacheStamp
-            )
+            ))
     }
 
     private func discardUnpublishableCelebrationSnapshots() {
@@ -5574,13 +5614,11 @@ struct HomeView: View {
             return
         }
         capacityRemaining = nil
-        let persistedIDs = Set(aggregates.map(\.id)).union(strata.map(\.id))
         let pending = PendingStratumCelebrationStore.load()
-        let now = Date.now
         let recoverable = pending.filter {
             canPublishCelebrationSnapshot($0)
-                && persistedIDs.contains($0.id)
-                && !scene.isBakeInProgress
+                && !localProjectionNeedsMaintenance
+                && ($0.timeFusionTotalGrams ?? Int.max) <= totalGrams
         }
         let latestRecoverable = PendingStratumCelebrationSelection.latest(in: recoverable)
         let recoverableIDs = Set(recoverable.map(\.id))
@@ -5589,16 +5627,14 @@ struct HomeView: View {
             if recoverableIDs.contains($0.id) {
                 return $0.id == latestRecoverable?.id
             }
-            return scene.isBakeInProgress
-                || persistedIDs.contains($0.id)
-                || now.timeIntervalSince($0.createdAt) < 10
+            return localProjectionNeedsMaintenance
         }
         PendingStratumCelebrationStore.save(waiting)
         if let latestRecoverable {
             enqueueStratumCelebration(latestRecoverable)
         }
         celebrationRecoveryTask?.cancel()
-        if waiting.contains(where: { !persistedIDs.contains($0.id) || scene.isBakeInProgress }) {
+        if !waiting.isEmpty && localProjectionNeedsMaintenance {
             celebrationRecoveryTask = Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(650))
                 guard !Task.isCancelled else { return }
@@ -6701,6 +6737,11 @@ struct HomeView: View {
     }
 
     private func revealAggregateInspection(_ aggregateID: UUID) {
+        if TimeFusionPolicy.isProjectionID(aggregateID) {
+            overviewInitialClusterID = nil
+            showAccumulationOverview = true
+            return
+        }
         guard inspectionSummary(for: aggregateID) != nil else { return }
         cancelTiltHintPresentation()
         aggregateInspectionTask?.cancel()
@@ -6823,40 +6864,30 @@ struct HomeView: View {
         .accessibilityIdentifier("jar.aggregate.inspect")
     }
 
-    @ViewBuilder
-    private var aggregateInspectionSlot: some View {
-        if let aggregateID = latestInspectableAggregateID,
-           let restingSummary = inspectionSummary(for: aggregateID) {
-            let presentedSummary = aggregateInspectionSummary ?? restingSummary
-            let isPresented = aggregateInspectionSummary != nil
-
-            ZStack {
-                // Keep the larger state in the layout even while hidden. That
-                // makes the launcher below the jar stay put without clipping
-                // this card at accessibility Dynamic Type sizes.
-                aggregateInspectionButton(presentedSummary)
-                    .opacity(isPresented ? 1 : 0)
-                    .allowsHitTesting(isPresented)
-                    .accessibilityHidden(!isPresented)
-
-                // Once a detail has been opened the row holds only the card
-                // (`showsAggregateInspectionSlot`).
-                if !didSeeAggregateDetail {
-                    Label(
-                        String(localized: "結晶をタップすると、内訳を見られます", table: "Home", comment: "Hint under the jar until a crystal's detail has been opened once"),
-                        systemImage: "hand.tap"
-                    )
-                    .font(.caption.weight(.semibold))
+    private func aggregateInspectionSlot(_ readout: LifetimeReadoutContinuityPolicy.Readout) -> some View {
+        Button {
+            overviewInitialClusterID = nil
+            showAccumulationOverview = true
+        } label: {
+            VStack(spacing: 4) {
+                Text(TimeFusionPresentation.progress(
+                    totalGrams: readout.jarGrams,
+                    isLowerBound: readout.isLowerBound || readout.isCloudVerificationPending
+                ))
+                    .font(.subheadline.weight(.semibold))
+                    .monospacedDigit()
+                Text("時間のまとまりと元の記録を見る", tableName: "Home",
+                     comment: "Home link below the jar: opens time-based crystals and original records")
+                    .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
-                    .multilineTextAlignment(.center)
-                    // The capacity chip takes this row while a fusion nears.
-                    .opacity(isPresented || showsCapacityChip ? 0 : 1)
-                    .accessibilityHidden(true)
-                    .allowsHitTesting(false)
-                }
             }
-            .frame(maxWidth: .infinity)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, minHeight: 52)
+            .padding(.vertical, 6)
         }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("jar.time-fusion.progress")
     }
 
     @ViewBuilder
@@ -7341,6 +7372,7 @@ struct JarLandedTotalsInputs {
     /// Every saved session counted (`HomeProjectionPolicy.totals`), landed or
     /// not.
     let savedTotals: HomeProjectionPolicy.Totals
+    var representedPendingSessions: [StudySession] = []
 
     /// The landed totals as Home's own pass knows them, before the stage
     /// applies what has landed or started falling since.
@@ -7348,7 +7380,8 @@ struct JarLandedTotalsInputs {
         HomeProjectionPolicy.landedTotals(
             roots: roots,
             looseSessions: looseSessions,
-            unlandedSessionIDs: pendingOnHomePass
+            unlandedSessionIDs: pendingOnHomePass,
+            representedPendingSessions: representedPendingSessions
         )
     }
 
@@ -7357,7 +7390,8 @@ struct JarLandedTotalsInputs {
         HomeProjectionPolicy.landedTotals(
             roots: roots,
             looseSessions: looseSessions,
-            unlandedSessionIDs: state.unlandedSessionIDs(pendingOnHomePass: pendingOnHomePass)
+            unlandedSessionIDs: state.unlandedSessionIDs(pendingOnHomePass: pendingOnHomePass),
+            representedPendingSessions: representedPendingSessions
         )
     }
 
@@ -7506,30 +7540,15 @@ enum PostDropProgressAccessibilityPresentation {
         fusionState: FusionRewardBridgeState,
         projectionIsLowerBound: Bool
     ) -> String {
-        let physicalDisplay = FusionRewardBridgePresentation.display(
-            state: fusionState,
-            projectionIsLowerBound: projectionIsLowerBound
+        let progress = TimeFusionPresentation.progress(
+            totalGrams: effortProgress?.totalGrams,
+            isLowerBound: projectionIsLowerBound
         )
-        if let effortProgress {
-            let effortDisplay = EffortProgressPresentation.display(
-                snapshot: effortProgress,
-                projectionIsLowerBound: projectionIsLowerBound
-            )
-            return String(
-                localized: "\(effortDisplay.accessibilityLabel)。瓶の整理：\(physicalDisplay.accessibilityLabel)",
-                table: "Home",
-                comment: "VoiceOver announcement after a focus: time-core progress, then the count toward the next crystal"
-            )
-        }
-
-        // Receipts from builds before mass was captured keep their original,
-        // internally consistent count presentation for this one replay.
-        // Phrases without final punctuation; the last takes none either.
-        var phrases = [physicalDisplay.progressLabel, physicalDisplay.nextStepLabel]
-        if let longTermContextLabel = physicalDisplay.longTermContextLabel {
-            phrases.append(longTermContextLabel)
-        }
-        return SentenceText.join(phrases.dropLast().map(HomeView.spokenSentence) + [phrases.last ?? ""])
+        guard let effortProgress else { return progress }
+        let effort = EffortProgressPresentation.display(
+            snapshot: effortProgress, projectionIsLowerBound: projectionIsLowerBound
+        )
+        return SentenceText.join([CompletionCardPresentation.sentence(effort.accessibilityLabel), progress])
     }
 }
 
@@ -7771,12 +7790,11 @@ enum CompletionCardPresentation {
             coreFraction: projectionIsLowerBound ? nil : effortProgress.map {
                 $0.crossedMilestoneGrams == nil ? $0.progressFraction : 1
             },
-            unitLine: effortProgress == nil ? nil : String(
-                localized: "時間の核は、粒の数ではなく集中した時間で進みます。25分が1.0標準単位で、今回は\(standardUnits(grams: grams))標準単位です。",
-                table: "Home",
-                comment: "Completion card 「しくみ」: the time core counts time, not gems; 25 minutes is one standard unit. %@ is this focus in standard units (1.0)"
+            unitLine: TimeFusionPresentation.explanation,
+            jarLine: TimeFusionPresentation.progress(
+                totalGrams: effortProgress?.totalGrams,
+                isLowerBound: projectionIsLowerBound
             ),
-            jarLine: jarLine(fusionState, projectionIsLowerBound: projectionIsLowerBound),
             weekCountLine: weeklyTimerCompletionCount > 0 ? String(
                 localized: "今週のタイマー完走は\(weeklyTimerCompletionCount)回です。回数は時間の価値とは別です。",
                 table: "Home",
@@ -7809,20 +7827,6 @@ enum CompletionCardPresentation {
         }
         return String(localized: "時間の核の\(snapshot.displayedTargetLevel)段目まで あと\(remaining)", table: "Home",
                       comment: "Completion card 「しくみ」: focus time left until the time core's next level. %1$lld is the level, %2$@ a duration")
-    }
-
-    private static func jarLine(_ state: FusionRewardBridgeState, projectionIsLowerBound: Bool) -> String {
-        guard !projectionIsLowerBound else {
-            return String(localized: "粒は1回の完走につき1つです。結晶までの数は、確認が済むと表示します。", table: "Home",
-                          comment: "Completion card 「しくみ」 while the gem count is being checked")
-        }
-        if state.isFusionComplete {
-            return String(localized: "粒は1回の完走につき1つです。この一粒で10粒がそろい、瓶の中でひとつの結晶になります。記録と重さはそのままです。", table: "Home",
-                          comment: "Completion card 「しくみ」: this gem completes ten, which fuse into one crystal; nothing is lost")
-        }
-        let remaining = max(1, state.immediateHorizon.remainingPebbleCount)
-        return String(localized: "粒は1回の完走につき1つです。10粒そろうと、瓶の中でひとつの結晶にまとまります（記録と重さはそのまま）。次の結晶まで あと\(remaining)粒。", table: "Home",
-                      comment: "Completion card 「しくみ」: ten gems fuse into one crystal; %lld gems to the next crystal")
     }
 
     /// Minutes rounded up, so 「あと」 never claims less than is left.
@@ -7867,9 +7871,7 @@ enum CompletionCardPresentation {
               let effortProgress,
               effortProgress.crossedMilestoneGrams == EffortProgressPolicy.firstMilestoneGrams
         else { return .none }
-        let madeFirstCrystal = fusionState.totalPebbleCount == FusionHierarchyPresentation.fanIn
-            && fusionState.completedFusionLevels == [1]
-        return madeFirstCrystal ? .fusionSheet : .card
+        return .fusionSheet
     }
 
     /// The card's form of the fusion sheet's line (no 「10粒で」: the core
@@ -8409,32 +8411,26 @@ private struct StratumCelebrationView: View {
                     .frame(width: side * 1.3, height: side * 1.3)
             }
 
-            FusionOrbitStage(
-                state: orbitState,
+            ProgressCrystalGlyph(
+                completionCount: 0,
                 colorHex: colorHex,
-                scale: .hero,
-                destinationGrams: request.grams,
-                colorShares: colorShares
+                level: level,
+                grams: request.grams
             )
-            .frame(width: side * (framed ? 0.86 : 1), height: side * (framed ? 0.86 : 1))
-            // The bowl hangs low in the stage; keep it clear of the edge.
-            .offset(y: framed ? -side * 0.02 : 0)
+            .frame(width: side * 0.86, height: side * 0.86)
         }
         .frame(maxWidth: .infinity)
         .frame(height: side)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(level == 1
-            ? String(localized: "新しい結晶。その下に、もとになった\(FusionHierarchyPresentation.fanIn)粒", table: "Home",
-                     comment: "VoiceOver: the fusion sheet art, a new ×10 crystal over its source gems. %lld is 10")
-            : String(localized: "新しい結晶。その下に、もとになった\(FusionHierarchyPresentation.fanIn)個の結晶", table: "Home",
-                     comment: "VoiceOver: the fusion sheet art, a larger crystal over its source crystals. %lld is 10"))
+        .accessibilityLabel(String(localized: "\(TimeFusionPresentation.duration(grams: request.grams))を表す結晶", table: "Home",
+                                   comment: "VoiceOver: the amount of saved focus time represented by this crystal"))
     }
 
     private var celebrationLines: some View {
         VStack(spacing: 6) {
             // The line break keeps 「結晶」 whole on a phone.
-            Text("\(request.pebbleCount)粒ぶんの時間が、\nひとつの結晶に。", tableName: "Home",
-                 comment: "Fusion sheet headline, two lines. %lld is the gems the new crystal holds (10). en: 'The time of %lld gems,\\nin one crystal.'")
+            Text("\(TimeFusionPresentation.duration(grams: request.grams))が、\nひとつの結晶に。", tableName: "Home",
+                 comment: "Time-fusion celebration headline: a precise duration represented by the new crystal")
                 .font(PomoGemTheme.brand(24))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -8461,7 +8457,7 @@ private struct StratumCelebrationView: View {
     @ViewBuilder
     private var coreBirthLine: some View {
         if teachesCoreBirth {
-            Text("10粒で、時間の核が生まれました。これからは核が、積み上げた時間の重さを表します。", tableName: "Home",
+            Text("4時間10分を積み上げ、時間の核が生まれました。これからも、集中した時間で育ちます。", tableName: "Home",
                  comment: "Fusion sheet, only when the first crystal and the first time core arrive together")
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(PomoGemTheme.text)
@@ -8487,12 +8483,12 @@ private struct StratumCelebrationView: View {
     private var celebrationActions: some View {
         VStack(spacing: 12) {
             Button(action: onExplore) {
-                celebrationActionLabel(Text("この結晶の内訳を見る", tableName: "Home",
+                celebrationActionLabel(Text("積み上げた時間と記録を見る", tableName: "Home",
                                             comment: "Fusion sheet primary action: opens the new crystal's breakdown"))
             }
             .buttonStyle(PomoGemPrimaryButtonStyle())
             Button(action: onShare) {
-                celebrationActionLabel(Text("この結晶をカードにする", tableName: "Home",
+                celebrationActionLabel(Text("積み上がりをカードにする", tableName: "Home",
                                             comment: "Fusion sheet action: makes a share card of the new crystal"))
             }
             .buttonStyle(PomoGemSecondaryButtonStyle())
@@ -8517,12 +8513,10 @@ private struct StratumCelebrationView: View {
 
     private var celebrationMechanics: some View {
         let lines = [
-            String(localized: "10粒がそろうと、瓶の中でひとつの結晶にまとまります。瓶を軽く保つための整理で、一粒ずつの時間も、\(Self.massLabel(grams: request.grams))の重さも、記録にそのまま残ります。", table: "Home",
-                   comment: "Fusion sheet 「しくみ」: fusing ten gems keeps the jar light and loses nothing. %@ is the crystal's mass"),
-            String(localized: "時間の核は、粒の数ではなく積み上げた時間で進みます。次へ急ぐ必要はありません。", table: "Home",
-                   comment: "Fusion sheet 「しくみ」: the time core counts time, not gems; no need to hurry"),
-            String(localized: "×10の結晶が10個そろうと、×100の結晶になります。", table: "Home",
-                   comment: "Fusion sheet 「しくみ」: ten ×10 crystals make a ×100 crystal")
+            TimeFusionPresentation.explanation,
+            String(localized: "結晶は記録済みの合計時間を表します。ひとつずつの学習記録は、元のまま残ります。", table: "Home",
+                   comment: "Time crystals are a total-time display; original study records remain intact"),
+            TimeFusionPresentation.progress(totalGrams: request.timeFusionTotalGrams, isLowerBound: false)
         ]
         return MechanicsDisclosure(
             isExpanded: $mechanicsExpanded,
@@ -8566,17 +8560,13 @@ private struct StratumCelebrationView: View {
     /// Time first, then the gems (or Pro's engraved month), then the size:
     /// 「時間 4時間10分」「粒 10粒」「結晶 ×10」.
     private var celebrationStats: some View {
+        let total = request.timeFusionTotalGrams ?? request.grams
+        let remainder = TimeFusionPolicy.snapshot(totalGrams: total).remainderGrams
         let tiles: [CelebrationTile] = [
-            CelebrationTile(title: String(localized: "時間", table: "Home", comment: "Fusion sheet tile title: the focus time the crystal holds. en: 'Time'"),
-                            value: DurationText.short(minutes: DurationPresentation.focusMinutes(grams: request.grams))),
-            showsMonthLabel
-                ? CelebrationTile(title: String(localized: "刻印", table: "Home", comment: "Fusion sheet tile title for Pro: the month engraved on the crystal. en: 'Engraving'"),
-                                  value: request.monthLabel)
-                : CelebrationTile(title: String(localized: "粒", table: "Home", comment: "Fusion sheet tile title: how many gems the crystal holds. en: 'Gems'"),
-                                  value: CountText.gems(request.pebbleCount)),
-            // The size, not the noun: the tile is titled 結晶 (round 12).
-            CelebrationTile(title: String(localized: "結晶", table: "Home", comment: "Fusion sheet tile title: the crystal's size (×10). en: 'Crystal'"),
-                            value: AggregatePresentation.countLabel(request.pebbleCount))
+            CelebrationTile(title: String(localized: "合計時間", table: "Home", comment: "Time-fusion receipt: all saved focus time"),
+                            value: TimeFusionPresentation.duration(grams: total)),
+            CelebrationTile(title: String(localized: "繰り越し", table: "Home", comment: "Time-fusion receipt: exact focus time carried toward the next crystal"),
+                            value: TimeFusionPresentation.duration(grams: remainder))
         ]
         return Group {
             if dynamicTypeSize.isAccessibilitySize {

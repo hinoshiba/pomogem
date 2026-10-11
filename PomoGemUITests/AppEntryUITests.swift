@@ -239,9 +239,9 @@ final class AppEntryUITests: XCTestCase {
     }
 
     /// A start waiting behind the fusion celebration belongs to 「続ける」.
-    /// Choosing the crystal's breakdown instead drops it: the overview the
+    /// Choosing the time and records overview drops it: the overview the
     /// person asked for stays, and no focus opens over it.
-    func testStartLinkWaitingOnTheCelebrationYieldsToItsBreakdown() throws {
+    func testStartLinkWaitingOnTheCelebrationYieldsToTimeAndRecords() throws {
         executionTimeAllowance = 600
         app.terminate()
         // Ten completions cross the review threshold; keep the App Store
@@ -267,18 +267,18 @@ final class AppEntryUITests: XCTestCase {
         XCTAssertTrue(celebration.exists, "The celebration is the person's to close")
         XCTAssertFalse(focusTimerDisplay.exists)
 
-        app.buttons["この結晶の内訳を見る"].tap()
-        let overview = app.navigationBars.matching(
-            NSPredicate(format: "identifier IN %@", ["積み上がり", "結晶の内訳"])
-        ).firstMatch
-        XCTAssertTrue(overview.waitForExistence(timeout: 8), "The breakdown opens")
+        let records = app.buttons["積み上げた時間と記録を見る"]
+        XCTAssertTrue(waitForHittable(records, timeout: 5))
+        records.tap()
+        let overview = app.navigationBars["積み上がり"]
+        XCTAssertTrue(overview.waitForExistence(timeout: 8), "The time and records overview opens")
         waitForUISettle(2_500_000)
-        XCTAssertTrue(overview.exists, "The breakdown stays open")
+        XCTAssertTrue(overview.exists, "The time and records overview stays open")
         XCTAssertFalse(
             focusTimerDisplay.exists,
-            "The waiting start was dropped, not fired over the breakdown"
+            "The waiting start was dropped, not fired over the time and records overview"
         )
-        retain("Start link behind the celebration, then 内訳 — breakdown kept")
+        retain("Start link behind the celebration — time and records overview kept")
     }
 
     /// A break whose time is up keeps the request: its screen says so, and

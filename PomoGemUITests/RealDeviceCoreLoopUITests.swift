@@ -1433,58 +1433,43 @@ final class RealDeviceCoreLoopUITests: XCTestCase {
         _ = waitForAbsence(dismiss, timeout: 10)
     }
 
-    /// A restored jar with crystals: find one by tapping the resting pile
-    /// (a tap only bounces gems), then check where its card appears at the
-    /// default text size. The first card sits in the row under the jar until
-    /// a crystal's detail has been opened once; after that it hangs over
-    /// the upper jar under the readout (home-11). Opening the detail is
-    /// read-only.
+    /// A restored time crystal opens the whole time overview. The physical
+    /// tap is read-only and closing the overview returns to usable Home.
     private func inspectCrystalIfPresent() throws {
         let jar = jarElement
         let value = describeValue(jar)
-        guard value.contains("、結晶") else {
+        guard value.contains("時間の結晶"), !value.contains("時間の結晶0個") else {
             note("CRYSTAL none in this jar: \(value)")
             return
         }
-        let card = app.buttons["jar.aggregate.inspect"]
-        func sweep(_ label: String) -> Bool {
-            let frame = jar.frame
-            for row in 0..<5 {
-                for column in 0..<5 {
-                    let point = CGPoint(
-                        x: frame.minX + frame.width * (0.18 + 0.16 * CGFloat(column)),
-                        y: frame.minY + frame.height * (0.5 + 0.1 * CGFloat(row))
-                    )
-                    app.coordinate(withNormalizedOffset: .zero)
-                        .withOffset(CGVector(dx: point.x, dy: point.y)).tap()
-                    if card.waitForExistence(timeout: 1.2) {
-                        note("CRYSTAL \(label) card after a tap at \(point): \(card.label); card=\(card.frame) jar=\(frame)")
-                        return true
-                    }
+        let overview = app.navigationBars["積み上がり"]
+        let frame = jar.frame
+        var opened = false
+        for row in 0..<5 where !opened {
+            for column in 0..<5 {
+                let point = CGPoint(
+                    x: frame.minX + frame.width * (0.18 + 0.16 * CGFloat(column)),
+                    y: frame.minY + frame.height * (0.5 + 0.1 * CGFloat(row))
+                )
+                app.coordinate(withNormalizedOffset: .zero)
+                    .withOffset(CGVector(dx: point.x, dy: point.y)).tap()
+                if overview.waitForExistence(timeout: 1.2) {
+                    note("CRYSTAL overview opened after a tap at \(point)")
+                    opened = true
+                    break
                 }
             }
-            note("CRYSTAL \(label) no card after 25 taps over the pile")
-            return false
         }
-        guard sweep("first") else { return }
-        capture("crystal-card-first")
-        let jarFrame = jar.frame
-        let inside = card.frame.minY >= jarFrame.minY && card.frame.maxY <= jarFrame.maxY
-        note("CRYSTAL first card \(inside ? "over the jar" : "outside the jar (row under it)")")
-        guard !inside else { return }
-        try tap(card)
-        let detail = app.navigationBars["結晶の内訳"]
-        try require(detail.waitForExistence(timeout: 8), "The crystal card must open its detail.")
-        pause(1)
-        capture("crystal-detail")
-        let close = app.buttons["overview.cluster.close"]
-        try tap(close.exists ? close : detail.buttons.element(boundBy: 0))
+        guard opened else {
+            note("CRYSTAL no crystal hit after 25 taps over the pile")
+            return
+        }
+        capture("time-crystal-overview")
+        try require(!app.buttons["jar.aggregate.inspect"].exists,
+                    "Time crystals must not offer fabricated per-crystal source membership.")
+        try tap(app.buttons["overview.close"])
         try requireHome()
-        pause(7)
-        guard sweep("second") else { return }
-        capture("crystal-card-over-jar")
-        let hudClear = card.frame.minY >= jar.frame.minY + 187
-        note("CRYSTAL second card inside the jar: \(card.frame.minY >= jar.frame.minY && card.frame.maxY <= jar.frame.maxY); at or below the former 188 pt line: \(hudClear)")
+        capture("time-crystal-returned-home")
     }
 
     // MARK: - extras helpers (leave pause, on-screen end, break)
@@ -1715,10 +1700,10 @@ final class RealDeviceCoreLoopUITests: XCTestCase {
 
     private func readHomeTotals(label: String) throws -> HomeTotals {
         try tap(app.buttons["メニュー"])
-        // The empty jar's hint 「25分の集中で、ここにひと粒落ちる。」 also mentions
-        // 集中 and 粒; only the menu's combined metrics row mentions 累計.
+        // Read original records from the combined menu row. Visible time
+        // crystals have a different count and are not source records.
         let summary = app.descendants(matching: .any).matching(
-            NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "累計", "集中")
+            NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "累計", "元の記録")
         ).firstMatch
         try require(summary.waitForExistence(timeout: 10), "The Home menu must summarize the totals.")
         let deadline = Date().addingTimeInterval(60)
@@ -1729,7 +1714,7 @@ final class RealDeviceCoreLoopUITests: XCTestCase {
         capture("menu-totals-\(label)")
         try tap(app.buttons["home.menu.close"])
         try requireHome()
-        let expression = try NSRegularExpression(pattern: "累計([0-9][0-9,]*(?:\\.[0-9]+)?) ?(kg|g)、集中([0-9][0-9,]*)粒")
+        let expression = try NSRegularExpression(pattern: "累計([0-9][0-9,]*(?:\\.[0-9]+)?) ?(kg|g)、元の記録 ?([0-9][0-9,]*)件")
         guard let match = expression.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
               let massRange = Range(match.range(at: 1), in: text),
               let unitRange = Range(match.range(at: 2), in: text),

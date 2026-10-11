@@ -132,13 +132,7 @@ struct PaywallAlert: Equatable {
                 table: "Paywall",
                 comment: "Paywall alert after buying from Screen Time's study-app limit"
             )
-        case .aggregateLabels:
-            String(
-                localized: "ポモジェムProが使えるようになりました。結晶に、作った月が表示されます。",
-                table: "Paywall",
-                comment: "Paywall alert after buying from the crystal month-label hint"
-            )
-        case .settings:
+        case .settings, .aggregateLabels:
             String(
                 localized: "ポモジェムProが使えるようになりました。",
                 table: "Paywall",

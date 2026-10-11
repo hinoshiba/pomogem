@@ -61,7 +61,7 @@ final class PostDropProgressAccessibilityPresentationTests: XCTestCase {
         XCTAssertFalse(message.contains("合計2粒分"))
     }
 
-    func testMassReceiptAnnouncesEffortBeforeSecondaryJarOrganization() throws {
+    func testMassReceiptAnnouncesEffortAndExactTimeToNextCrystal() throws {
         let message = PostDropProgressAccessibilityPresentation.description(
             effortProgress: EffortProgressPolicy.snapshot(
                 totalGrams: 3_100,
@@ -72,10 +72,11 @@ final class PostDropProgressAccessibilityPresentationTests: XCTestCase {
         )
 
         let effortRange = try XCTUnwrap(message.range(of: "時間の核"))
-        let organizationRange = try XCTUnwrap(message.range(of: "瓶の整理"))
+        let organizationRange = try XCTUnwrap(message.range(of: "次の結晶"))
         XCTAssertLessThan(effortRange.lowerBound, organizationRange.lowerBound)
         XCTAssertTrue(message.contains("5時間10分"))
-        XCTAssertTrue(message.contains("10/10"))
+        XCTAssertTrue(message.contains("あと3時間10分"))
+        XCTAssertFalse(message.contains("10/10"))
     }
 
     func testPartialMassReceiptStillLeadsWithKnownContribution() {
@@ -90,19 +91,19 @@ final class PostDropProgressAccessibilityPresentationTests: XCTestCase {
 
         XCTAssertTrue(message.hasPrefix("今回の完走で1時間を追加"))
         XCTAssertTrue(message.contains("時間の核を整理中"))
-        XCTAssertTrue(message.contains("瓶の整理"))
-        XCTAssertTrue(message.contains("結晶進捗を整理中"))
+        XCTAssertFalse(message.contains("瓶の整理"))
+        XCTAssertTrue(message.contains("結晶の時間を確認中"))
     }
 
-    func testLegacyReceiptKeepsCountCompatibilityPresentation() {
+    func testLegacyReceiptWithoutTimeDoesNotInventTimeProgress() {
         let message = PostDropProgressAccessibilityPresentation.description(
             effortProgress: nil,
             fusionState: FusionRewardBridgePresentation.state(totalPebbleCount: 9),
             projectionIsLowerBound: false
         )
 
-        XCTAssertTrue(message.hasPrefix("×10へ 9/10"))
-        XCTAssertTrue(message.contains("あと1粒"))
+        XCTAssertEqual(message, "結晶の時間を確認中")
+        XCTAssertFalse(message.contains("あと1粒"))
         XCTAssertFalse(message.contains("時間の核"))
     }
 }
@@ -156,8 +157,8 @@ final class CompletionCardPresentationTests: XCTestCase {
         )
         XCTAssertEqual(first.coreLine, "時間の核まで あと3時間45分")
         XCTAssertEqual(try XCTUnwrap(first.coreFraction), 0.1, accuracy: 0.0001)
-        XCTAssertTrue(try XCTUnwrap(first.unitLine).contains("1.0標準単位"))
-        XCTAssertTrue(first.jarLine.contains("次の結晶まで あと9粒"), first.jarLine)
+        XCTAssertTrue(try XCTUnwrap(first.unitLine).contains("同じ時間なら同じ結晶"))
+        XCTAssertTrue(first.jarLine.contains("次の結晶まで あと3時間45分"), first.jarLine)
         XCTAssertEqual(first.weekCountLine, "今週のタイマー完走は1回です。回数は時間の価値とは別です。")
         let visible = [first.coreLine, first.unitLine, first.jarLine, first.weekCountLine].compactMap { $0 }.joined()
         for jargon in ["TIME CORE", "最初の時間の核", "戻った", "瓶の整理"] {
@@ -175,7 +176,7 @@ final class CompletionCardPresentationTests: XCTestCase {
         // far its next growth is, in plain words (no 「次の段」).
         XCTAssertEqual(tenth.coreLine, "集中した時間があと37時間30分たまると、時間の核はさらに育ちます")
         XCTAssertEqual(tenth.coreFraction, 1)
-        XCTAssertTrue(tenth.jarLine.contains("10粒がそろい"), tenth.jarLine)
+        XCTAssertEqual(tenth.jarLine, "次の結晶まで あと4時間10分")
         XCTAssertNil(tenth.weekCountLine)
 
         let partial = CompletionCardPresentation.mechanics(
@@ -197,8 +198,8 @@ final class CompletionCardPresentationTests: XCTestCase {
             weeklyTimerCompletionCount: 2
         )
         XCTAssertNil(legacy.coreLine)
-        XCTAssertNil(legacy.unitLine)
-        XCTAssertTrue(legacy.jarLine.contains("あと1粒"), legacy.jarLine)
+        XCTAssertEqual(legacy.unitLine, TimeFusionPresentation.explanation)
+        XCTAssertEqual(legacy.jarLine, "結晶の時間を確認中")
     }
 
     /// The card that says 「時間の核が生まれました」 on its face (a 50-minute
@@ -216,7 +217,7 @@ final class CompletionCardPresentationTests: XCTestCase {
             effortProgress: EffortProgressPolicy.snapshot(totalGrams: 2_500, latestContributionGrams: 500),
             fusionState: FusionRewardBridgePresentation.state(totalPebbleCount: 5),
             projectionIsLowerBound: false
-        ), .card)
+        ), .fusionSheet)
         XCTAssertEqual(fifth.coreLine, "集中した時間があと37時間30分たまると、時間の核はさらに育ちます")
         let shownWithTheFace = [
             CompletionCardPresentation.coreBirthOnCard,
@@ -342,17 +343,17 @@ final class CompletionCardPresentationTests: XCTestCase {
 
         // 50-minute gems: the core comes with the fifth gem, no fusion.
         XCTAssertEqual(moment(total: 2_000, latest: 500, pebbles: 4), .none)
-        XCTAssertEqual(moment(total: 2_500, latest: 500, pebbles: 5), .card)
+        XCTAssertEqual(moment(total: 2_500, latest: 500, pebbles: 5), .fusionSheet)
         XCTAssertEqual(moment(total: 5_000, latest: 500, pebbles: 10), .none,
                        "The first ×10 of a 50-minute jar teaches nothing again")
 
         // 15-minute gems: the first ×10 at 1.5kg, the core at the 17th gem.
         XCTAssertEqual(moment(total: 1_500, latest: 150, pebbles: 10), .none)
         XCTAssertEqual(moment(total: 2_400, latest: 150, pebbles: 16), .none)
-        XCTAssertEqual(moment(total: 2_550, latest: 150, pebbles: 17), .card)
+        XCTAssertEqual(moment(total: 2_550, latest: 150, pebbles: 17), .fusionSheet)
 
         // A core that arrives with a later fusion is the card's to say.
-        XCTAssertEqual(moment(total: 2_600, latest: 130, pebbles: 20), .card)
+        XCTAssertEqual(moment(total: 2_600, latest: 130, pebbles: 20), .fusionSheet)
         XCTAssertEqual(moment(total: 2_500, latest: 250, pebbles: 10, lowerBound: true), .none)
         XCTAssertEqual(CompletionCardPresentation.coreBirthMoment(
             effortProgress: nil,

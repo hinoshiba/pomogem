@@ -110,12 +110,10 @@ struct PaywallView: View {
         case .customTimer:
             // The same noun as the first feature row and Settings' Pro row.
             String(localized: "自由な集中時間を選べます。", table: "Paywall", comment: "Paywall subtitle when opened from the custom focus duration control")
-        case .aggregateLabels:
-            String(localized: "結晶に、作った月を刻めます。", table: "Paywall", comment: "Paywall subtitle when opened from the crystal month-label hint")
         case .screenTimeApps:
             String(localized: "勉強時間を記録するアプリを、数の制限なく選べます。", table: "Paywall",
                    comment: "Paywall subtitle when opened from Screen Time's study-app limit")
-        case .settings:
+        case .settings, .aggregateLabels:
             String(localized: "集中のリズムと、残し方をもっと自由に。", table: "Paywall",
                    comment: "Paywall subtitle when opened from Settings: more freedom in how you focus and keep your record")
         }
@@ -135,8 +133,7 @@ struct PaywallView: View {
                     }
                     PaywallFeature(
                         kind: kind,
-                        isHighlighted: index == 0 && PaywallFeatureKind.highlights(context),
-                        monthLabelExample: DateText.yearMonth(.now)
+                        isHighlighted: index == 0 && PaywallFeatureKind.highlights(context)
                     )
                 }
             }
@@ -518,20 +515,20 @@ struct PaywallView: View {
     }
 }
 
-/// settings-04. The three things Pro adds, in one place so the paywall can
+/// settings-04. The available things Pro adds, in one place so the paywall can
 /// put the one that matches its entry point first.
 enum PaywallFeatureKind: CaseIterable, Hashable {
     case customDuration
-    case monthLabel
     case studyApps
 
     /// The entry point's feature first; the rest keep their usual order.
     static func ordered(for context: PaywallContext) -> [PaywallFeatureKind] {
         let first: PaywallFeatureKind? = switch context {
         case .customTimer: .customDuration
-        case .aggregateLabels: .monthLabel
         case .screenTimeApps: .studyApps
-        case .settings: nil
+        // Keep old presentation contexts compatible without advertising a
+        // month for time crystals, which have no single creation month.
+        case .settings, .aggregateLabels: nil
         }
         guard let first else { return allCases }
         return [first] + allCases.filter { $0 != first }
@@ -539,13 +536,12 @@ enum PaywallFeatureKind: CaseIterable, Hashable {
 
     /// Opened from a feature (not from Settings' general Pro row).
     static func highlights(_ context: PaywallContext) -> Bool {
-        context != .settings
+        context == .customTimer || context == .screenTimeApps
     }
 
     var symbol: String {
         switch self {
         case .customDuration: "timer"
-        case .monthLabel: "calendar"
         case .studyApps: "apps.iphone"
         }
     }
@@ -554,8 +550,6 @@ enum PaywallFeatureKind: CaseIterable, Hashable {
         switch self {
         case .customDuration:
             String(localized: "自由な集中時間", table: "Paywall", comment: "Paywall feature title: any focus length")
-        case .monthLabel:
-            String(localized: "結晶に月を刻む", table: "Paywall", comment: "Paywall feature title: crystals show the month they were made")
         case .studyApps:
             String(localized: "勉強アプリ数が無制限", table: "Paywall", comment: "Paywall feature title: unlimited Screen Time study apps")
         }
@@ -571,12 +565,6 @@ enum PaywallFeatureKind: CaseIterable, Hashable {
                 table: "Paywall",
                 comment: "Paywall feature detail; the argument is the Pro range, e.g. 1〜360分"
             )
-        case .monthLabel:
-            String(
-                localized: "粒が10個集まってできる結晶に、作った月を刻みます",
-                table: "Paywall",
-                comment: "Paywall feature detail: what the month label is"
-            )
         case .studyApps:
             String(
                 localized: "スクリーンタイムで記録する勉強アプリ。無料は5つまで",
@@ -590,8 +578,6 @@ enum PaywallFeatureKind: CaseIterable, Hashable {
 private struct PaywallFeature: View {
     let kind: PaywallFeatureKind
     let isHighlighted: Bool
-    /// The current month, as a Pro crystal shows it (「2026年9月」).
-    let monthLabelExample: String
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -607,10 +593,6 @@ private struct PaywallFeature: View {
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                if kind == .monthLabel {
-                    monthLabelPreview
-                        .padding(.top, 4)
-                }
             }
             Spacer(minLength: 0)
         }
@@ -631,29 +613,4 @@ private struct PaywallFeature: View {
         .accessibilityIdentifier("paywall.feature.\(kind)")
     }
 
-    /// A static example of the month a crystal carries, not a rendering of
-    /// the jar: the gem art belongs to the jar itself.
-    private var monthLabelPreview: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "diamond.fill")
-                .font(.caption2)
-                .foregroundStyle(PomoGemTheme.amber)
-            Text(verbatim: monthLabelExample)
-                .font(.system(.caption, design: .rounded, weight: .bold))
-                .monospacedDigit()
-                // "September 2026" is wider than 「2026年9月」: at accessibility
-                // sizes it shrinks instead of breaking the month in two.
-                .lineLimit(1)
-                .minimumScaleFactor(0.35)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(PomoGemTheme.amber.opacity(0.10), in: Capsule())
-        .overlay(Capsule().stroke(PomoGemTheme.amber.opacity(0.35), lineWidth: 0.7))
-        .accessibilityLabel(Text(
-            "表示の例：\(monthLabelExample)",
-            tableName: "Paywall",
-            comment: "VoiceOver: an example month label; the argument is a month such as 2026年9月"
-        ))
-    }
 }

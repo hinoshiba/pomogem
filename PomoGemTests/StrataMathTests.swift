@@ -88,6 +88,18 @@ final class StrataMathTests: XCTestCase {
         XCTAssertEqual(StrataMath.decodeColorMix(json), mix)
     }
 
+    func testOriginalClusterScaleShowsTimeInsteadOfRecordCount() {
+        func summary(count: Int, grams: Int) -> AccumulationClusterSummary {
+            AccumulationClusterSummary(legacyStratum: JarStratumVisual(
+                bakedAt: Date(timeIntervalSince1970: 10_000), pebbleCount: count,
+                grams: grams, height: 12, colorMix: [], monthLabel: "2026年9月"
+            ))
+        }
+        XCTAssertEqual(summary(count: 10, grams: 2_500).scaleLabel, "4時間10分")
+        XCTAssertEqual(summary(count: 25, grams: 2_500).scaleLabel, "4時間10分")
+        XCTAssertEqual(summary(count: 10, grams: 1_000).scaleLabel, "1時間40分")
+    }
+
     func testLegacyClusterSummaryNormalizesOnlyItsStoredColorEvidence() {
         let summary = AccumulationClusterSummary(legacyStratum: JarStratumVisual(
             bakedAt: Date(timeIntervalSince1970: 10_000),

@@ -120,6 +120,23 @@
         }
       }
     },
+    "%@。結晶のアクションで集中時間の内訳を確認できます" : {
+      "comment" : "VoiceOver jar hint for canonical time crystals",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@. Use the crystal action to view your focus time and records"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@。結晶のアクションで集中時間の内訳を確認できます"
+          }
+        }
+      }
+    },
     "%@など" : {
       "comment" : "VoiceOver, a crystal of several themes: the name of the theme with the most gems, then 'and others'",
       "localizations" : {
@@ -583,6 +600,52 @@
         }
       }
     },
+    "時間の結晶%lld個" : {
+      "comment" : "VoiceOver, number of canonical focus-time crystals",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld time crystal"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld time crystals"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間の結晶%lld個"
+          }
+        }
+      }
+    },
+    "時間の結晶、%@" : {
+      "comment" : "VoiceOver for a visual crystal representing an exact amount of focus time",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Time crystal, %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間の結晶、%@"
+          }
+        }
+      }
+    },
     "最新の結晶の内訳を見る" : {
       "comment" : "VoiceOver custom action on the jar",
       "localizations" : {
@@ -816,6 +879,23 @@
         }
       }
     },
+    "結晶になる途中、%@" : {
+      "comment" : "VoiceOver for focus time carried toward the next crystal",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Growing toward a crystal, %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結晶になる途中、%@"
+          }
+        }
+      }
+    },
     "自己申告%lld粒" : {
       "comment" : "VoiceOver, a crystal: how many of its gems were entered by hand",
       "localizations" : {
@@ -1030,6 +1110,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "金%lld粒"
+          }
+        }
+      }
+    },
+    "集中時間" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus time"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中時間"
           }
         }
       }

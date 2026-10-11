@@ -1604,7 +1604,9 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(waitForHittable(productionLauncher, timeout: 6))
         let jar = app.buttons["瓶"]
         XCTAssertTrue(jar.waitForExistence(timeout: 5))
-        XCTAssertTrue(((jar.value as? String) ?? "").contains("1粒"), String(describing: jar.value))
+        XCTAssertTrue(waitForValue(of: jar, containing: "結晶になる途中、25分", timeout: 6),
+                      String(describing: jar.value))
+        XCTAssertTrue(((jar.value as? String) ?? "").contains("250グラム"), String(describing: jar.value))
         // Let the ordinary landing toast disappear before retaining the image.
         waitForUISettle(4_000_000)
         retainScreenshot(named: "ASC_01_home-with-first-pebble")
@@ -1716,7 +1718,9 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(waitForHittable(launcher, timeout: 6))
         let jar = app.buttons["Jar"]
         XCTAssertTrue(jar.waitForExistence(timeout: 5))
-        XCTAssertTrue(((jar.value as? String) ?? "").contains("1"), String(describing: jar.value))
+        XCTAssertTrue(waitForValue(of: jar, containing: "25 min", timeout: 6), String(describing: jar.value))
+        XCTAssertTrue(normalizedSpacing((jar.value as? String) ?? "").contains("250 grams"),
+                      String(describing: jar.value))
         waitForUISettle(4_000_000)
         retainScreenshot(named: "ASC_EN_01_home-with-first-pebble")
 
@@ -1771,97 +1775,56 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         add(evidence)
     }
 
-    /// Retains visual evidence around the first exact decimal carry. The
-    /// screenshots make the pre-fusion rail, completed Reward Bridge, fusion
-    /// celebration, and newly born lifetime core reviewable together.
-    func testVisualEvolutionFromNineMeasuredParticlesThroughFirstCrystal() {
+    /// Retains visual evidence of the 225-to-250-minute boundary. The fixture
+    /// supplies historical time; one real completion verifies the acknowledgement,
+    /// landing, time crystal, and celebration sequence.
+    func testVisualEvolutionFromGrowingTimeThroughFirstCrystal() {
+        app.terminate()
+        app.launchEnvironment["POMOGEM_UI_TEST_GEM_SHOWCASE"] = "nine"
+        app.launch()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 10))
         selectDemoDurationForVisualAudit()
 
-        let presentationProbe = app.descendants(matching: .any)["jar.presentation.probe"]
-        XCTAssertTrue(presentationProbe.waitForExistence(timeout: 5))
-
-        for expectedCount in 1 ... 8 {
-            completeDemoFocusAndDismissBridgeForVisualAudit(
-                expectedPresentationCount: expectedCount,
-                presentationProbe: presentationProbe
-            )
-        }
+        let jar = app.buttons["瓶"]
+        XCTAssertTrue(waitForValue(of: jar, containing: "3時間45分", timeout: 8))
+        XCTAssertTrue(waitForValue(of: jar, containing: "時間の結晶0個", timeout: 8))
+        retainScreenshot(named: "225 minutes — growing gem before the first time crystal")
 
         startDemoFocusForVisualAudit()
         stopCompletionAlertIfPresented(in: app)
         let dismissBridge = app.buttons["休憩の提案を閉じる"]
         XCTAssertTrue(dismissBridge.waitForExistence(timeout: 28))
-        XCTAssertTrue(
-            waitForPresentationCount(8, from: presentationProbe, timeout: 5),
-            "The ninth reward must remain outside the jar until its card closes; probe=\(presentationValue(from: presentationProbe))"
-        )
-        let ninthProgress = app.descendants(matching: .any)["reward.fusion-progress"]
-        XCTAssertTrue(ninthProgress.waitForExistence(timeout: 4))
-        XCTAssertTrue(ninthProgress.label.contains("×10へ 9/10"), ninthProgress.label)
-        waitForUISettle()
-        retainScreenshot(named: "Ninth Reward Bridge — ninth pebble awaits dismissal")
-
-        dismissBridge.tap()
-        XCTAssertTrue(
-            waitForAbsence(dismissBridge, timeout: 5),
-            "The ninth Reward Bridge must leave the accessibility tree before another focus starts"
-        )
-        XCTAssertTrue(waitForPresentationCount(9, from: presentationProbe, timeout: 10))
-        XCTAssertTrue(
-            waitForHittable(demoLauncherForVisualAudit, timeout: 6),
-            "The demo launcher must be operable after the ninth Reward Bridge closes"
-        )
-        // The jar counts a completed focus when its gem lands (dev-D7), a
-        // moment after the scene holds it; the probe's count includes the
-        // gem while it is still falling.
-        let jar = app.buttons["瓶"]
-        XCTAssertTrue(
-            waitForValue(of: jar, containing: "9粒", timeout: 6),
-            (jar.value as? String) ?? ""
-        )
-        let nineJarValue = (jar.value as? String) ?? ""
-        XCTAssertFalse(nineJarValue.contains("結晶1個"), nineJarValue)
-        waitForUISettle()
-        retainScreenshot(named: "Nine measured particles — pre-fusion Home rail")
-
-        startDemoFocusForVisualAudit()
-        stopCompletionAlertIfPresented(in: app)
-        XCTAssertTrue(dismissBridge.waitForExistence(timeout: 28))
-        let tenthProgress = app.descendants(matching: .any)["reward.fusion-progress"]
-        XCTAssertTrue(tenthProgress.waitForExistence(timeout: 4))
-        XCTAssertTrue(tenthProgress.label.contains("×10完成 10/10"), tenthProgress.label)
-        waitForUISettle()
-        retainScreenshot(named: "Tenth Reward Bridge — exact completed orbit")
+        let progress = app.descendants(matching: .any)["reward.fusion-progress"]
+        XCTAssertTrue(progress.waitForExistence(timeout: 4))
+        XCTAssertTrue(progress.label.contains("次の結晶まで あと4時間10分"), progress.label)
+        XCTAssertFalse(progress.label.contains("10/10"), progress.label)
+        XCTAssertFalse(app.staticTexts["fusion.celebration.title"].exists,
+                       "Saving time alone must not celebrate before the reward lands")
+        retainScreenshot(named: "250 minutes saved — reward waits for acknowledgement")
 
         dismissBridge.tap()
         let celebration = app.staticTexts["fusion.celebration.title"]
-        XCTAssertTrue(celebration.waitForExistence(timeout: 10))
-        // The sheet's own mass line, not a match somewhere on Home behind it.
+        XCTAssertTrue(celebration.waitForExistence(timeout: 12))
+        XCTAssertTrue(celebration.label.contains("4時間10分"), celebration.label)
         let celebrationMass = app.staticTexts["fusion.celebration.mass"]
         XCTAssertTrue(celebrationMass.waitForExistence(timeout: 4))
         XCTAssertEqual(celebrationMass.label, "重さはそのまま 2.50kg")
-        waitForUISettle()
-        retainScreenshot(named: "First decimal fusion — lossless celebration")
+        retainScreenshot(named: "First 250-minute crystal — conserved time celebration")
 
         let closeCelebration = app.buttons["fusion.celebration.close"]
         XCTAssertTrue(closeCelebration.waitForExistence(timeout: 4))
         closeCelebration.tap()
-        XCTAssertTrue(waitForHittable(demoLauncherForVisualAudit, timeout: 8))
-        XCTAssertTrue(
-            waitForValue(of: jar, containing: "合計10粒分", timeout: 6),
-            (jar.value as? String) ?? ""
-        )
-        let tenJarValue = (jar.value as? String) ?? ""
-        XCTAssertTrue(tenJarValue.contains("結晶1個"), tenJarValue)
-        XCTAssertTrue(tenJarValue.contains("合計10粒分"), tenJarValue)
-        waitForUISettle()
-        retainScreenshot(named: "First decimal crystal — Home lifetime core")
+        XCTAssertTrue(waitForHittable(app.buttons["home.focus-launcher"], timeout: 8))
+        XCTAssertTrue(waitForValue(of: jar, containing: "4時間10分", timeout: 8))
+        XCTAssertTrue(waitForValue(of: jar, containing: "時間の結晶1個", timeout: 8))
+        XCTAssertFalse((jar.value as? String ?? "").contains("合計10粒分"))
+        retainScreenshot(named: "250 minutes — first time crystal in Home")
     }
 
     /// Opens the bounded forty-year fixture directly at the lifetime camera so
-    /// the representative star field and its exact mass can be inspected
+    /// the canonical time crystals and their exact total can be inspected
     /// without mutating any simulator's ordinary user store.
-    func testFortyYearLifetimeConstellationVisualSnapshot() {
+    func testFortyYearLifetimeTimeCrystalsVisualSnapshot() {
         app.terminate()
         app = XCUIApplication()
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
@@ -1880,23 +1843,18 @@ final class RuntimeFlowAuditUITests: XCTestCase {
 
         let constellation = app.descendants(matching: .any)["overview.lifetime-constellation"]
         XCTAssertTrue(scrollUntilVisible(constellation))
-        let core = app.descendants(matching: .any)["overview.constellation.core"]
-        XCTAssertTrue(scrollUntilVisible(core))
-        XCTAssertEqual(core.label, "時間の核")
-        let coreValue = (core.value as? String) ?? ""
-        XCTAssertTrue(
-            coreValue.replacingOccurrences(of: ",", with: "").contains("350640粒"),
-            coreValue
-        )
-        XCTAssertTrue(coreValue.contains("87.66t"), coreValue)
+        let duration = app.staticTexts["146,100時間"].firstMatch
+        XCTAssertTrue(scrollUntilVisible(duration))
+        XCTAssertTrue(duration.exists)
+        XCTAssertTrue(app.staticTexts["87.66t"].firstMatch.exists)
+        XCTAssertTrue(app.staticTexts["元の記録"].firstMatch.exists)
         waitForUISettle()
-        retainScreenshot(named: "Forty-year lifetime constellation — exact 87.66t")
+        retainScreenshot(named: "Forty-year lifetime time crystals — exact 146,100 hours")
     }
 
-    /// Guards the geometry-based core caption at the largest supported text
-    /// category. The representative orbit keeps the same eight-node meaning;
-    /// only the surrounding overview becomes vertically expansive.
-    func testFortyYearLifetimeConstellationAtAccessibility5() {
+    /// The exact total and original-record route stay reachable at the largest
+    /// supported text size; crystal identity remains independent of source count.
+    func testFortyYearLifetimeTimeCrystalsAtAccessibility5() {
         app.terminate()
         app = XCUIApplication()
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
@@ -1921,17 +1879,15 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(crystal.waitForExistence(timeout: 4))
         crystal.tap()
 
-        let core = app.descendants(matching: .any)["overview.constellation.core"]
-        XCTAssertTrue(scrollUntilVisible(core))
-        XCTAssertEqual(core.label, "時間の核")
-        let coreValue = (core.value as? String) ?? ""
-        XCTAssertTrue(
-            coreValue.replacingOccurrences(of: ",", with: "").contains("350640粒"),
-            coreValue
-        )
-        XCTAssertTrue(coreValue.contains("87.66t"), coreValue)
+        let duration = app.staticTexts["146,100時間"].firstMatch
+        XCTAssertTrue(scrollUntilVisible(duration))
+        XCTAssertTrue(duration.exists)
         waitForUISettle()
-        retainScreenshot(named: "Forty-year lifetime constellation — AX5 geometry")
+        retainScreenshot(named: "Forty-year lifetime time crystals — AX5 exact time")
+        let records = app.buttons["overview.time-crystals.records"]
+        XCTAssertTrue(scrollUntilHittable(records))
+        records.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["overview.timeline.year-list"].waitForExistence(timeout: 8))
     }
 
     private func exerciseInterruptibleFocus(
@@ -2087,44 +2043,6 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             waitForAbsence(dismissBridge, timeout: 2),
             "The previous Reward Bridge must remain absent while the new timer is running"
         )
-    }
-
-    private func completeDemoFocusAndDismissBridgeForVisualAudit(
-        expectedPresentationCount: Int,
-        presentationProbe: XCUIElement
-    ) {
-        startDemoFocusForVisualAudit()
-        stopCompletionAlertIfPresented(in: app)
-        let dismiss = app.buttons["休憩の提案を閉じる"]
-        XCTAssertTrue(dismiss.waitForExistence(timeout: 28))
-        XCTAssertTrue(
-            waitForPresentationCount(
-                expectedPresentationCount - 1,
-                from: presentationProbe,
-                timeout: 5
-            ),
-            "Completion \(expectedPresentationCount) must wait for its card to close; probe=\(presentationValue(from: presentationProbe))"
-        )
-        dismiss.tap()
-        XCTAssertTrue(
-            waitForAbsence(dismiss, timeout: 5),
-            "Reward Bridge \(expectedPresentationCount) must disappear before the next iteration"
-        )
-        XCTAssertTrue(
-            waitForPresentationCount(expectedPresentationCount, from: presentationProbe, timeout: 10),
-            "Closing Reward Bridge \(expectedPresentationCount) must add exactly one live particle"
-        )
-        XCTAssertTrue(
-            waitForHittable(app.buttons["home.focus-launcher"], timeout: 6),
-            "The launcher must become operable after Reward Bridge \(expectedPresentationCount) closes"
-        )
-        waitForLauncherEnabled()
-        // 12秒、DEMO is Debug-only and never saved as the preferred duration.
-        // Home restores the saved duration when it reappears or its
-        // preferences change, which a completion can do; pick the demo again.
-        if !waitForHittable(demoLauncherForVisualAudit, timeout: 2) {
-            selectDemoDurationForVisualAudit()
-        }
     }
 
     private func retainScreenshot(named name: String) {
@@ -2321,10 +2239,15 @@ final class RuntimeFlowAuditUITests: XCTestCase {
     ) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         repeat {
-            if ((element.value as? String) ?? "").contains(fragment) { return true }
+            if normalizedSpacing((element.value as? String) ?? "").contains(fragment) { return true }
             usleep(50_000)
         } while Date() < deadline
-        return ((element.value as? String) ?? "").contains(fragment)
+        return normalizedSpacing((element.value as? String) ?? "").contains(fragment)
+    }
+
+    private func normalizedSpacing(_ value: String) -> String {
+        value.replacingOccurrences(of: "\u{00a0}", with: " ")
+            .replacingOccurrences(of: "\u{202f}", with: " ")
     }
 
     private func waitForHittable(

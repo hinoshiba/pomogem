@@ -3,9 +3,9 @@ import SwiftUI
 
 /// A bounded, read-only point in the long-range effort constellation.
 ///
-/// The live jar remains the tactile view of recent work. These nodes are the
-/// same persisted root aggregates seen from farther away, so the overview can
-/// feel expansive without inventing progress or loading every historic row.
+/// Planning supplies canonical time units and the exact remainder, just as the
+/// live jar does. Node identity does not assign any original record to a crystal.
+/// Count and date fields remain compatibility metadata for older callers.
 struct EffortConstellationNode: Identifiable, Equatable, Sendable {
     let id: UUID
     let level: Int
@@ -40,9 +40,9 @@ struct EffortConstellationNode: Identifiable, Equatable, Sendable {
 enum EffortConstellationPresentation {
     static let maximumVisibleNodes = 8
 
-    /// Samples the complete bounded root page across time rather than showing
-    /// only the newest roots. Old, middle, and recent effort therefore remain
-    /// visible together when a multi-decade account has more roots than fit.
+    /// Samples a bounded node list in a stable order. Canonical time nodes use
+    /// their stable IDs; legacy callers may still supply dates as sort keys.
+    /// This is a visual sample only; the core always uses the exact total.
     static func representativeNodes(
         _ values: [EffortConstellationNode],
         maximum: Int = maximumVisibleNodes
@@ -52,10 +52,10 @@ enum EffortConstellationPresentation {
 
         let canonical = Dictionary(grouping: values, by: \.id).values.compactMap { duplicates in
             duplicates.max { lhs, rhs in
-                if lhs.pebbleCount == rhs.pebbleCount {
+                if lhs.grams == rhs.grams {
                     return lhs.periodEnd < rhs.periodEnd
                 }
-                return lhs.pebbleCount < rhs.pebbleCount
+                return lhs.grams < rhs.grams
             }
         }
         .sorted { lhs, rhs in
@@ -112,9 +112,8 @@ enum EffortConstellationPresentation {
         StrataMath.decimalAggregateLevel(forPebbleCount: max(1, totalPebbleCount))
     }
 
-    /// The time core is a persisted decimal form, not a forecast. An exact
-    /// count or lower bound of ten proves that at least the first decimal form
-    /// exists; only a lower bound below ten keeps the outlined destination.
+    /// Time determines whether the first milestone has formed. The count-only
+    /// fallback is retained for compatibility with legacy presentation callers.
     static func coreIsMaterialized(
         totalPebbleCount: Int,
         totalGrams: Int? = nil,
@@ -130,8 +129,8 @@ enum EffortConstellationPresentation {
         min(62, 40 + CGFloat(max(1, level)) * 4)
     }
 
-    /// Current constellation nodes communicate represented effort by mass;
-    /// their decimal aggregate level remains a storage/inspection attribute.
+    /// Current constellation nodes communicate time through its conserved mass.
+    /// Their level describes a time denomination, independent of source count.
     static func nodeDiameter(grams: Int) -> CGFloat {
         let standardUnits = max(
             0.01,
@@ -198,8 +197,8 @@ enum EffortConstellationPresentation {
                 ? String(localized: "集中\(mass)以上", table: "Overview", comment: "VoiceOver, time core: at least this focus mass (still being checked)")
                 : String(localized: "集中\(mass)", table: "Overview", comment: "VoiceOver, time core: the focus mass so far"),
             projectionIsLowerBound
-                ? String(localized: "\(totalPebbleCount)粒以上", table: "Overview", comment: "VoiceOver, time core: at least this many gems (still being checked)")
-                : CountText.gems(totalPebbleCount)
+                ? String(localized: "元の記録\(totalPebbleCount)件以上", table: "Overview", comment: "VoiceOver time core: minimum number of original records, distinct from time crystal count")
+                : String(localized: "元の記録\(totalPebbleCount)件", table: "Overview", comment: "VoiceOver time core: original record count")
         ]
 
         if projectionIsLowerBound {
@@ -226,16 +225,15 @@ enum EffortConstellationPresentation {
     }
 }
 
-/// A code-native long-range view: one deterministic time core surrounded by a
-/// representative set of persisted aggregate roots. Nothing here is a second
-/// reward system; it is a different camera distance over the same exact mass.
+/// A long-range view of the exact time total with a bounded sample of time units.
+/// The same saved time drives this display and the jar; no new reward is earned.
 struct EffortConstellationView: View {
     let nodes: [EffortConstellationNode]
     let totalGrams: Int
     let totalPebbleCount: Int
     let projectionIsLowerBound: Bool
-    /// The time core's theme fan, as Home computes it (roots and loose
-    /// gems). Empty derives it from the roots alone.
+    /// Optional presentation colors. Current time projections use one neutral
+    /// color; an empty value derives colors from the supplied nodes.
     let coreColorShares: [GemColorShare]
     var onSelect: ((UUID) -> Void)?
 
@@ -464,9 +462,9 @@ struct EffortConstellationView: View {
                     projectionIsLowerBound
                         ? String(localized: "最初の結晶までの進捗を整理しています", table: "Overview", comment: "VoiceOver, empty time-core vessel while progress is still being tallied")
                         : String(
-                            localized: "集中\(EffortProgressPresentation.formattedDuration(grams: totalGrams))。最初の結晶まで、あと\(max(0, 10 - min(9, max(0, totalPebbleCount))))粒です",
+                            localized: "集中\(EffortProgressPresentation.formattedDuration(grams: totalGrams))。最初の結晶まで、あと\(DurationPresentation.focusLabel(grams: TimeFusionPolicy.snapshot(totalGrams: totalGrams).nextCrystalRemainingGrams))です",
                             table: "Overview",
-                            comment: "VoiceOver, empty time-core vessel: focus time so far, gems left until the first crystal"
+                            comment: "VoiceOver empty time-core vessel: accumulated time, then remaining time until the first crystal"
                         )
                 )
         )
@@ -476,9 +474,9 @@ struct EffortConstellationView: View {
     private func orbitNode(_ node: EffortConstellationNode) -> some View {
         let diameter = EffortConstellationPresentation.nodeDiameter(grams: node.grams)
         let accessibilityLabel = String(
-            localized: "\(EffortConstellationPresentation.formattedMass(node.grams))、集中\(EffortProgressPresentation.formattedDuration(grams: node.grams))。\(AggregatePresentation.title(level: node.level))、\(node.pebbleCount)粒分",
+            localized: "\(EffortProgressPresentation.formattedDuration(grams: node.grams))の\(AggregatePresentation.title(level: node.level))、\(EffortConstellationPresentation.formattedMass(node.grams))",
             table: "Overview",
-            comment: "VoiceOver, one crystal on the star map: mass, focus time, crystal name such as 結晶, gems it holds"
+            comment: "VoiceOver time crystal: represented duration, crystal name, mass"
         )
 
         if let onSelect {

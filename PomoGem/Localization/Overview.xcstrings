@@ -156,65 +156,36 @@
         }
       }
     },
-    "%@、集中%@。%@、%lld粒分" : {
-      "comment" : "VoiceOver, one crystal on the star map: mass, focus time, crystal name such as 結晶, gems it holds",
+    "%@の%@、%@" : {
+      "comment" : "VoiceOver time crystal: represented duration, crystal name, mass",
       "localizations" : {
         "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%1$@, %2$@ of focus. %3$@ holding %4$lld gem"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%1$@, %2$@ of focus. %3$@ holding %4$lld gems"
-                }
-              }
-            }
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%2$@ of %1$@, %3$@"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@、集中%@。%@、%lld粒分"
+            "value" : "%@の%@、%@"
           }
         }
       }
     },
-    "%@の%@、%lld個、%lld粒を保持、%@" : {
-      "comment" : "VoiceOver, one crystal tier: scale such as ×10, form name such as 結晶, how many there are, gems held, spoken mass",
+    "%@の%@、%lld個、合計%@、%@" : {
+      "comment" : "VoiceOver time tier: unit time, crystal name, displayed count, total time, mass",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$@ %2$@, %3$lld in this tier, holding %4$lld gems, %5$@"
+            "value" : "%2$@ of %1$@, %3$lld in the jar, %4$@ in total, %5$@"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@の%@、%lld個、%lld粒を保持、%@"
-          }
-        }
-      }
-    },
-    "%@の%@、%lld粒、%lld粒を保持、%@" : {
-      "comment" : "VoiceOver, loose gems in the tier list: scale (×1), form name, gem count, gems held, spoken mass",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@ %2$@, %3$lld in this tier, gems held: %4$lld, %5$@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@の%@、%lld粒、%lld粒を保持、%@"
+            "value" : "%@の%@、%lld個、合計%@、%@"
           }
         }
       }
@@ -273,6 +244,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@の瓶、読み込み範囲内、%lld粒、%@"
+          }
+        }
+      }
+    },
+    "%@の積み重ね" : {
+      "comment" : "Original record group detail title, showing its total time",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ built up"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@の積み重ね"
           }
         }
       }
@@ -365,6 +353,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lldパーセント"
+          }
+        }
+      }
+    },
+    "%lld件" : {
+      "comment" : "Number of original focus records",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld record"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld records"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld件"
           }
         }
       }
@@ -478,64 +495,6 @@
         }
       }
     },
-    "%lld粒以上" : {
-      "comment" : "VoiceOver, time core: at least this many gems (still being checked)",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "at least %lld gem"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "at least %lld gems"
-                }
-              }
-            }
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld粒以上"
-          }
-        }
-      }
-    },
-    "%lld粒分の積み重ね" : {
-      "comment" : "Crystal detail title: how many gems this crystal holds",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld Gem of Focus"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld Gems of Focus"
-                }
-              }
-            }
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld粒分の積み重ね"
-          }
-        }
-      }
-    },
     "1%未満" : {
       "comment" : "A share below one percent",
       "localizations" : {
@@ -549,56 +508,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "1%未満"
-          }
-        }
-      }
-    },
-    "10粒がひとつの結晶になるのは、瓶を整理するためです。時間の価値は変わりません。" : {
-      "comment" : "Overview crystal section: why 10 gems become one crystal",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "10 gems become one crystal to keep your jar tidy. The value of your time stays the same."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "10粒がひとつの結晶になるのは、瓶を整理するためです。時間の価値は変わりません。"
-          }
-        }
-      }
-    },
-    "10粒ごとに生まれます" : {
-      "comment" : "Empty crystal section: one crystal forms from every 10 gems",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "One forms for every 10 gems"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "10粒ごとに生まれます"
-          }
-        }
-      }
-    },
-    "10粒をひとつの結晶にまとめます。価値の段階ではなく、記録と質量をそのまま残して瓶に余白をつくる仕組みです。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "10 gems combine into one crystal. It isn't a ladder of value: it makes room in the jar while keeping every record and all the mass."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "10粒をひとつの結晶にまとめます。価値の段階ではなく、記録と質量をそのまま残して瓶に余白をつくる仕組みです。"
           }
         }
       }
@@ -677,22 +586,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "iCloudを確認中。この端末で確認済みの記録は%lld粒。古い結晶は表示していません。%@"
-          }
-        }
-      }
-    },
-    "iCloudを確認中です" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Checking iCloud…"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "iCloudを確認中です"
           }
         }
       }
@@ -841,48 +734,18 @@
         }
       }
     },
-    "いま、瓶で動く粒" : {
-      "comment" : "Card title: the loose gems moving in the jar now",
+    "いま、瓶にある時間" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gems in Your Jar Now"
+            "value" : "Time in your jar"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "いま、瓶で動く粒"
-          }
-        }
-      }
-    },
-    "いま瓶で動く粒、%lld粒" : {
-      "comment" : "VoiceOver: the number of loose gems moving in the jar now",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld gem moving in your jar now"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld gems moving in your jar now"
-                }
-              }
-            }
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "いま瓶で動く粒、%lld粒"
+            "value" : "いま、瓶にある時間"
           }
         }
       }
@@ -944,22 +807,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "このiPhoneの集計を確認中。この端末で確認済みの記録は%lld粒。古い結晶は表示していません。%@"
-          }
-        }
-      }
-    },
-    "このiPhoneの集計を確認中です" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Checking this iPhone's totals…"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このiPhoneの集計を確認中です"
           }
         }
       }
@@ -1106,19 +953,18 @@
         }
       }
     },
-    "この月の代表瓶" : {
-      "comment" : "Section title: a jar drawn from this month's latest gems",
+    "この月の時間の瓶" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This Month's Sample Jar"
+            "value" : "This month’s time jar"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "この月の代表瓶"
+            "value" : "この月の時間の瓶"
           }
         }
       }
@@ -1135,6 +981,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "この月の記録を、ひとつの瓶とカードで振り返ります"
+          }
+        }
+      }
+    },
+    "この月の集中%@を表す瓶" : {
+      "comment" : "VoiceOver monthly jar: total confirmed duration represented by time crystals",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A jar representing %1$@ of focus this month"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この月の集中%@を表す瓶"
           }
         }
       }
@@ -1169,6 +1032,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "この月を振り返る"
+          }
+        }
+      }
+    },
+    "この端末で確認できた合計%@を、時間の結晶と育つ粒で表示します。元の記録は一回ずつ残っています。" : {
+      "comment" : "Month jar disclosure: exact confirmed duration; original records remain intact",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Time crystals and a growing gem show the %1$@ confirmed on this device. Every original record is kept."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末で確認できた合計%@を、時間の結晶と育つ粒で表示します。元の記録は一回ずつ残っています。"
           }
         }
       }
@@ -1325,35 +1205,6 @@
         }
       }
     },
-    "この端末に届いている全%lld粒・%@を表示しています。" : {
-      "comment" : "Month jar disclosure: every gem of the month on this iPhone and their mass",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Showing the %1$lld gem on this device (%2$@)."
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Showing all %1$lld gems on this device (%2$@)."
-                }
-              }
-            }
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "この端末に届いている全%lld粒・%@を表示しています。"
-          }
-        }
-      }
-    },
     "この端末に届いている範囲です。保存領域の反映中は合計が増えることがあります。" : {
       "localizations" : {
         "en" : {
@@ -1480,22 +1331,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "この粒に残っている情報"
-          }
-        }
-      }
-    },
-    "すべての積み重ねを、一歩引いて見る" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Step back and see everything you've built up"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "すべての積み重ねを、一歩引いて見る"
           }
         }
       }
@@ -1665,22 +1500,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "テーマ別・日ごとの記録と、この月の代表瓶を開きます"
-          }
-        }
-      }
-    },
-    "レア粒の光も内側に保持" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Also holds the glow of rare gems"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "レア粒の光も内側に保持"
           }
         }
       }
@@ -1989,22 +1808,6 @@
         }
       }
     },
-    "価値は集中時間、粒の階層は瓶を整理する形として見る" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Its value is your focus time; gem tiers just keep the jar organized"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "価値は集中時間、粒の階層は瓶を整理する形として見る"
-          }
-        }
-      }
-    },
     "保存されている色の内訳" : {
       "comment" : "Crystal detail: the color breakdown that was saved",
       "localizations" : {
@@ -2038,23 +1841,6 @@
         }
       }
     },
-    "保持する粒" : {
-      "comment" : "Tier metric title: the gems this tier holds",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gems held"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保持する粒"
-          }
-        }
-      }
-    },
     "保持する質量" : {
       "comment" : "Tier metric title: the mass this tier holds",
       "localizations" : {
@@ -2068,6 +1854,97 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "保持する質量"
+          }
+        }
+      }
+    },
+    "元の記録" : {
+      "comment" : "Lifetime stat title: source records, independent of the visible time crystals\nThe original records behind the total time",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Original records"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "元の記録"
+          }
+        }
+      }
+    },
+    "元の記録%lld件" : {
+      "comment" : "VoiceOver time core: original record count",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld original record"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld original records"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "元の記録%lld件"
+          }
+        }
+      }
+    },
+    "元の記録%lld件以上" : {
+      "comment" : "VoiceOver time core: minimum number of original records, distinct from time crystal count",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "at least %lld original record"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "at least %lld original records"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "元の記録%lld件以上"
+          }
+        }
+      }
+    },
+    "元の記録を見る" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View original records"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "元の記録を見る"
           }
         }
       }
@@ -2122,23 +1999,6 @@
         }
       }
     },
-    "全%lld粒・%@。瓶は最新%lld粒の代表表示です。" : {
-      "comment" : "Month jar disclosure: all gems of the month and their mass; the jar draws only the latest %3$lld",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$lld gems in all · %2$@. The jar shows only the latest %3$lld as a sample."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "全%lld粒・%@。瓶は最新%lld粒の代表表示です。"
-          }
-        }
-      }
-    },
     "再読み込み" : {
       "comment" : "Reload button (icon only in the browser, text in the month sheet)",
       "localizations" : {
@@ -2152,6 +2012,55 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "再読み込み"
+          }
+        }
+      }
+    },
+    "合計4時間10分でひとつの結晶に。結晶10個分の時間は、ひとつ上の段にまとまります。余った時間も次の粒に残ります。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Every 4 hr 10 min forms a crystal. Ten crystals' worth of time forms the next level. Any remaining time stays in the growing gem."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合計4時間10分でひとつの結晶に。結晶10個分の時間は、ひとつ上の段にまとまります。余った時間も次の粒に残ります。"
+          }
+        }
+      }
+    },
+    "合計時間" : {
+      "comment" : "Total time in the original record group\nTotal time represented by this tier",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Total time"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合計時間"
+          }
+        }
+      }
+    },
+    "合計時間で育つ結晶と、次の粒に残る時間を見ます。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "See crystals formed from your total time and the time remaining in the growing gem."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合計時間で育つ結晶と、次の粒に残る時間を見ます。"
           }
         }
       }
@@ -2406,6 +2315,22 @@
         }
       }
     },
+    "時間で育つ結晶の段" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crystal levels built from time"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間で育つ結晶の段"
+          }
+        }
+      }
+    },
     "時間の核" : {
       "comment" : "The time core, the lifetime focus-time milestone (title, label and VoiceOver)",
       "localizations" : {
@@ -2436,22 +2361,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "時間の核の器"
-          }
-        }
-      }
-    },
-    "時間の核は集中した時間で進みます。10分で100グラム、25分で250グラム、60分で600グラムです" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The time core grows with your focus time: 10 minutes is 100 grams, 25 minutes is 250 grams, and 60 minutes is 600 grams"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "時間の核は集中した時間で進みます。10分で100グラム、25分で250グラム、60分で600グラムです"
           }
         }
       }
@@ -2555,35 +2464,6 @@
         }
       }
     },
-    "最新%lld粒の代表瓶" : {
-      "comment" : "VoiceOver: a jar drawn from this many of the month's latest gems",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Sample jar of the latest %lld gem"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Sample jar of the latest %lld gems"
-                }
-              }
-            }
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最新%lld粒の代表瓶"
-          }
-        }
-      }
-    },
     "最新の代表粒を読み込み中" : {
       "localizations" : {
         "en" : {
@@ -2596,22 +2476,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "最新の代表粒を読み込み中"
-          }
-        }
-      }
-    },
-    "最新の粒を近くで見る" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "A close look at your latest gems"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最新の粒を近くで見る"
           }
         }
       }
@@ -2726,18 +2590,19 @@
         }
       }
     },
-    "段は瓶を整理するための形です。10個そろうと次の段にまとまりますが、時間の核は集中した時間だけで進みます。" : {
+    "次の結晶まで、あと%@。短く分けても、同じ合計時間なら同じ結晶になります。" : {
+      "comment" : "Time until the next 250-minute crystal; equal total time has the same crystals regardless of session length",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Tiers are just a way to keep the jar tidy. Every 10 combine into the next tier, but the time core grows only with your focus time."
+            "value" : "%@ until the next crystal. The same total time forms the same crystals, even when split into shorter sessions."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "段は瓶を整理するための形です。10個そろうと次の段にまとまりますが、時間の核は集中した時間だけで進みます。"
+            "value" : "次の結晶まで、あと%@。短く分けても、同じ合計時間なら同じ結晶になります。"
           }
         }
       }
@@ -2809,22 +2674,6 @@
         }
       }
     },
-    "生涯の時間と、瓶を整理する結晶を見ます。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "See all your time so far, and the crystals that keep your jar tidy."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "生涯の時間と、瓶を整理する結晶を見ます。"
-          }
-        }
-      }
-    },
     "生涯の瓶" : {
       "comment" : "Card title: the jar of everything so far",
       "localizations" : {
@@ -2874,18 +2723,18 @@
         }
       }
     },
-    "確認が終わるまで古い結晶は表示しません。" : {
+    "確認できた時間を表示しています。結晶の進みは、集計の確認が終わると表示します。" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Older crystals stay hidden until the check is finished."
+            "value" : "Showing confirmed time. Crystal progress will appear after the total is verified."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "確認が終わるまで古い結晶は表示しません。"
+            "value" : "確認できた時間を表示しています。結晶の進みは、集計の確認が終わると表示します。"
           }
         }
       }
@@ -2988,35 +2837,18 @@
         }
       }
     },
-    "積んだ粒" : {
-      "comment" : "Lifetime stat title: gems stacked so far",
+    "積み上げた時間の結晶" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gems added"
+            "value" : "Crystals of accumulated time"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "積んだ粒"
-          }
-        }
-      }
-    },
-    "粒の色と数を内側に残したまま、大きな一粒になります。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The gems become one larger gem that keeps their colors and count inside."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "粒の色と数を内側に残したまま、大きな一粒になります。"
+            "value" : "積み上げた時間の結晶"
           }
         }
       }
@@ -3153,19 +2985,18 @@
         }
       }
     },
-    "結晶の段" : {
-      "comment" : "Overview section title: the ×10, ×100 … crystal steps",
+    "結晶の段も、次の粒も、合計時間で決まります。10分を繰り返しても、同じ合計時間なら結晶の数や大きさは変わりません。" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Crystal Tiers"
+            "value" : "Crystal levels and the growing gem depend on total time. Repeating 10-minute sessions gives the same number and size of crystals as any other way of spending that time."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "結晶の段"
+            "value" : "結晶の段も、次の粒も、合計時間で決まります。10分を繰り返しても、同じ合計時間なら結晶の数や大きさは変わりません。"
           }
         }
       }
@@ -3187,19 +3018,34 @@
         }
       }
     },
-    "結晶をタップすると、内訳を見られます。" : {
-      "comment" : "Overview crystal section: tapping a crystal opens its details",
+    "結晶は合計時間を表す目盛りです。一回ごとの記録を分割したり、削除したりすることはありません。" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Tap a crystal to see what's inside."
+            "value" : "Crystals measure your total time. Individual records are kept whole and are never deleted by fusion."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "結晶をタップすると、内訳を見られます。"
+            "value" : "結晶は合計時間を表す目盛りです。一回ごとの記録を分割したり、削除したりすることはありません。"
+          }
+        }
+      }
+    },
+    "結晶は時間総額の表示です。どの結晶から見ても、元の一回ごとの時間・テーマ・日付は記録に残っています。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crystals represent your total time. Each original record keeps its duration, theme, and date."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結晶は時間総額の表示です。どの結晶から見ても、元の一回ごとの時間・テーマ・日付は記録に残っています。"
           }
         }
       }
@@ -3221,19 +3067,19 @@
         }
       }
     },
-    "縮尺" : {
-      "comment" : "Crystal detail stat title: its scale, such as ×10",
+    "育つ粒" : {
+      "comment" : "Remainder gem growing toward the next time crystal",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Scale"
+            "value" : "Growing gem"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "縮尺"
+            "value" : "育つ粒"
           }
         }
       }
@@ -3351,23 +3197,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "表示を5件に戻す"
-          }
-        }
-      }
-    },
-    "表示中 %lld個" : {
-      "comment" : "Crystal section: how many crystals this page shows",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld shown"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "表示中 %lld個"
           }
         }
       }
@@ -3721,31 +3550,19 @@
         }
       }
     },
-    "集中%@。最初の結晶まで、あと%lld粒です" : {
-      "comment" : "VoiceOver, empty time-core vessel: focus time so far, gems left until the first crystal",
+    "集中%@。最初の結晶まで、あと%@です" : {
+      "comment" : "VoiceOver empty time-core vessel: accumulated time, then remaining time until the first crystal",
       "localizations" : {
         "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%1$@ of focus. %2$lld more gem until the first crystal"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%1$@ of focus. %2$lld more gems until the first crystal"
-                }
-              }
-            }
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ of focus. %2$@ until the first crystal"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "集中%@。最初の結晶まで、あと%lld粒です"
+            "value" : "集中%@。最初の結晶まで、あと%@です"
           }
         }
       }

@@ -2725,7 +2725,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         if safelyHittable(menu, in: app) {
             menu.tap()
             let summary = app.descendants(matching: .any).matching(
-                NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "集中", "粒")
+                NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "累計", "元の記録")
             ).firstMatch
             if summary.waitForExistence(timeout: 10) { menuLabel = summary.label }
             capture("home-totals-\(label)")
@@ -2738,9 +2738,9 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             pause(1)
         }
 
-        let pebbles = firstInteger(in: menuLabel, pattern: "集中([0-9][0-9,]*)粒")
-            ?? firstInteger(in: jarValue, pattern: "([0-9][0-9,]*)粒")
-            ?? -1
+        // Only original records prove a newly imported Screen Time entry.
+        // The jar's canonical crystal/growing-gem count cannot substitute.
+        let pebbles = firstInteger(in: menuLabel, pattern: "元の記録 ?([0-9][0-9,]*)件") ?? -1
         var grams = -1
         var exact = false
         if let (value, unit) = firstMass(in: menuLabel) {

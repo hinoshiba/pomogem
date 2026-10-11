@@ -349,6 +349,9 @@ struct PendingStratumCelebration: Identifiable, Codable, Equatable, Sendable {
     /// receipts written by earlier builds; cloud mode treats a missing stamp
     /// conservatively while local-only mode has no asynchronous importer.
     let projectionCacheStamp: AggregateProjectionCacheStamp?
+    /// Time-based display receipts never claim ownership of source sessions.
+    /// Missing means a legacy count-based storage-compaction receipt.
+    let timeFusionTotalGrams: Int?
 
     init(
         id: UUID,
@@ -358,7 +361,8 @@ struct PendingStratumCelebration: Identifiable, Codable, Equatable, Sendable {
         monthLabel: String,
         colorHex: String? = nil,
         level: Int? = nil,
-        projectionCacheStamp: AggregateProjectionCacheStamp? = nil
+        projectionCacheStamp: AggregateProjectionCacheStamp? = nil,
+        timeFusionTotalGrams: Int? = nil
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -368,6 +372,7 @@ struct PendingStratumCelebration: Identifiable, Codable, Equatable, Sendable {
         self.colorHex = colorHex
         self.level = level.map { max(1, $0) }
         self.projectionCacheStamp = projectionCacheStamp
+        self.timeFusionTotalGrams = timeFusionTotalGrams.map { max(0, $0) }
     }
 }
 

@@ -1,7 +1,7 @@
 import Foundation
 
 /// A read-only, deterministic preview of how a repeated study plan would be
-/// represented by the current decimal roll-up hierarchy.
+/// represented by the canonical hierarchy of credited focus time.
 ///
 /// This type deliberately has no persistence dependency. It never opens a
 /// ModelContainer, reads the user's subjects, performs a reward draw, or writes
@@ -62,14 +62,14 @@ struct AccumulationPlanProjection: Equatable, Sendable {
             if isAggregate {
                 let metadata = AggregateMetadata(
                     level: level,
-                    pebbleCount: pebbleCount,
-                    childAggregateCount: level > 1 ? Constants.Jar.aggregateFanIn : 0,
+                    pebbleCount: 0,
+                    childAggregateCount: 0,
                     colorMix: Self.sampleColorMix,
                     subjectMix: Self.sampleSubjectMix(pebbleCount: pebbleCount),
                     periodStart: periodStart,
                     periodEnd: periodEnd,
                     sessionIDs: [],
-                    measuredPebbleCount: pebbleCount,
+                    measuredPebbleCount: 0,
                     manualPebbleCount: 0,
                     goldPebbleCount: 0,
                     prismPebbleCount: 0
@@ -83,7 +83,8 @@ struct AccumulationPlanProjection: Equatable, Sendable {
                     aggregate: metadata,
                     grams: grams,
                     radius: CGFloat(StrataMath.aggregateRadius(level: level)),
-                    createdAt: periodEnd
+                    createdAt: periodEnd,
+                    isTimeProjection: true
                 )
             }
 
@@ -94,7 +95,8 @@ struct AccumulationPlanProjection: Equatable, Sendable {
                 source: .timer,
                 kind: .normal,
                 grams: grams,
-                createdAt: periodEnd
+                createdAt: periodEnd,
+                isTimeProjection: true
             )
         }
 
@@ -105,7 +107,7 @@ struct AccumulationPlanProjection: Equatable, Sendable {
             table: "Planning",
             comment: "Theme name of the gems in the plan's preview jar (never saved)"
         )
-        private static let sampleColorHex = Constants.Color.auroraWarm
+        private static let sampleColorHex = TimeFusionPolicy.colorHex
         private static let sampleColorMix = [
             StratumColorFraction(hex: sampleColorHex, fraction: 1)
         ]
@@ -143,9 +145,9 @@ struct AccumulationPlanProjection: Equatable, Sendable {
                 level: body.level,
                 pebbleCount: body.pebbleCount,
                 grams: body.grams,
-                colorHex: Constants.Color.auroraWarm,
+                colorHex: TimeFusionPolicy.colorHex,
                 colorMix: [StratumColorFraction(
-                    hex: Constants.Color.auroraWarm,
+                    hex: TimeFusionPolicy.colorHex,
                     fraction: 1
                 )],
                 periodEnd: body.periodEnd,
@@ -204,11 +206,7 @@ struct AccumulationPlanProjection: Equatable, Sendable {
         let bodies = specifications.enumerated().map { index, specification in
             let fraction = Double(index + 1) / Double(max(1, specifications.count))
             return Body(
-                id: deterministicUUID(
-                    ordinal: index,
-                    plan: plan,
-                    level: specification.level
-                ),
+                id: specification.id,
                 level: specification.level,
                 pebbleCount: specification.pebbleCount,
                 grams: specification.grams,
@@ -223,14 +221,13 @@ struct AccumulationPlanProjection: Equatable, Sendable {
             completionCount: completionCount,
             focusMinutes: focusMinutes,
             grams: grams,
-            aggregateCreationCount: decimalAggregateCreationCount(
-                completionCount: completionCount
-            ),
+            aggregateCreationCount: crystalFormationCount(totalGrams: grams),
             bodies: bodies
         )
     }
 
     private struct BodySpecification {
+        let id: UUID
         let level: Int
         let pebbleCount: Int
         let grams: Int
@@ -281,101 +278,42 @@ struct AccumulationPlanProjection: Equatable, Sendable {
         return Int((numerator + denominator / 2) / denominator)
     }
 
-    /// The final decimal frontier is simply the base-ten digits of the total.
-    /// For example, 350,640 completions become 4 ×10, 6 ×100, 5 ×10,000,
-    /// and 3 ×100,000 bodies. This is mathematically identical to repeatedly
-    /// carrying ten equal-level bodies, but avoids hundreds of thousands of
-    /// allocations in a user-facing planning sheet.
+    /// Session estimates remain a separate statistic. Shapes, identities and
+    /// mass allocations depend only on total time, just like the real jar.
     private static func decimalFrontierSpecifications(
         completionCount: Int,
         totalGrams: Int
     ) -> [BodySpecification] {
-        var remaining = completionCount
-        var magnitude = 1
-        var level = 0
-        var countSpecifications: [(level: Int, pebbleCount: Int)] = []
-
-        while remaining > 0 {
-            let digit = remaining % Constants.Jar.aggregateFanIn
-            for _ in 0 ..< digit {
-                countSpecifications.append((
-                    level: level,
-                    pebbleCount: magnitude
-                ))
-            }
-            remaining /= Constants.Jar.aggregateFanIn
-            magnitude *= Constants.Jar.aggregateFanIn
-            level += 1
+        guard totalGrams > 0 else { return [] }
+        let snapshot = TimeFusionPolicy.snapshot(totalGrams: totalGrams)
+        var units = snapshot.visibleCrystals
+        if snapshot.remainderGrams > 0 {
+            units.insert(TimeFusionUnit(level: 0, grams: snapshot.remainderGrams, ordinal: 0), at: 0)
         }
-
-        guard completionCount > 0 else { return [] }
-
-        // Count describes the estimated session rhythm; grams describe the
-        // independently rounded time expectation. Allocate the latter across
-        // the count hierarchy without losing a single gram. This keeps the
-        // simulated physical frontier exact even when the rounded session
-        // count times one session's duration differs by a few minutes.
-        let baseGramsPerPebble = totalGrams / completionCount
-        var extraGramCount = totalGrams % completionCount
-        return countSpecifications.map { specification in
-            let allocatedExtras = min(extraGramCount, specification.pebbleCount)
-            extraGramCount -= allocatedExtras
+        var cumulativeGrams = 0
+        var allocatedCount = 0
+        return units.map { unit in
+            cumulativeGrams += unit.grams
+            let cumulativeCount = Int(Int64(completionCount) * Int64(cumulativeGrams) / Int64(totalGrams))
+            let count = cumulativeCount - allocatedCount
+            allocatedCount = cumulativeCount
             return BodySpecification(
-                level: specification.level,
-                pebbleCount: specification.pebbleCount,
-                grams: specification.pebbleCount * baseGramsPerPebble
-                    + allocatedExtras
+                id: unit.level == 0 ? TimeFusionUnit(level: 0, grams: 0, ordinal: 0).id : unit.id,
+                level: unit.level,
+                pebbleCount: count,
+                grams: unit.grams
             )
         }
     }
 
-    private static func decimalAggregateCreationCount(completionCount: Int) -> Int {
-        var sourceCount = completionCount
+    private static func crystalFormationCount(totalGrams: Int) -> Int {
+        var sourceCount = max(0, totalGrams) / TimeFusionPolicy.firstCrystalGrams
         var total = 0
-        while sourceCount >= Constants.Jar.aggregateFanIn {
-            sourceCount /= Constants.Jar.aggregateFanIn
+        while sourceCount > 0 {
             total += sourceCount
+            sourceCount /= 10
         }
         return total
-    }
-
-    private static func deterministicUUID(
-        ordinal: Int,
-        plan: Plan,
-        level: Int
-    ) -> UUID {
-        var state = UInt64(ordinal + 1)
-        state ^= UInt64(plan.years) << 48
-        state ^= UInt64(plan.sessionsPerWeek) << 40
-        state ^= UInt64(plan.minutesPerSession) << 32
-        state ^= UInt64(level) << 24
-        let high = mixed(state ^ 0x504C_414E_4E45_4400)
-        let low = mixed(state &+ 0x9E37_79B9_7F4A_7C15)
-        return UUID(uuid: (
-            UInt8(truncatingIfNeeded: high >> 56),
-            UInt8(truncatingIfNeeded: high >> 48),
-            UInt8(truncatingIfNeeded: high >> 40),
-            UInt8(truncatingIfNeeded: high >> 32),
-            UInt8(truncatingIfNeeded: high >> 24),
-            UInt8(truncatingIfNeeded: high >> 16),
-            (UInt8(truncatingIfNeeded: high >> 8) & 0x0F) | 0x40,
-            UInt8(truncatingIfNeeded: high),
-            (UInt8(truncatingIfNeeded: low >> 56) & 0x3F) | 0x80,
-            UInt8(truncatingIfNeeded: low >> 48),
-            UInt8(truncatingIfNeeded: low >> 40),
-            UInt8(truncatingIfNeeded: low >> 32),
-            UInt8(truncatingIfNeeded: low >> 24),
-            UInt8(truncatingIfNeeded: low >> 16),
-            UInt8(truncatingIfNeeded: low >> 8),
-            UInt8(truncatingIfNeeded: low)
-        ))
-    }
-
-    private static func mixed(_ input: UInt64) -> UInt64 {
-        var value = input &+ 0x9E37_79B9_7F4A_7C15
-        value = (value ^ (value >> 30)) &* 0xBF58_476D_1CE4_E5B9
-        value = (value ^ (value >> 27)) &* 0x94D0_49BB_1331_11EB
-        return value ^ (value >> 31)
     }
 }
 
