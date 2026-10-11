@@ -668,7 +668,7 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         XCTAssertTrue(controller.learningStoppedByFreeLimit,
                       "The page and the Settings row read the stop from the ledger's gate")
         XCTAssertEqual(controller.monitoringError, ScreenTimeError.freeApplicationLimit.localizedDescription)
-        XCTAssertTrue(controller.monitoringError?.contains("勉強アプリ") == true)
+        XCTAssertTrue(controller.monitoringError?.contains("粒にするアプリ") == true)
 
         // Unknown again (a later process before StoreKit answers) keeps the
         // closed gate closed: nil can only keep or relax, never grant Pro.
