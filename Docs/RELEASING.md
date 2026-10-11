@@ -5,9 +5,12 @@
 この手順は、許可済みMacのXcode OrganizerからiPhone版をArchive、Validate、Uploadするための
 正本です。Mac／Mac Catalyst版は作成しません。
 
-現行候補は1.1.1 (12)です。2026-10-11にApp Store Connectで1.1.0 (11)の配信準備完了を
-確認しました。最新の作業結果は[1.1.1 (12) release record](../AppStore/release-record-1.1.1-12.md)を
-参照してください。以下の1.1.0 (10)準備状況は当時の履歴で、現在の署名状態は再検証します。
+2026-10-11にApp Store Connectで1.1.0 (11)の配信準備完了を確認しました。1.1.1 (12)は
+同日10:40 JSTにuploadが成功し、配布payloadの全3 bundleを検証済みです。処理完了後にbuild 12を
+選択・保存し、10:58 JSTに審査へ提出しました。Connectで「審査待ち」を確認済みです。
+1.1.1の承認・公開はまだ確認していません。最新の作業結果は
+[1.1.1 (12) release record](../AppStore/release-record-1.1.1-12.md)を参照してください。
+以下の1.1.0 (10)準備状況は当時の履歴です。未実施の実機試験などは完了扱いにしません。
 
 ## 既存の自動配布設定を確認（移行時のみ）
 

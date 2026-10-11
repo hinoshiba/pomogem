@@ -9,7 +9,7 @@ app_store_id: 6809139517
 app_store_listing_status: public
 marketing_version: "1.1.1"
 build_number: "12"
-candidate_status: preparation_not_uploaded
+candidate_status: waiting_for_review
 published_version: "1.1.0"
 published_version_status: ready_for_distribution_verified_2026_10_11
 copyright: "2026 hinoshiba"
@@ -95,7 +95,7 @@ app_usage_descriptions:
 screen_time:
   enabled_by_default: false
   authorization: family_controls_individual
-  distribution_authorization: verified_local_profiles_2026_10_11_final_archive_pending
+  distribution_authorization: verified_uploaded_distribution_payload_2026_10_11
   learning:
     aggregation: combined_selected_apps_per_theme_in_confirmed_10_minute_steps
     seconds_per_gem: 600
@@ -357,7 +357,6 @@ oss_publication:
     - store_and_web_marketing_images
   publication_model: mixed_license_source_and_ordinary_docs_with_reserved_brand_assets
 release_blockers:
-  - verify the final signed archive and upload payload against the currently valid Family Controls distribution profiles for both host and Screen Time monitor extension
   - verify actual signed-device 10-minute learning and black-gem delivery after the callback fix; prior failed or simulator-only checks are not a pass
   - compare the ten ja-JP/en-US simulator screenshot candidates refreshed 2026-09-30 with the signed Release candidate on a physical supported iPhone, review the 03 reward-card transition, and replace inherited/older images in Connect before submission
   - compare the 2026-10-01 live-StoreKit-price IAP image with the final signed build, replace the older image in Connect, and confirm it survives reload before submission
@@ -366,8 +365,35 @@ release_blockers:
   - owner must accept the fail-closed interactive recovery ceiling when more than 256 corrupt active logical timer sessions precede a valid session, or ship a versioned reversible quarantine design
   - Japan paid-IAP operator disclosure and pre-purchase legal presentation require owner or qualified legal determination
   - verify the F5 end-of-timer alarm on a signed iOS 26 device before shipping NSAlarmKitUsageDescription (the timer screens now book it; simulator unit and UI tests are not a pass): the permission prompt, a 最大 focus and break that end locked ring the system alarm with the Library/Sounds ringtone through .named, Stop and Open App, the hand-off when the app is open at the end, the silent switch in and out of the app, a Focus, and that Apple Music ducks and returns; at 標準 the screen stays on while the alarm rings and auto-stops after 3 minutes (AppStore/submission-checklist.md)
-  - complete StoreKit Sandbox, signed-device, TestFlight, App Store metadata, and distribution-signing verification
+  - complete StoreKit Sandbox, signed-device, TestFlight, and remaining App Store metadata verification
   - enable the MusicKit App Service on App ID com.hinoshiba.pomogem and verify focus music on a signed device with and without an Apple Music subscription (Docs/FocusMusic.md)
+
+release_verification_2026_10_11:
+  archive_source_commit: 73cc2d5d7d162c227344bc1afd252a024c726a97
+  source_tag: v1.1.1-build12
+  source_tag_pushed: true
+  raw_signed_archive: verified
+  organizer_validation: passed
+  distribution_payload: verified_all_three_bundles
+  export_matches_upload_payload: sha256_verified
+  archive_dsym_uuid_match: true
+  upload: succeeded
+  uploaded_at: "2026-10-11T10:40:00+09:00"
+  uploaded_version: "1.1.1"
+  uploaded_build: "12"
+  build_processing: complete
+  build_attached_to_version: true
+  app_review_submitted: true
+  app_review_submitted_at: "2026-10-11T10:58:00+09:00"
+  app_review_status: waiting_for_review
+  metadata_saved_and_reread: ja_JP_and_en_US_exact_source_match
+  review_attachment: review_notes_zip_four_public_text_files
+  ci_run: 38101798036
+  ci_source_commit: 73cc2d5d7d162c227344bc1afd252a024c726a97
+  ci_result: success
+  receipt_only_full_ios_ci: not_rerun_local_static_checks_only
+  real_device_screen_time_callbacks: unverified
+  signing_material_logs_and_payloads: private_outside_repository
 
 release_verification_2026_09_06:
   app_store_record_created: true

@@ -3,8 +3,11 @@
 このfolderはApp Store Connectへ入力する内容と提出判断のsource of truthです。App Store Connect
 APIのcredentialやdownloadしたprofileは置きません。
 
-2026-10-11にApp Store Connectで1.1.0 (11)の配信準備完了を確認しました。現行候補は
-1.1.1 (12)です。現在の作業結果は[release-record-1.1.1-12.md](release-record-1.1.1-12.md)を参照してください。
+2026-10-11にApp Store Connectで1.1.0 (11)の配信準備完了を確認しました。1.1.1 (12)は
+同日10:40 JSTにuploadが成功し、配布payloadの全3 bundleを検証済みです。処理完了後にbuild 12を
+選択・保存し、10:58 JSTに審査へ提出しました。Connectで「審査待ち」を確認済みです。
+1.1.1の承認・公開はまだ確認していません。現在の作業結果は
+[release-record-1.1.1-12.md](release-record-1.1.1-12.md)を参照してください。
 下記の1.1.0準備状況や旧profileに関する記述は、記載日時点の履歴です。
 
 - `configuration.yml`: product identifierと提供範囲
