@@ -1250,6 +1250,23 @@
         }
       }
     },
+    "上昇アラーム" : {
+      "comment" : "Alarm sound name: two electronic tones sweeping upward in pitch. Suggested English: Rising alarm",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rising alarm"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上昇アラーム"
+          }
+        }
+      }
+    },
     "上（縦）" : {
       "comment" : "Settings: default timer orientation option, top of the timer up (portrait)",
       "localizations" : {
@@ -1313,6 +1330,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "下（縦・上下逆）"
+          }
+        }
+      }
+    },
+    "交互トーン" : {
+      "comment" : "Alarm sound name: a steady alternating low/high electronic tone. Suggested English: Alternating tones",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alternating tones"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "交互トーン"
           }
         }
       }
@@ -1533,6 +1567,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "休憩終了のアラート中"
+          }
+        }
+      }
+    },
+    "低い音と高い音を交互にはっきり鳴らします" : {
+      "comment" : "Alarm sound description. Suggested English: Clear low and high tones in a steady alternating rhythm",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear low and high tones in a steady alternating rhythm"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "低い音と高い音を交互にはっきり鳴らします"
           }
         }
       }
@@ -2553,6 +2604,23 @@
         }
       }
     },
+    "短く2回、長く1回の電子音を力強くくり返します" : {
+      "comment" : "Alarm sound description. Suggested English: Two short pulses and one long pulse, repeated insistently",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Two short pulses and one long pulse, repeated insistently"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "短く2回、長く1回の電子音を力強くくり返します"
+          }
+        }
+      }
+    },
     "穏やかに集中するとき" : {
       "comment" : "Apple Music Focus playlist title (US storefront: Peaceful Focus)",
       "localizations" : {
@@ -2995,6 +3063,23 @@
         }
       }
     },
+    "連続パルス" : {
+      "comment" : "Alarm sound name: insistent short-short-long electronic pulses. Suggested English: Insistent pulses",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Insistent pulses"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "連続パルス"
+          }
+        }
+      }
+    },
     "選んで再生します" : {
       "comment" : "VoiceOver hint of a music row",
       "localizations" : {
@@ -3380,6 +3465,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "音楽を選ぶ"
+          }
+        }
+      }
+    },
+    "音程がぐっと上がる電子音をくり返します" : {
+      "comment" : "Alarm sound description. Suggested English: Repeated electronic sweeps that rise in pitch",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Repeated electronic sweeps that rise in pitch"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音程がぐっと上がる電子音をくり返します"
           }
         }
       }

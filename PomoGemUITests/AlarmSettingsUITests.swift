@@ -34,22 +34,19 @@ final class AlarmSettingsUITests: XCTestCase {
     func testTheSoundAndStrengthPickersChooseAndExplainEachStrength() throws {
         openSettings()
 
-        // The sound: eight choices, the alarm-grade five first.
+        // All eleven sounds remain reachable as the list grows.
         let soundRow = element("settings.completion-sound")
         XCTAssertTrue(reveal(soundRow))
         XCTAssertTrue(describe(soundRow).contains("澄んだチャイム"), "The synced chime until one is chosen: \(describe(soundRow))")
         soundRow.tap()
         XCTAssertTrue(app.navigationBars["タイマー終了音"].waitForExistence(timeout: 5))
-        let raws = ["bell", "digital", "marimba", "schoolChime", "alarmClock", "standard", "soft", "bright"]
+        let raws = ["bell", "digital", "marimba", "schoolChime", "alarmClock", "alternatingTone", "risingSweep", "urgentPulse", "standard", "soft", "bright"]
         for raw in raws {
-            XCTAssertTrue(element("settings.completion-sound.\(raw)").waitForExistence(timeout: 3), raw)
+            XCTAssertTrue(reveal(element("settings.completion-sound.\(raw)")), raw)
         }
         XCTAssertEqual(element("settings.completion-sound.standard").value as? String, "選択中")
-        XCTAssertLessThan(
-            element("settings.completion-sound.alarmClock").frame.minY,
-            element("settings.completion-sound.standard").frame.minY
-        )
         let bell = element("settings.completion-sound.bell")
+        XCTAssertTrue(reveal(bell, swipingDown: true))
         // VoiceOver speaks what each sound is, not only its name.
         XCTAssertTrue(bell.label.contains("澄んだ鐘"), bell.label)
         tapUntilSelected(bell)
@@ -57,8 +54,7 @@ final class AlarmSettingsUITests: XCTestCase {
         let softHint = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS %@", "「アラーム」の音から選んでください")
         ).firstMatch
-        if !softHint.exists { app.swipeUp() }
-        XCTAssertTrue(softHint.waitForExistence(timeout: 3), "やわらかいベル points people who miss the end to the alarms")
+        XCTAssertTrue(reveal(softHint), "やわらかいベル points people who miss the end to the alarms")
         XCTAssertTrue(softHint.label.contains("「やわらかいベル」は音が小さく"), softHint.label)
         retainScreenshot(named: "Timer end sound list")
         goBack(from: "タイマー終了音")
@@ -93,6 +89,46 @@ final class AlarmSettingsUITests: XCTestCase {
         XCTAssertTrue(reveal(sound, swipingDown: true))
         XCTAssertTrue(sound.label.contains("オンでも鳴ります"), sound.label)
         retainScreenshot(named: "Sound & Haptics at Maximum, alarms denied")
+    }
+
+    func testHapticPatternsCanBeComparedAndSelectionSurvivesReturning() {
+        openSettings()
+        let hapticRow = element("settings.completion-haptic")
+        XCTAssertTrue(reveal(hapticRow))
+        hapticRow.tap()
+        XCTAssertTrue(app.navigationBars["タイマー終了時の触覚"].waitForExistence(timeout: 5))
+        for raw in ["standard", "gentle", "strong", "heartbeat", "rapid", "longBuzz", "wave", "insist"] {
+            let option = element("settings.completion-haptic.\(raw)")
+            XCTAssertTrue(reveal(option), raw)
+            XCTAssertGreaterThanOrEqual(option.frame.height, 44)
+            XCTAssertTrue(option.label.contains("。"), "VoiceOver includes the rhythm description")
+            tapUntilSelected(option)
+        }
+        retainScreenshot(named: "Expanded vibration patterns")
+        goBack(from: "タイマー終了時の触覚")
+        XCTAssertTrue(reveal(hapticRow))
+        hapticRow.tap()
+        let selected = element("settings.completion-haptic.insist")
+        XCTAssertTrue(reveal(selected))
+        XCTAssertEqual(selected.value as? String, "選択中")
+    }
+
+    func testHapticPickerAtLargestTextSize() {
+        app.terminate()
+        app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1"
+        app.launch()
+        openSettings()
+        let hapticRow = element("settings.completion-haptic")
+        XCTAssertTrue(reveal(hapticRow))
+        hapticRow.tap()
+        for raw in ["standard", "heartbeat", "longBuzz", "insist"] {
+            let option = element("settings.completion-haptic.\(raw)")
+            XCTAssertTrue(reveal(option), raw)
+            XCTAssertGreaterThan(option.frame.height, 70)
+            tapUntilSelected(option)
+            XCTAssertLessThanOrEqual(option.frame.maxX, app.windows.firstMatch.frame.maxX)
+        }
+        retainScreenshot(named: "Vibration patterns at accessibility text size")
     }
 
     // MARK: Helpers

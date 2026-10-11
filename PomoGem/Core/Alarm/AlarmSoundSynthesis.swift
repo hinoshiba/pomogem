@@ -1,7 +1,7 @@
 import Accelerate
 import Foundation
 
-/// The five alarm-grade timer sounds that are synthesized here, from source
+/// The alarm-grade timer sounds that are synthesized here, from source
 /// code only. Raw values name the device-local `alarm.sound` choice, so keep
 /// them stable.
 enum AlarmSynthesizedSound: String, CaseIterable, Sendable {
@@ -18,6 +18,12 @@ enum AlarmSynthesizedSound: String, CaseIterable, Sendable {
     /// A mechanical twin-bell alarm clock: a hammer alternating between two
     /// small bells about 25 times a second.
     case alarmClock
+    /// A clear low/high pair repeated in a steady alternating rhythm.
+    case alternatingTone
+    /// Two electronic tones that sweep upward in pitch.
+    case risingSweep
+    /// Insistent groups of two short pulses and one longer pulse.
+    case urgentPulse
 }
 
 /// One alarm pattern before mastering: a single cycle rendered linearly with
@@ -67,6 +73,9 @@ enum AlarmSoundSynthesis {
         case .marimba: marimba()
         case .schoolChime: schoolChime()
         case .alarmClock: alarmClock()
+        case .alternatingTone: alternatingTone()
+        case .risingSweep: risingSweep()
+        case .urgentPulse: urgentPulse()
         }
     }
 
@@ -411,7 +420,83 @@ enum AlarmSoundSynthesis {
         return AlarmSoundSource(oneShot: buffer, period: period, limiterDrive: 6)
     }
 
+    /// Eight alternating low/high notes. The sustained body and clear pitch
+    /// changes draw attention without raising the shared peak ceiling.
+    static func alternatingTone() -> AlarmSoundSource {
+        let period = 2.4
+        var buffer = makeBuffer(period: period)
+        for note in 0..<8 {
+            let frequency = note.isMultiple(of: 2) ? 960.0 : 1_440.0
+            addElectronicTone(
+                into: &buffer,
+                start: Double(note) * 0.3,
+                duration: 0.25,
+                frequency: frequency
+            )
+        }
+        return AlarmSoundSource(oneShot: buffer, period: period, limiterDrive: 2)
+    }
+
+    /// Two upward sweeps, each wholly inside the phone speaker's strongest
+    /// range. Integrating the changing frequency preserves phase continuity.
+    static func risingSweep() -> AlarmSoundSource {
+        let period = 2.4
+        var buffer = makeBuffer(period: period)
+        for start in [0.0, 1.2] {
+            addElectronicTone(
+                into: &buffer,
+                start: start,
+                duration: 1.0,
+                frequency: 900,
+                endFrequency: 2_300
+            )
+        }
+        return AlarmSoundSource(oneShot: buffer, period: period, limiterDrive: 2)
+    }
+
+    /// Short–short–long, three times per cycle. A lower electronic pitch
+    /// gives these longer pulses a different character from the digital
+    /// alarm's high, rapid four-beep groups.
+    static func urgentPulse() -> AlarmSoundSource {
+        let period = 2.4
+        var buffer = makeBuffer(period: period)
+        for group in [0.0, 0.8, 1.6] {
+            for (offset, duration) in [(0.0, 0.16), (0.23, 0.16), (0.46, 0.22)] {
+                addElectronicTone(
+                    into: &buffer,
+                    start: group + offset,
+                    duration: duration,
+                    frequency: 1_280
+                )
+            }
+        }
+        return AlarmSoundSource(oneShot: buffer, period: period, limiterDrive: 2)
+    }
+
     // MARK: Building blocks
+
+    /// A rounded electronic tone with a little harmonic body. A raised-
+    /// cosine attack and release bring every pulse to zero before its gap,
+    /// so neither note changes nor looping introduce abrupt waveform steps.
+    private static func addElectronicTone(
+        into buffer: inout [Float],
+        start: TimeInterval,
+        duration: TimeInterval,
+        frequency: Double,
+        endFrequency: Double? = nil
+    ) {
+        let first = frames(start)
+        let length = frames(duration)
+        let sweepRate = ((endFrequency ?? frequency) - frequency) / duration
+        for offset in 0..<length where first + offset < buffer.count {
+            let time = Double(offset) / sampleRate
+            let envelope = raisedRamp(time, 0.012)
+                * raisedRamp(Double(length - 1 - offset) / sampleRate, 0.018)
+            let phase = 2 * Double.pi * (frequency * time + 0.5 * sweepRate * time * time)
+            let wave = sin(phase) + 0.24 * sin(2 * phase) + 0.08 * sin(3 * phase)
+            buffer[first + offset] += Float(envelope * wave)
+        }
+    }
 
     struct Mode {
         let frequency: Double

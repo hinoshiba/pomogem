@@ -17,6 +17,17 @@ struct TimerCompletionAlarmRequest: Equatable, Sendable {
 
     var sessionID: UUID { configuration.sessionID }
 
+    /// The vibration picker previews the selected rhythm at the actual alarm
+    /// strength, with no sound or audio-session override.
+    static func hapticPreview(style: TimerCompletionHaptic, strength: AlarmStrength) -> Self {
+        resolve(
+            configuration: TimerCompletionAlertConfiguration(sessionID: UUID(), sound: nil, haptic: style),
+            cue: .repeating,
+            strength: strength,
+            sound: nil
+        )
+    }
+
     /// Pure resolution, for tests and for `live`.
     static func resolve(
         configuration: TimerCompletionAlertConfiguration,
@@ -167,7 +178,7 @@ final class LiveTimerCompletionAlarmPlayer: TimerCompletionAlarmPlayer {
             }
         }
         if request.plan.playsHaptics, let style = request.configuration.haptic {
-            // A cue's vibration is the style's taps (`AlarmHapticPattern.taps`),
+            // A cue's vibration is the style's bounded pattern (`AlarmHapticPattern.cueEvents`),
             // which is what `Haptics.playTimerCompletion` plays.
             haptics.playTimerCompletion(style)
         }
@@ -204,6 +215,7 @@ final class TimerCompletionAlarmPreview {
     private let player: TimerCompletionAlarmPlayer
     private let sleeper: Sleeper
     private var stopTask: Task<Void, Never>?
+    private var hasPlayback = false
 
     init(
         player: TimerCompletionAlarmPlayer,
@@ -221,6 +233,7 @@ final class TimerCompletionAlarmPreview {
         cancel()
         switch request.plan.playback {
         case .loop:
+            hasPlayback = true
             player.sustainLoop(request)
             let sleeper = self.sleeper
             let duration = Self.loopDuration
@@ -232,20 +245,23 @@ final class TimerCompletionAlarmPreview {
                 }
                 guard let self, !Task.isCancelled else { return }
                 self.stopTask = nil
+                self.hasPlayback = false
                 self.player.stop()
             }
         case .once, .repeating:
+            hasPlayback = true
             player.playCue(request)
         case .none:
             break
         }
     }
 
-    /// Stops a looping preview at once (another preview, leaving Settings).
+    /// Also cancels a one-shot that is still playing or awaiting the engine.
     func cancel() {
-        guard let stopTask else { return }
-        stopTask.cancel()
+        stopTask?.cancel()
         self.stopTask = nil
+        guard hasPlayback else { return }
+        hasPlayback = false
         player.stop()
     }
 }

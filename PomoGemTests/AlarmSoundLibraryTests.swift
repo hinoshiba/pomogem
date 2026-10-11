@@ -43,7 +43,7 @@ final class AlarmSoundLibraryTests: XCTestCase {
 
     func testRingtoneFilesAreSixteenBitMonoUnderThirtySecondsAndExcludedFromBackup() throws {
         var payloads: [Data] = []
-        for choice in [AlarmSoundChoice.standard, .bell, .schoolChime] {
+        for choice in [AlarmSoundChoice.standard, .bell, .schoolChime, .alternatingTone, .risingSweep, .urgentPulse] {
             let url = try AlarmSoundLibrary.ensureRingtoneFile(for: choice, libraryDirectory: library)
             XCTAssertEqual(url.deletingLastPathComponent().lastPathComponent, "Sounds")
             XCTAssertEqual(url.lastPathComponent, AlarmSoundLibrary.fileName(for: choice))

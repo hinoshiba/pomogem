@@ -172,36 +172,17 @@ final class Haptics {
     /// A bounded timer-only cue. Jar landing feedback remains separate so the
     /// completion and the physical drop are distinguishable without looking.
     func playTimerCompletion(_ style: TimerCompletionHaptic = .standard) {
-        switch style {
-        case .standard:
-            playTimerCompletion(
-                events: [
-                    transient(intensity: 0.72, sharpness: 0.82),
-                    transient(intensity: 0.92, sharpness: 0.48, relativeTime: 0.14)
-                ],
-                fallbackIntensity: 0.9
-            )
-        case .gentle:
-            playTimerCompletion(
-                events: [transient(intensity: 0.42, sharpness: 0.30)],
-                fallbackIntensity: 0.42,
-                fallbackSharpness: 0.30
-            )
-        case .strong:
-            playTimerCompletion(
-                events: [
-                    transient(intensity: 0.78, sharpness: 0.74),
-                    transient(intensity: 0.94, sharpness: 0.54, relativeTime: 0.11),
-                    transient(intensity: 1.00, sharpness: 0.36, relativeTime: 0.24)
-                ],
-                fallbackIntensity: 1,
-                fallbackSharpness: 0.45
-            )
-        }
+        let pattern = AlarmHapticPattern.completion(strength: .gentle, style: style)
+        let strongest = pattern.events.max { $0.intensity < $1.intensity }
+        playTimerCompletion(
+            events: pattern.makeHapticEvents(),
+            fallbackIntensity: CGFloat(strongest?.intensity ?? 1),
+            fallbackSharpness: CGFloat(strongest?.sharpness ?? 0.5)
+        )
     }
 
-    /// F5, the standard and maximum presets: loops `pattern` (a continuous
-    /// full-intensity vibration with the chosen style's taps as accents)
+    /// F5, the standard and maximum presets: loops `pattern` (the chosen
+    /// style's sustained, full-intensity pulses with gaps between them)
     /// through `CHHapticAdvancedPatternPlayer` with `loopEnabled`, or leaves
     /// it looping. Like every cue it waits for the asynchronous engine start
     /// (jar-03) instead of starting the engine on the main thread; a looping

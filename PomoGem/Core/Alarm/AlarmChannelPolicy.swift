@@ -231,7 +231,7 @@ enum AlarmChannelPolicy {
                 keepsScreenAwake: false,
                 automaticStopInterval: nil,
                 haptic: hapticsEnabled
-                    ? AlarmHapticPattern(events: AlarmHapticPattern.taps(for: hapticStyle), loopDuration: nil)
+                    ? AlarmHapticPattern(events: AlarmHapticPattern.cueEvents(for: hapticStyle), loopDuration: nil)
                     : nil
             )
         case .repeating:

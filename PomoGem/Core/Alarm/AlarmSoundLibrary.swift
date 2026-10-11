@@ -15,7 +15,7 @@ enum AlarmSoundFileKind: String, Sendable {
     /// ≤ 28 s: the Time Sensitive notification at the standard and maximum
     /// presets, and the AlarmKit alarm.
     case ringtone
-    /// One cycle: the notification at the gentle preset, for the five new
+    /// One cycle: the notification at the gentle preset, for the synthesized
     /// sounds (the original chimes keep `TimerCompletionSoundLibrary`).
     case cue
 }
@@ -29,8 +29,9 @@ enum AlarmSoundFileKind: String, Sendable {
 /// this device from the same arithmetic as the in-app sound. They can always
 /// be rebuilt, so they are excluded from backups.
 enum AlarmSoundLibrary {
-    /// Bump whenever the synthesis or mastering changes: an existing file
-    /// with the current name is reused as-is.
+    /// Bump whenever existing synthesis or mastering changes: an existing
+    /// file with the current name is reused as-is. Adding a choice with a
+    /// new raw value already creates a distinct filename and needs no bump.
     static let fileVersion = 1
     static let fileNamePrefix = "pomogem-alarm-"
     static let fileExtension = "caf"

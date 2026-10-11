@@ -1077,32 +1077,24 @@ struct SettingsView: View {
                 )
             }
 
-            Picker(selection: timerCompletionHapticBinding) {
-                ForEach(TimerCompletionHaptic.allCases) { style in
-                    Text(style.title)
-                        .tag(style)
-                        .accessibilityLabel(String(
-                            localized: "\(style.title)。\(style.detail)",
-                            table: "Settings",
-                            comment: "VoiceOver label of a picker option: its name, then its description"
-                        ))
-                        .accessibilityIdentifier(
-                            "settings.completion-haptic.\(style.rawValue)"
-                        )
-                }
+            NavigationLink {
+                AlarmHapticPickerView(
+                    selection: sensoryPreferences.timerCompletionHaptic,
+                    strength: alarmStrength,
+                    onSelect: updateTimerCompletionHaptic
+                )
             } label: {
-                SettingLabel(
-                    title: String(
-                        localized: "タイマー終了時の触覚",
-                        table: "Settings",
-                        comment: "Settings picker: the haptic played when a timer ends"
-                    ),
+                SettingValueRowLabel(
+                    title: AlarmSettingsCopy.hapticRowTitle,
                     subtitle: sensoryPreferences.timerCompletionHaptic.detail,
-                    symbol: sensoryPreferences.timerCompletionHaptic.systemImage
+                    symbol: sensoryPreferences.timerCompletionHaptic.systemImage,
+                    value: sensoryPreferences.timerCompletionHaptic.title
                 )
             }
-            .pickerStyle(.navigationLink)
             .disabled(!sensoryPreferences.hapticsOn)
+            .accessibilityLabel(Text(verbatim: AlarmSettingsCopy.hapticRowTitle))
+            .accessibilityValue(Text(verbatim: sensoryPreferences.timerCompletionHaptic.title))
+            .accessibilityHint(Text(verbatim: sensoryPreferences.timerCompletionHaptic.detail))
             .accessibilityIdentifier("settings.completion-haptic")
 
             NavigationLink {
@@ -2009,13 +2001,6 @@ struct SettingsView: View {
         )
     }
 
-    private var timerCompletionHapticBinding: Binding<TimerCompletionHaptic> {
-        Binding(
-            get: { sensoryPreferences.timerCompletionHaptic },
-            set: { updateTimerCompletionHaptic($0) }
-        )
-    }
-
     private var completionPreviewConfiguration: TimerCompletionPreviewConfiguration {
         TimerCompletionPreviewConfiguration(
             sound: sensoryPreferences.soundOn
@@ -2053,9 +2038,9 @@ struct SettingsView: View {
         }
     }
 
-    private func updateTimerCompletionHaptic(_ style: TimerCompletionHaptic) {
-        guard style != sensoryPreferences.timerCompletionHaptic else { return }
+    private func updateTimerCompletionHaptic(_ style: TimerCompletionHaptic) -> Bool {
         completionPreview.cancel()
+        guard style != sensoryPreferences.timerCompletionHaptic else { return true }
         do {
             try PrefsConsumerPolicy.mutate(
                 .timerCompletionHaptic,
@@ -2066,6 +2051,7 @@ struct SettingsView: View {
             }
             try modelContext.save()
             booleanSettingsCommitGeneration &+= 1
+            return true
         } catch {
             modelContext.rollback()
             settingsError = String(
@@ -2073,6 +2059,7 @@ struct SettingsView: View {
                 table: "Settings",
                 comment: "Settings error; the argument is the system error description"
             )
+            return false
         }
     }
 

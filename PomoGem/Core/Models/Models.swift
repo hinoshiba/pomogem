@@ -2709,6 +2709,11 @@ enum TimerCompletionHaptic: String, CaseIterable, Identifiable, Sendable {
     case standard
     case gentle
     case strong
+    case heartbeat
+    case rapid
+    case longBuzz
+    case wave
+    case insist
 
     var id: String { rawValue }
 
@@ -2717,6 +2722,11 @@ enum TimerCompletionHaptic: String, CaseIterable, Identifiable, Sendable {
         case .standard: String(localized: "標準・2回", table: "Models", comment: "Timer completion haptic name: standard, two taps")
         case .gentle: String(localized: "やさしい・1回", table: "Models", comment: "Timer completion haptic name: gentle, one tap")
         case .strong: String(localized: "しっかり・3回", table: "Models", comment: "Timer completion haptic name: strong, three taps")
+        case .heartbeat: String(localized: "鼓動", table: "Models", comment: "Timer completion haptic name: paired heartbeat pulses")
+        case .rapid: String(localized: "連打", table: "Models", comment: "Timer completion haptic name: six rapid pulses")
+        case .longBuzz: String(localized: "ロング", table: "Models", comment: "Timer completion haptic name: one sustained vibration")
+        case .wave: String(localized: "ウェーブ", table: "Models", comment: "Timer completion haptic name: progressively longer pulses")
+        case .insist: String(localized: "短・短・長", table: "Models", comment: "Timer completion haptic name: two short pulses and one long pulse")
         }
     }
 
@@ -2725,6 +2735,11 @@ enum TimerCompletionHaptic: String, CaseIterable, Identifiable, Sendable {
         case .standard: String(localized: "短い2回で終了を知らせます", table: "Models", comment: "Timer completion haptic description")
         case .gentle: String(localized: "控えめな1回で知らせます", table: "Models", comment: "Timer completion haptic description")
         case .strong: String(localized: "はっきりした3回で知らせます", table: "Models", comment: "Timer completion haptic description")
+        case .heartbeat: String(localized: "ドクドクと、2回ずつの振動で知らせます", table: "Models", comment: "Timer completion haptic description")
+        case .rapid: String(localized: "小刻みな6回の振動で知らせます", table: "Models", comment: "Timer completion haptic description")
+        case .longBuzz: String(localized: "長く続く振動で知らせます", table: "Models", comment: "Timer completion haptic description")
+        case .wave: String(localized: "波のように、振動がだんだん長くなります", table: "Models", comment: "Timer completion haptic description")
+        case .insist: String(localized: "短い振動2回のあと、長い振動で知らせます", table: "Models", comment: "Timer completion haptic description")
         }
     }
 
@@ -2733,6 +2748,11 @@ enum TimerCompletionHaptic: String, CaseIterable, Identifiable, Sendable {
         case .standard: "waveform"
         case .gentle: "waveform.badge.minus"
         case .strong: "waveform.badge.plus"
+        case .heartbeat: "heart.fill"
+        case .rapid: "bolt.fill"
+        case .longBuzz: "waveform.path"
+        case .wave: "water.waves"
+        case .insist: "bell.badge.fill"
         }
     }
 

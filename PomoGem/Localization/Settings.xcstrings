@@ -1406,7 +1406,7 @@
       }
     },
     "アラーム" : {
-      "comment" : "Header of the five alarm-grade timer end sounds. Suggested English: Alarms",
+      "comment" : "Header of the alarm-grade timer end sounds. Suggested English: Alarms",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3956,6 +3956,23 @@
         }
       }
     },
+    "現在のアラームの強さ：%@" : {
+      "comment" : "Haptic picker header; %@ is the selected alarm strength. Suggested English: Current alarm strength: %@",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Current alarm strength: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "現在のアラームの強さ：%@"
+          }
+        }
+      }
+    },
     "現在のタイマー表示です" : {
       "comment" : "VoiceOver hint of the selected timer display",
       "localizations" : {
@@ -5108,6 +5125,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "選ぶとすぐに反映されます"
+          }
+        }
+      }
+    },
+    "選ぶと振動を試せます" : {
+      "comment" : "VoiceOver hint of a haptic option. Suggested English: Choose to preview the vibration",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose to preview the vibration"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選ぶと振動を試せます"
+          }
+        }
+      }
+    },
+    "選ぶと現在の強さで振動を試せます。「標準」「最大」では3秒間、「控えめ」では1回だけ振動します。弱く感じるときは「ロング」「連打」「短・短・長」を試してください。振動の感じ方は機種や持ち方で変わります。選んだパターンはアプリを開いているときに使われ、ロック中の振動はiOSに従います。" : {
+      "comment" : "Haptic picker footer: preview duration, stronger rhythms, hardware variation and foreground-only custom patterns. Suggested English: Choose a pattern to feel it at the current strength: three seconds for Standard or Maximum, or once for Gentle. Try Long Buzz, Rapid, or Short · Short · Long for a more noticeable vibration. How it feels depends on your iPhone and how you hold it. The selected pattern plays while the app is open; iOS controls vibration while locked.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a pattern to feel it at the current strength: three seconds for Standard or Maximum, or once for Gentle. Try Long Buzz, Rapid, or Short · Short · Long for a more noticeable vibration. How it feels depends on your iPhone and how you hold it. The selected pattern plays while the app is open; iOS controls vibration while locked."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選ぶと現在の強さで振動を試せます。「標準」「最大」では3秒間、「控えめ」では1回だけ振動します。弱く感じるときは「ロング」「連打」「短・短・長」を試してください。振動の感じ方は機種や持ち方で変わります。選んだパターンはアプリを開いているときに使われ、ロック中の振動はiOSに従います。"
           }
         }
       }

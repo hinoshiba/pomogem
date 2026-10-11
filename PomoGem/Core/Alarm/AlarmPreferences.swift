@@ -2,7 +2,7 @@ import Foundation
 
 /// The sound that ends a focus or a break. The first three are the original
 /// synced completion chimes (same raw values as `TimerCompletionSound`); the
-/// other five are alarm-grade sounds synthesized by `AlarmSoundSynthesis`.
+/// others are alarm-grade sounds synthesized by `AlarmSoundSynthesis`.
 ///
 /// The choice is stored on this iPhone only (`AlarmPreferences`). New raw
 /// values are never written to the synced `TimerCompletionSound`, so older app
@@ -16,6 +16,9 @@ enum AlarmSoundChoice: String, CaseIterable, Identifiable, Sendable {
     case marimba
     case schoolChime
     case alarmClock
+    case alternatingTone
+    case risingSweep
+    case urgentPulse
 
     var id: String { rawValue }
 
@@ -34,11 +37,12 @@ enum AlarmSoundChoice: String, CaseIterable, Identifiable, Sendable {
         case .standard: .standard
         case .soft: .soft
         case .bright: .bright
-        case .bell, .digital, .marimba, .schoolChime, .alarmClock: nil
+        case .bell, .digital, .marimba, .schoolChime, .alarmClock,
+             .alternatingTone, .risingSweep, .urgentPulse: nil
         }
     }
 
-    /// The alarm-grade synthesized sound, for the five new choices.
+    /// The alarm-grade synthesized sound, for the additional choices.
     var synthesizedSound: AlarmSynthesizedSound? {
         switch self {
         case .standard, .soft, .bright: nil
@@ -47,6 +51,9 @@ enum AlarmSoundChoice: String, CaseIterable, Identifiable, Sendable {
         case .marimba: .marimba
         case .schoolChime: .schoolChime
         case .alarmClock: .alarmClock
+        case .alternatingTone: .alternatingTone
+        case .risingSweep: .risingSweep
+        case .urgentPulse: .urgentPulse
         }
     }
 
@@ -63,6 +70,12 @@ enum AlarmSoundChoice: String, CaseIterable, Identifiable, Sendable {
             return String(localized: "学校のチャイム", table: "Focus", comment: "Alarm sound name: the Westminster chime Japanese schools play between classes. Suggested English: School chime")
         case .alarmClock:
             return String(localized: "目覚まし時計", table: "Focus", comment: "Alarm sound name: a mechanical twin-bell alarm clock. Suggested English: Alarm clock")
+        case .alternatingTone:
+            return String(localized: "交互トーン", table: "Focus", comment: "Alarm sound name: a steady alternating low/high electronic tone. Suggested English: Alternating tones")
+        case .risingSweep:
+            return String(localized: "上昇アラーム", table: "Focus", comment: "Alarm sound name: two electronic tones sweeping upward in pitch. Suggested English: Rising alarm")
+        case .urgentPulse:
+            return String(localized: "連続パルス", table: "Focus", comment: "Alarm sound name: insistent short-short-long electronic pulses. Suggested English: Insistent pulses")
         case .standard, .soft, .bright:
             return ""
         }
@@ -81,6 +94,12 @@ enum AlarmSoundChoice: String, CaseIterable, Identifiable, Sendable {
             return String(localized: "キーンコーンカーンコーンの鐘の旋律", table: "Focus", comment: "Alarm sound description; the onomatopoeia is how Japanese hear the Westminster chime. Suggested English: The Westminster chime heard at school")
         case .alarmClock:
             return String(localized: "ジリリリと鳴る、ベル式の目覚まし時計", table: "Focus", comment: "Alarm sound description. Suggested English: The ring of a mechanical bell alarm clock")
+        case .alternatingTone:
+            return String(localized: "低い音と高い音を交互にはっきり鳴らします", table: "Focus", comment: "Alarm sound description. Suggested English: Clear low and high tones in a steady alternating rhythm")
+        case .risingSweep:
+            return String(localized: "音程がぐっと上がる電子音をくり返します", table: "Focus", comment: "Alarm sound description. Suggested English: Repeated electronic sweeps that rise in pitch")
+        case .urgentPulse:
+            return String(localized: "短く2回、長く1回の電子音を力強くくり返します", table: "Focus", comment: "Alarm sound description. Suggested English: Two short pulses and one long pulse, repeated insistently")
         case .standard, .soft, .bright:
             return ""
         }
@@ -94,6 +113,9 @@ enum AlarmSoundChoice: String, CaseIterable, Identifiable, Sendable {
         case .marimba: return "pianokeys"
         case .schoolChime: return "building.columns"
         case .alarmClock: return "alarm.fill"
+        case .alternatingTone: return "waveform"
+        case .risingSweep: return "arrow.up.right"
+        case .urgentPulse: return "waveform.path"
         case .standard, .soft, .bright: return ""
         }
     }

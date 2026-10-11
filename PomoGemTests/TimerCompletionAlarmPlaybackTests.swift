@@ -63,7 +63,7 @@ final class TimerCompletionAlarmPlaybackTests: XCTestCase {
         let request = try? XCTUnwrap(controller.activeRequest)
         XCTAssertEqual(request?.plan.playback, .loop)
         XCTAssertEqual(request?.plan.audioSession, .ambient, "Standard follows the silent switch")
-        XCTAssertEqual(request?.plan.haptic?.loopDuration, 1.5, "A continuous vibration loops")
+        XCTAssertEqual(request?.plan.haptic, AlarmHapticPattern.completion(strength: .standard, style: .standard))
         XCTAssertTrue(controller.isRinging(sessionID: alarm.sessionID))
         XCTAssertTrue(controller.keepsScreenAwake(sessionID: alarm.sessionID))
         XCTAssertFalse(controller.keepsScreenAwake(sessionID: UUID()))
@@ -133,7 +133,7 @@ final class TimerCompletionAlarmPlaybackTests: XCTestCase {
         let loud = makeController(strength: .maximum)
         loud.start(configuration())
         XCTAssertEqual(loud.activeRequest?.plan.audioSession, .playbackDuckingOthers)
-        XCTAssertEqual(loud.activeRequest?.plan.haptic?.loopDuration, 1.4)
+        XCTAssertEqual(loud.activeRequest?.plan.haptic, AlarmHapticPattern.completion(strength: .maximum, style: .standard))
         loud.stop()
 
         let hapticOnly = makeController(strength: .maximum)
@@ -325,6 +325,48 @@ final class TimerCompletionAlarmPlaybackTests: XCTestCase {
         XCTAssertEqual(player.events, [.sustain(.digital), .stop], "one stop only")
         preview.cancel()
         XCTAssertEqual(player.events.count, 2, "nothing to stop")
+    }
+
+    func testCancellingAShortPreviewAlsoStopsPendingHaptics() {
+        let preview = TimerCompletionAlarmPreview(player: player)
+        preview.play(.hapticPreview(style: .longBuzz, strength: .gentle))
+        XCTAssertEqual(player.events, [.cue(nil)])
+        XCTAssertFalse(preview.isLooping)
+        preview.cancel()
+        XCTAssertEqual(player.events, [.cue(nil), .stop], "Stop also cancels cues awaiting the haptic engine")
+        preview.cancel()
+        XCTAssertEqual(player.events.count, 2)
+    }
+
+    func testReselectingDuringAPreviewDoesNotLetTheOldDeadlineStopTheNewPattern() async {
+        let sleeps = PreviewSleeps()
+        let preview = TimerCompletionAlarmPreview(player: player) { try await sleeps.sleep($0) }
+        preview.play(.hapticPreview(style: .heartbeat, strength: .maximum))
+        await sleeps.waitForSleep()
+        preview.play(.hapticPreview(style: .rapid, strength: .standard))
+        // Resume the old deadline before the new task reaches its sleep.
+        sleeps.resume()
+        await sleeps.waitForSleep()
+        XCTAssertTrue(preview.isLooping)
+        XCTAssertEqual(player.events, [.sustain(nil), .stop, .sustain(nil)])
+        XCTAssertEqual(player.requests.last?.configuration.haptic, .rapid)
+        preview.cancel()
+        sleeps.resume()
+        await settle()
+        XCTAssertEqual(player.events, [.sustain(nil), .stop, .sustain(nil), .stop])
+    }
+
+    func testHapticPickerUsesTheSelectedStrengthWithoutSound() {
+        for strength in AlarmStrength.allCases {
+            for style in TimerCompletionHaptic.allCases {
+                let request = TimerCompletionAlarmRequest.hapticPreview(style: style, strength: strength)
+                XCTAssertNil(request.sound)
+                XCTAssertFalse(request.plan.playsSound)
+                XCTAssertEqual(request.plan.audioSession, .ambient)
+                XCTAssertTrue(request.plan.playsHaptics)
+                XCTAssertEqual(request.plan.haptic, AlarmHapticPattern.completion(strength: strength, style: style))
+            }
+        }
     }
 
     // MARK: Resolution

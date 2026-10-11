@@ -37,7 +37,10 @@ final class OnboardingPaywallModelsLocalizationTests: XCTestCase {
         XCTAssertEqual(AchievementKind.examPass.notePlaceholder, "例：簿記2級")
         XCTAssertEqual(RareRewardMode.choiceOrder.map(\.title), ["抽選しない", "控えめ", "標準"])
         XCTAssertEqual(TimerDisplayMode.allCases.map(\.title), ["リング＋時間", "円盤（数字なし）", "時間のみ", "リングのみ"])
-        XCTAssertEqual(TimerCompletionHaptic.allCases.map(\.title), ["標準・2回", "やさしい・1回", "しっかり・3回"])
+        XCTAssertEqual(
+            TimerCompletionHaptic.allCases.map(\.title),
+            ["標準・2回", "やさしい・1回", "しっかり・3回", "鼓動", "連打", "ロング", "ウェーブ", "短・短・長"]
+        )
         XCTAssertEqual(SessionSource.timer.displayName, "実測")
         XCTAssertEqual(SessionSource.manual.displayName, "自己申告")
         XCTAssertEqual(SubjectNamePolicy.ValidationError.empty.message, "テーマ名を入力してください。")
@@ -271,6 +274,24 @@ final class OnboardingPaywallModelsLocalizationTests: XCTestCase {
             "If 20 draws in a row (one per 250\u{00A0}g) bring no gold, the next draw is a gold gem. A rainbow gem doesn’t reset this count."
         )
         XCTAssertEqual(try english("Models", "集中時間は1分から360分の範囲で指定してください。"), "Choose a focus length from 1 to 360\u{00A0}min.")
+    }
+
+    func testNewTimerHapticChoicesInEnglish() throws {
+        let expected = [
+            "鼓動": "Heartbeat",
+            "連打": "Rapid",
+            "ロング": "Long Buzz",
+            "ウェーブ": "Wave",
+            "短・短・長": "Short · Short · Long",
+            "ドクドクと、2回ずつの振動で知らせます": "Pairs of pulses like a heartbeat",
+            "小刻みな6回の振動で知らせます": "Six quick pulses when time is up",
+            "長く続く振動で知らせます": "One long, sustained vibration",
+            "波のように、振動がだんだん長くなります": "Pulses grow longer like a wave",
+            "短い振動2回のあと、長い振動で知らせます": "Two short pulses followed by one long vibration"
+        ]
+        for (key, translation) in expected {
+            XCTAssertEqual(try english("Models", key), translation)
+        }
     }
 
     /// A number and its unit never break across lines ("(250 / g)" at AX5 on
