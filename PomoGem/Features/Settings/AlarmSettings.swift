@@ -128,6 +128,10 @@ enum AlarmSettingsCopy {
         String(localized: "タイマー終了音", table: "Settings", comment: "Settings row: the sound that ends a focus or break. Suggested English: Timer End Sound")
     }
 
+    static var hapticRowTitle: String {
+        String(localized: "タイマー終了時の触覚", table: "Settings", comment: "Settings picker: the haptic played when a timer ends")
+    }
+
     static var strengthRowTitle: String {
         String(localized: "終了アラームの強さ", table: "Settings", comment: "Settings row: how insistently the end rings (Gentle, Standard, Maximum). Suggested English: Alarm Strength")
     }
@@ -164,7 +168,7 @@ enum AlarmSoundPreview {
     }
 }
 
-/// The eight sounds, the five alarm-grade ones first. Choosing one plays it.
+/// The alarm sounds first, followed by the original chimes. Choosing one plays it.
 /// The checkmark moves at once; `onSelect` writes the choice (device-local,
 /// or the synced chime for one of the original three).
 struct AlarmSoundPickerView: View {
@@ -182,7 +186,7 @@ struct AlarmSoundPickerView: View {
             Section {
                 ForEach(Self.alarms) { row($0) }
             } header: {
-                Text("アラーム", tableName: "Settings", comment: "Header of the five alarm-grade timer end sounds. Suggested English: Alarms")
+                Text("アラーム", tableName: "Settings", comment: "Header of the alarm-grade timer end sounds. Suggested English: Alarms")
             } footer: {
                 Text(
                     "選ぶと1回鳴らして確かめられます。",
@@ -256,6 +260,114 @@ struct AlarmSoundPickerView: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("settings.completion-sound.\(choice.rawValue)")
         .accessibilityAction { choose(choice) }
+    }
+}
+
+/// Owns only the picker's vibration. Cancelling the combined countdown in
+/// Settings must not cancel a new preview after its selection was saved.
+@MainActor
+private final class AlarmHapticPreviewPlayer: TimerCompletionAlarmPlayer {
+    func playCue(_ request: TimerCompletionAlarmRequest) {
+        if let style = request.configuration.haptic {
+            Haptics.shared.playTimerCompletion(style)
+        }
+    }
+
+    func sustainLoop(_ request: TimerCompletionAlarmRequest) {
+        if let pattern = request.plan.haptic {
+            Haptics.shared.sustainTimerCompletionLoop(pattern)
+        }
+    }
+
+    func stop() { Haptics.shared.stopTimerCompletion() }
+}
+
+struct AlarmHapticPickerView: View {
+    @Environment(\.scenePhase) private var scenePhase
+
+    let selection: TimerCompletionHaptic
+    let strength: AlarmStrength
+    let onSelect: (TimerCompletionHaptic) -> Bool
+
+    @State private var current: TimerCompletionHaptic?
+    @State private var preview = TimerCompletionAlarmPreview(player: AlarmHapticPreviewPlayer())
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(TimerCompletionHaptic.allCases) { style in
+                    row(style)
+                }
+            } header: {
+                Text(
+                    "現在のアラームの強さ：\(strength.title)",
+                    tableName: "Settings",
+                    comment: "Haptic picker header; %@ is the selected alarm strength. Suggested English: Current alarm strength: %@"
+                )
+            } footer: {
+                Text(
+                    "選ぶと現在の強さで振動を試せます。「標準」「最大」では3秒間、「控えめ」では1回だけ振動します。弱く感じるときは「ロング」「連打」「短・短・長」を試してください。振動の感じ方は機種や持ち方で変わります。選んだパターンはアプリを開いているときに使われ、ロック中の振動はiOSに従います。",
+                    tableName: "Settings",
+                    comment: "Haptic picker footer: preview duration, stronger rhythms, hardware variation and foreground-only custom patterns. Suggested English: Choose a pattern to feel it at the current strength: three seconds for Standard or Maximum, or once for Gentle. Try Long Buzz, Rapid, or Short · Short · Long for a more noticeable vibration. How it feels depends on your iPhone and how you hold it. The selected pattern plays while the app is open; iOS controls vibration while locked."
+                )
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(NightBackground())
+        .navigationTitle(Text(verbatim: AlarmSettingsCopy.hapticRowTitle))
+        .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: selection) { _, value in current = value }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { preview.cancel() }
+        }
+        .onDisappear { preview.cancel() }
+    }
+
+    private func choose(_ style: TimerCompletionHaptic) {
+        preview.cancel()
+        guard onSelect(style) else { return }
+        current = style
+        Haptics.shared.isEnabled = true
+        preview.play(.hapticPreview(style: style, strength: strength))
+    }
+
+    private func row(_ style: TimerCompletionHaptic) -> some View {
+        let isSelected = style == (current ?? selection)
+        return Button {
+            choose(style)
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: style.systemImage)
+                    .foregroundStyle(PomoGemTheme.amber)
+                    .frame(width: 26)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: style.title)
+                        .foregroundStyle(PomoGemTheme.text)
+                    Text(verbatim: style.detail)
+                        .font(.caption)
+                        .foregroundStyle(PomoGemTheme.muted)
+                }
+                Spacer(minLength: 8)
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(PomoGemTheme.amber)
+                        .accessibilityHidden(true)
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PomoGemBareButtonStyle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(Text(verbatim: AlarmSettingsCopy.optionLabel(title: style.title, detail: style.detail)))
+        .accessibilityValue(AlarmSettingsCopy.selectionValue(isSelected))
+        .accessibilityHint(Text("選ぶと振動を試せます", tableName: "Settings", comment: "VoiceOver hint of a haptic option. Suggested English: Choose to preview the vibration"))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityIdentifier("settings.completion-haptic.\(style.rawValue)")
+        .accessibilityAction { choose(style) }
     }
 }
 

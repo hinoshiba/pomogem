@@ -25,10 +25,13 @@ final class AlarmPreferencesTests: XCTestCase {
 
     // MARK: Choices
 
-    func testTheCatalogKeepsTheThreeChimesAndAddsFiveAlarmSounds() {
+    func testTheCatalogKeepsTheOriginalSoundsAndAddsThreeAttentionGettingChoices() {
         XCTAssertEqual(
             AlarmSoundChoice.allCases.map(\.rawValue),
-            ["standard", "soft", "bright", "bell", "digital", "marimba", "schoolChime", "alarmClock"],
+            [
+                "standard", "soft", "bright", "bell", "digital", "marimba", "schoolChime", "alarmClock",
+                "alternatingTone", "risingSweep", "urgentPulse"
+            ],
             "raw values are stored device-locally: keep them stable"
         )
         XCTAssertEqual(AlarmSoundChoice.allCases.compactMap(\.legacySound), TimerCompletionSound.allCases)
@@ -55,7 +58,8 @@ final class AlarmPreferencesTests: XCTestCase {
     func testTheNewSoundsHaveJapaneseNamesAndSymbolsThatExist() {
         let expected: [AlarmSoundChoice: String] = [
             .bell: "ベル", .digital: "デジタル", .marimba: "マリンバ",
-            .schoolChime: "学校のチャイム", .alarmClock: "目覚まし時計"
+            .schoolChime: "学校のチャイム", .alarmClock: "目覚まし時計",
+            .alternatingTone: "交互トーン", .risingSweep: "上昇アラーム", .urgentPulse: "連続パルス"
         ]
         for (choice, title) in expected {
             XCTAssertEqual(choice.title, title)

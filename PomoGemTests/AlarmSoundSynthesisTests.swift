@@ -48,14 +48,14 @@ final class AlarmSoundSynthesisTests: XCTestCase {
         }
     }
 
-    func testTheFiveAlarmSoundsAreLoudAndSitInThePhoneSpeakerBand() {
+    func testTheSynthesizedAlarmSoundsAreLoudAndSitInThePhoneSpeakerBand() {
         for sound in AlarmSynthesizedSound.allCases {
             let rendered = rendering(AlarmSoundChoice(rawValue: sound.rawValue)!)
             let loop = rendered.loop
             let measured = SoundMeasurement(loop)
             // Commercial alarm tones sit around −8 to −14 dBFS RMS; today's
             // chime every 1.3 s is about −20 dBFS. These all sit at the loud
-            // end (−7 to −10.5 dBFS as rendered today).
+            // end (−5 to −10.5 dBFS with the sustained electronic choices).
             XCTAssertGreaterThan(measured.rmsDecibels, -11.5, "\(sound.rawValue) loop RMS")
             XCTAssertGreaterThan(measured.loudestWindowRMSDecibels(window: 0.4), -10, "\(sound.rawValue) 400 ms RMS")
             // The lock-screen ringtone keeps most of that loudness despite
@@ -80,6 +80,58 @@ final class AlarmSoundSynthesisTests: XCTestCase {
     }
 
     // MARK: Structure
+
+    func testAttentionGettingSoundsFitOnePreviewAndHaveSmoothPulseEdges() {
+        for choice in [AlarmSoundChoice.alternatingTone, .risingSweep, .urgentPulse] {
+            let rendered = rendering(choice)
+            XCTAssertLessThanOrEqual(rendered.source.period, 3, choice.rawValue)
+            XCTAssertLessThanOrEqual(rendered.preview.count, AlarmSoundSynthesis.frames(3), choice.rawValue)
+            XCTAssertGreaterThan(SoundMeasurement(rendered.loop).rmsDecibels, -8, choice.rawValue)
+            XCTAssertEqual(rendered.loop.first ?? 1, 0, accuracy: 1e-6, choice.rawValue)
+            XCTAssertEqual(rendered.loop.last ?? 1, 0, accuracy: 1e-6, choice.rawValue)
+
+            // At each pulse, the first/last 1 ms must rise from/fall to
+            // silence. Peak normalization alone would miss a hard gate
+            // that clicked at every note boundary.
+            let pulses: [(start: Double, duration: Double)]
+            switch choice {
+            case .alternatingTone:
+                pulses = (0..<8).map { (Double($0) * 0.3, 0.25) }
+            case .risingSweep:
+                pulses = [(0, 1), (1.2, 1)]
+            default:
+                pulses = [0.0, 0.8, 1.6].flatMap { group in
+                    [(group, 0.16), (group + 0.23, 0.16), (group + 0.46, 0.22)]
+                }
+            }
+            let edge = AlarmSoundSynthesis.frames(0.001)
+            for pulse in pulses {
+                let start = AlarmSoundSynthesis.frames(pulse.start)
+                let end = start + AlarmSoundSynthesis.frames(pulse.duration)
+                let attack = Array(rendered.loop[start..<(start + edge)])
+                let release = Array(rendered.loop[(end - edge)..<end])
+                XCTAssertLessThan(AlarmSoundSynthesis.peak(of: attack), 0.025, choice.rawValue)
+                XCTAssertLessThan(AlarmSoundSynthesis.peak(of: release), 0.025, choice.rawValue)
+                XCTAssertEqual(rendered.loop[end - 1], 0, accuracy: 1e-6, choice.rawValue)
+            }
+        }
+    }
+
+    func testAlternatingTonesChangePitchAndSweepsRiseInsteadOfRepeatingOneBeep() {
+        func segment(_ choice: AlarmSoundChoice, from start: Double, to end: Double) -> SoundMeasurement {
+            let loop = rendering(choice).loop
+            return SoundMeasurement(Array(loop[AlarmSoundSynthesis.frames(start)..<AlarmSoundSynthesis.frames(end)]))
+        }
+        XCTAssertGreaterThan(segment(.alternatingTone, from: 0.04, to: 0.20).bandFraction(900...1_030), 0.85)
+        XCTAssertGreaterThan(segment(.alternatingTone, from: 0.34, to: 0.50).bandFraction(1_380...1_510), 0.85)
+        XCTAssertGreaterThan(segment(.risingSweep, from: 0.04, to: 0.16).bandFraction(900...1_200), 0.80)
+        XCTAssertGreaterThan(segment(.risingSweep, from: 0.80, to: 0.94).bandFraction(1_980...2_300), 0.80)
+        let pulses = rendering(.urgentPulse).loop
+        for gap in [(0.16, 0.23), (0.39, 0.46), (0.68, 0.80)] {
+            let silence = Array(pulses[AlarmSoundSynthesis.frames(gap.0)..<AlarmSoundSynthesis.frames(gap.1)])
+            XCTAssertEqual(AlarmSoundSynthesis.peak(of: silence), 0, "pulse groups must have audible gaps")
+        }
+    }
 
     func testLoopsAreOnePeriodLong() {
         for choice in AlarmSoundChoice.allCases {
@@ -219,7 +271,10 @@ final class AlarmSoundSynthesisTests: XCTestCase {
             .digital: "14f3bbc54820941b",
             .marimba: "7a3c079005c96ddd",
             .schoolChime: "c3642732e60783",
-            .alarmClock: "7abdbe65138e0696"
+            .alarmClock: "7abdbe65138e0696",
+            .alternatingTone: "d1ee18d4711c74b9",
+            .risingSweep: "19c5bde1601004ad",
+            .urgentPulse: "e85efdb7b0f39aab"
         ]
         for choice in AlarmSoundChoice.allCases {
             let fingerprint = SoundMeasurement.pcm16Fingerprint(rendering(choice).ringtone)

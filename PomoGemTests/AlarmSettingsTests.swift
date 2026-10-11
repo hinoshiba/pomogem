@@ -118,7 +118,7 @@ final class AlarmSettingsTests: XCTestCase {
             XCTAssertEqual(events.count, pattern.events.count)
             XCTAssertEqual(
                 events.filter { $0.type == .hapticContinuous }.count,
-                strength == .gentle ? 0 : 1
+                strength == .gentle ? 0 : 3
             )
             _ = try pattern.makeHapticPattern()
         }

@@ -263,6 +263,23 @@
         }
       }
     },
+    "ウェーブ" : {
+      "comment" : "Timer completion haptic name: progressively longer pulses",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wave"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ウェーブ"
+          }
+        }
+      }
+    },
     "スクリーンタイム" : {
       "comment" : "Record source label: Screen Time",
       "localizations" : {
@@ -293,6 +310,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "テーマの保存データが多すぎるため、安全に変更できませんでした。"
+          }
+        }
+      }
+    },
+    "ドクドクと、2回ずつの振動で知らせます" : {
+      "comment" : "Timer completion haptic description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pairs of pulses like a heartbeat"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ドクドクと、2回ずつの振動で知らせます"
           }
         }
       }
@@ -361,6 +395,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "レア粒台帳の数値上限を超えました。"
+          }
+        }
+      }
+    },
+    "ロング" : {
+      "comment" : "Timer completion haptic name: one sustained vibration",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Long Buzz"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ロング"
           }
         }
       }
@@ -688,6 +739,23 @@
         }
       }
     },
+    "小刻みな6回の振動で知らせます" : {
+      "comment" : "Timer completion haptic description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Six quick pulses when time is up"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "小刻みな6回の振動で知らせます"
+          }
+        }
+      }
+    },
     "抽選しない" : {
       "comment" : "Rare-reward mode: no draws",
       "localizations" : {
@@ -858,6 +926,23 @@
         }
       }
     },
+    "波のように、振動がだんだん長くなります" : {
+      "comment" : "Timer completion haptic description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulses grow longer like a wave"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "波のように、振動がだんだん長くなります"
+          }
+        }
+      }
+    },
     "満点だったテスト" : {
       "comment" : "Achievement kind detail: perfect score",
       "localizations" : {
@@ -922,6 +1007,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "短い2回で終了を知らせます"
+          }
+        }
+      }
+    },
+    "短い振動2回のあと、長い振動で知らせます" : {
+      "comment" : "Timer completion haptic description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Two short pulses followed by one long vibration"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "短い振動2回のあと、長い振動で知らせます"
+          }
+        }
+      }
+    },
+    "短・短・長" : {
+      "comment" : "Timer completion haptic name: two short pulses and one long pulse",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Short · Short · Long"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "短・短・長"
           }
         }
       }
@@ -1147,6 +1266,23 @@
         }
       }
     },
+    "連打" : {
+      "comment" : "Timer completion haptic name: six rapid pulses",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rapid"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "連打"
+          }
+        }
+      }
+    },
     "金%lld" : {
       "comment" : "Compact count of gold gems from rare-reward draws, e.g. 金1",
       "localizations" : {
@@ -1164,6 +1300,23 @@
         }
       }
     },
+    "長く続く振動で知らせます" : {
+      "comment" : "Timer completion haptic description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "One long, sustained vibration"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "長く続く振動で知らせます"
+          }
+        }
+      }
+    },
     "集中時間は1分から360分の範囲で指定してください。" : {
       "comment" : "Settings error: the focus length must be 1 to 360 minutes",
       "localizations" : {
@@ -1177,6 +1330,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "集中時間は1分から360分の範囲で指定してください。"
+          }
+        }
+      }
+    },
+    "鼓動" : {
+      "comment" : "Timer completion haptic name: paired heartbeat pulses",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Heartbeat"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "鼓動"
           }
         }
       }
