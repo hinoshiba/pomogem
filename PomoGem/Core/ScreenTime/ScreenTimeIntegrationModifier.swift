@@ -318,28 +318,27 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
 
     @MainActor
     private func retireDeletedLearningThemeIfNeeded() async throws {
-        guard controller.authorizationGranted,
-              let themeID = controller.configuration.themeID,
-              !controller.configuration.learningSelection.applicationTokens.isEmpty else { return }
-        var descriptor = FetchDescriptor<Subject>(predicate: #Predicate { $0.id == themeID })
-        descriptor.fetchLimit = SubjectSyncPolicy.maximumPhysicalRows + 1
-        let candidates = try modelContext.fetch(descriptor)
-        guard candidates.count <= SubjectSyncPolicy.maximumPhysicalRows else {
-            throw ScreenTimeImportCoordinator.ImportError.invalidReceipt
+        guard controller.authorizationGranted else { return }
+        // Themes may disappear here or arrive as a synced deletion. Check
+        // every destination; removing one must retain the other app choices.
+        for themeID in controller.configuration.learningThemeIDs {
+            var descriptor = FetchDescriptor<Subject>(predicate: #Predicate { $0.id == themeID })
+            descriptor.fetchLimit = SubjectSyncPolicy.maximumPhysicalRows + 1
+            let candidates = try modelContext.fetch(descriptor)
+            guard candidates.count <= SubjectSyncPolicy.maximumPhysicalRows else {
+                throw ScreenTimeImportCoordinator.ImportError.invalidReceipt
+            }
+            guard SubjectSyncPolicy.presentationSubjects(from: candidates).isEmpty else { continue }
+            let outcome = await controller.retireLearningSelection(ofRemovedTheme: themeID, isPro: resolvedIsPro)
+            if outcome.cleared {
+                router?.showToast(
+                    String(localized: "記録先のテーマが削除されたため、対象アプリの記録を止めました", table: "ScreenTime",
+                           comment: "Toast: apps assigned to a deleted Screen Time theme stopped recording"),
+                    symbol: "exclamationmark.triangle"
+                )
+            }
+            if let failure = outcome.failure { throw failure }
         }
-        guard SubjectSyncPolicy.presentationSubjects(from: candidates).isEmpty else { return }
-        let outcome = await controller.retireLearningSelection(ofRemovedTheme: themeID, isPro: purchase.isPro)
-        // Clearing the selection is documented; doing it without a word read
-        // as a broken feature. Say it once the study apps are gone, even when
-        // registering what is left then failed: nothing retries after that.
-        if outcome.cleared {
-            router?.showToast(
-                String(localized: "記録先のテーマが削除されたため、勉強アプリの記録を止めました", table: "ScreenTime",
-                       comment: "Toast: the Screen Time destination theme was deleted, so study-app recording stopped"),
-                symbol: "exclamationmark.triangle"
-            )
-        }
-        if let failure = outcome.failure { throw failure }
     }
 }
 

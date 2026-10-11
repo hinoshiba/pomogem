@@ -1686,7 +1686,7 @@ final class ScreenTimeSettingsDraftTests: XCTestCase {
         XCTAssertFalse(ScreenTimeRowStatus.recording.isWarning)
         XCTAssertEqual(ScreenTimeRowStatus.recording.subtitle, "自動記録中")
         XCTAssertTrue(ScreenTimeRowStatus.needsAttention.subtitle.hasPrefix("要確認"))
-        XCTAssertEqual(ScreenTimeRowStatus.learningStopped.subtitle, "要確認：勉強アプリの記録が止まっています")
+        XCTAssertEqual(ScreenTimeRowStatus.learningStopped.subtitle, "要確認：粒にするアプリの記録が止まっています")
     }
 
     /// settings-01 on the Screen Time page: until StoreKit answers, a Pro
@@ -1716,7 +1716,7 @@ final class ScreenTimeSettingsDraftTests: XCTestCase {
         XCTAssertTrue(ScreenTimeThemeDeletionNotice.applies(to: theme, configuration: configuration, isBound: true))
         XCTAssertFalse(ScreenTimeThemeDeletionNotice.applies(to: UUID(), configuration: configuration, isBound: true))
         XCTAssertFalse(ScreenTimeThemeDeletionNotice.applies(to: theme, configuration: configuration, isBound: false))
-        XCTAssertTrue(ScreenTimeThemeDeletionNotice.text.contains("選び直す"))
+        XCTAssertTrue(ScreenTimeThemeDeletionNotice.text.contains("対象のアプリ"))
     }
 
     func testTheRemovedThemeNoticeLastsUntilTheUserSavesAndStaysWithItsOwner() async throws {

@@ -37,8 +37,8 @@ final class ScreenTimeController: ObservableObject {
     /// every three seconds: the user needs time to read what to fix. Cleared
     /// by the next request and once access is granted.
     @Published private(set) var authorizationFailure: ScreenTimeAuthorizationFailure?
-    /// The learning destination theme was deleted (here or on another device)
-    /// and the study-app selection was cleared with it, as documented. Kept
+    /// A learning destination theme was deleted (here or on another device)
+    /// and its assigned apps were cleared with it. Kept
     /// per owner on this iPhone until the user has seen the explanation on
     /// the Screen Time page (or saves or resets there), so the page and the
     /// Settings row can say why learning stopped instead of looking like a
@@ -257,8 +257,19 @@ final class ScreenTimeController: ObservableObject {
     }
 
     func save(configuration newConfiguration: ScreenTimeConfiguration, isPro: Bool) async throws {
+        try await save(configuration: newConfiguration, isPro: isPro, removingDeletedTheme: false)
+    }
+
+    private func save(
+        configuration newConfiguration: ScreenTimeConfiguration,
+        isPro: Bool?,
+        removingDeletedTheme: Bool
+    ) async throws {
         guard !isSaving, !isResetting, !isErasing else { throw OperationError.busy }
-        try ScreenTimePolicy.validate(newConfiguration, isPro: isPro)
+        // Automatic deletion cleanup must still remove its affected apps if
+        // an expired Pro subscription leaves more than five OTHER apps. This
+        // bypasses only save-time count validation, never the recording gate.
+        try ScreenTimePolicy.validate(newConfiguration, isPro: removingDeletedTheme || isPro == true)
         let lease = try boundLease()
         // Switching the focus shield on needs the same approval as recording;
         // switching either off never does.
@@ -281,12 +292,16 @@ final class ScreenTimeController: ObservableObject {
             for index in state.runs.indices {
                 let lane = state.runs[index].lane
                 let changed = lane == .learning
-                    ? old.learningSelection != newConfiguration.learningSelection || old.themeID != newConfiguration.themeID
+                    ? !old.hasSameLearningDestinations(as: newConfiguration)
                     : old.distractionSelection != newConfiguration.distractionSelection
                 if changed || old.enabled != newConfiguration.enabled { state.runs[index].active = false }
             }
             state.configuration = newConfiguration
-            state.learningAllowedBySubscription = isPro || newConfiguration.learningSelection.applicationTokens.count <= ScreenTimePolicy.freeLearningApplicationLimit
+            state.learningAllowedBySubscription = ScreenTimePolicy.learningAllowedBySubscription(
+                isPro: isPro,
+                learningApplicationCount: newConfiguration.learningSelection.applicationTokens.count,
+                previouslyAllowed: state.learningAllowedBySubscription
+            )
             state.monitoringError = nil
             state.pruneConsumedRuns()
         }
@@ -743,9 +758,9 @@ final class ScreenTimeController: ObservableObject {
         if isBoundToContext != bound { isBoundToContext = bound }
     }
 
-    /// The destination theme `themeID` is gone: clear the study apps, as
-    /// documented, and remember why. `cleared` is true once the ledger no
-    /// longer holds the study apps, whatever the registration then did.
+    /// The destination theme `themeID` is gone: clear only its assigned apps
+    /// and remember why. `cleared` is true once the ledger no longer holds
+    /// those assignments, whatever the registration then did.
     ///
     /// `save` commits the cleared configuration before it registers what is
     /// left, so a refused registration still leaves the study apps cleared,
@@ -755,21 +770,22 @@ final class ScreenTimeController: ObservableObject {
     /// the caller to report as before.
     func retireLearningSelection(
         ofRemovedTheme themeID: UUID,
-        isPro: Bool
+        isPro: Bool?
     ) async -> (cleared: Bool, failure: Error?) {
-        guard let lease = try? boundLease(), configuration.themeID == themeID,
-              !configuration.learningSelection.applicationTokens.isEmpty else { return (false, nil) }
+        guard let lease = try? boundLease(),
+              !configuration.learningApplications(for: themeID).isEmpty else { return (false, nil) }
         var retired = configuration
-        retired.learningSelection = FamilyActivitySelection(includeEntireCategory: false)
-        retired.themeID = nil
-        if retired.distractionSelection.applicationTokens.isEmpty { retired.enabled = false }
+        retired.removeLearningApplications(for: themeID)
+        if retired.learningSelection.applicationTokens.isEmpty,
+           retired.distractionSelection.applicationTokens.isEmpty { retired.enabled = false }
         // Existing receipts retain the original theme ID; future use is no
         // longer silently attributed to a theme the user has removed.
         var failure: Error?
-        do { try await save(configuration: retired, isPro: isPro) } catch { failure = error }
+        do { try await save(configuration: retired, isPro: isPro, removingDeletedTheme: true) }
+        catch { failure = error }
         guard (try? requireCurrent(lease)) != nil,
               let state = try? store.snapshot(), lease.binding.matches(state),
-              state.configuration.learningSelection.applicationTokens.isEmpty else { return (false, failure) }
+              state.configuration.learningApplications(for: themeID).isEmpty else { return (false, failure) }
         // The delete dialog on this iPhone already said what deleting this
         // theme does; a lasting 要確認 on top of that only nags. A deletion
         // from another device, or one this process did not confirm, still
@@ -924,7 +940,7 @@ enum ScreenTimeRowStatus: Equatable {
     var subtitle: String {
         switch self {
         case .feature:
-            String(localized: "勉強アプリの粒と黒い石を10分ごとに積む", table: "ScreenTime",
+            String(localized: "選んだアプリの時間を粒や黒い石に", table: "ScreenTime",
                    comment: "Settings row subtitle: Screen Time, when there is nothing to report")
         case .recording:
             String(localized: "自動記録中", table: "ScreenTime", comment: "Settings row subtitle: recording")
@@ -932,7 +948,7 @@ enum ScreenTimeRowStatus: Equatable {
             String(localized: "要確認：自動記録が止まっています", table: "ScreenTime",
                    comment: "Settings row subtitle: recording stopped because of an error")
         case .learningStopped:
-            String(localized: "要確認：勉強アプリの記録が止まっています", table: "ScreenTime",
+            String(localized: "要確認：粒にするアプリの記録が止まっています", table: "ScreenTime",
                    comment: "Settings row subtitle: study apps stopped recording (free-plan limit); black stones still record")
         case .themeRemoved:
             String(localized: "要確認：記録先のテーマが削除されました", table: "ScreenTime",
@@ -947,12 +963,11 @@ enum ScreenTimeRowStatus: Equatable {
 /// where Screen Time records study-app time on this iPhone.
 enum ScreenTimeThemeDeletionNotice {
     static func applies(to themeID: UUID, configuration: ScreenTimeConfiguration, isBound: Bool) -> Bool {
-        isBound && configuration.themeID == themeID
-            && !configuration.learningSelection.applicationTokens.isEmpty
+        isBound && !configuration.learningApplications(for: themeID).isEmpty
     }
 
     static var text: String {
-        String(localized: "このテーマは、スクリーンタイムで選んだ勉強アプリの記録先です。削除すると勉強アプリの選択も解除され、記録を続けるにはアプリと記録先を選び直す必要があります。",
+        String(localized: "このテーマを記録先にしたアプリの選択が解除されます。ほかのテーマに記録するアプリはそのままです。記録を続けるには、対象のアプリと記録先を選び直してください。",
                table: "ScreenTime", comment: "Theme delete confirmation: the theme is the Screen Time destination")
     }
 }

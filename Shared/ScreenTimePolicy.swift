@@ -1,6 +1,7 @@
 import CryptoKit
 import FamilyControls
 import Foundation
+import ManagedSettings
 
 enum ScreenTimeLane: String, Codable, CaseIterable {
     case learning, distraction
@@ -11,6 +12,12 @@ struct ScreenTimeConfiguration: Codable, Equatable {
     var learningSelection = FamilyActivitySelection(includeEntireCategory: false)
     var distractionSelection = FamilyActivitySelection(includeEntireCategory: false)
     var themeID: UUID?
+    /// Nil is the pre-per-app format: every selected app uses `themeID`.
+    /// Opaque token keys stay in this device's ledger and use the framework's
+    /// Codable/Hashable support, independent of its JSON representation.
+    /// An explicit map never falls back, so clearing one app's destination
+    /// cannot silently restore the old shared destination.
+    var learningApplicationThemes: [ApplicationToken: UUID]?
     /// F2: shield the distraction apps while this iPhone runs a focus.
     /// Opt-in and free; independent of `enabled` (recording). Optional so a
     /// ledger written before it decodes (the synthesized decoder has no
@@ -25,6 +32,55 @@ struct ScreenTimeConfiguration: Codable, Equatable {
         get { shieldsDistractionDuringFocus == true }
         set { shieldsDistractionDuringFocus = newValue ? true : nil }
     }
+
+    func learningThemeID(for application: ApplicationToken) -> UUID? {
+        guard learningSelection.applicationTokens.contains(application) else { return nil }
+        guard let learningApplicationThemes else { return themeID }
+        return learningApplicationThemes[application]
+    }
+
+    mutating func setLearningThemeID(_ themeID: UUID?, for application: ApplicationToken) {
+        reconcileLearningThemeAssignments()
+        guard learningSelection.applicationTokens.contains(application) else { return }
+        learningApplicationThemes?[application] = themeID
+    }
+
+    /// Call after the app picker changes. Existing destinations survive; a
+    /// newly selected app needs a choice unless there is one sensible default.
+    mutating func reconcileLearningThemeAssignments(defaultThemeID: UUID? = nil) {
+        let previous = learningApplicationThemes
+        learningApplicationThemes = Dictionary(uniqueKeysWithValues:
+            learningSelection.applicationTokens.compactMap { application in
+                let destination = previous.map { $0[application] } ?? themeID
+                return (destination ?? defaultThemeID).map { (application, $0) }
+            }
+        )
+    }
+
+    var learningThemeIDs: Set<UUID> {
+        Set(learningSelection.applicationTokens.compactMap { learningThemeID(for: $0) })
+    }
+
+    func learningApplications(for themeID: UUID) -> Set<ApplicationToken> {
+        Set(learningSelection.applicationTokens.filter { learningThemeID(for: $0) == themeID })
+    }
+
+    mutating func removeLearningApplications(for themeID: UUID) {
+        let removed = learningApplications(for: themeID)
+        // Materialize before clearing the legacy fallback.
+        reconcileLearningThemeAssignments()
+        learningSelection.applicationTokens.subtract(removed)
+        if self.themeID == themeID { self.themeID = nil }
+        reconcileLearningThemeAssignments()
+    }
+
+    func hasSameLearningDestinations(as other: Self) -> Bool {
+        learningSelection == other.learningSelection
+            && learningSelection.applicationTokens.allSatisfy {
+                learningThemeID(for: $0) == other.learningThemeID(for: $0)
+            }
+    }
+
 }
 
 enum ScreenTimeError: LocalizedError {
@@ -46,14 +102,14 @@ enum ScreenTimeError: LocalizedError {
             return String(localized: "カテゴリやWebサイトではなく、個別のアプリを選んでください。", table: "ScreenTime",
                           comment: "Error: categories or websites were chosen; only individual apps count")
         case .overlappingApplications:
-            return String(localized: "同じアプリを勉強アプリと控えたいアプリの両方には登録できません。",
+            return String(localized: "同じアプリを「粒にするアプリ」と「黒い石にするアプリ」の両方には登録できません。",
                           table: "ScreenTime", comment: "Error: an app is in both Screen Time lanes")
         case .freeApplicationLimit:
-            return String(localized: "無料で登録できる勉強アプリは5つまでです。5つ以下にするか、Proをご利用ください。",
+            return String(localized: "無料で登録できる粒にするアプリは5つまでです。5つ以下にするか、Proをご利用ください。",
                           table: "ScreenTime", comment: "Error: more study apps than the free plan records")
         case .missingTheme:
-            return String(localized: "勉強時間を記録するテーマを選んでください。",
-                          table: "ScreenTime", comment: "Error: study apps are chosen but no destination theme")
+            return String(localized: "各アプリの記録先のテーマを選んでください。",
+                          table: "ScreenTime", comment: "Error: each chosen app needs a destination theme")
         case .corruptedState:
             return String(localized: "スクリーンタイムの記録を読み込めませんでした。記録の上書きは行っていません。",
                           table: "ScreenTime", comment: "Error: the Screen Time ledger could not be read; nothing was overwritten")
@@ -84,8 +140,9 @@ enum ScreenTimePolicy {
     static let minutesPerGem = 10
     static let freeLearningApplicationLimit = 5
     // Apple documents a maximum of 20 simultaneous activities, shared by the
-    // app and its extension. Keep each batch small (18 events), with eight
-    // batches per lane plus one daily scheduler, and one more name for the
+    // app and its extension. Each destination contributes 18 events per batch;
+    // all learning destinations share eight activity names. Eight batches per
+    // lane plus one daily scheduler, and one more name for the
     // focus shield's failsafe: 18 in all, leaving 2.
     // https://developer.apple.com/documentation/deviceactivity/deviceactivitycenter/monitoringerror/excessiveactivities
     static let eventsPerActivity = 18
@@ -130,7 +187,7 @@ enum ScreenTimePolicy {
             throw ScreenTimeError.overlappingApplications
         }
         try validateLearningCount(learning.applicationTokens.count, isPro: isPro)
-        if !learning.applicationTokens.isEmpty, configuration.themeID == nil {
+        if learning.applicationTokens.contains(where: { configuration.learningThemeID(for: $0) == nil }) {
             throw ScreenTimeError.missingTheme
         }
     }
@@ -224,7 +281,16 @@ struct ScreenTimeRun: Codable, Equatable {
     var observedAt: Date?
     var active = true
 
-    var activityPrefix: String { "\(ScreenTimePolicy.activityPrefix)\(id.uuidString)." }
+    /// Multiple learning destinations share the same eight registrations,
+    /// while each run keeps its own receipts and thresholds. Nil decodes the
+    /// existing single-destination registrations without replacing them.
+    var registrationID: UUID?
+
+    var activityPrefix: String { "\(ScreenTimePolicy.activityPrefix)\((registrationID ?? id).uuidString)." }
+
+    func eventName(threshold: Int) -> String {
+        registrationID == nil ? String(threshold) : "\(id.uuidString).\(threshold)"
+    }
 }
 
 /// Calendar continuity belongs to the existing registration, not to which
@@ -475,7 +541,17 @@ struct ScreenTimeState: Codable {
               learningPausedUntil?.timeIntervalSince1970.isFinite != false,
               callbackCounters?.isValid != false,
               Set(runs.map(\.id)).count == runs.count,
-              runs.filter(\.active).count <= ScreenTimeLane.allCases.count else { return false }
+              Set(runs.filter(\.active).map(\.activityPrefix)).count <= ScreenTimeLane.allCases.count,
+              runs.filter({ $0.active && $0.lane == .distraction }).count <= 1 else { return false }
+        let learningRuns = runs.filter { $0.active && $0.lane == .learning }
+        guard learningRuns.count <= max(1, configuration.learningThemeIDs.count),
+              Set(learningRuns.compactMap(\.themeID)).count == learningRuns.compactMap(\.themeID).count,
+              Set(learningRuns.map(\.activityPrefix)).count <= 1 else { return false }
+        if let first = learningRuns.first {
+            guard learningRuns.allSatisfy({
+                $0.dayStart == first.dayStart && $0.dayEnd == first.dayEnd && $0.timeZoneID == first.timeZoneID
+            }), Set(learningRuns.filter { !$0.includesPastActivity }.map(\.startedAt)).count <= 1 else { return false }
+        }
         return runs.allSatisfy { run in
             run.dayStart.timeIntervalSince1970.isFinite && run.dayEnd.timeIntervalSince1970.isFinite &&
             run.startedAt.timeIntervalSince1970.isFinite && run.dayEnd > run.dayStart &&

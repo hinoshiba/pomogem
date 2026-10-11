@@ -1,6 +1,7 @@
 import DeviceActivity
 import FamilyControls
 import Foundation
+import ManagedSettings
 import os
 
 /// Console evidence for registration on a real device (filter by this
@@ -281,42 +282,42 @@ final class ScreenTimeMonitoring {
                 guard !selection.applicationTokens.isEmpty,
                       lane == .distraction || state.learningAllowedBySubscription,
                       !state.runs.contains(where: { $0.active && $0.lane == lane }) else { continue }
+                let destinations: [UUID?] = lane == .learning
+                    ? state.configuration.learningThemeIDs.sorted { $0.uuidString < $1.uuidString }.map(Optional.some)
+                    : [nil]
+                // All destinations share a schedule and activity names. Their
+                // disjoint application sets and event names keep attribution
+                // independent without spending eight activities per theme.
+                let registrationID: UUID? = destinations.count > 1 ? UUID() : nil
+                var futureStart: Date?
                 if lane == .learning, learningPaused {
-                    // Register the lane now to start by itself when the timer
-                    // phase ends, so the minutes after it count even if nobody
-                    // opens PomoGem. A hold with no end, or one ending too
-                    // close to midnight, waits for a later pass instead.
                     guard let start = ScreenTimePolicy.preArmedLearningStart(
                         pausedUntil: state.learningPausedUntil, now: now, dayEnd: dayEnd
                     ) else { continue }
+                    futureStart = start
+                }
+                for destination in destinations {
+                    // A destination inherits midnight usage only from its own
+                    // uninterrupted previous-day run, never another theme.
+                    let prior = previousRuns.filter { lane != .learning || $0.themeID == destination }
+                    let includesPast = futureStart == nil && ScreenTimeRolloverPolicy.includesPastActivity(
+                        lane: lane,
+                        previousRuns: prior,
+                        dayStart: dayStart,
+                        timeZoneID: calendar.timeZone.identifier,
+                        learningPausedByTimer: state.isLearningPaused(at: dayStart),
+                        learningAllowedBySubscription: state.learningAllowedBySubscription,
+                        supportsPastActivity: supportsPastActivity
+                    )
                     state.runs.append(ScreenTimeRun(
                         lane: lane, dayStart: dayStart, dayEnd: dayEnd,
-                        startedAt: start,
+                        startedAt: futureStart ?? (includesPast ? dayStart : now),
                         timeZoneID: calendar.timeZone.identifier,
-                        includesPastActivity: false,
-                        themeID: state.configuration.themeID
+                        includesPastActivity: includesPast,
+                        themeID: destination,
+                        registrationID: registrationID
                     ))
-                    continue
                 }
-                // A continuing prior-day registration includes this day's
-                // midnight usage even when the app beats a delayed scheduler.
-                // Retired/edited runs and same-day registration repair do not.
-                let includesPast = ScreenTimeRolloverPolicy.includesPastActivity(
-                    lane: lane,
-                    previousRuns: previousRuns,
-                    dayStart: dayStart,
-                    timeZoneID: calendar.timeZone.identifier,
-                    learningPausedByTimer: state.isLearningPaused(at: dayStart),
-                    learningAllowedBySubscription: state.learningAllowedBySubscription,
-                    supportsPastActivity: supportsPastActivity
-                )
-                state.runs.append(ScreenTimeRun(
-                    lane: lane, dayStart: dayStart, dayEnd: dayEnd,
-                    startedAt: includesPast ? dayStart : now,
-                    timeZoneID: calendar.timeZone.identifier,
-                    includesPastActivity: includesPast,
-                    themeID: state.configuration.themeID
-                ))
             }
             state.pruneConsumedRuns()
             state.monitoringError = nil
@@ -349,14 +350,18 @@ final class ScreenTimeMonitoring {
                 startedCount += 1
                 try generation.requireCurrent(store.snapshot())
             }
-            for run in state.runs where run.active {
-                let selection = run.lane == .learning ? state.configuration.learningSelection : state.configuration.distractionSelection
+            let registrations = Dictionary(grouping: state.runs.filter(\.active), by: \.activityPrefix)
+            for prefix in registrations.keys.sorted() {
+                guard let runs = registrations[prefix], let run = runs.first else { continue }
                 var scheduleCalendar = Calendar(identifier: .gregorian)
                 scheduleCalendar.timeZone = TimeZone(identifier: run.timeZoneID) ?? .current
                 // A pre-armed run's interval opens when the timer's hold ends.
                 // Every other run keeps the day's midnight start, which can
                 // never make an interval too short to register.
                 let intervalStart = run.startedAt > now ? run.startedAt : run.dayStart
+                guard runs.allSatisfy({ ($0.startedAt > now ? $0.startedAt : $0.dayStart) == intervalStart }) else {
+                    throw ScreenTimeError.corruptedState
+                }
                 var start = scheduleCalendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: intervalStart)
                 var end = scheduleCalendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: run.dayEnd.addingTimeInterval(-1))
                 start.timeZone = scheduleCalendar.timeZone
@@ -367,16 +372,24 @@ final class ScreenTimeMonitoring {
                     let name = run.activityPrefix + String(batch)
                     guard !installed.contains(name) else { continue }
                     var events: [DeviceActivityEvent.Name: DeviceActivityEvent] = [:]
-                    for threshold in ScreenTimePolicy.thresholds(batch: batch) {
-                        let duration = DateComponents(minute: threshold * ScreenTimePolicy.minutesPerGem)
-                        let event: DeviceActivityEvent
-                        if #available(iOS 17.4, *) {
-                            event = DeviceActivityEvent(applications: selection.applicationTokens, threshold: duration,
-                                                        includesPastActivity: run.includesPastActivity)
+                    for destinationRun in runs {
+                        let applications: Set<ApplicationToken>
+                        if destinationRun.lane == .learning, let themeID = destinationRun.themeID {
+                            applications = state.configuration.learningApplications(for: themeID)
                         } else {
-                            event = DeviceActivityEvent(applications: selection.applicationTokens, threshold: duration)
+                            applications = state.configuration.distractionSelection.applicationTokens
                         }
-                        events[DeviceActivityEvent.Name(String(threshold))] = event
+                        for threshold in ScreenTimePolicy.thresholds(batch: batch) {
+                            let duration = DateComponents(minute: threshold * ScreenTimePolicy.minutesPerGem)
+                            let event: DeviceActivityEvent
+                            if #available(iOS 17.4, *) {
+                                event = DeviceActivityEvent(applications: applications, threshold: duration,
+                                                            includesPastActivity: destinationRun.includesPastActivity)
+                            } else {
+                                event = DeviceActivityEvent(applications: applications, threshold: duration)
+                            }
+                            events[DeviceActivityEvent.Name(destinationRun.eventName(threshold: threshold))] = event
+                        }
                     }
                     // Recheck the generation after each framework call; callbacks
                     // from stopped/changed configurations cannot award receipts.
@@ -469,20 +482,35 @@ final class ScreenTimeMonitoring {
             try invalidateAuthorizationIfNeeded()
             return
         }
-        guard activityName.hasPrefix(Self.prefix), let threshold = Int(eventName) else {
+        guard activityName.hasPrefix(Self.prefix) else {
             count(threshold: .ignoredByName, statusUnknown: statusUnknown, now: now)
             ScreenTimeLog.monitoring.notice(
                 "threshold ignored kind=\(kind.rawValue, privacy: .public) reason=name")
             return
         }
         let parts = activityName.dropFirst(Self.prefix.count).split(separator: ".")
-        guard parts.count == 2, let runID = UUID(uuidString: String(parts[0])),
+        let eventParts = eventName.split(separator: ".")
+        guard parts.count == 2, let registrationID = UUID(uuidString: String(parts[0])),
               let batch = Int(parts[1]), (0..<ScreenTimePolicy.batchesPerLane).contains(batch),
-              ScreenTimePolicy.thresholds(batch: batch).contains(threshold) else {
+              let thresholdText = eventParts.last, let threshold = Int(thresholdText),
+              ScreenTimePolicy.thresholds(batch: batch).contains(threshold),
+              eventParts.count == 1 || eventParts.count == 2 else {
             count(threshold: .ignoredByName, statusUnknown: statusUnknown, now: now)
             ScreenTimeLog.monitoring.notice(
                 "threshold ignored kind=\(kind.rawValue, privacy: .public) reason=name")
             return
+        }
+        let runID: UUID
+        if eventParts.count == 2 {
+            guard let candidate = UUID(uuidString: String(eventParts[0])),
+                  let run = try store.snapshot().runs.first(where: { $0.id == candidate }),
+                  run.registrationID == registrationID else {
+                count(threshold: .ignoredByName, statusUnknown: statusUnknown, now: now)
+                return
+            }
+            runID = candidate
+        } else {
+            runID = registrationID
         }
         let recorded = try store.record(runID: runID, threshold: threshold, now: now)
         count(threshold: recorded ? .recorded : .ignoredByLedger,

@@ -2,7 +2,7 @@ import XCTest
 
 /// The app's free learning ceiling (`ScreenTimePolicy.freeLearningApplicationLimit`).
 /// The UI test target does not link the app module, so it is restated here; the
-/// on-screen 「無料で記録できる勉強アプリは5つまでです」 notice the limits phase
+/// on-screen 「無料で記録できる粒にするアプリは5つまでです」 notice the limits phase
 /// asserts is what keeps the two honest.
 private let screenTimeFreeLearningLimit = 5
 
@@ -130,7 +130,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         var identifier: String {
             self == .learning ? "screen-time.learning-apps" : "screen-time.distraction-apps"
         }
-        var title: String { self == .learning ? "勉強アプリの粒" : "黒い石" }
+        var title: String { self == .learning ? "粒にするアプリ" : "黒い石にするアプリ" }
     }
 
     private enum AuditFailure: Error { case stopped }
@@ -568,10 +568,10 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         }
 
         let overLimitMessage = app.staticTexts.matching(
-            NSPredicate(format: "label CONTAINS %@", "無料で記録できる勉強アプリは5つまで")
+            NSPredicate(format: "label CONTAINS %@", "無料で記録できる粒にするアプリは5つまで")
         ).firstMatch
         try require(overLimitMessage.waitForExistence(timeout: 5),
-                    "Six learning apps must raise 「無料で記録できる勉強アプリは5つまでです…」 in the picker.",
+                    "Six learning apps must raise 「無料で記録できる粒にするアプリは5つまでです…」 in the picker.",
                     evidence: "limits-message-missing")
         // screentime-02: the ceiling no longer blocks 反映. The paywall cannot
         // appear over this sheet, so blocking left only キャンセル and lost every
@@ -633,7 +633,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             let tickedConflict = tickApplication(app, named: conflicting)
             if tickedConflict {
                 let conflictMessage = app.staticTexts.matching(
-                    NSPredicate(format: "label CONTAINS %@", "同じアプリを勉強アプリと控えたいアプリの両方には登録できません")
+                    NSPredicate(format: "label CONTAINS %@", "同じアプリを「粒にするアプリ」と「黒い石にするアプリ」の両方には登録できません")
                 ).firstMatch
                 try require(conflictMessage.waitForExistence(timeout: 5),
                             "Selecting \(conflicting) — already in the black-gem lane — must raise the cross-lane conflict message.",
@@ -725,7 +725,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         // settings screen that hosts a live FamilyActivityPicker row costs real
         // time, and the busy poll this replaced charged that cost to the app.
         let updating = app.descendants(matching: .any)["screen-time.updating"].firstMatch
-        let navigationBar = app.navigationBars["スクリーンタイム"]
+        let navigationBar = app.navigationBars["アプリの時間を積む"]
         let namedBack = navigationBar.buttons["設定"]
         let backButton = namedBack.exists ? namedBack : navigationBar.buttons.firstMatch
         let backLabel = backButton.exists ? backButton.label : "<missing>"
@@ -909,19 +909,24 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             try skipWithEvidence("restart-monitoring-missing-baseline",
                                  "Both app selections and the black-stone total must be readable and saved first (learning=\(describeCount(learningBefore)), distraction=\(describeCount(distractionBefore)), black=\(describeCount(blackBefore))).")
         }
-        let theme = themePicker(app)
-        _ = reveal(theme)
-        let themeLabel = labelIfPresent(theme)
-        let themeValue = describeValue(theme)
-        let themeDescription = "\(themeLabel) / \(themeValue)"
-        let hasChosenTheme = theme.exists
-            && !themeDescription.contains("選んでください")
-            && !themeDescription.contains("削除されたテーマ")
-            && (themeLabel != "記録先のテーマ" || (!themeValue.isEmpty && themeValue != "<missing>"))
-        guard hasChosenTheme else {
-            try skipWithEvidence("restart-monitoring-no-theme",
-                                 "The learning lane needs an existing saved theme; screen-time.theme reads \(themeDescription).")
+        var themeDescriptions: [String] = []
+        for index in 0..<learningBefore {
+            let theme = themePicker(app, at: index)
+            _ = reveal(theme)
+            let themeLabel = labelIfPresent(theme)
+            let themeValue = describeValue(theme)
+            let description = "\(themeLabel) / \(themeValue)"
+            let hasChosenTheme = theme.exists
+                && !description.contains("選んでください")
+                && !description.contains("削除されたテーマ")
+                && (themeLabel != "記録先のテーマ" || (!themeValue.isEmpty && themeValue != "<missing>"))
+            guard hasChosenTheme else {
+                try skipWithEvidence("restart-monitoring-no-theme-\(index)",
+                                     "Each learning app needs an existing saved theme; screen-time.learning-theme.\(index) reads \(description).")
+            }
+            themeDescriptions.append(description)
         }
+        let themeDescription = themeDescriptions.joined(separator: " | ")
         let toggle = app.switches["screen-time.enabled"]
         _ = reveal(toggle)
         let initialValue = describeValue(toggle)
@@ -964,12 +969,15 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         try require((blackAfter ?? -1) >= blackBefore,
                     "Restarting monitoring lost existing black stones: \(blackBefore) → \(describeCount(blackAfter)).",
                     evidence: "restart-monitoring-on-black-lost")
-        let themeAfter = themePicker(app)
-        _ = reveal(themeAfter)
-        try require(labelIfPresent(themeAfter) == themeLabel && describeValue(themeAfter) == themeValue,
-                    "Restarting monitoring changed the saved learning theme: \(themeDescription) → \(labelIfPresent(themeAfter)) / \(describeValue(themeAfter)).",
-                    evidence: "restart-monitoring-theme-lost")
-        try returnToHome(app, from: "スクリーンタイム")
+        for (index, savedDescription) in themeDescriptions.enumerated() {
+            let themeAfter = themePicker(app, at: index)
+            _ = reveal(themeAfter)
+            let description = "\(labelIfPresent(themeAfter)) / \(describeValue(themeAfter))"
+            try require(description == savedDescription,
+                        "Restarting monitoring changed app \(index + 1)'s saved theme: \(savedDescription) → \(description).",
+                        evidence: "restart-monitoring-theme-lost-\(index)")
+        }
+        try returnToHome(app, from: "アプリの時間を積む")
         let homeAfter = readHomeTotals(app, label: "restart-monitoring-home-after")
         try require(!homeAfter.isSettling && homeAfter.pebbles >= homeBefore.pebbles,
                     "Restarting monitoring lost existing study gems: \(homeBefore.summary) → \(homeAfter.summary).",
@@ -1001,7 +1009,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         try require(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "自動記録中")).firstMatch.exists,
                     "The learning usage phase requires active monitoring before the usage window.",
                     evidence: "usage-learning-not-monitoring")
-        try returnToHome(app, from: "スクリーンタイム")
+        try returnToHome(app, from: "アプリの時間を積む")
 
         let before = readHomeTotals(app, label: "usage-learning-before")
         note("USAGE-LEARNING baseline: \(before.summary)")
@@ -1061,7 +1069,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         try require(!app.staticTexts["screen-time.monitoring-error"].exists,
                     "The 20-minute baseline has a monitoring error.",
                     evidence: "usage-learning-twenty-monitoring-error")
-        try returnToHome(app, from: "スクリーンタイム")
+        try returnToHome(app, from: "アプリの時間を積む")
 
         let before = readHomeTotals(app, label: "usage-learning-twenty-before")
         note("USAGE-LEARNING-TWENTY baseline: \(before.summary)")
@@ -1125,7 +1133,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         // learning gem from that window can still surface during the ~10
         // minutes of settings work above and land on a baseline read at phase
         // entry.
-        try returnToHome(app, from: "スクリーンタイム")
+        try returnToHome(app, from: "アプリの時間を積む")
         let homeBaseline = readHomeTotals(app, label: "usage-distraction-home-baseline")
 
         try burnUsage(app, label: "usage-distraction")
@@ -1149,7 +1157,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                     "A single 10-minute usage window must not produce a second black gem: \(second.map { "\($0.0)" } ?? "").",
                     evidence: "usage-distraction-double-count")
 
-        try returnToHome(app, from: "スクリーンタイム")
+        try returnToHome(app, from: "アプリの時間を積む")
         let homeAfter = readHomeTotals(app, label: "usage-distraction-home-after")
         if learningSelected == 0 {
             try require(homeAfter.pebbles == homeBaseline.pebbles,
@@ -1199,7 +1207,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                     "The 20-minute baseline has a monitoring error.",
                     evidence: "usage-distraction-twenty-monitoring-error")
         let learningSelected = selectionCount(app, lane: .learning) ?? 0
-        try returnToHome(app, from: "スクリーンタイム")
+        try returnToHome(app, from: "アプリの時間を積む")
         let homeBaseline = readHomeTotals(app, label: "usage-distraction-twenty-home-before")
         note("USAGE-DISTRACTION-TWENTY baseline: blackGems=\(baseline) home=\(homeBaseline.summary) learningApps=\(learningSelected)")
         try burnUsage(app, label: "usage-distraction-twenty")
@@ -1210,7 +1218,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         try require(extra == nil,
                     "A fresh 20–29 minute window must stop at +2 black stones; an additional change was \(extra.map { String($0.0) } ?? "<none>").",
                     evidence: "usage-distraction-twenty-third-stone")
-        try returnToHome(app, from: "スクリーンタイム")
+        try returnToHome(app, from: "アプリの時間を積む")
         let homeAfter = readHomeTotals(app, label: "usage-distraction-twenty-home-after")
         let homeCountsAreComparable = !homeBaseline.isSettling && !homeAfter.isSettling
             && homeBaseline.pebbles >= 0 && homeAfter.pebbles >= 0
@@ -1249,7 +1257,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                                  "The timer phase requires active monitoring (自動記録中) before starting a timer; the screen shows \(status).")
         }
         note("TIMER-PAUSE: status before the timer = \(monitoring.label)")
-        try returnToHome(app, from: "スクリーンタイム")
+        try returnToHome(app, from: "アプリの時間を積む")
 
         let timer = app.descendants(matching: .any)["focus.timer-display"].firstMatch
         guard !timer.exists else {
@@ -1287,7 +1295,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                     "After the timer is cancelled the learning lane must re-register and the status must return to 自動記録中; the screen shows \(after).",
                     evidence: "timer-pause-not-resumed")
         try require(!app.staticTexts.matching(
-                        NSPredicate(format: "label CONTAINS %@", "タイマーの計測中は勉強アプリの自動記録を休止し")
+                        NSPredicate(format: "label CONTAINS %@", "タイマーの計測中は粒にするアプリの自動記録を休止し")
                     ).firstMatch.exists,
                     "The timer-pause notice must disappear once no timer is running.",
                     evidence: "timer-pause-notice-sticky")
@@ -1298,7 +1306,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
 
         if reachable.isEmpty {
             try skipWithEvidence("timer-pause-paused-state-unreachable",
-                                 "PASSED the post-timer half (自動記録中 restored, no monitoring error) but the paused half is UNVERIFIED: FocusView is an interactive-dismiss-disabled fullScreenCover with no route back to Home, so 「タイマーの計測中は勉強アプリの自動記録を休止し、終了後に自動で再開します。」 and 「控えたいアプリだけ自動記録中」 cannot be observed from XCUITest while a timer runs. Drive that half through iPhone Mirroring or by hand.")
+                                 "PASSED the post-timer half (自動記録中 restored, no monitoring error) but the paused half is UNVERIFIED: FocusView is an interactive-dismiss-disabled fullScreenCover with no route back to Home, so 「タイマーの計測中は粒にするアプリの自動記録を休止し、終了後に自動で再開します。」 and 「控えたいアプリだけ自動記録中」 cannot be observed from XCUITest while a timer runs. Drive that half through iPhone Mirroring or by hand.")
         }
         note("TIMER-PAUSE COMPLETE.")
     }
@@ -1397,7 +1405,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             pause(5)
             app.activate()
             pause(5)
-            if !app.navigationBars["スクリーンタイム"].exists {
+            if !app.navigationBars["アプリの時間を積む"].exists {
                 try reachHome(app)
                 try openScreenTimeSettings(app)
             }
@@ -1418,7 +1426,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         // ---- observe the revoked state (NO throwing assertions here) ----
         app.activate()
         pause(3)
-        if !app.navigationBars["スクリーンタイム"].exists {
+        if !app.navigationBars["アプリの時間を積む"].exists {
             try reachHome(app)
             try openScreenTimeSettings(app)
         }
@@ -1461,7 +1469,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
 
         app.activate()
         pause(3)
-        if !app.navigationBars["スクリーンタイム"].exists {
+        if !app.navigationBars["アプリの時間を積む"].exists {
             try reachHome(app)
             try openScreenTimeSettings(app)
         }
@@ -1551,7 +1559,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                     "Reset must not leave a monitoring error: \(labelIfPresent(app.staticTexts["screen-time.monitoring-error"])).",
                     evidence: "reset-error")
 
-        try returnToHome(app, from: "スクリーンタイム")
+        try returnToHome(app, from: "アプリの時間を積む")
         let homeAfter = readHomeTotals(app, label: "reset-home-after")
         try require(homeAfter.pebbles == homeBefore.pebbles,
                     "Reset must retain saved study records: \(homeBefore.pebbles) → \(homeAfter.pebbles) 粒.",
@@ -1652,7 +1660,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
 
     /// The 設定 list is long and `reveal`'s `.fast` flings can carry a lazily
     /// materialised row past the viewport without it ever being sampled.
-    /// 設定 → 「アプリの利用時間」 sits high in the list, so scroll to the TOP
+    /// 設定 → 「アプリの時間を積む」 sits high in the list, so scroll to the TOP
     /// first and then step down slowly, sampling after every step.
     @discardableResult
     private func revealSettingsRow(_ element: XCUIElement, in application: XCUIApplication) -> Bool {
@@ -1702,7 +1710,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
     private func openScreenTimeSettings(_ app: XCUIApplication) throws {
         acknowledgeCompletionAlertIfPresent(app)
         dismissCloudFocusOfferIfPresent(app)
-        if app.navigationBars["スクリーンタイム"].exists { return }
+        if app.navigationBars["アプリの時間を積む"].exists { return }
         if !app.navigationBars["設定"].exists {
             try tap(app.buttons["メニュー"], "Home menu")
             let settings = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "設定")).firstMatch
@@ -1720,7 +1728,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         dismissCloudFocusOfferIfPresent(app)
         _ = revealSettingsRow(entry, in: app)
         try tap(entry, "settings.screen-time")
-        guard app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 20) else {
+        guard app.navigationBars["アプリの時間を積む"].waitForExistence(timeout: 20) else {
             capture("screen-time-missing")
             XCTFail("The Screen Time settings screen did not open.")
             throw AuditFailure.stopped
@@ -1799,14 +1807,18 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         // "the app shows no status at all". Go back up first.
         scrollSettingsToTop(app)
         for text in ["自動記録中", "控えたいアプリだけ自動記録中", "自動記録は停止中です。",
-                     "タイマーの計測中は勉強アプリの自動記録を休止し",
+                     "タイマーの計測中は粒にするアプリの自動記録を休止し",
                      "スクリーンタイムの許可が解除されました"] {
             let element = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch
             note("[\(label)] status text \"\(text)\" present=\(element.exists)")
         }
 
-        let theme = themePicker(app)
-        note("[\(label)] screen-time.theme exists=\(theme.exists) enabled=\(theme.exists && theme.isEnabled) label=\(theme.exists ? theme.label : "-") value=\(describeValue(theme))")
+        let learningCount = selectionCount(app, lane: .learning) ?? 0
+        for index in 0..<learningCount {
+            let theme = themePicker(app, at: index)
+            _ = reveal(theme)
+            note("[\(label)] screen-time.learning-theme.\(index) exists=\(theme.exists) enabled=\(theme.exists && theme.isEnabled) label=\(theme.exists ? theme.label : "-") value=\(describeValue(theme))")
+        }
 
         let save = app.buttons["screen-time.save"]
         note("[\(label)] screen-time.save exists=\(save.exists) enabled=\(save.exists && save.isEnabled)")
@@ -1824,20 +1836,22 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         pause(1)
     }
 
-    private func themePicker(_ app: XCUIApplication) -> XCUIElement {
-        app.buttons["screen-time.theme"].exists
-            ? app.buttons["screen-time.theme"]
-            : app.descendants(matching: .any)["screen-time.theme"].firstMatch
+    private func themePicker(_ app: XCUIApplication, at index: Int = 0) -> XCUIElement {
+        let identifier = "screen-time.learning-theme.\(index)"
+        return app.buttons[identifier].exists
+            ? app.buttons[identifier]
+            : app.descendants(matching: .any)[identifier].firstMatch
     }
 
     private func validationFooter(_ app: XCUIApplication) -> String {
         let candidates = [
             "スクリーンタイムへのアクセスを許可してください。",
             "記録するアプリを1つ以上選んでください。",
-            "勉強時間を記録するテーマを選んでください。",
+            "各アプリの記録先のテーマを選んでください。",
+            "各アプリの記録先のテーマを選んでください。",
             "カテゴリやWebサイトは選べません",
-            "同じアプリを勉強アプリと控えたいアプリの両方には登録できません",
-            "無料では勉強アプリを5つまで選べます"
+            "同じアプリを「粒にするアプリ」と「黒い石にするアプリ」の両方には登録できません",
+            "無料では粒にするアプリを5つまで選べます"
         ]
         let found = candidates.filter {
             app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", $0)).firstMatch.exists
@@ -1887,16 +1901,31 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.06)).tap()
         }
         pause(1)
-        note("THEME PICKER dismissed; screen-time.theme value now \(describeValue(picker)); スクリーンタイム bar present=\(app.navigationBars["スクリーンタイム"].exists)")
+        note("THEME PICKER dismissed; screen-time.learning-theme.0 value now \(describeValue(picker)); スクリーンタイム bar present=\(app.navigationBars["アプリの時間を積む"].exists)")
     }
 
-    /// Picks POMOGEM_REAL_SCREEN_TIME_THEME, or the first real theme.
+    /// The real-device audit chooses one known destination for every picked
+    /// learning app; independent destinations have separate fixture coverage.
     @discardableResult
     private func selectRecordingTheme(_ app: XCUIApplication) throws -> String {
-        let picker = themePicker(app)
+        guard let count = selectionCount(app, lane: .learning), count > 0 else {
+            XCTFail("Choose learning apps before assigning recording themes.")
+            throw AuditFailure.stopped
+        }
+        var destination = themeName
+        for index in 0..<count {
+            destination = try selectRecordingTheme(app, at: index, preferredTheme: destination)
+        }
+        return destination ?? "<missing>"
+    }
+
+    private func selectRecordingTheme(_ app: XCUIApplication, at index: Int,
+                                      preferredTheme: String?) throws -> String {
+        let identifier = "screen-time.learning-theme.\(index)"
+        let picker = themePicker(app, at: index)
         guard reveal(picker), picker.exists, picker.isEnabled else {
             capture("theme-picker-unavailable")
-            XCTFail("screen-time.theme must be operable to choose a recording theme.")
+            XCTFail("\(identifier) must be operable to choose a recording theme.")
             throw AuditFailure.stopped
         }
         // The row publishes the chosen theme in its LABEL (「記録先のテーマ、<name>」)
@@ -1906,7 +1935,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         // an accessor on an element a re-laying-out hierarchy has just dropped
         // raises "Failed to get matching snapshot", which XCTest records as a
         // test FAILURE rather than `exists == false`.
-        if let themeName,
+        if let themeName = preferredTheme,
            describeValue(picker).contains(themeName) || labelIfPresent(picker).contains(themeName) {
             note("THEME: \(themeName) is already selected (\(labelIfPresent(picker))).")
             return themeName
@@ -1918,7 +1947,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         let excluded: Set<String> = ["選んでください", "削除されたテーマ", "記録先のテーマ", "キャンセル", "保存"]
         var chosen: XCUIElement?
         var chosenLabel = ""
-        if let themeName {
+        if let themeName = preferredTheme {
             let match = app.buttons.matching(NSPredicate(format: "label == %@", themeName)).firstMatch
             if isOnScreen(match, in: app) { chosen = match; chosenLabel = themeName }
         } else {
@@ -1934,13 +1963,13 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             capture("theme-picker-no-option")
             let available = labels(of: app.buttons).joined(separator: " | ")
             app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.06)).tap()
-            XCTFail("No selectable theme was offered by screen-time.theme. Options seen: \(available). Create a theme through the ordinary UI first.")
+            XCTFail("No selectable theme was offered by \(identifier). Options seen: \(available). Create a theme through the ordinary UI first.")
             throw AuditFailure.stopped
         }
         // A coordinate tap: a sheet button whose activation point the runtime
         // cannot derive raises "Activation point invalid" from `tap()` itself.
         chosen.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        // The menu dismisses asynchronously. Reading `screen-time.theme` while
+        // The menu dismisses asynchronously. Reading the destination row while
         // the hierarchy is still collapsing raises "Failed to get matching
         // snapshot" out of the accessor itself — XCTest records that as a test
         // FAILURE, not as `exists == false`, which is what killed the first
@@ -1950,7 +1979,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         var settledLabel = ""
         for _ in 0..<12 {
             pause(1)
-            let row = app.buttons["screen-time.theme"]
+            let row = themePicker(app, at: index)
             // `waitForExistence` only asserts existence at the instant it
             // returns; every accessor after it issues a FRESH query, and a
             // fresh query against a collapsing hierarchy is exactly what
@@ -1962,7 +1991,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             settledLabel = labelIfPresent(row)
             if settledLabel.contains(chosenLabel) || value.contains(chosenLabel) { break }
         }
-        note("THEME: selected \(chosenLabel); screen-time.theme value=\(value) label=\(settledLabel)")
+        note("THEME: selected \(chosenLabel); \(identifier) value=\(value) label=\(settledLabel)")
         return chosenLabel
     }
 
@@ -2093,7 +2122,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                     "反映 must be enabled to apply a valid selection. Footer: \(validationFooter(app)).",
                     evidence: "picker-apply-disabled")
         apply.tap()
-        guard app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 20) else {
+        guard app.navigationBars["アプリの時間を積む"].waitForExistence(timeout: 20) else {
             capture("picker-apply-stuck")
             XCTFail("The picker did not dismiss after 反映.")
             throw AuditFailure.stopped
@@ -2109,7 +2138,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             app.swipeDown(velocity: .fast)
         }
         pause(1)
-        note("PICKER: cancelled; スクリーンタイム bar present=\(app.navigationBars["スクリーンタイム"].exists)")
+        note("PICKER: cancelled; スクリーンタイム bar present=\(app.navigationBars["アプリの時間を積む"].exists)")
     }
 
     /// Ticks one application by display name inside Apple's remote picker.
@@ -2146,7 +2175,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             // them so a name that is simply not in this picker can be told from
             // one the harness failed to reach.
             let offered = labels(of: app.switches)
-                .filter { !$0.isEmpty && $0 != "アプリの利用時間を記録" }
+                .filter { !$0.isEmpty && $0 != "利用時間を自動記録" }
             note("PICKER: \"\(title)\" offers: \(offered.prefix(24).joined(separator: " | "))")
             var found = setApplication(app, named: name, selected: true)
             var sweeps = 0
@@ -2928,7 +2957,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         repeat {
             cycle += 1
             try guardAgainstSystemAlert("poll-black-\(cycle)")
-            if !app.navigationBars["スクリーンタイム"].exists {
+            if !app.navigationBars["アプリの時間を積む"].exists {
                 try reachHome(app)
                 try openScreenTimeSettings(app)
             }
@@ -2962,7 +2991,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         repeat {
             cycle += 1
             try guardAgainstSystemAlert("poll-black-target-\(cycle)")
-            if !app.navigationBars["スクリーンタイム"].exists {
+            if !app.navigationBars["アプリの時間を積む"].exists {
                 try reachHome(app)
                 try openScreenTimeSettings(app)
             }
@@ -3011,7 +3040,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         repeat {
             cycle += 1
             try guardAgainstSystemAlert("poll-black-\(cycle)")
-            if !app.navigationBars["スクリーンタイム"].exists {
+            if !app.navigationBars["アプリの時間を積む"].exists {
                 try reachHome(app)
                 try openScreenTimeSettings(app)
             }

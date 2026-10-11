@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 enum PomoGemTheme {
     static let background = Color("ink.night")
@@ -725,5 +726,144 @@ extension View {
         navigationTitle(title)
             .toolbarBackground(PomoGemTheme.background.opacity(0.92), for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
+    }
+}
+
+/// Keep settings stationary during an interior horizontal drag, while the
+/// system continues to own edge-back navigation and unsaved-edit protection.
+extension View {
+    @ViewBuilder
+    func settingsEdgeSwipeBack() -> some View {
+        if #available(iOS 26.0, *) {
+            background(SettingsEdgeSwipeBackBridge().frame(width: 0, height: 0))
+        } else {
+            self
+        }
+    }
+}
+
+@available(iOS 26.0, *)
+private struct SettingsEdgeSwipeBackBridge: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> Controller { Controller() }
+
+    func updateUIViewController(_ controller: Controller, context: Context) {
+        controller.installIfVisible()
+    }
+
+    static func dismantleUIViewController(_ controller: Controller, coordinator: ()) {
+        controller.removeHorizontalPan()
+    }
+
+    final class Controller: UIViewController, UIGestureRecognizerDelegate {
+        private var horizontalPan: UIPanGestureRecognizer?
+        private weak var contentSwipe: UIGestureRecognizer?
+        private weak var edgeSwipe: UIGestureRecognizer?
+        private var isAppearanceActive = false
+
+        override func loadView() {
+            view = UIView()
+            view.isUserInteractionEnabled = false
+        }
+
+        override func viewWillAppear(_ animated: Bool) {
+            super.viewWillAppear(animated)
+            isAppearanceActive = true
+            installHorizontalPan()
+        }
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            installHorizontalPan()
+        }
+
+        override func viewWillDisappear(_ animated: Bool) {
+            isAppearanceActive = false
+            removeHorizontalPan()
+            super.viewWillDisappear(animated)
+        }
+
+        func installIfVisible() {
+            guard isAppearanceActive, viewIfLoaded?.window != nil else { return }
+            installHorizontalPan()
+        }
+
+        private func installHorizontalPan() {
+            guard isAppearanceActive, let navigation = navigationController,
+                  horizontalPan?.view !== navigation.view else { return }
+            removeHorizontalPan()
+            contentSwipe = navigation.interactiveContentPopGestureRecognizer
+            edgeSwipe = navigation.interactivePopGestureRecognizer
+            // A recognized pan cancels a pending NavigationLink tap without
+            // moving the page. Merely disabling the native content recognizer
+            // would let a horizontal drag select a row. Keep the native
+            // recognizers intact so they retain their own back-navigation rules.
+            let pan = UIPanGestureRecognizer(target: self, action: #selector(consumeHorizontalPan))
+            pan.delegate = self
+            pan.maximumNumberOfTouches = 1
+            navigation.view.addGestureRecognizer(pan)
+            horizontalPan = pan
+        }
+
+        @objc private func consumeHorizontalPan(_ recognizer: UIPanGestureRecognizer) {}
+
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let pan = gestureRecognizer as? UIPanGestureRecognizer,
+                  let view = pan.view else { return false }
+            let velocity = pan.velocity(in: view)
+            return abs(velocity.x) > abs(velocity.y)
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            guard let view = gestureRecognizer.view else { return false }
+            let x = touch.location(in: view).x
+            let leadingDistance = view.effectiveUserInterfaceLayoutDirection == .rightToLeft
+                ? view.bounds.width - x : x
+            guard leadingDistance > 24 else { return false }
+            // Sliders and switches keep their native horizontal tracking.
+            var touchedView = touch.view
+            while let candidate = touchedView, candidate !== view {
+                if candidate is UIControl { return false }
+                touchedView = candidate.superview
+            }
+            return true
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            // The system's content-wide back gesture waits for this pan to
+            // fail. An edge touch is excluded above, so native back still
+            // works. This relationship is evaluated per attempt; no system
+            // recognizer's enabled state or delegate is changed.
+            otherGestureRecognizer === contentSwipe
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRequireFailureOf otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            // Respect the system's edge region even if it exceeds 24 points.
+            otherGestureRecognizer === edgeSwipe && otherGestureRecognizer !== contentSwipe
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            // Preserve native theme swipe actions and horizontal scrollers.
+            otherGestureRecognizer is UIPanGestureRecognizer
+                && otherGestureRecognizer !== edgeSwipe
+                && otherGestureRecognizer !== contentSwipe
+        }
+
+        func removeHorizontalPan() {
+            if let horizontalPan {
+                horizontalPan.view?.removeGestureRecognizer(horizontalPan)
+            }
+            horizontalPan = nil
+            contentSwipe = nil
+            edgeSwipe = nil
+        }
     }
 }
