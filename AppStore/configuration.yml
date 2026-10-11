@@ -7,11 +7,11 @@ store_localizations:
   - en-US
 app_store_id: 6809139517
 app_store_listing_status: public
-marketing_version: "1.1.0"
-build_number: "11"
+marketing_version: "1.1.1"
+build_number: "12"
 candidate_status: preparation_not_uploaded
-published_version: "1.0.2"
-published_version_status: ready_for_distribution_verified_2026_09_22
+published_version: "1.1.0"
+published_version_status: ready_for_distribution_verified_2026_10_11
 copyright: "2026 hinoshiba"
 website_host: pomogem.hinoshiba.com
 app_bundle_id: com.hinoshiba.pomogem
@@ -95,9 +95,9 @@ app_usage_descriptions:
 screen_time:
   enabled_by_default: false
   authorization: family_controls_individual
-  distribution_authorization: unverified_local_distribution_profiles_lack_family_controls
+  distribution_authorization: verified_local_profiles_2026_10_11_final_archive_pending
   learning:
-    aggregation: combined_selected_apps_in_confirmed_10_minute_steps
+    aggregation: combined_selected_apps_per_theme_in_confirmed_10_minute_steps
     seconds_per_gem: 600
     grams_per_gem: 100
     free_app_limit: 5
@@ -357,7 +357,7 @@ oss_publication:
     - store_and_web_marketing_images
   publication_model: mixed_license_source_and_ordinary_docs_with_reserved_brand_assets
 release_blockers:
-  - verify Family Controls distribution authorization and matching final profiles for both host and Screen Time monitor extension
+  - verify the final signed archive and upload payload against the currently valid Family Controls distribution profiles for both host and Screen Time monitor extension
   - verify actual signed-device 10-minute learning and black-gem delivery after the callback fix; prior failed or simulator-only checks are not a pass
   - compare the ten ja-JP/en-US simulator screenshot candidates refreshed 2026-09-30 with the signed Release candidate on a physical supported iPhone, review the 03 reward-card transition, and replace inherited/older images in Connect before submission
   - compare the 2026-10-01 live-StoreKit-price IAP image with the final signed build, replace the older image in Connect, and confirm it survives reload before submission

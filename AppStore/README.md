@@ -3,6 +3,10 @@
 このfolderはApp Store Connectへ入力する内容と提出判断のsource of truthです。App Store Connect
 APIのcredentialやdownloadしたprofileは置きません。
 
+2026-10-11にApp Store Connectで1.1.0 (11)の配信準備完了を確認しました。現行候補は
+1.1.1 (12)です。現在の作業結果は[release-record-1.1.1-12.md](release-record-1.1.1-12.md)を参照してください。
+下記の1.1.0準備状況や旧profileに関する記述は、記載日時点の履歴です。
+
 - `configuration.yml`: product identifierと提供範囲
 - `connect-entry-plan.md`: App Store Connectへ保存するfield値と未完了項目
 - `metadata/ja-JP/`: 日本語listing原稿

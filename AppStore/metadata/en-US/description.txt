@@ -17,7 +17,7 @@ Choose a theme and a free 25-, 45-, 60-, or 90-minute timer. Finish a session an
 
 OPTIONAL SCREEN TIME GEMS
 
-Choose learning apps and a theme. Each confirmed 10 minutes of combined use adds a 100-gram gem. Select up to five learning apps for free, or unlimited apps with Pro. This uses OS threshold notifications, so delivery can be delayed. Partial periods under 10 minutes are not added, and learning-app monitoring pauses while a focus timer runs.
+In Settings > Add App Time, choose apps and a theme for each. App names appear in settings. Apps with the same theme combine their use: each confirmed 10 minutes adds a 100-gram gem. Themes count separately. Free: 5 apps; Pro: unlimited. OS notifications may be delayed. Periods under 10 minutes are not added. Gem recording pauses during focus timers.
 
 You can also choose apps you want to use less. Each combined 10 minutes adds a black obstacle gem. This selection is unlimited for everyone. Black gems combine only with black gems; they do not count toward study time, study mass, rewards, or sharing, and never subtract earned study gems. The same app cannot belong to both selections. You choose whether to authorize and enable recording.
 

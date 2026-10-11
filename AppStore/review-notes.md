@@ -1,7 +1,8 @@
 # App Review notes draft
 
-対象: 1.1.0 (10) 提出準備。公開中の1.0.2 (9)や過去の実機記録とは区別します。
-本体・Monitor拡張のFamily Controls配布権限と最終署名済み候補の実到達試験は未確認です。
+対象: 1.1.1 (12) 提出準備。公開中の1.1.0 (11)や過去の実機記録とは区別します。
+2026-10-11に本体・Monitor拡張の有効な配布profileでFamily Controls権限を確認しました。
+最終署名済み候補の実到達試験は未確認です。
 Connectへ貼る短縮版は[review-notes-connect.txt](review-notes-connect.txt)を正本とします。
 
 ポモジェムは独自アカウント登録不要のiPhone集中タイマーです。最初の画面で、同格の二つの保存先
@@ -37,7 +38,7 @@ UIKitが届ける向きの通知に追従します。手動固定はすべての
 - Product ID: `com.hinoshiba.pomogem.pro.lifetime`
 - Type: Non-Consumable
 - Entry: Homeの時間表示 → 「自由な時間を設定」、またはSettings → ポモジェムPro
-- Unlocks: 無料の25分／45分／60分／90分以外の任意の1分00秒〜360分00秒を秒単位で指定、結晶の月刻印、スクリーンタイムの勉強アプリ数無制限（無料5つ）
+- Unlocks: 無料の25分／45分／60分／90分以外の任意の1分00秒〜360分00秒を秒単位で指定、結晶の月刻印、スクリーンタイムで粒にするアプリ数無制限（無料5つ）
 - Restore: purchase screenの「購入を復元」
 - Pricing: United States USD 0.99 base price; Japan JPY 100 custom price; other available storefronts use Apple's automatically generated local equivalent
 - Availability: App and IAP are available in 148 of 175 storefronts. Austria, Belgium, Bulgaria, Croatia, Cyprus, Czech Republic, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Ireland, Italy, Latvia, Lithuania, Luxembourg, Malta, Netherlands, Poland, Portugal, Romania, Slovakia, Slovenia, Spain, and Sweden are excluded. United Kingdom, Norway, and Switzerland remain included; automatic availability for new storefronts is enabled.
@@ -50,25 +51,32 @@ UIKitが届ける向きの通知に追従します。手動固定はすべての
 
 ## Apple services and permissions
 
-- Screen Time（1.1.0候補）: Settings → アプリの利用時間 →「アクセスを許可」でindividual authorizationを
-  許可します。勉強アプリと記録先テーマを選び、記録をオンにして「保存」。複数の選択アプリをまたぐ合計
-  10分ごとに、復帰後の瓶へ600秒・100gぶんの粒を追加します。無料は勉強アプリ5つまで、Proは無制限。
-  「黒い石」側のアプリは無料でも無制限で、別に合計10分ごとに黒い障害物を追加します。黒同士だけで
-  結合し、学習時間・共有画像には含めません。二つの集合は重複不可、カテゴリ／Webは選択不可です。
+- Screen Time: Settings →「アプリの時間を積む」（英語: Add App Time）→「アクセスを許可」で
+  individual authorizationを許可します。「粒にするアプリ」を選び、各アプリに記録先テーマを指定して
+  記録をオンにし「保存」。初回のアプリ選択で記録は自動でオンになります。Podcastは「ニュース」、
+  Audibleは「読書」のように分けられます。同じテーマのアプリの利用時間を合算し、10分ごとに復帰後の瓶へ
+  600秒・100gの粒を追加します。別テーマの時間は独立に数えます。無料は5アプリまで、Proは無制限。
+  設定トップと詳細画面で選択アプリ名を確認できます。既存の共通テーマは各アプリの初期値として継承し、
+  保存済みの記録を変更しません。未保存の変更を残して戻る場合は、保存するか破棄するかを確認します。
+  「黒い石にするアプリ」は無料でも無制限で、別に合計10分ごとに黒い障害物を追加します。黒同士だけで
+  結合し、学習時間・共有画像には含めません。二つの集合は重複不可、OSのカテゴリ／Webは選択不可です。
   アプリの選択と黒い石はApp Groupの端末内台帳だけに保存し、tokenをCloudKitやJSON exportへ渡しません。
-  10分未満の端数は日付変更・設定変更・停止でリセットし、timer中は学習側を休止して二重加算を防ぎます。
+  10分未満の端数は日付変更・アプリや記録先の変更・停止でリセットし、timer中は学習側を休止します。
+  1アプリだけの振り分け変更でも学習側全体の端数をリセットし、変更後の区間から新しい記録先へ反映します。
+  確定済みの到達記録は元のテーマに保持します。記録先テーマを削除すると、そのテーマのアプリ選択だけを
+  解除し、ほかのテーマのアプリと確定済みの記録を保持します。
   OS通知には遅延があり、アクセス拒否や監視失敗は設定へ表示します。実機での確認手順と配布前に必要な
   本体・Monitor拡張のFamily Controls distribution承認は[ScreenTimeGems.md](../Docs/ScreenTimeGems.md)に記載。
   この追記はApp Store Connectへの転記・Apple承認・実機検証の完了を示しません。
 
-- Screen Time 集中中のアプリ制限（1.1.0候補、任意・無料、既定オフ）: 上と同じ画面でアクセスを許可し、
-  「黒い石」の「アプリを選ぶ」で控えたいアプリを1つ以上選び、「集中中のアプリ制限」の
+- Screen Time 集中中のアプリ制限（任意・無料、既定オフ）: 上と同じ画面でアクセスを許可し、
+  「黒い石にするアプリ」の「アプリを選ぶ」で控えたいアプリを1つ以上選び、「集中中のアプリ制限」の
   「集中中は気が散るアプリを開けないようにする」をオンにして「保存」。Homeで集中を開始し、ホーム画面から
   選んだアプリを開くと、iOS標準のScreen Time制限画面（ManagedSettingsのshield。独自のShield画面や
   Shield拡張はありません）が表示されます。集中画面の「今日はここまで」で中断するか、集中が終わって休憩に
   入ると解除します。一時停止中も予定の終了時刻まで続きます。設定をオフにして保存しても解除します。
   集中画面は全画面表示のため、集中中は設定画面を開けません。集中画面の外で制限が残っている場合は
-  Settings → アプリの利用時間に「今すぐ制限を解除」を表示し、その集中のあいだだけすぐに解除できます。アプリが終了していても、予定の終了時刻に始まるDevice Activityの
+  Settings →「アプリの時間を積む」に「今すぐ制限を解除」を表示し、その集中のあいだだけすぐに解除できます。アプリが終了していても、予定の終了時刻に始まるDevice Activityの
   区間でMonitor拡張が解除を試み、次にアプリを開いたときにも解除します。対象は本人が選んだアプリだけで、
   50個を超えると制限せずに理由を表示します。本人が自分の端末で使う自己管理の機能で、他者を管理しません
   （individual authorization）。制限中は控えたいアプリを使えないため、黒い石は増えません。購入は不要です。
@@ -141,7 +149,7 @@ UIKitが届ける向きの通知に追従します。手動固定はすべての
   設定で選ぶ既定の向きだけをこのiPhoneのUserDefaultsに保存し、同期・送信・JSON書き出しはしない。
   通常の記録resetでは保持し、app削除時には消去される。timer画面を閉じたときやinactive／backgroundでは
   向きの更新を停止
-- Apple Music（1.1.0候補、[FocusMusic.md](../Docs/FocusMusic.md)）: 集中・休憩タイマーの見出しの音符
+- Apple Music（[FocusMusic.md](../Docs/FocusMusic.md)）: 集中・休憩タイマーの見出しの音符
   button（長押しでも可）→「集中用の音楽」。Settings → 集中 → 「集中用の音楽」からも同じ画面を開ける。
   MusicKitの許可は画面内の「Apple Musicへのアクセスを許可」か
   一覧のtapでだけ求め、`NSAppleMusicUsageDescription`で目的を表示する。`SystemMusicPlayer`で「ミュージック」
@@ -151,7 +159,7 @@ UIKitが届ける向きの通知に追従します。手動固定はすべての
   次の曲のbuttonの代わりにAppleの`musicSubscriptionOffer`（登録・お試しの画面）を表示し、一覧のtapも同じ画面を
   開く。無料機能でPro・広告・affiliateとは無関係。自動再生は既定offの「集中を始めたら再生する」をオンにした
   場合だけで、ほかのappの音声が再生中なら入れ替えない。選んだ音楽のIDなどは端末内UserDefaultsだけに保存し、送信しない
-- 終了アラーム（1.1.0候補）: Settings → 音と触覚 →「タイマー終了音」で8種（ベル、デジタル、マリンバ、
+- 終了アラーム: Settings → 音と触覚 →「タイマー終了音」で8種（ベル、デジタル、マリンバ、
   学校のチャイム、目覚まし時計と従来の3種。すべてコード内で合成し、選ぶと1回鳴る）、「終了アラームの強さ」で
   控えめ／標準（既定）／最大を選ぶ。休憩の終わりも同じ音と強さ。標準は、アプリを開いている間に終わると
   止めるまで音と連続振動をくり返し、その間は画面をつけたままにし、3分で自動的に止まる（止めるボタンは残る）。
@@ -159,7 +167,7 @@ UIKitが届ける向きの通知に追従します。手動固定はすべての
   最大は、アプリを開いている間だけ消音モードでも鳴らす（`.playback`＋`.duckOthers`。ミュージックは止めずに
   小さくし、止めると戻す。background audioなしで、離れると止まる）。止めるボタン、VoiceOverの2本指の
   ダブルタップ、アプリを離れることはどの強さでも止める操作
-- AlarmKit（iOS 26以降、1.1.0候補）: 終了アラームの強さを「最大」（既定は「標準」）にしたときだけ
+- AlarmKit（iOS 26以降）: 終了アラームの強さを「最大」（既定は「標準」）にしたときだけ
   `NSAlarmKitUsageDescription`で目的を示して許可を求める。許可後は本人が開始した集中・休憩の終わりに
   alert-onlyのアラームを1件だけ予約し（countdown表示や追加のLive Activityなし）、同じ終わりにTime
   Sensitive通知を重ねない。終了直前にアプリが前面にあれば取り消してアプリ内のアラームで知らせ、戻った
