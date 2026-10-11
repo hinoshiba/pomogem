@@ -139,36 +139,36 @@
         }
       }
     },
-    "10分未満の端数は、日付の切り替わりや設定の変更・停止でリセットされます。タイマー中の二重加算を避けるため、勉強アプリの計測もいったん区切ります。" : {
+    "10分未満の端数は、日付の切り替わりや設定の変更・停止でリセットされます。タイマー中の二重加算を避けるため、粒にするアプリの計測もいったん区切ります。" : {
       "comment" : "About recording: leftovers under 10 minutes reset at the day boundary or on changes; study-app timing also breaks during a timer",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Leftover time under 10 minutes resets when the day changes, or when you change or stop these settings. Study-app timing also restarts around a timer, so no time is counted twice."
+            "value" : "Leftover time under 10 minutes resets when the day changes, or when you change or stop these settings. Timing for apps that add gems also restarts around a timer, so no time is counted twice."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "10分未満の端数は、日付の切り替わりや設定の変更・停止でリセットされます。タイマー中の二重加算を避けるため、勉強アプリの計測もいったん区切ります。"
+            "value" : "10分未満の端数は、日付の切り替わりや設定の変更・停止でリセットされます。タイマー中の二重加算を避けるため、粒にするアプリの計測もいったん区切ります。"
           }
         }
       }
     },
-    "Proで勉強アプリを無制限に" : {
+    "Proで粒にするアプリを無制限に" : {
       "comment" : "Button: Pro allows unlimited study apps (opens the paywall)",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Unlimited Study Apps with Pro"
+            "value" : "Record Unlimited Apps as Gems with Pro"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Proで勉強アプリを無制限に"
+            "value" : "Proで粒にするアプリを無制限に"
           }
         }
       }
@@ -292,19 +292,19 @@
         }
       }
     },
-    "このテーマは、スクリーンタイムで選んだ勉強アプリの記録先です。削除すると勉強アプリの選択も解除され、記録を続けるにはアプリと記録先を選び直す必要があります。" : {
+    "このテーマを記録先にしたアプリの選択が解除されます。ほかのテーマに記録するアプリはそのままです。記録を続けるには、対象のアプリと記録先を選び直してください。" : {
       "comment" : "Theme delete confirmation: the theme is the Screen Time destination",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Your Screen Time study apps record to this theme. Deleting it also clears the study-app selection. To keep recording, choose the apps and a theme again."
+            "value" : "Apps assigned to this theme will be removed from your selection. Apps assigned to other themes stay selected. To continue recording the affected apps, select them again and choose a destination."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このテーマは、スクリーンタイムで選んだ勉強アプリの記録先です。削除すると勉強アプリの選択も解除され、記録を続けるにはアプリと記録先を選び直す必要があります。"
+            "value" : "このテーマを記録先にしたアプリの選択が解除されます。ほかのテーマに記録するアプリはそのままです。記録を続けるには、対象のアプリと記録先を選び直してください。"
           }
         }
       }
@@ -322,6 +322,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "この環境ではスクリーンタイムを利用できません。対応するiPhoneのアプリでお試しください。"
+          }
+        }
+      }
+    },
+    "まだアプリが選ばれていません。追加すると、アプリごとに記録先のテーマを指定できます。" : {
+      "comment" : "Empty learning app list: choose apps, then assign each to a theme",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No apps selected yet. Add apps to choose a destination theme for each one."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "まだアプリが選ばれていません。追加すると、アプリごとに記録先のテーマを指定できます。"
           }
         }
       }
@@ -394,23 +411,6 @@
         }
       }
     },
-    "アプリで過ごした時間も、瓶に。" : {
-      "comment" : "Screen Time settings: headline",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Time in apps goes into your jar, too."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "アプリで過ごした時間も、瓶に。"
-          }
-        }
-      }
-    },
     "アプリとテーマを選び、保存すると反映されます" : {
       "comment" : "VoiceOver hint: choose apps and a theme, then save",
       "localizations" : {
@@ -428,19 +428,36 @@
         }
       }
     },
-    "アプリの利用時間を記録" : {
-      "comment" : "Toggle: record time spent in the chosen apps",
+    "アプリの時間を、テーマごとの粒に。" : {
+      "comment" : "Screen Time settings: headline",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Record App Time"
+            "value" : "Turn app time into gems, by theme."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "アプリの利用時間を記録"
+            "value" : "アプリの時間を、テーマごとの粒に。"
+          }
+        }
+      }
+    },
+    "アプリの時間を積む" : {
+      "comment" : "Navigation title shared with the Settings and Home entries",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add App Time"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリの時間を積む"
           }
         }
       }
@@ -496,19 +513,36 @@
         }
       }
     },
-    "アプリを選ぶ" : {
-      "comment" : "Button: open Apple's app picker",
+    "アプリを追加" : {
+      "comment" : "Button: choose the first apps",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Choose Apps"
+            "value" : "Add Apps"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "アプリを選ぶ"
+            "value" : "アプリを追加"
+          }
+        }
+      }
+    },
+    "アプリを追加・変更" : {
+      "comment" : "Button: edit the selected apps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add or Change Apps"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリを追加・変更"
           }
         }
       }
@@ -615,19 +649,19 @@
         }
       }
     },
-    "スクリーンタイム" : {
-      "comment" : "Navigation title: the Screen Time page",
+    "スクリーンタイムで利用時間を記録します。積みたい時間は粒に、控えたい時間は黒い石に。アプリと記録先を選び、保存してください。" : {
+      "comment" : "Screen Time settings: what the feature does",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Screen Time"
+            "value" : "Use Screen Time to record app usage. Time you want to build becomes gems; time you want to cut down becomes black stones. Choose your apps and their destinations, then save."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "スクリーンタイム"
+            "value" : "スクリーンタイムで利用時間を記録します。積みたい時間は粒に、控えたい時間は黒い石に。アプリと記録先を選び、保存してください。"
           }
         }
       }
@@ -1006,35 +1040,35 @@
         }
       }
     },
-    "タイマーの計測中は勉強アプリの自動記録を休止し、終了後に自動で再開します。" : {
+    "タイマーの計測中は粒にするアプリの自動記録を休止し、終了後に自動で再開します。" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Study-app recording pauses while a timer runs and resumes on its own afterward."
+            "value" : "Recording for apps that add gems pauses while a timer runs and resumes on its own afterward."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "タイマーの計測中は勉強アプリの自動記録を休止し、終了後に自動で再開します。"
+            "value" : "タイマーの計測中は粒にするアプリの自動記録を休止し、終了後に自動で再開します。"
           }
         }
       }
     },
-    "テーマが未選択、または削除されています。記録先を選び直してください。" : {
-      "comment" : "Footer: no destination theme, or it was deleted",
+    "テーマは「設定」→「テーマ」で追加できます。例：ニュース、読書、英語。" : {
+      "comment" : "Where to create destination categories, with examples",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No theme is chosen, or it was deleted. Choose a theme to record to."
+            "value" : "Add themes in Settings → Themes. For example: News, Reading, or English."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "テーマが未選択、または削除されています。記録先を選び直してください。"
+            "value" : "テーマは「設定」→「テーマ」で追加できます。例：ニュース、読書、英語。"
           }
         }
       }
@@ -1086,6 +1120,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "リセット"
+          }
+        }
+      }
+    },
+    "一覧を折りたたむ" : {
+      "comment" : "Collapse a long selected-app list",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show Fewer Apps"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一覧を折りたたむ"
           }
         }
       }
@@ -1260,6 +1311,23 @@
         }
       }
     },
+    "利用時間を自動記録" : {
+      "comment" : "Toggle: record time spent in the chosen apps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Automatically Record App Time"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "利用時間を自動記録"
+          }
+        }
+      }
+    },
     "制限しているあいだは控えたいアプリを開けないため、その時間は黒い石になりません。" : {
       "comment" : "Footer under the focus shield toggle: blocked time adds no black stones",
       "localizations" : {
@@ -1345,6 +1413,23 @@
         }
       }
     },
+    "削除されたテーマを記録先にしていたアプリの選択を解除しました。再開するには、アプリを追加して記録先を選び直してください。" : {
+      "comment" : "Footer: the destination theme was deleted and the study apps were cleared",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apps assigned to the deleted theme have been removed from your selection. To resume, add them again and choose a destination."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "削除されたテーマを記録先にしていたアプリの選択を解除しました。再開するには、アプリを追加して記録先を選び直してください。"
+          }
+        }
+      }
+    },
     "前回の集中では、制限を自動で解除する準備ができなかったため、制限しませんでした。次の集中でもう一度試します。" : {
       "comment" : "Notice after a focus: its failsafe could not be registered, so it ran unshielded; the next focus tries again",
       "localizations" : {
@@ -1358,125 +1443,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "前回の集中では、制限を自動で解除する準備ができなかったため、制限しませんでした。次の集中でもう一度試します。"
-          }
-        }
-      }
-    },
-    "勉強アプリ" : {
-      "comment" : "Picker title: study apps",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Study Apps"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "勉強アプリ"
-          }
-        }
-      }
-    },
-    "勉強アプリと控えたいアプリは別々に合計します。同じアプリを両方には登録できません。" : {
-      "comment" : "About recording: the two lanes are summed separately",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Study apps and apps you want to use less are totaled separately. The same app can't be in both."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "勉強アプリと控えたいアプリは別々に合計します。同じアプリを両方には登録できません。"
-          }
-        }
-      }
-    },
-    "勉強アプリの粒" : {
-      "comment" : "Section header: study apps that add pebbles",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Study-App Gems"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "勉強アプリの粒"
-          }
-        }
-      }
-    },
-    "勉強アプリの粒と黒い石を10分ごとに積む" : {
-      "comment" : "Settings row subtitle: Screen Time, when there is nothing to report",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Adds study-app gems and black stones every 10 minutes"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "勉強アプリの粒と黒い石を10分ごとに積む"
-          }
-        }
-      }
-    },
-    "勉強アプリを使った時間は10分ごとに粒として、控えたいアプリの時間は黒い石として、瓶に積みます。" : {
-      "comment" : "Screen Time settings: what the feature does",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Every 10 minutes in study apps adds a gem to your jar, and time in apps you want to use less adds black stones."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "勉強アプリを使った時間は10分ごとに粒として、控えたいアプリの時間は黒い石として、瓶に積みます。"
-          }
-        }
-      }
-    },
-    "勉強アプリを選ぶ" : {
-      "comment" : "VoiceOver: open the study-app picker",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Choose study apps"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "勉強アプリを選ぶ"
-          }
-        }
-      }
-    },
-    "勉強時間を記録するテーマを選んでください。" : {
-      "comment" : "Error: study apps are chosen but no destination theme",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Choose a theme to record study time to."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "勉強時間を記録するテーマを選んでください。"
           }
         }
       }
@@ -1498,36 +1464,53 @@
         }
       }
     },
-    "同じアプリを勉強アプリと控えたいアプリの両方には登録できません。" : {
+    "各アプリの記録先のテーマを選んでください。" : {
+      "comment" : "Error: each chosen app needs a destination theme\nValidation: every selected learning app needs a live destination theme",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a destination theme for each app."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "各アプリの記録先のテーマを選んでください。"
+          }
+        }
+      }
+    },
+    "同じアプリを「粒にするアプリ」と「黒い石にするアプリ」の両方には登録できません。" : {
       "comment" : "Error: an app is in both Screen Time lanes",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The same app can't be in both study apps and apps you want to use less."
+            "value" : "The same app cannot be in both Apps That Add Gems and Apps That Add Black Stones."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "同じアプリを勉強アプリと控えたいアプリの両方には登録できません。"
+            "value" : "同じアプリを「粒にするアプリ」と「黒い石にするアプリ」の両方には登録できません。"
           }
         }
       }
     },
-    "同じアプリを勉強アプリと控えたいアプリの両方には登録できません。もう一方の選択から外してください。" : {
+    "同じアプリを「粒にするアプリ」と「黒い石にするアプリ」の両方には登録できません。もう一方の選択から外してください。" : {
       "comment" : "Validation: an app is in both lanes",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The same app can't be in both study apps and apps you want to use less. Remove it from the other list."
+            "value" : "The same app cannot be in both Apps That Add Gems and Apps That Add Black Stones. Remove it from the other list."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "同じアプリを勉強アプリと控えたいアプリの両方には登録できません。もう一方の選択から外してください。"
+            "value" : "同じアプリを「粒にするアプリ」と「黒い石にするアプリ」の両方には登録できません。もう一方の選択から外してください。"
           }
         }
       }
@@ -1697,6 +1680,23 @@
         }
       }
     },
+    "控えたいアプリを追加すると、ここに一覧を表示します。" : {
+      "comment" : "Empty distraction app list",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add apps you want to cut down on to see them here."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控えたいアプリを追加すると、ここに一覧を表示します。"
+          }
+        }
+      }
+    },
     "控えたいアプリを選ぶ" : {
       "comment" : "VoiceOver: open the picker for apps to cut down",
       "localizations" : {
@@ -1765,19 +1765,19 @@
         }
       }
     },
-    "無料では勉強アプリを5つまで選べます。5つ以下に減らしてください。Proでは無制限です。" : {
+    "無料では粒にするアプリを5つまで選べます。5つ以下に減らしてください。Proでは無制限です。" : {
       "comment" : "Validation: more than 5 study apps on the free plan",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "On the free plan you can choose up to 5 study apps. Choose 5 or fewer. Pro has no limit."
+            "value" : "On the free plan you can choose up to 5 apps that add gems. Choose 5 or fewer. Pro has no limit."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "無料では勉強アプリを5つまで選べます。5つ以下に減らしてください。Proでは無制限です。"
+            "value" : "無料では粒にするアプリを5つまで選べます。5つ以下に減らしてください。Proでは無制限です。"
           }
         }
       }
@@ -1799,36 +1799,36 @@
         }
       }
     },
-    "無料で登録できる勉強アプリは5つまでです。5つ以下にするか、Proをご利用ください。" : {
+    "無料で登録できる粒にするアプリは5つまでです。5つ以下にするか、Proをご利用ください。" : {
       "comment" : "Error: more study apps than the free plan records",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The free plan records up to 5 study apps. Choose 5 or fewer, or use Pro."
+            "value" : "The free plan records up to 5 apps that add gems. Choose 5 or fewer, or use Pro."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "無料で登録できる勉強アプリは5つまでです。5つ以下にするか、Proをご利用ください。"
+            "value" : "無料で登録できる粒にするアプリは5つまでです。5つ以下にするか、Proをご利用ください。"
           }
         }
       }
     },
-    "無料で記録できる勉強アプリは5つまでです。このまま反映して、設定画面でProにするか、5つ以下に減らしてから保存してください。" : {
+    "無料で記録できる粒にするアプリは5つまでです。このまま反映して、設定画面でProにするか、5つ以下に減らしてから保存してください。" : {
       "comment" : "Picker notice: over the free learning-app limit; applying is still allowed",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The free plan records up to 5 study apps. You can apply this selection, then get Pro on the settings screen or choose 5 or fewer before saving."
+            "value" : "The free plan records up to 5 apps that add gems. You can apply this selection, then get Pro on the settings screen or choose 5 or fewer before saving."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "無料で記録できる勉強アプリは5つまでです。このまま反映して、設定画面でProにするか、5つ以下に減らしてから保存してください。"
+            "value" : "無料で記録できる粒にするアプリは5つまでです。このまま反映して、設定画面でProにするか、5つ以下に減らしてから保存してください。"
           }
         }
       }
@@ -1918,6 +1918,57 @@
         }
       }
     },
+    "粒にするアプリ" : {
+      "comment" : "Picker title: apps whose usage adds gems\nSection header: apps whose usage adds gems",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apps That Add Gems"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粒にするアプリ"
+          }
+        }
+      }
+    },
+    "粒にするアプリと黒い石にするアプリは別々に合計します。同じアプリを両方には登録できません。" : {
+      "comment" : "About recording: the two lanes are summed separately",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apps that add gems and apps that add black stones are totaled separately. The same app cannot be in both."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粒にするアプリと黒い石にするアプリは別々に合計します。同じアプリを両方には登録できません。"
+          }
+        }
+      }
+    },
+    "粒にするアプリを選ぶ" : {
+      "comment" : "VoiceOver: open the app picker for gems",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose Apps That Add Gems"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粒にするアプリを選ぶ"
+          }
+        }
+      }
+    },
     "累計 %@" : {
       "comment" : "Total time in the apps to cut down. %@ is a duration, e.g. 30分 (30 min).",
       "localizations" : {
@@ -1986,19 +2037,19 @@
         }
       }
     },
-    "要確認：勉強アプリの記録が止まっています" : {
+    "要確認：粒にするアプリの記録が止まっています" : {
       "comment" : "Settings row subtitle: study apps stopped recording (free-plan limit); black stones still record",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Needs attention: study-app recording has stopped"
+            "value" : "Needs attention: recording for apps that add gems has stopped"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "要確認：勉強アプリの記録が止まっています"
+            "value" : "要確認：粒にするアプリの記録が止まっています"
           }
         }
       }
@@ -2122,8 +2173,25 @@
         }
       }
     },
+    "記録先が未選択、または削除されているアプリがあります。各アプリのテーマを選び直してください。" : {
+      "comment" : "Footer: no destination theme, or it was deleted",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Some apps have no destination, or their theme was deleted. Choose a theme for each app."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記録先が未選択、または削除されているアプリがあります。各アプリのテーマを選び直してください。"
+          }
+        }
+      }
+    },
     "記録先のテーマ" : {
-      "comment" : "Picker: the theme that study-app time is added to",
+      "comment" : "Picker: the destination category for this app",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2139,36 +2207,36 @@
         }
       }
     },
-    "記録先のテーマが削除されたため、勉強アプリの記録を止めました" : {
-      "comment" : "Toast: the Screen Time destination theme was deleted, so study-app recording stopped",
+    "記録先のテーマが削除されたため、対象アプリの記録を止めました" : {
+      "comment" : "Toast: apps assigned to a deleted Screen Time theme stopped recording",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Study-app recording stopped because its theme was deleted"
+            "value" : "Recording stopped for apps assigned to the deleted theme"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "記録先のテーマが削除されたため、勉強アプリの記録を止めました"
+            "value" : "記録先のテーマが削除されたため、対象アプリの記録を止めました"
           }
         }
       }
     },
-    "記録先のテーマが削除されたため、勉強アプリの選択を解除しました。アプリとテーマを選び直して保存すると、記録を再開します。" : {
-      "comment" : "Footer: the destination theme was deleted and the study apps were cleared",
+    "記録先のテーマは、時間を分けるカテゴリです。同じテーマに指定したアプリの利用時間を合計し、10分ごとに粒（10分・100g）を追加します。異なるテーマの時間は合算しません。" : {
+      "comment" : "Footer: how study-app time becomes pebbles",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The theme for study apps was deleted, so the study-app selection was cleared. Choose apps and a theme again, then save to resume recording."
+            "value" : "Themes are categories for your time. Apps assigned to the same theme add one gem (10 minutes, 100 g) for every 10 minutes of combined use. Time in different themes is counted separately."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "記録先のテーマが削除されたため、勉強アプリの選択を解除しました。アプリとテーマを選び直して保存すると、記録を再開します。"
+            "value" : "記録先のテーマは、時間を分けるカテゴリです。同じテーマに指定したアプリの利用時間を合計し、10分ごとに粒（10分・100g）を追加します。異なるテーマの時間は合算しません。"
           }
         }
       }
@@ -2275,6 +2343,23 @@
         }
       }
     },
+    "選んだアプリの時間を粒や黒い石に" : {
+      "comment" : "Settings row subtitle: Screen Time, when there is nothing to report",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn time in selected apps into gems or black stones"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選んだアプリの時間を粒や黒い石に"
+          }
+        }
+      }
+    },
     "選んだアプリや記録の設定は、保存するまで反映されません。" : {
       "comment" : "Dialog message: unsaved Screen Time edits",
       "localizations" : {
@@ -2309,23 +2394,6 @@
         }
       }
     },
-    "選んだアプリを合計10分使うごとに、記録先のテーマへ粒（10分・100g）と勉強時間を追加します。" : {
-      "comment" : "Footer: how study-app time becomes pebbles",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Every 10 minutes in the chosen apps adds a gem (10 min · 100 g) and study time to the chosen theme."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "選んだアプリを合計10分使うごとに、記録先のテーマへ粒（10分・100g）と勉強時間を追加します。"
-          }
-        }
-      }
-    },
     "選んでください" : {
       "comment" : "Picker placeholder: no theme chosen yet",
       "localizations" : {
@@ -2339,6 +2407,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "選んでください"
+          }
+        }
+      }
+    },
+    "選択中の%lldアプリをすべて表示" : {
+      "comment" : "Show all selected distraction apps; the first five are already listed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show All %lld Selected Apps"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択中の%lldアプリをすべて表示"
           }
         }
       }
@@ -2411,23 +2496,6 @@
         }
       }
     },
-    "黒い石" : {
-      "comment" : "Section header: apps to cut down that add black stones",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Black Stones"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "黒い石"
-          }
-        }
-      }
-    },
     "黒い石 +%lld" : {
       "comment" : "Toast part: black stones added. en needs plural variations: '+%lld black stone' / '+%lld black stones'.",
       "localizations" : {
@@ -2487,6 +2555,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "黒い石だけを片付けるときは、上の「黒い石を片付ける」を使います。アプリの選択はそのまま残ります。"
+          }
+        }
+      }
+    },
+    "黒い石にするアプリ" : {
+      "comment" : "Section header: apps whose usage adds black stones",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apps That Add Black Stones"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "黒い石にするアプリ"
           }
         }
       }

@@ -3446,7 +3446,7 @@ struct HomeView: View {
                 menuActionButton(
                     title: String(localized: "アプリの時間を積む", table: "Home",
                                   comment: "Home menu row: open the Screen Time settings"),
-                    detail: String(localized: "勉強アプリ10分ごとに1粒", table: "Home",
+                    detail: String(localized: "選んだアプリをテーマ別に記録", table: "Home",
                                    comment: "Home menu row detail: every 10 minutes in the chosen study apps adds one pebble"),
                     symbol: "hourglass"
                 ) {

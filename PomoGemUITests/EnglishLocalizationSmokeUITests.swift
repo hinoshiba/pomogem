@@ -35,7 +35,7 @@ final class EnglishLocalizationSmokeUITests: XCTestCase {
         for (identifier, label) in [
             ("settings.category.themes", "Themes"),
             ("settings.category.timer", "Focus Timer"),
-            ("settings.screen-time", "App Usage"),
+            ("settings.screen-time", "Add App Time"),
             ("settings.category.sensory", "Sound & Haptics"),
             ("settings.category.jar", "Jar & Sharing"),
             ("settings.category.notifications", "Reminders"),

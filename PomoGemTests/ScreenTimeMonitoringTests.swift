@@ -1,4 +1,7 @@
+import DeviceActivity
+import FamilyControls
 import Foundation
+import ManagedSettings
 import XCTest
 @testable import PomoGem
 
@@ -375,5 +378,363 @@ final class ScreenTimeMonitoringTests: XCTestCase {
         XCTAssertFalse(retired.runs.contains(where: \.active))
         XCTAssertEqual(retired.negativeGemCount, 31)
         try await controller.waitForPendingOperations()
+    }
+}
+
+
+/// The app picker exposes opaque tokens. These tests keep them opaque while
+/// exercising migration, event attribution, and the shared OS activity budget.
+final class ScreenTimePerApplicationThemeTests: XCTestCase {
+    private let now = Calendar.current.startOfDay(for: Date(timeIntervalSince1970: 1_800_000_000))
+        .addingTimeInterval(43_200)
+    private var directories: [URL] = []
+    private let noticeSuite = "ScreenTimePerApplicationThemes-" + UUID().uuidString
+    private var noticeDefaults: UserDefaults { UserDefaults(suiteName: noticeSuite)! }
+
+    override func tearDown() {
+        noticeDefaults.removePersistentDomain(forName: noticeSuite)
+        for directory in directories { try? FileManager.default.removeItem(at: directory) }
+        super.tearDown()
+    }
+
+    func testLegacyLedgerAssignsEverySelectedAppToItsExistingThemeWithoutRewritingIt() throws {
+        var configuration = try configuration(applications: 2)
+        let originalTheme = UUID()
+        configuration.themeID = originalTheme
+        let encoded = try JSONEncoder().encode(configuration)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        XCTAssertNil(object["learningApplicationThemes"])
+        var restored = try JSONDecoder().decode(ScreenTimeConfiguration.self, from: encoded)
+        for token in restored.learningSelection.applicationTokens {
+            XCTAssertEqual(restored.learningThemeID(for: token), originalTheme)
+        }
+        XCTAssertEqual(restored, configuration)
+        restored.reconcileLearningThemeAssignments()
+        XCTAssertTrue(restored.hasSameLearningDestinations(as: configuration))
+        let once = restored
+        restored.reconcileLearningThemeAssignments()
+        XCTAssertEqual(restored, once, "Repeated reconciliation must not dirty a settings draft")
+        XCTAssertEqual(try JSONDecoder().decode(ScreenTimeConfiguration.self,
+                                              from: JSONEncoder().encode(restored)), restored)
+    }
+
+    func testChangingOneLegacyAppPreservesTheOthersAndExplicitMissingDestinationDoesNotFallBack() throws {
+        var configuration = try configuration(applications: 2)
+        let original = UUID(), reading = UUID()
+        configuration.themeID = original
+        let tokens = Array(configuration.learningSelection.applicationTokens)
+        configuration.setLearningThemeID(reading, for: tokens[0])
+        XCTAssertEqual(configuration.learningThemeID(for: tokens[0]), reading)
+        XCTAssertEqual(configuration.learningThemeID(for: tokens[1]), original)
+        configuration.setLearningThemeID(nil, for: tokens[0])
+        configuration.reconcileLearningThemeAssignments()
+        XCTAssertNil(configuration.learningThemeID(for: tokens[0]))
+        XCTAssertThrowsError(try ScreenTimePolicy.validate(configuration, isPro: false)) {
+            guard case ScreenTimeError.missingTheme = $0 else { return XCTFail("Wrong validation error") }
+        }
+        configuration.setLearningThemeID(reading, for: tokens[0])
+        XCTAssertNoThrow(try ScreenTimePolicy.validate(configuration, isPro: false))
+    }
+
+    func testRemovedAppAssignmentIsPrunedAndNewAppsNeedAnExplicitDestination() throws {
+        var configuration = try configuration(applications: 2)
+        let theme = UUID()
+        configuration.reconcileLearningThemeAssignments(defaultThemeID: theme)
+        let removed = try XCTUnwrap(configuration.learningSelection.applicationTokens.first)
+        configuration.learningSelection.applicationTokens.remove(removed)
+        configuration.reconcileLearningThemeAssignments()
+        XCTAssertEqual(configuration.learningApplicationThemes?.count, 1)
+        configuration.learningSelection.applicationTokens.insert(removed)
+        XCTAssertNil(configuration.learningThemeID(for: removed))
+        configuration.reconcileLearningThemeAssignments(defaultThemeID: theme)
+        XCTAssertEqual(configuration.learningThemeID(for: removed), theme)
+    }
+
+    func testManyDestinationsShareEightActivitiesAndEveryEventContainsOnlyItsOwnApps() throws {
+        var configuration = try configuration(applications: 12)
+        for token in configuration.learningSelection.applicationTokens {
+            configuration.setLearningThemeID(UUID(), for: token)
+        }
+        configuration.distractionSelection.applicationTokens = [try token(200)]
+        let (store, center, monitor) = try fixture(configuration)
+        XCTAssertTrue(try monitor.synchronize(now: now))
+        let state = try store.snapshot()
+        XCTAssertTrue(state.isValid)
+        XCTAssertEqual(state.runs.filter { $0.active && $0.lane == .learning }.count, 12)
+        XCTAssertEqual(center.activities.count, ScreenTimePolicy.maximumActivities)
+        XCTAssertLessThanOrEqual(center.activities.count + ScreenTimePolicy.focusShieldActivities, 20)
+        for run in state.runs where run.active {
+            for batch in 0..<ScreenTimePolicy.batchesPerLane {
+                let events = try XCTUnwrap(center.events[run.activityPrefix + String(batch)])
+                for threshold in ScreenTimePolicy.thresholds(batch: batch) {
+                    let event = try XCTUnwrap(events[DeviceActivityEvent.Name(run.eventName(threshold: threshold))])
+                    let expected = run.lane == .learning
+                        ? configuration.learningApplications(for: try XCTUnwrap(run.themeID))
+                        : configuration.distractionSelection.applicationTokens
+                    XCTAssertEqual(event.applications, expected)
+                    XCTAssertEqual(event.threshold.minute, threshold * 10)
+                }
+            }
+        }
+        let before = center.startCount
+        XCTAssertTrue(try monitor.synchronize(now: now.addingTimeInterval(60)))
+        XCTAssertEqual(center.startCount, before, "An unchanged settings pass must preserve event baselines")
+    }
+
+    func testAppsSharingADestinationContributeToTheSameTenMinuteEvent() throws {
+        var configuration = try configuration(applications: 3)
+        let tokens = Array(configuration.learningSelection.applicationTokens)
+        let news = UUID(), reading = UUID()
+        configuration.setLearningThemeID(news, for: tokens[0])
+        configuration.setLearningThemeID(news, for: tokens[1])
+        configuration.setLearningThemeID(reading, for: tokens[2])
+        let (store, center, monitor) = try fixture(configuration)
+        XCTAssertTrue(try monitor.synchronize(now: now))
+        let runs = try store.snapshot().runs
+        XCTAssertEqual(runs.count, 2)
+        let newsRun = try XCTUnwrap(runs.first { $0.themeID == news })
+        let event = try XCTUnwrap(center.events[newsRun.activityPrefix + "0"]?[
+            DeviceActivityEvent.Name(newsRun.eventName(threshold: 1))])
+        XCTAssertEqual(event.applications, Set([tokens[0], tokens[1]]))
+    }
+
+    func testSharedActivityCallbacksAttributeIndependentlyAndRejectAnotherRegistration() throws {
+        var configuration = try configuration(applications: 2)
+        for token in configuration.learningSelection.applicationTokens {
+            configuration.setLearningThemeID(UUID(), for: token)
+        }
+        let (store, _, monitor) = try fixture(configuration)
+        XCTAssertTrue(try monitor.synchronize(now: now))
+        let runs = try store.snapshot().runs
+        let first = runs[0], second = runs[1]
+        try monitor.handleThreshold(eventName: first.eventName(threshold: 2), activityName: first.activityPrefix + "0",
+                                    now: now.addingTimeInterval(1_201))
+        try monitor.handleThreshold(eventName: second.eventName(threshold: 1), activityName: second.activityPrefix + "0",
+                                    now: now.addingTimeInterval(1_202))
+        try monitor.handleThreshold(eventName: first.eventName(threshold: 1), activityName: first.activityPrefix + "0",
+                                    now: now.addingTimeInterval(1_203))
+        try monitor.handleThreshold(eventName: first.eventName(threshold: 3),
+                                    activityName: ScreenTimePolicy.activityPrefix + UUID().uuidString + ".0",
+                                    now: now.addingTimeInterval(1_801))
+        let receipts = try store.pendingLearningReceipts()
+        XCTAssertEqual(receipts.filter { $0.themeID == first.themeID }.count, 2)
+        XCTAssertEqual(receipts.filter { $0.themeID == second.themeID }.count, 1)
+        XCTAssertEqual(Set(receipts.map(\.id)).count, 3)
+    }
+
+    @MainActor
+    func testReassigningPodcastAndAudibleKeepsCompletedEnglishReceiptsAndStartsNewDestinations() async throws {
+        var configuration = try configuration(applications: 2)
+        let english = UUID(), news = UUID(), reading = UUID()
+        configuration.themeID = english
+        let tokens = Array(configuration.learningSelection.applicationTokens)
+        let (store, center, monitor) = try fixture(configuration)
+        let driver = FixedMonitor(monitor, now: now)
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
+                                              monitoring: driver, authorization: { .approved },
+                                              noticeDefaults: noticeDefaults)
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        XCTAssertTrue(try monitor.synchronize(now: now))
+        let oldRun = try XCTUnwrap(try store.snapshot().runs.first)
+        try monitor.handleThreshold(eventName: "2", activityName: oldRun.activityPrefix + "0",
+                                    now: now.addingTimeInterval(1_201))
+        let oldReceipts = try store.pendingLearningReceipts()
+        XCTAssertEqual(oldReceipts.count, 2)
+        configuration.setLearningThemeID(news, for: tokens[0])
+        configuration.setLearningThemeID(reading, for: tokens[1])
+        driver.now = now.addingTimeInterval(1_800)
+        try await controller.save(configuration: configuration, isPro: false)
+        let saved = try store.snapshot()
+        XCTAssertEqual(saved.pendingLearningReceipts(limit: 64), oldReceipts)
+        XCTAssertEqual(Set(oldReceipts.map(\.themeID)), [english])
+        XCTAssertFalse(try XCTUnwrap(saved.runs.first { $0.id == oldRun.id }).active)
+        XCTAssertEqual(Set(saved.runs.filter(\.active).compactMap(\.themeID)), [news, reading])
+        XCTAssertFalse(center.activities.contains { $0.rawValue.hasPrefix(oldRun.activityPrefix) })
+        try monitor.handleThreshold(eventName: "3", activityName: oldRun.activityPrefix + "0",
+                                    now: now.addingTimeInterval(2_401))
+        XCTAssertEqual(try store.pendingLearningReceipts(), oldReceipts)
+        for run in saved.runs where run.active {
+            try monitor.handleThreshold(eventName: run.eventName(threshold: 1), activityName: run.activityPrefix + "0",
+                                        now: now.addingTimeInterval(2_401))
+        }
+        let receipts = try store.pendingLearningReceipts()
+        XCTAssertEqual(receipts.filter { $0.themeID == english }.count, 2)
+        XCTAssertEqual(receipts.filter { $0.themeID == news }.count, 1)
+        XCTAssertEqual(receipts.filter { $0.themeID == reading }.count, 1)
+    }
+
+    @MainActor
+    func testDeletingOneThemeKeepsOtherAppsAndRecordingEnabled() async throws {
+        var configuration = try configuration(applications: 2)
+        let tokens = Array(configuration.learningSelection.applicationTokens)
+        let removed = UUID(), remaining = UUID()
+        configuration.setLearningThemeID(removed, for: tokens[0])
+        configuration.setLearningThemeID(remaining, for: tokens[1])
+        let (store, _, monitor) = try fixture(configuration)
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
+                                              monitoring: FixedMonitor(monitor, now: now), authorization: { .approved },
+                                              noticeDefaults: noticeDefaults)
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        let outcome = await controller.retireLearningSelection(ofRemovedTheme: removed, isPro: false)
+        XCTAssertTrue(outcome.cleared)
+        XCTAssertNil(outcome.failure)
+        let saved = try store.snapshot().configuration
+        XCTAssertTrue(saved.enabled)
+        XCTAssertEqual(saved.learningSelection.applicationTokens, [tokens[1]])
+        XCTAssertEqual(saved.learningThemeID(for: tokens[1]), remaining)
+        XCTAssertTrue(ScreenTimeThemeDeletionNotice.applies(to: remaining, configuration: saved, isBound: true))
+        XCTAssertFalse(ScreenTimeThemeDeletionNotice.applies(to: removed, configuration: saved, isBound: true))
+    }
+
+    @MainActor
+    func testDeletingAThemeOverTheFreeLimitStillRemovesItsAppsWithoutChangingAnUnresolvedEntitlement() async throws {
+        for entitlement in [false, nil, true] as [Bool?] {
+            var configuration = try configuration(applications: 8)
+            let tokens = Array(configuration.learningSelection.applicationTokens)
+            let removed = UUID(), remaining = UUID()
+            configuration.reconcileLearningThemeAssignments(defaultThemeID: remaining)
+            configuration.setLearningThemeID(removed, for: tokens[0])
+            let (store, _, monitor) = try fixture(configuration)
+            let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
+                                                  monitoring: FixedMonitor(monitor, now: now), authorization: { .approved },
+                                              noticeDefaults: noticeDefaults)
+            try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+            let outcome = await controller.retireLearningSelection(ofRemovedTheme: removed, isPro: entitlement)
+            XCTAssertTrue(outcome.cleared)
+            XCTAssertNil(outcome.failure)
+            let state = try store.snapshot()
+            XCTAssertEqual(state.configuration.learningSelection.applicationTokens.count, 7)
+            XCTAssertFalse(state.configuration.learningSelection.applicationTokens.contains(tokens[0]))
+            XCTAssertEqual(state.configuration.learningThemeIDs, [remaining])
+            XCTAssertEqual(state.learningAllowedBySubscription, entitlement != false,
+                           "A real downgrade closes the gate; no StoreKit answer preserves it")
+            XCTAssertEqual(state.runs.contains { $0.active && $0.lane == .learning }, entitlement != false)
+        }
+    }
+
+    func testTimerPrearmsAllDestinationsWithoutIncreasingActivityCountAndRetiresAllOnIndefinitePause() throws {
+        var configuration = try configuration(applications: 2)
+        for token in configuration.learningSelection.applicationTokens {
+            configuration.setLearningThemeID(UUID(), for: token)
+        }
+        let (store, center, monitor) = try fixture(configuration)
+        let end = now.addingTimeInterval(1_500)
+        try store.update { $0.applyTimerPause(.until(end), now: now) }
+        XCTAssertTrue(try monitor.synchronize(now: now))
+        let runs = try store.snapshot().runs.filter(\.active)
+        XCTAssertEqual(runs.count, 2)
+        XCTAssertTrue(runs.allSatisfy { $0.startedAt == end && !$0.includesPastActivity })
+        XCTAssertEqual(center.activities.count, 1 + ScreenTimePolicy.batchesPerLane)
+        for run in runs {
+            try monitor.handleThreshold(eventName: run.eventName(threshold: 1), activityName: run.activityPrefix + "0",
+                                        now: end.addingTimeInterval(601))
+        }
+        XCTAssertEqual(try store.pendingLearningReceipts().count, 2)
+        try store.update { $0.applyTimerPause(.indefinite, now: end.addingTimeInterval(602)) }
+        XCTAssertFalse(try monitor.synchronize(now: end.addingTimeInterval(602)))
+        XCTAssertTrue(try store.snapshot().runs.allSatisfy { !$0.active })
+        XCTAssertEqual(center.activities.count, 1)
+    }
+
+    func testRolloverOnlyReplaysMidnightUsageForTheDestinationThatWasAlreadyActive() throws {
+        var configuration = try configuration(applications: 2)
+        let tokens = Array(configuration.learningSelection.applicationTokens)
+        let continuing = UUID(), added = UUID()
+        configuration.setLearningThemeID(continuing, for: tokens[0])
+        configuration.setLearningThemeID(added, for: tokens[1])
+        let (store, _, monitor) = try fixture(configuration)
+        let dayStart = Calendar.current.startOfDay(for: now)
+        let previousDay = Calendar.current.date(byAdding: .day, value: -1, to: dayStart)!
+        try store.update {
+            $0.runs = [ScreenTimeRun(lane: .learning, dayStart: previousDay, dayEnd: dayStart,
+                                    startedAt: previousDay, timeZoneID: Calendar.current.timeZone.identifier,
+                                    includesPastActivity: false, themeID: continuing)]
+        }
+        XCTAssertTrue(try monitor.synchronize(now: now))
+        let state = try store.snapshot()
+        XCTAssertTrue(state.isValid)
+        let continued = try XCTUnwrap(state.runs.first { $0.active && $0.themeID == continuing })
+        let newlyAdded = try XCTUnwrap(state.runs.first { $0.active && $0.themeID == added })
+        XCTAssertTrue(continued.includesPastActivity)
+        XCTAssertEqual(continued.startedAt, dayStart)
+        XCTAssertFalse(newlyAdded.includesPastActivity)
+        XCTAssertEqual(newlyAdded.startedAt, now)
+        XCTAssertEqual(continued.activityPrefix, newlyAdded.activityPrefix)
+        let report = ScreenTimeDiagnosticsReport(state: state, now: now)
+        XCTAssertEqual(report.schemaVersion, 4)
+        XCTAssertEqual(report.learning.activeRuns, 2)
+        XCTAssertNil(report.learning.includesPastActivity, "Mixed destinations cannot be reported as a single Boolean")
+        XCTAssertNil(report.learning.runStartedAtOffsetSec)
+        XCTAssertNotNil(report.learning.intervalStartOffsetSec)
+    }
+
+    @MainActor
+    func testMigratingTheLegacyMapWithoutChangingDestinationsPreservesAnActiveRun() async throws {
+        var configuration = try configuration(applications: 2)
+        configuration.themeID = UUID()
+        let (store, center, monitor) = try fixture(configuration)
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
+                                              monitoring: FixedMonitor(monitor, now: now), authorization: { .approved },
+                                              noticeDefaults: noticeDefaults)
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        XCTAssertTrue(try monitor.synchronize(now: now))
+        let run = try XCTUnwrap(try store.snapshot().runs.first)
+        let starts = center.startCount
+        configuration.reconcileLearningThemeAssignments()
+        try await controller.save(configuration: configuration, isPro: false)
+        XCTAssertEqual(try store.snapshot().runs.first?.id, run.id)
+        XCTAssertEqual(center.startCount, starts)
+    }
+
+    private func token(_ index: UInt8) throws -> ApplicationToken {
+        try JSONDecoder().decode(ApplicationToken.self,
+                                 from: JSONEncoder().encode(["data": Data([0xD3, index])]))
+    }
+
+    private func configuration(applications: Int) throws -> ScreenTimeConfiguration {
+        var configuration = ScreenTimeConfiguration()
+        configuration.enabled = true
+        configuration.learningSelection.applicationTokens = Set(try (0..<applications).map { try token(UInt8($0)) })
+        return configuration
+    }
+
+    private func fixture(_ configuration: ScreenTimeConfiguration) throws
+        -> (ScreenTimeStore, PerApplicationCenter, ScreenTimeMonitoring) {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        directories.append(directory)
+        let store = ScreenTimeStore(directory: directory)
+        try store.update {
+            $0.contextKey = "owner"
+            $0.contextIsActive = true
+            $0.configuration = configuration
+        }
+        let center = PerApplicationCenter()
+        let monitor = ScreenTimeMonitoring(store: store, center: center, authorization: { true })
+        return (store, center, monitor)
+    }
+
+    private final class FixedMonitor: ScreenTimeMonitoringDriving {
+        let monitor: ScreenTimeMonitoring
+        var now: Date
+        init(_ monitor: ScreenTimeMonitoring, now: Date) { self.monitor = monitor; self.now = now }
+        func stop() { monitor.stop() }
+        func invalidateAuthorizationIfNeeded() throws { try monitor.invalidateAuthorizationIfNeeded() }
+        func synchronize(now: Date) throws -> Bool { try monitor.synchronize(now: self.now) }
+    }
+
+    private final class PerApplicationCenter: ScreenTimeActivityCenterDriving {
+        var events: [String: [DeviceActivityEvent.Name: DeviceActivityEvent]] = [:]
+        var startCount = 0
+        var activities: [DeviceActivityName] { events.keys.map(DeviceActivityName.init(rawValue:)) }
+        func stopMonitoring(_ activities: [DeviceActivityName]) {
+            XCTAssertFalse(activities.isEmpty)
+            for activity in activities { events.removeValue(forKey: activity.rawValue) }
+        }
+        func startMonitoring(_ activity: DeviceActivityName, during schedule: DeviceActivitySchedule,
+                             events: [DeviceActivityEvent.Name: DeviceActivityEvent]) throws {
+            self.events[activity.rawValue] = events
+            startCount += 1
+            XCTAssertLessThanOrEqual(self.events.count + ScreenTimePolicy.focusShieldActivities, 20)
+        }
     }
 }

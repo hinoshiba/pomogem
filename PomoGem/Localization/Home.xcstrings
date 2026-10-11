@@ -3193,23 +3193,6 @@
         }
       }
     },
-    "勉強アプリ10分ごとに1粒" : {
-      "comment" : "Home menu row detail: every 10 minutes in the chosen study apps adds one pebble",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "1 gem for every 10 minutes in study apps"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "勉強アプリ10分ごとに1粒"
-          }
-        }
-      }
-    },
     "動く瓶をシェア" : {
       "comment" : "Home menu row: open the share composer with the animated jar",
       "localizations" : {
@@ -5131,6 +5114,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "達成した日"
+          }
+        }
+      }
+    },
+    "選んだアプリをテーマ別に記録" : {
+      "comment" : "Home menu row detail: every 10 minutes in the chosen study apps adds one pebble",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Record selected apps by theme"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選んだアプリをテーマ別に記録"
           }
         }
       }

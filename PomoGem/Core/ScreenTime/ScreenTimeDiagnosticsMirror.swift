@@ -168,15 +168,17 @@ final class ScreenTimeDiagnosticsMirror {
 struct ScreenTimeDiagnosticsReport: Codable, Equatable {
     /// Bumped when a field is added, renamed or given a new meaning, so a file
     /// pulled off a phone can be read against the right description.
-    static let schemaVersion = 3
+    static let schemaVersion = 4
 
     /// What one lane's registration looks like in the ledger this pass read.
     struct LaneSchedule: Codable, Equatable {
-        /// 0 or 1 in a valid ledger: `ScreenTimeState.isValid` allows at most
-        /// one active run per lane.
+        /// Learning can have one run per destination, all sharing the same
+        /// eight registrations. Distraction still has at most one.
         var activeRuns: Int
-        /// The fields below describe that active run, and are absent without
-        /// one.
+        /// The interval is shared by the active runs and absent without one.
+        /// Since schema 4, `runStartedAtOffsetSec` and `includesPastActivity`
+        /// are present only when every destination agrees. Mixed rollover
+        /// continuity must not be reported as one arbitrary destination.
         ///
         /// `intervalStartOffsetSec` / `intervalEndOffsetSec` are measured from
         /// `writtenAt`, NOT from the moment the registration was made — this
@@ -285,8 +287,10 @@ struct ScreenTimeDiagnosticsReport: Codable, Equatable {
             intervalEndOffsetSec: ScreenTimeDiagnosticSeconds.between(
                 now, run.dayEnd.addingTimeInterval(-1)
             ),
-            runStartedAtOffsetSec: ScreenTimeDiagnosticSeconds.between(run.startedAt, run.dayStart),
-            includesPastActivity: run.includesPastActivity,
+            runStartedAtOffsetSec: active.allSatisfy { $0.startedAt == run.startedAt }
+                ? ScreenTimeDiagnosticSeconds.between(run.startedAt, run.dayStart) : nil,
+            includesPastActivity: active.allSatisfy { $0.includesPastActivity == run.includesPastActivity }
+                ? run.includesPastActivity : nil,
             repeats: false
         )
     }

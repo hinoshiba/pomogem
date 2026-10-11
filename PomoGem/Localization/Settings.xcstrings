@@ -1155,6 +1155,35 @@
         }
       }
     },
+    "ほか%lldアプリ" : {
+      "comment" : "More selected apps; open the page for the full list",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld more app"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld more apps"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ほか%lldアプリ"
+          }
+        }
+      }
+    },
     "ほかの端末と古いバージョンに関する制約を確認しました" : {
       "comment" : "Complete data deletion: acknowledgement switch on the last step",
       "localizations" : {
@@ -1223,19 +1252,19 @@
         }
       }
     },
-    "アプリの利用時間" : {
-      "comment" : "Settings index row title: app usage",
+    "アプリの時間を積む" : {
+      "comment" : "Settings index row title, shared with Home and the destination page",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "App Usage"
+            "value" : "Add App Time"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "アプリの利用時間"
+            "value" : "アプリの時間を積む"
           }
         }
       }
@@ -5130,6 +5159,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "選択中"
+          }
+        }
+      }
+    },
+    "選択中のアプリ" : {
+      "comment" : "Saved app selections shown on the Screen Time settings entry, including while recording is off",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selected Apps"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択中のアプリ"
           }
         }
       }

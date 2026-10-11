@@ -30,6 +30,133 @@ final class SettingsPaywallUITests: XCTestCase {
         app = nil
     }
 
+    func testSettingsHorizontalDragsPreserveRowsEdgeBackAndNativeSwipeActions() {
+        app.launch()
+        let nativeContentBackBeforeSettings = checkRecordsContentBack()
+        openSettingsForGestureChecks(launch: false)
+        assertInteriorDragsStay(on: "設定")
+
+        PomoGemSettingsUITestNavigation.open(.timer, in: app)
+        assertInteriorDragsStay(on: "集中タイマー")
+        swipeBackFromEdge()
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 8))
+        assertInteriorDragsStay(on: "設定")
+
+        // A cancelled edge-back transition must reinstall the settings policy.
+        let edge = app.coordinate(withNormalizedOffset: CGVector(dx: 0.002, dy: 0.65))
+        edge.press(forDuration: 0.05, thenDragTo: app.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.16, dy: 0.65)
+        ), withVelocity: .slow, thenHoldForDuration: 0.3)
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 8))
+        assertInteriorDragsStay(on: "設定")
+
+        let screenTime = app.buttons["settings.screen-time"]
+        XCTAssertTrue(PomoGemSettingsUITestNavigation.reveal(
+            screenTime, in: app, indexIdentifier: "settings.screen-time"
+        ))
+        screenTime.tap()
+        XCTAssertTrue(app.navigationBars["アプリの時間を積む"].waitForExistence(timeout: 8))
+        assertInteriorDragsStay(on: "アプリの時間を積む")
+        swipeBackFromEdge()
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 8))
+
+        PomoGemSettingsUITestNavigation.open(.themes, in: app)
+        let theme = app.buttons["英語"].firstMatch
+        XCTAssertTrue(theme.waitForExistence(timeout: 5))
+        theme.swipeLeft(velocity: .slow)
+        XCTAssertTrue(app.buttons["削除"].firstMatch.waitForExistence(timeout: 5),
+                      "Theme swipe actions remain available; nothing is deleted")
+        app.navigationBars["テーマ"].buttons.firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 8))
+        swipeBackFromEdge()
+        XCTAssertTrue(app.buttons["home.menu.open"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.navigationBars["設定"].exists)
+
+        // The OS and this page's own controls determine whether a content
+        // swipe returns home. Settings must leave that behavior unchanged.
+        XCTAssertEqual(checkRecordsContentBack(), nativeContentBackBeforeSettings)
+    }
+
+    func testSettingsIndexStaysWithinNarrowWidthAtLargestTextSize() {
+        app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1"
+        openSettingsForGestureChecks()
+        let identifiers = [
+            "settings.category.themes", "settings.category.timer", "settings.screen-time",
+            "settings.category.sensory", "settings.category.jar", "settings.category.notifications",
+            "settings.category.data", "settings.pro", "settings.category.support"
+        ]
+        let window = app.windows.firstMatch.frame
+        for identifier in identifiers {
+            let row = app.buttons[identifier]
+            // The last row has the system's 20-point bottom inset; horizontal
+            // bounds do not require an extra artificial 24-point safe margin.
+            for _ in 0..<15 {
+                if row.exists && row.isHittable { break }
+                app.swipeUp(velocity: .slow)
+            }
+            XCTAssertTrue(row.exists && row.isHittable, identifier)
+            XCTAssertGreaterThanOrEqual(row.frame.minX, window.minX - 1, identifier)
+            XCTAssertLessThanOrEqual(row.frame.maxX, window.maxX + 1, identifier)
+            XCTAssertGreaterThanOrEqual(row.frame.height, 43.5, identifier)
+        }
+        attach("Settings AX5 — all index rows fit the narrow phone")
+        assertInteriorDragsStay(on: "設定")
+        swipeBackFromEdge()
+        XCTAssertTrue(app.buttons["home.menu.open"].waitForExistence(timeout: 8))
+    }
+
+    private func openSettingsForGestureChecks(launch: Bool = true) {
+        if launch { app.launch() }
+        let menu = app.buttons["home.menu.open"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 12))
+        menu.tap()
+        let settings = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "設定")).firstMatch
+        XCTAssertTrue(settings.waitForExistence(timeout: 8))
+        settings.tap()
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 8))
+    }
+
+    private func checkRecordsContentBack() -> Bool {
+        let menu = app.buttons["home.menu.open"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 12))
+        menu.tap()
+        let records = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "記録を見る")).firstMatch
+        XCTAssertTrue(records.waitForExistence(timeout: 5))
+        records.tap()
+        let navigationBar = app.navigationBars["記録"]
+        XCTAssertTrue(navigationBar.waitForExistence(timeout: 8))
+        swipeAcrossContent(toRight: true)
+        let returnedHome = waitForAbsence(navigationBar, timeout: 2)
+        if !returnedHome {
+            navigationBar.buttons.firstMatch.tap()
+        }
+        XCTAssertTrue(menu.waitForExistence(timeout: 8))
+        return returnedHome
+    }
+
+    private func assertInteriorDragsStay(on title: String) {
+        swipeAcrossContent(toRight: false)
+        XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5),
+                      "A horizontal drag must not select a settings row")
+        swipeAcrossContent(toRight: true)
+        XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5),
+                      "An interior drag must not start back navigation")
+    }
+
+    private func swipeAcrossContent(toRight: Bool) {
+        let startX = toRight ? 0.15 : 0.9
+        let endX = toRight ? 0.9 : 0.15
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: startX, dy: 0.6))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: endX, dy: 0.6))
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .fast, thenHoldForDuration: 0)
+    }
+
+    private func swipeBackFromEdge() {
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.002, dy: 0.65))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.65))
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .fast, thenHoldForDuration: 0)
+    }
+
     func testSettingsKeepsSupportPrivacyAndTheAboutPageTogether() {
         checkSettingsLayout(accessibility5: false)
     }
@@ -65,11 +192,11 @@ final class SettingsPaywallUITests: XCTestCase {
         let entry = app.buttons["settings.screen-time"]
         XCTAssertTrue(reveal(entry))
         entry.tap()
-        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.navigationBars["アプリの時間を積む"].waitForExistence(timeout: 8))
         XCTAssertTrue(element("screen-time.authorization-status").waitForExistence(timeout: 6))
         XCTAssertFalse(XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.firstMatch.exists,
                        "Opening the settings page never asks for Screen Time access")
-        app.navigationBars["スクリーンタイム"].buttons.firstMatch.tap()
+        app.navigationBars["アプリの時間を積む"].buttons.firstMatch.tap()
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
         PomoGemSettingsUITestNavigation.returnHome(in: app)
     }

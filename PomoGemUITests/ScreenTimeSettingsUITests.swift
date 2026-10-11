@@ -1,9 +1,9 @@
 import XCTest
 
-/// Simulator navigation and accessibility coverage only. These tests never
-/// grant permission, simulate a successful callback, or operate the app picker.
+/// Simulator navigation, draft persistence and accessibility coverage only.
+/// These tests never grant permission or simulate a successful usage callback.
 ///
-/// One of them opts into a DEBUG-only Simulator fixture
+/// Some tests opt into a DEBUG-only Simulator fixture
 /// (`ScreenTimeSettingsUITestFixture`) so the unbound -> bound draft re-seed
 /// can be exercised at all: it stubs the authorization STATUS on a private
 /// controller over a temporary-directory ledger and replaces
@@ -131,7 +131,7 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         XCTAssertTrue(alert.waitForExistence(timeout: 6))
         attach("Screen Time — save reports the unbound context")
         alert.buttons["閉じる"].tap()
-        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.navigationBars["アプリの時間を積む"].waitForExistence(timeout: 4))
     }
 
     /// The load-bearing half of F4: the settings screen is opened while the
@@ -146,7 +146,7 @@ final class ScreenTimeSettingsUITests: XCTestCase {
     func testALateContextBindingSeedsTheStoredSelectionInsteadOfAnEmptyDraft() {
         app.launchEnvironment["POMOGEM_UI_TEST_SCREEN_TIME"] = "late-binding"
         app.launch()
-        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.navigationBars["アプリの時間を積む"].waitForExistence(timeout: 20))
 
         let ledger = app.staticTexts["screen-time.fixture-ledger"]
         XCTAssertTrue(ledger.waitForExistence(timeout: 10))
@@ -172,9 +172,8 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         XCTAssertTrue(reveal(learning))
         XCTAssertEqual(learning.value as? String, "0アプリ選択中")
         XCTAssertFalse(learning.isEnabled, "Unbound, no apps can be picked")
-        let theme = app.descendants(matching: .any)["screen-time.theme"].firstMatch
-        XCTAssertTrue(reveal(theme))
-        XCTAssertFalse(theme.isEnabled, "Unbound, the theme cannot be chosen")
+        XCTAssertFalse(learningThemePicker(at: 0).exists,
+                       "An unbound empty selection must not invent a destination row")
         let distraction = app.buttons["screen-time.distraction-apps"]
         XCTAssertTrue(reveal(distraction))
         XCTAssertEqual(distraction.value as? String, "0アプリ選択中")
@@ -215,10 +214,9 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         XCTAssertEqual(learning.value as? String, "2アプリ選択中",
                        "The unbound -> bound transition must re-seed the draft")
         XCTAssertTrue(learning.isEnabled, "Bound, the page can be edited")
-        // The theme picker sits directly under the learning row.
-        XCTAssertTrue(reveal(theme))
-        XCTAssertTrue("\(theme.value ?? "")\(theme.label)".contains("スクリーンタイム検証テーマ"),
-                      "The re-seeded draft must carry the stored theme: \(theme.debugDescription)")
+        for index in 0..<2 {
+            assertLearningTheme(at: index, is: "スクリーンタイム検証テーマ")
+        }
         XCTAssertTrue(reveal(distraction))
         XCTAssertEqual(distraction.value as? String, "1アプリ選択中")
         XCTAssertTrue(reveal(total))
@@ -293,29 +291,42 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         pick.tap()
         let closed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: pick)
         XCTAssertEqual(XCTWaiter.wait(for: [closed], timeout: 10), .completed, "The pick must close the sheet")
-        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 6))
+        XCTAssertTrue(app.navigationBars["アプリの時間を積む"].waitForExistence(timeout: 6))
         XCTAssertTrue(reveal(learning))
         XCTAssertEqual(learning.value as? String, "2アプリ選択中", "Both picked apps must reach the page")
 
         XCTAssertTrue(reveal(enabled))
         XCTAssertEqual(enabled.value as? String, "1", "A first pick must switch recording on")
-        let theme = app.descendants(matching: .any)["screen-time.theme"].firstMatch
-        XCTAssertTrue(reveal(theme))
-        XCTAssertTrue("\(theme.value ?? "")\(theme.label)".contains("スクリーンタイム検証テーマ"),
-                      "The only theme becomes the destination: \(theme.debugDescription)")
+        for index in 0..<2 {
+            assertLearningTheme(at: index, is: "スクリーンタイム検証テーマ")
+        }
         XCTAssertTrue(ledger.label.contains("enabled=0"), "Nothing is saved before 保存: \(ledger.label)")
         attach("Screen Time — first pick switched recording on")
 
-        // Unsaved: back asks, and staying keeps everything.
+        // The horizontal-scroll fix must not re-enable native edge-back
+        // while a draft is unsaved. Use the same fast edge gesture that
+        // leaves a clean settings page in SettingsPaywallUITests.
         let back = app.buttons["screen-time.back"]
         XCTAssertTrue(back.waitForExistence(timeout: 6))
+        let edge = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.65))
+            .withOffset(CGVector(dx: 0.75, dy: 0))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.65))
+        edge.press(forDuration: 0.05, thenDragTo: end, withVelocity: .fast, thenHoldForDuration: 0)
+        XCTAssertTrue(app.navigationBars["アプリの時間を積む"].waitForExistence(timeout: 6))
+        XCTAssertTrue(back.exists, "An edge swipe must retain the unsaved draft")
+        XCTAssertTrue(reveal(learning, upwards: false))
+        XCTAssertEqual(learning.value as? String, "2アプリ選択中")
+        XCTAssertTrue(ledger.label.contains("learning=0"), "The gesture must not save the draft: \(ledger.label)")
+        attach("Screen Time — unsaved app choices survive edge-back")
+
+        // Unsaved: back asks, and staying keeps everything.
         back.tap()
         XCTAssertTrue(app.buttons["保存して戻る"].waitForExistence(timeout: 6))
         XCTAssertTrue(app.buttons["変更を破棄して戻る"].exists)
         attach("Screen Time — unsaved changes question")
         keepEditing()
         XCTAssertFalse(app.buttons["変更を破棄して戻る"].waitForExistence(timeout: 2))
-        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.navigationBars["アプリの時間を積む"].waitForExistence(timeout: 4))
         XCTAssertTrue(reveal(enabled))
         XCTAssertEqual(enabled.value as? String, "1")
 
@@ -333,7 +344,7 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         XCTAssertFalse(app.buttons["screen-time.back"].waitForExistence(timeout: 2))
 
         // Nothing unsaved: the ordinary back button leaves at once.
-        app.navigationBars["スクリーンタイム"].buttons.firstMatch.tap()
+        app.navigationBars["アプリの時間を積む"].buttons.firstMatch.tap()
         XCTAssertTrue(app.navigationBars["fixture-root"].waitForExistence(timeout: 6))
 
         // Discarding really discards.
@@ -350,6 +361,91 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         XCTAssertTrue(ledger.label.contains("enabled=1"), "A discarded edit must not reach the ledger: \(ledger.label)")
     }
 
+    /// A real draft/save lifecycle over the temporary ledger. Synthetic app
+    /// labels prove row placement and per-app routing, not that the Simulator
+    /// can resolve real Family Controls identities.
+    func testSelectedAppsHaveIndependentThemeDestinationsThatSaveAndDiscard() {
+        launchPerAppFixture()
+        let ledger = app.staticTexts["screen-time.fixture-ledger"]
+        let seed = "スクリーンタイム検証テーマ"
+        let alternate = "アプリ別の検証テーマ"
+        expectLedger(ledger, contains: "assignments=app1:seed,app2:alternate", timeout: 10)
+        assertSelectedApplicationNames()
+        // App-name coverage ends below the learning rows, so return upwards.
+        assertLearningTheme(at: 0, is: seed, upwards: false)
+        assertLearningTheme(at: 1, is: alternate)
+        attach("Screen Time — selected app names and independent destinations")
+
+        chooseLearningTheme(at: 0, named: alternate, upwards: false)
+        assertLearningTheme(at: 1, is: alternate)
+        XCTAssertTrue(ledger.label.contains("assignments=app1:seed,app2:alternate"),
+                      "A theme change must remain a draft until 保存: \(ledger.label)")
+        app.buttons["screen-time.save"].tap()
+        expectLedger(ledger, contains: "assignments=app1:alternate,app2:alternate", timeout: 20)
+        app.navigationBars["アプリの時間を積む"].buttons.firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["fixture-root"].waitForExistence(timeout: 6))
+        openFixtureSettings()
+        assertLearningTheme(at: 0, is: alternate)
+        assertLearningTheme(at: 1, is: alternate)
+
+        chooseLearningTheme(at: 1, named: seed)
+        assertLearningTheme(at: 0, is: alternate, upwards: false)
+        let back = app.buttons["screen-time.back"]
+        XCTAssertTrue(back.waitForExistence(timeout: 6))
+        back.tap()
+        let discard = app.buttons["変更を破棄して戻る"]
+        XCTAssertTrue(discard.waitForExistence(timeout: 6))
+        discard.tap()
+        XCTAssertTrue(app.navigationBars["fixture-root"].waitForExistence(timeout: 6))
+        XCTAssertTrue(ledger.label.contains("assignments=app1:alternate,app2:alternate"),
+                      "Discard must preserve both saved destinations: \(ledger.label)")
+        openFixtureSettings()
+        assertLearningTheme(at: 0, is: alternate)
+        assertLearningTheme(at: 1, is: alternate)
+
+        chooseLearningTheme(at: 1, named: seed)
+        app.buttons["screen-time.back"].tap()
+        let saveAndBack = app.buttons["保存して戻る"]
+        XCTAssertTrue(saveAndBack.waitForExistence(timeout: 6))
+        saveAndBack.tap()
+        XCTAssertTrue(app.navigationBars["fixture-root"].waitForExistence(timeout: 20))
+        expectLedger(ledger, contains: "assignments=app1:alternate,app2:seed", timeout: 20)
+        openFixtureSettings()
+        assertLearningTheme(at: 0, is: alternate)
+        assertLearningTheme(at: 1, is: seed)
+        attach("Screen Time — separately saved destinations survive reopening")
+    }
+
+    func testSelectedAppNamesAndThemeControlsRemainReadableAtAccessibilitySize() {
+        app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1"
+        launchPerAppFixture()
+        assertSelectedApplicationNames()
+        for index in 0..<2 {
+            let picker = learningThemePicker(at: index)
+            // The app-name checks finish at the distraction section. Once
+            // back at app 1, app 2 is below it again.
+            XCTAssertTrue(reveal(picker, upwards: index != 0))
+            XCTAssertGreaterThanOrEqual(picker.frame.height, 43.5)
+            XCTAssertGreaterThanOrEqual(picker.frame.minX, -0.5)
+            XCTAssertLessThanOrEqual(picker.frame.maxX, app.windows.firstMatch.frame.maxX + 0.5,
+                                     "A destination picker must fit the iPhone width at AX5")
+            XCTAssertTrue(picker.isEnabled)
+            let cell = app.cells.containing(.any, identifier: "screen-time.learning-theme.\(index)").firstMatch
+            let identifiedRow = app.descendants(matching: .any)["screen-time.learning-app.\(index)"].firstMatch
+            let row = cell.exists ? cell : identifiedRow
+            XCTAssertTrue(row.exists, "Each app and destination must have a containing settings row")
+            let name = app.staticTexts["学習アプリ\(index + 1)"]
+            XCTAssertTrue(name.exists)
+            for child in [name, picker] {
+                XCTAssertGreaterThanOrEqual(child.frame.minY, row.frame.minY - 0.5,
+                                            "A selected app row must not clip the top of its content")
+                XCTAssertLessThanOrEqual(child.frame.maxY, row.frame.maxY + 0.5,
+                                         "A long destination must fit its row without overlapping the next app")
+            }
+            attach("Screen Time AX5 — per-app destination \(index + 1)")
+        }
+    }
+
     /// F2 through the same DEBUG fixture: a bound, approved owner with apps
     /// chosen and the focus shield off. The switch is applied by 保存 like the
     /// rest of the page. A focus the fixture starts then reconciles the shield
@@ -361,7 +457,7 @@ final class ScreenTimeSettingsUITests: XCTestCase {
     func testTheFocusShieldSwitchSavesAndItsEscapeHatchLiftsTheShield() {
         app.launchEnvironment["POMOGEM_UI_TEST_SCREEN_TIME"] = "focus-shield"
         app.launch()
-        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.navigationBars["アプリの時間を積む"].waitForExistence(timeout: 20))
         let ledger = app.staticTexts["screen-time.fixture-ledger"]
         XCTAssertTrue(ledger.waitForExistence(timeout: 10))
         expectLedger(ledger, contains: "boundToContext=true", timeout: 20)
@@ -499,7 +595,7 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_SCREEN_TIME"] = "focus-shield-too-many"
         app.launch()
-        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.navigationBars["アプリの時間を積む"].waitForExistence(timeout: 20))
         let ledger = app.staticTexts["screen-time.fixture-ledger"]
         XCTAssertTrue(ledger.waitForExistence(timeout: 10))
         expectLedger(ledger, contains: "boundToContext=true", timeout: 20)
@@ -536,10 +632,10 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         let entry = openHomeMenuEntry()
         attach("Home menu — Screen Time entry")
         entry.tap()
-        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.navigationBars["アプリの時間を積む"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.staticTexts["screen-time.authorization-status"].waitForExistence(timeout: 6))
         attach("Screen Time opened from the Home menu")
-        app.navigationBars["スクリーンタイム"].buttons.firstMatch.tap()
+        app.navigationBars["アプリの時間を積む"].buttons.firstMatch.tap()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8), "Back returns to Home")
     }
 
@@ -602,7 +698,7 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(entry.frame.height, 43.5)
         attach("Home menu AX5 — Screen Time entry")
         entry.tap()
-        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.navigationBars["アプリの時間を積む"].waitForExistence(timeout: 8))
     }
 
     private func openHomeMenuEntry() -> XCUIElement {
@@ -613,7 +709,7 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         XCTAssertTrue(entry.waitForExistence(timeout: 8))
         XCTAssertTrue(reveal(entry))
         XCTAssertTrue(entry.label.contains("アプリの時間を積む"), entry.label)
-        XCTAssertTrue(entry.label.contains("勉強アプリ10分ごとに1粒"), "The detail names the apps that count: \(entry.label)")
+        XCTAssertTrue(entry.label.contains("選んだアプリをテーマ別に記録"), "The detail names the apps that count: \(entry.label)")
         return entry
     }
 
@@ -644,11 +740,53 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         }
     }
 
+    private func launchPerAppFixture() {
+        app.launchEnvironment["POMOGEM_UI_TEST_SCREEN_TIME"] = "per-app-categories"
+        app.launch()
+        let ledger = app.staticTexts["screen-time.fixture-ledger"]
+        XCTAssertTrue(ledger.waitForExistence(timeout: 20))
+        expectLedger(ledger, contains: "boundToContext=true", timeout: 20)
+        openFixtureSettings()
+    }
+
+    private func learningThemePicker(at index: Int) -> XCUIElement {
+        app.buttons["screen-time.learning-theme.\(index)"]
+    }
+
+    private func assertLearningTheme(at index: Int, is name: String, upwards: Bool = true,
+                                     file: StaticString = #filePath, line: UInt = #line) {
+        let picker = learningThemePicker(at: index)
+        XCTAssertTrue(reveal(picker, upwards: upwards), file: file, line: line)
+        XCTAssertTrue("\(picker.value ?? "")\(picker.label)".contains(name),
+                      "App \(index + 1) must keep its own destination: \(picker.debugDescription)",
+                      file: file, line: line)
+    }
+
+    private func chooseLearningTheme(at index: Int, named name: String, upwards: Bool = true) {
+        let picker = learningThemePicker(at: index)
+        XCTAssertTrue(reveal(picker, upwards: upwards))
+        picker.tap()
+        let option = app.buttons.matching(NSPredicate(format: "label == %@", name)).firstMatch
+        XCTAssertTrue(option.waitForExistence(timeout: 6), "Theme menu must offer \(name)")
+        option.tap()
+        XCTAssertTrue(picker.waitForExistence(timeout: 6))
+        assertLearningTheme(at: index, is: name)
+    }
+
+    private func assertSelectedApplicationNames() {
+        for name in ["学習アプリ1", "学習アプリ2", "気晴らしアプリ1"] {
+            let label = app.staticTexts[name]
+            XCTAssertTrue(reveal(label), "The selected app must be named on the settings page: \(name)")
+            XCTAssertGreaterThanOrEqual(label.frame.minX, -0.5)
+            XCTAssertLessThanOrEqual(label.frame.maxX, app.windows.firstMatch.frame.maxX + 0.5)
+        }
+    }
+
     private func openFixtureSettings() {
         let open = app.descendants(matching: .any)["screen-time.fixture-open"].firstMatch
         XCTAssertTrue(open.waitForExistence(timeout: 10))
         open.tap()
-        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.navigationBars["アプリの時間を積む"].waitForExistence(timeout: 8))
     }
 
     private func expectLedger(_ ledger: XCUIElement, contains fragment: String, timeout: TimeInterval) {
@@ -672,7 +810,7 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         let entry = app.descendants(matching: .any)["settings.screen-time"].firstMatch
         XCTAssertTrue(reveal(entry))
         entry.tap()
-        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 6))
+        XCTAssertTrue(app.navigationBars["アプリの時間を積む"].waitForExistence(timeout: 6))
     }
 
     private func assertAuthorizationHasNotBeenInvented() {
@@ -707,7 +845,7 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         attach("Screen Time — explicit local reset confirmation")
         alert.buttons["キャンセル"].tap()
         XCTAssertFalse(alert.exists)
-        XCTAssertTrue(app.navigationBars["スクリーンタイム"].exists)
+        XCTAssertTrue(app.navigationBars["アプリの時間を積む"].exists)
     }
 
     /// The footer the settings screen shows once the ledger IS bound. It is
@@ -741,7 +879,9 @@ final class ScreenTimeSettingsUITests: XCTestCase {
             if element.exists {
                 let top = app.navigationBars.allElementsBoundByIndex
                     .filter(\.isHittable).map(\.frame.maxY).max() ?? 0
-                let bottom = app.windows.firstMatch.frame.maxY - 36
+                let ledger = app.staticTexts["screen-time.fixture-ledger"]
+                let bottom = ledger.exists
+                    ? ledger.frame.minY - 8 : app.windows.firstMatch.frame.maxY - 36
                 let frame = settledFrame(of: element)
                 if frame.height > 0 && frame.width > 0 {
                     if frame.minY >= top && frame.maxY <= bottom {
@@ -749,20 +889,14 @@ final class ScreenTimeSettingsUITests: XCTestCase {
                         // the test never attempts to tap those controls.
                         return element.isHittable || !element.isEnabled
                     }
-                    if frame.maxY <= top {
-                        app.swipeDown(velocity: .fast)
-                        continue
-                    }
-                    if frame.minY >= bottom {
-                        app.swipeUp(velocity: .fast)
-                        continue
-                    }
                     if frame.height > bottom - top && element.isHittable {
                         return true
                     }
                 }
-                // Small corrections keep a tall AX5 row from being skipped by
-                // alternating full-screen swipes near a viewport edge.
+                // Use bounded corrections for fully offscreen rows too.
+                // Fast full-screen flings can jump a short app-name label
+                // from below the fixture bar to above the navigation bar,
+                // then back again forever at AX5.
                 let correction = frame.minY < top
                     ? top - frame.minY + 12 : bottom - frame.maxY - 12
                 let distance = min(160, max(60, abs(correction))) * (correction < 0 ? -1 : 1)

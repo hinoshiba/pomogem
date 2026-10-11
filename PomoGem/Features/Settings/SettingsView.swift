@@ -212,6 +212,7 @@ struct SettingsView: View {
             pageContent
         }
         .scrollContentBackground(.hidden)
+        .settingsEdgeSwipeBack()
         .background(NightBackground())
         .pomogemNavigationTitle(page?.title ?? String(localized: "設定", table: "Settings", comment: "Navigation title of the Settings screen"))
         .toolbarTitleDisplayMode(.large)
@@ -3615,12 +3616,34 @@ private struct ScreenTimeSettingsRowLabel: View {
     }
 
     var body: some View {
-        SettingsIndexRowLabel(
-            title: String(localized: "アプリの利用時間", table: "Settings", comment: "Settings index row title: app usage"),
-            subtitle: status.subtitle,
-            symbol: "hourglass",
-            isWarning: status.isWarning
-        )
+        VStack(alignment: .leading, spacing: 8) {
+            SettingsIndexRowLabel(
+                title: String(localized: "アプリの時間を積む", table: "Settings", comment: "Settings index row title, shared with Home and the destination page"),
+                subtitle: status.subtitle,
+                symbol: "hourglass",
+                isWarning: status.isWarning
+            )
+            let tokens = ScreenTimeApplicationList.tokens(in:
+                controller.configuration.learningSelection.applicationTokens
+                    .union(controller.configuration.distractionSelection.applicationTokens)
+            )
+            if !tokens.isEmpty {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("選択中のアプリ", tableName: "Settings", comment: "Saved app selections shown on the Screen Time settings entry, including while recording is off")
+                        .foregroundStyle(PomoGemTheme.muted)
+                    ForEach(Array(tokens.prefix(3)), id: \.self) { token in
+                        ScreenTimeApplicationLabel(token: token)
+                    }
+                    if tokens.count > 3 {
+                        Text("ほか\(tokens.count - 3)アプリ", tableName: "Settings", comment: "More selected apps; open the page for the full list")
+                            .foregroundStyle(PomoGemTheme.muted)
+                    }
+                }
+                .font(.caption)
+                .padding(.leading, 38)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

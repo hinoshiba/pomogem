@@ -25,6 +25,7 @@ enum ScreenTimeSettingsUITestFixture {
     /// fixture ledger must never be mistaken for a real owner's.
     static let ownerKey = "screen-time-uitest-owner"
     static let themeName = "スクリーンタイム検証テーマ"
+    static let alternateThemeName = "アプリ別の検証テーマ"
     static let learningApplicationCount = 2
     static let distractionApplicationCount = 1
     static let negativeGemCount = 3
@@ -44,6 +45,9 @@ enum ScreenTimeSettingsUITestFixture {
         /// settings screen is pushed from a root screen so going back — and
         /// the unsaved-changes question it asks — can be exercised.
         case firstSetup = "first-setup"
+        /// Two apps with independent destinations, opened from a root so
+        /// save, discard and reopen exercise the real settings lifecycle.
+        case perAppCategories = "per-app-categories"
         /// A bound owner without access whose request Family Controls
         /// refuses for want of a passcode, so the refusal, its fix and the
         /// Settings shortcut can be seen. The Simulator cannot refuse itself.
@@ -81,6 +85,21 @@ enum ScreenTimeSettingsUITestFixture {
             tokens.insert(token)
         }
         return tokens
+    }
+
+    /// Synthetic names let the UI test read selected apps without claiming
+    /// that the Simulator can resolve Apple's opaque tokens. The production
+    /// label always comes from FamilyControls; this helper is DEBUG-only.
+    static func fixtureApplicationName(for token: ApplicationToken) -> String? {
+        guard isActiveForCurrentProcess else { return nil }
+        for seed in [UInt8(0x11), 0x51, 0x22, 0x52, 0x33] {
+            let count = seed == 0x33 ? tooManyDistractionApplicationCount : 2
+            let tokens = ScreenTimeApplicationList.tokens(in: applicationTokens(count: count, seed: seed))
+            guard let index = tokens.firstIndex(of: token) else { continue }
+            let kind = seed == 0x11 || seed == 0x51 ? "学習アプリ" : "気晴らしアプリ"
+            return "\(kind)\(index + 1)"
+        }
+        return nil
     }
 
     static func tooManyAppsConfiguration(themeID: UUID) -> ScreenTimeConfiguration {
@@ -216,6 +235,7 @@ final class ScreenTimeSettingsUITestFixtureModel: ObservableObject {
     /// controller, and the row would otherwise still show the old ledger.
     @Published private(set) var focusPasses = 0
     let themeID = UUID()
+    let alternateThemeID = UUID()
     private let store: ScreenTimeStore
     private let directory: URL
     private let driver: ScreenTimeSettingsUITestFixtureDriver
@@ -271,6 +291,13 @@ final class ScreenTimeSettingsUITestFixtureModel: ObservableObject {
                 state.negativeGemCount = ScreenTimeSettingsUITestFixture.negativeGemCount
             case .focusShield:
                 state.configuration = seeded
+            case .perAppCategories:
+                var configuration = seeded
+                let tokens = sortedLearningTokens(in: configuration)
+                for (index, token) in tokens.enumerated() {
+                    configuration.setLearningThemeID(index == 0 ? themeID : alternateThemeID, for: token)
+                }
+                state.configuration = configuration
             case .focusShieldTooManyApps:
                 state.configuration = ScreenTimeSettingsUITestFixture.tooManyAppsConfiguration(themeID: themeID)
             case .firstSetup, .authorizationRefused:
@@ -283,6 +310,14 @@ final class ScreenTimeSettingsUITestFixtureModel: ObservableObject {
             colorHex: Constants.Color.english,
             sortOrder: 0
         ))
+        if scenario == .perAppCategories {
+            context.insert(Subject(
+                id: alternateThemeID,
+                name: ScreenTimeSettingsUITestFixture.alternateThemeName,
+                colorHex: Constants.Color.english,
+                sortOrder: 1
+            ))
+        }
         try? context.save()
     }
 
@@ -328,6 +363,19 @@ final class ScreenTimeSettingsUITestFixtureModel: ObservableObject {
         return record.liftedAt == nil ? "cleared" : "lifted"
     }
 
+    private func sortedLearningTokens(in configuration: ScreenTimeConfiguration) -> [ApplicationToken] {
+        ScreenTimeApplicationList.tokens(in: configuration.learningSelection.applicationTokens)
+    }
+
+    private func assignmentSummary(_ configuration: ScreenTimeConfiguration) -> String {
+        sortedLearningTokens(in: configuration).enumerated().map { index, token in
+            let destination = configuration.learningThemeID(for: token)
+            let theme = destination == themeID ? "seed"
+                : destination == alternateThemeID ? "alternate" : "missing"
+            return "app\(index + 1):\(theme)"
+        }.joined(separator: ",")
+    }
+
     /// What is actually on disk, independent of anything the screen publishes.
     /// `matchesSeed` is the assertion that matters: a save performed from a
     /// draft seeded off an unbound controller would replace the stored opaque
@@ -339,6 +387,7 @@ final class ScreenTimeSettingsUITestFixtureModel: ObservableObject {
             "distraction=\(state.configuration.distractionSelection.applicationTokens.count)",
             "enabled=\(state.configuration.enabled ? 1 : 0)",
             "theme=\(state.configuration.themeID == themeID ? "seed" : "other")",
+            "assignments=\(assignmentSummary(state.configuration))",
             "matchesSeed=\(state.configuration == seeded)",
             "sync=\(driver.events.filter { $0 == "synchronize" }.count)",
             "focusShield=\(state.configuration.shieldsDistractionDuringFocusEnabled ? 1 : 0)",
@@ -358,7 +407,8 @@ struct ScreenTimeSettingsUITestFixtureLaunchView: View {
         Group {
             if let model {
                 NavigationStack {
-                    if ScreenTimeSettingsUITestFixture.scenario == .firstSetup {
+                    if ScreenTimeSettingsUITestFixture.scenario == .firstSetup
+                        || ScreenTimeSettingsUITestFixture.scenario == .perAppCategories {
                         List {
                             NavigationLink("fixture-open-settings") {
                                 ScreenTimeSettingsView(controller: model.controller)
