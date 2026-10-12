@@ -177,11 +177,6 @@ struct HomeView: View {
     /// The jar stage's frame in the card's coordinate space, used to map
     /// settled gems behind the HUD's ink (F3).
     @State private var measuredJarStageFrame: CGRect = .zero
-    /// Room for a tapped crystal's card under the bottle
-    /// (`AggregateCardPlacementPolicy`), in the Home content's coordinates.
-    @State private var measuredPickerRowTop: CGFloat?
-    @State private var measuredLauncherTop: CGFloat?
-    @State private var measuredAggregateCardHeight: CGFloat?
     @State private var homeIsVisible = false
     @State private var rewardDropRevealIsPending = false
     @State private var rewardDropRevealRequestID: UUID?
@@ -241,9 +236,7 @@ struct HomeView: View {
     @State private var homeMenuDetent: PresentationDetent = .medium
     @State private var showAccumulationOverview = false
     @State private var overviewInitialClusterID: UUID?
-    @State private var aggregateInspectionID: UUID?
     @State private var selectedAggregateDetail: AccumulationClusterSummary?
-    @State private var aggregateInspectionTask: Task<Void, Never>?
     @State private var showManualEntry = false
     /// history-02. Confirmed but not yet written; see `PendingManualEntry`.
     @State private var pendingManualEntry: PendingManualEntry?
@@ -788,10 +781,6 @@ struct HomeView: View {
     private var latestInspectableAggregateID: UUID? {
         TimeFusionPolicy.snapshot(totalGrams: totalGrams).crystals.last?.id
     }
-    private var aggregateInspectionSummary: AccumulationClusterSummary? {
-        guard let aggregateInspectionID else { return nil }
-        return inspectionSummary(for: aggregateInspectionID)
-    }
     private func visibleGoldPebbleCount(
         roots: [AggregatePebble],
         looseSessions: [StudySession]
@@ -959,15 +948,7 @@ struct HomeView: View {
         VStack(spacing: 0) {
             GeometryReader { proxy in
                 let jarLayout = homeJarLayout(availableHeight: proxy.size.height)
-                // launch-perf (d): one theme read per pass for the card's
-                // placement and the picker row. `activeSubjects` canonicalises
-                // every theme row; the card's extra read cost 19–21 ms of main
-                // thread per landing on an iPhone 12 mini.
                 let hasActiveSubjects = !activeSubjects.isEmpty
-                let cardPlacement = aggregateCardPlacement(
-                    jarLayout: jarLayout,
-                    hasActiveSubjects: hasActiveSubjects
-                )
                 // One readout for the jar and its large-text companion; both
                 // readers take their values from it.
                 let stage = jarStageSnapshot
@@ -975,7 +956,7 @@ struct HomeView: View {
                 ScrollViewReader { scrollProxy in
                 ScrollView {
                     VStack(spacing: 0) {
-                        jarCard(layout: jarLayout, cardPlacement: cardPlacement, stage: stage)
+                        jarCard(layout: jarLayout, stage: stage)
                             .id("home.jar")
                             // D5: every row of the readout above the mouth,
                             // never drawn, sizes the room it takes.
@@ -984,41 +965,16 @@ struct HomeView: View {
                                     aboveMouthReadoutTemplate
                                 }
                             }
-                        if showsAggregateInspectionSlot(cardPlacement) {
+                        if showsTimeProgressLink {
                             JarStageReader(state: jarStageState, stage: stage) { readout in
                                 aggregateInspectionSlot(readout)
                             }
                                 .padding(.top, 8)
                                 .id(Self.aggregateInspectionSlotID)
                         }
-                        if showsLargeTextJourneyCard(stage.readout) {
-                            // Counts a gem when it lands, like the readout it
-                            // repeats; a landing re-runs only this reader,
-                            // which reads nothing but the snapshot.
-                            JarStageReader(state: jarStageState, stage: stage) { readout in
-                                if let line = stage.journey.line(readout: readout, now: .now) {
-                                    Spacer(minLength: 12)
-                                    largeTextJourneyCard(line, stage: stage, readout: readout)
-                                }
-                            }
-                        }
                         Spacer(minLength: 14)
                         if hasActiveSubjects {
-                            // The crystal's card under the bottle takes this
-                            // row for its few seconds when it reaches it
-                            // (`AggregateCardPlacementPolicy`).
-                            let givesWayToCard = aggregateInspectionSummary != nil
-                                && cardPlacement == .underBottle(hidesPickers: true)
                             focusSelectionControls
-                                .onGeometryChange(for: CGFloat.self) { geometry in
-                                    geometry.frame(in: .named(Self.homeContentCoordinateSpace)).minY
-                                } action: { top in
-                                    recordAggregateCardRoom(pickerTop: top, placement: cardPlacement)
-                                }
-                                .onDisappear { measuredPickerRowTop = nil }
-                                .opacity(givesWayToCard ? 0 : 1)
-                                .allowsHitTesting(!givesWayToCard)
-                                .accessibilityHidden(givesWayToCard)
                                 .padding(.bottom, 10)
                         }
                         if !pinsFocusLauncher {
@@ -1026,20 +982,10 @@ struct HomeView: View {
                             // disabled and sits behind the card; a shorter card left
                             // it half showing above the reward, sliced mid-glyph.
                             focusLauncher
-                                .onGeometryChange(for: CGFloat.self) { geometry in
-                                    geometry.frame(in: .named(Self.homeContentCoordinateSpace)).minY
-                                } action: { top in
-                                    recordAggregateCardRoom(launcherTop: top, placement: cardPlacement)
-                                }
                                 .opacity(breakOffer == nil ? 1 : 0)
                                 .allowsHitTesting(breakOffer == nil)
                                 .accessibilityHidden(breakOffer != nil)
                         }
-                    }
-                    // home-11 (#50 follow-up): under the bottle, in front of
-                    // the rows below it; the jar card starts at this stack's top.
-                    .overlay(alignment: .top) {
-                        aggregateCardUnderBottle(jarLayout: jarLayout, placement: cardPlacement)
                     }
                     .coordinateSpace(.named(Self.homeContentCoordinateSpace))
                     .padding(.horizontal, 16)
@@ -1066,14 +1012,6 @@ struct HomeView: View {
                         rewardDropRevealIsPending = false
                         syncScene()
                     }
-                }
-                .onChange(of: aggregateInspectionID) { oldID, id in
-                    followAggregateInspectionCard(
-                        from: oldID,
-                        to: id,
-                        inRow: cardPlacement == .row,
-                        with: scrollProxy
-                    )
                 }
                 // §5.6: what a settled, verified Home shows now.
                 .onChange(of: journeyObservation, initial: true) { _, observation in
@@ -1350,9 +1288,6 @@ struct HomeView: View {
             breakOfferTask = nil
             reviewRequestTask?.cancel()
             shareChipTask?.cancel()
-            aggregateInspectionTask?.cancel()
-            aggregateInspectionTask = nil
-            aggregateInspectionID = nil
             pendingCapacityCelebrations.removeAll()
             tiltHintTask?.cancel()
             tiltHintTask = nil
@@ -1596,7 +1531,6 @@ struct HomeView: View {
             uniqueAchievementCount: uniqueAchievementCount,
             accentHex: selectedSubject?.colorHex ?? Constants.Color.amberLamp,
             inspectableAggregateID: latestInspectableAggregateID,
-            aggregateInspectionSummary: aggregateInspectionSummary,
             journey: WeightJourneyStageInputs(
                 showsNextTarget: showsNextTarget,
                 selectedMinutes: max(0, selectedDuration.seconds / Constants.Timer.secondsPerMinute),
@@ -1610,17 +1544,15 @@ struct HomeView: View {
     /// lands.
     private func jarCard(
         layout: JarHUDLayout,
-        cardPlacement: AggregateCardPlacementPolicy.Placement,
         stage: JarStageSnapshot
     ) -> some View {
         JarStageReader(state: jarStageState, stage: stage, recordsSettledReadout: true) { readout in
-            jarStage(layout: layout, cardPlacement: cardPlacement, stage: stage, readout: readout)
+            jarStage(layout: layout, stage: stage, readout: readout)
         }
     }
 
     private func jarStage(
         layout: JarHUDLayout,
-        cardPlacement: AggregateCardPlacementPolicy.Placement,
         stage: JarStageSnapshot,
         readout: LifetimeReadoutContinuityPolicy.Readout
     ) -> some View {
@@ -1661,7 +1593,6 @@ struct HomeView: View {
                 isLoadingRecords: readout.isLoading,
                 isMotionEnabled: homeJarMotionIsEnabled,
                 inspectableAggregateID: stage.inspectableAggregateID,
-                onJarTapAccepted: invalidateAggregateInspectionCard,
                 onAggregateTapped: revealAggregateInspection,
                 onAggregateAccessibilityAction: revealAggregateInspection
             )
@@ -1717,9 +1648,6 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 // Placed by offset, so the card's layout never changes.
                 .offset(y: Self.capacityChipTopInset(layout: layout))
-                // A tapped crystal's card hangs in the same place for its
-                // few seconds; the chip steps aside meanwhile.
-                .opacity(stage.aggregateInspectionSummary != nil && cardPlacement != .row ? 0 : 1)
                 .transition(
                     reduceMotion
                         ? .opacity
@@ -1862,8 +1790,8 @@ struct HomeView: View {
             return max(0, measuredHUDBottom - jarStageState.measuredStageTop)
         }
         let valueRow: CGFloat = dynamicTypeSize.isAccessibilitySize && readout.jarIsEmpty ? 36 : 47
-        let line: CGFloat = dynamicTypeSize.isAccessibilitySize ? 0 : 19
-        return 88 + 15 + 3 + valueRow + 3 + 24 + line
+        let verification: CGFloat = readout.isCloudVerificationPending ? 20 : 0
+        return 88 + 15 + 3 + valueRow + verification
     }
 
     /// The bottle is at most `Constants.Jar.height` tall and centred in a
@@ -1894,7 +1822,7 @@ struct HomeView: View {
             // The one-time hint hangs under the readout, in the jar's empty
             // middle. On the floor it covered the first gem — the very
             // pebble it asks people to tap.
-            if stage.aggregateInspectionSummary == nil, showsTiltHint, !readout.jarIsEmpty, !readout.isLoading {
+            if showsTiltHint, !readout.jarIsEmpty, !readout.isLoading {
                 jarInteractionHint(compact: isShortJar && dynamicTypeSize.isAccessibilitySize)
                     .dynamicTypeSize(...(isShortJar ? DynamicTypeSize.xLarge : .xxxLarge))
                     // A short settle, not a slide from the edge: sliding in
@@ -1933,7 +1861,7 @@ struct HomeView: View {
                 .frame(height: layout.hudBottom ?? 0, alignment: .bottom)
                 .frame(maxHeight: .infinity, alignment: .top)
 
-            if stage.aggregateInspectionSummary == nil, showsTiltHint, !readout.jarIsEmpty, !readout.isLoading {
+            if showsTiltHint, !readout.jarIsEmpty, !readout.isLoading {
                 jarInteractionHint(compact: false)
                     .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                     .padding(.top, layout.stageTop + Self.aboveMouthHintInset(stageHeight: layout.stageHeight))
@@ -1955,9 +1883,8 @@ struct HomeView: View {
         return max(0, stageHeight - outer.maxY) + min(64, outer.height * 0.16)
     }
 
-    /// D5: every row the readout above the mouth can show (「瓶N杯」, the
-    /// label, the mass, the count pill and a two-line next-target line),
-    /// never drawn, so the room it takes changes with the text size only.
+    /// Measure the compact header without changing its height as totals grow.
+    /// Detailed record counts and Weight Journey comparisons live in the menu.
     private var aboveMouthReadoutTemplate: some View {
         VStack(spacing: 3) {
             JarFilledJarPill.Capsule(count: 9, colorHex: Constants.Color.amberLamp, reduceTransparency: false)
@@ -1966,12 +1893,10 @@ struct HomeView: View {
                 .font(.system(.caption2, design: .rounded, weight: .bold))
             Text(verbatim: "0")
                 .font(.system(size: 39, weight: .black, design: .rounded))
-            VStack(spacing: 4) {
-                jarMetricPill("0")
-                // The line may take two lines (a long 名所 with its stretch).
-                Text(verbatim: "0\n0")
-                    .font(Self.journeyLineFont)
-            }
+            // A pending verification caption must fit without pushing the
+            // header into the toolbar when the bottle count also appears.
+            Text(verbatim: "0")
+                .font(.system(size: verificationCaptionSize, weight: .bold, design: .rounded))
         }
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .hidden()
@@ -1983,13 +1908,6 @@ struct HomeView: View {
     }
 
     private static let aboveMouthPillGap: CGFloat = 4
-    /// 12 pt at the default size (§8.1), following Dynamic Type up to the
-    /// readout's xxxLarge cap.
-    private static let journeyLineFont = Font.system(.caption, design: .rounded, weight: .bold)
-    /// Inside the jar the line takes the old rail's 11 pt (caption2), so it
-    /// leaves the core as much of the stage as the rail did.
-    private static let insideJourneyLineFont = Font.system(.caption2, design: .rounded, weight: .bold)
-
     /// `compact`: a short jar at accessibility sizes. The hint is then one
     /// line at the default text size. Since #47 a young jar's first gem is
     /// about 57 pt across, and on an iPhone SE at AX5 the two-line hint
@@ -2069,34 +1987,7 @@ struct HomeView: View {
                     .foregroundStyle(Color.white.opacity(0.76))
             }
 
-            if isAboveMouth {
-                // §8.1: the count pill and the next-target line share a row
-                // when they fit, and stack when they do not.
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 8) {
-                        jarMetricPill(jarMetricSummary(readout, stage: stage))
-                        journeyLineText(readout, stage, lineLimit: 1)
-                    }
-                    VStack(spacing: 4) {
-                        jarMetricPill(jarMetricSummary(readout, stage: stage))
-                        journeyLineText(readout, stage, lineLimit: nil)
-                    }
-                }
-                jarMetricVerificationCaption(readout)
-            } else {
-                VStack(spacing: 4) {
-                    jarMetricPill(jarMetricSummary(readout, stage: stage))
-                    jarMetricVerificationCaption(readout)
-                    // D6: the one next-target line takes the place of the
-                    // pre-fusion rail (「最初の時間の核まで 30分 / 4時間10分」). At
-                    // accessibility sizes the card under the jar says it in
-                    // full-size text, as the rail's did.
-                    if !dynamicTypeSize.isAccessibilitySize {
-                        journeyLineText(readout, stage, lineLimit: 2, font: Self.insideJourneyLineFont)
-                            .padding(.horizontal, 20)
-                    }
-                }
-            }
+            jarMetricVerificationCaption(readout)
         }
         .opacity(readout.isLoading ? 0 : 1)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
@@ -2165,43 +2056,6 @@ struct HomeView: View {
             hasLocalLowerBound: readout.isLowerBound,
             context: presentationContext(for: readout)
         )
-    }
-
-    /// Original records and achievement stones share a compact localized pill.
-    private func jarMetricSummary(
-        _ readout: LifetimeReadoutContinuityPolicy.Readout,
-        stage: JarStageSnapshot
-    ) -> String {
-        let count = max(0, readout.jarPebbles)
-        let gems: String
-        if readout.isCloudVerificationPending {
-            gems = String(
-                localized: "確認済みの記録 \(count)件",
-                table: "Home",
-                comment: "Jar readout pill while iCloud is checked: original records this device has confirmed"
-            )
-        } else if readout.isLowerBound {
-            gems = String(
-                localized: "元の記録 \(count)+件",
-                table: "Home",
-                comment: "Jar readout pill: at least this many original records, not visible crystals"
-            )
-        } else {
-            gems = String(localized: "元の記録 \(count)件", table: "Home", comment: "Jar readout pill: original records, not visible crystals")
-        }
-        guard stage.uniqueAchievementCount > 0 else { return gems }
-        let stones = achievementCountIsLowerBound
-            ? String(
-                localized: "記念石 \(stage.uniqueAchievementCount)+",
-                table: "Home",
-                comment: "Jar readout pill: at least this many milestone stones"
-            )
-            : String(
-                localized: "記念石 \(stage.uniqueAchievementCount)",
-                table: "Home",
-                comment: "Jar readout pill: the number of milestone stones"
-            )
-        return Self.compactPair(gems, stones)
     }
 
     /// Two compact stats side by side, as in 「12粒 ・ 記念石 3」.
@@ -2368,39 +2222,6 @@ struct HomeView: View {
         }
     }
 
-    /// D6/§5.5: the one next-target line, from the readout on screen (a gem
-    /// counts when it lands) and Home's own inputs. It re-reads the clock
-    /// only at the moments D11 can change by itself (21:00, 04:00, the end
-    /// of a long break's quiet time), and never runs Home's body for it.
-    @ViewBuilder
-    private func journeyLineText(
-        _ readout: LifetimeReadoutContinuityPolicy.Readout,
-        _ stage: JarStageSnapshot,
-        lineLimit: Int?,
-        font: Font = Self.journeyLineFont
-    ) -> some View {
-        let now = Date.now
-        if stage.journey.line(readout: readout, now: now) != nil {
-            TimelineView(.explicit([now] + stage.journey.boundaries(after: now))) { context in
-                if let line = stage.journey.line(readout: readout, now: context.date) {
-                    Text(line.text)
-                        .font(font)
-                        .foregroundStyle(Color.white.opacity(0.88))
-                        .monospacedDigit()
-                        .multilineTextAlignment(.center)
-                        .lineLimit(lineLimit)
-                        .minimumScaleFactor(0.85)
-#if DEBUG
-                        .onChange(of: line.text, initial: true) { _, text in
-                            HomeRenderDiagnostics.journeyLineText = text
-                        }
-                        .onDisappear { HomeRenderDiagnostics.journeyLineText = nil }
-#endif
-                }
-            }
-        }
-    }
-
     /// The jar's VoiceOver value after its mass: the next-target line in
     /// place of the 10× core's remaining time (D6), the count toward the next
     /// crystal and 「瓶N杯」, from the same snapshot as its headline
@@ -2434,16 +2255,15 @@ struct HomeView: View {
         return Self.spokenPhrases(components)
     }
 
-    /// The documented large-text companion of the jar's fixed HUD
-    /// (EngagementArchitecture 大きい文字): at accessibility sizes the readout
-    /// stays inside the jar without its next-target line, and this card says
-    /// that line in full-size text, from the first gem (#50) — 「重さの旅」 in
-    /// place of the 10× core's progress (D6).
-    ///
-    /// Home places the card's reader from its own pass: a landing changes a
-    /// readout's count, never whether it is verified or loaded.
-    private func showsLargeTextJourneyCard(_ readout: LifetimeReadoutContinuityPolicy.Readout) -> Bool {
-        dynamicTypeSize.isAccessibilitySize && showsNextTarget && readout.fusionProgressTotals != nil
+    /// Detailed comparisons live in the menu, leaving the jar's next-crystal
+    /// action as Home's one visible progress cue at every text size.
+    private var menuWeightJourney: some View {
+        let stage = jarStageSnapshot
+        return JarStageReader(state: jarStageState, stage: stage) { readout in
+            if showsNextTarget, let line = stage.journey.line(readout: readout, now: .now) {
+                largeTextJourneyCard(line, stage: stage, readout: readout)
+            }
+        }
     }
 
     /// Runs inside `JarStageReader`, so its colour comes from the readout
@@ -2496,22 +2316,6 @@ struct HomeView: View {
 
     private static var largeTextFusionProgressTitle: String {
         String(localized: "時間の核の進み", table: "Home", comment: "Large-text card under the jar: title of the progress toward the next time core")
-    }
-
-    private func jarMetricPill(_ text: String) -> some View {
-        Text(text)
-            // Scales with the readout's Dynamic Type cap instead of a fixed
-            // 11 pt that could shrink to 8 pt.
-            .font(.system(.caption2, design: .rounded, weight: .semibold))
-            .foregroundStyle(PomoGemTheme.text.opacity(0.9))
-            .lineLimit(1)
-            .minimumScaleFactor(0.85)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(PomoGemTheme.raised.opacity(0.72), in: Capsule())
-            .overlay {
-                Capsule().stroke(PomoGemTheme.glassEdge.opacity(0.15), lineWidth: 1)
-            }
     }
 
     private var achievementCountLabel: String {
@@ -2639,10 +2443,10 @@ struct HomeView: View {
             return JarHUDLayout(placement: .inside, cardHeight: height, stageTop: 0, stageHeight: height)
         }
         // Reserve room for the visible theme/time controls and start button,
-        // including on compact iPhones, and for the crystal tip's row while
-        // it shows. A tapped crystal's card never resizes the jar.
-        let tipRowHeight: CGFloat = showsAggregateTipRow ? 72 : 0
-        let controls = 216 + tipRowHeight
+        // including on compact iPhones, and for the compact progress link.
+        // Opening a gem's detail does not resize the jar.
+        let progressRowHeight: CGFloat = showsTimeProgressLink ? 52 : 0
+        let controls = 216 + progressRowHeight
         // While a completion card shortens the jar, keep the placement of
         // the room without it.
         let cardIsUp = breakOffer != nil || router.deferredFocusRecovery != nil
@@ -2655,123 +2459,16 @@ struct HomeView: View {
         )
     }
 
-    /// Before the hidden template's first measurement: 「瓶N杯」, the label,
-    /// the mass, the count pill and a two-line line at the default size.
-    private static let estimatedAboveMouthReadoutHeight: CGFloat = 158
+    /// Before the hidden template's first measurement: bottle count, caption,
+    /// and mass at the default text size.
+    private static let estimatedAboveMouthReadoutHeight: CGFloat = 120
 
-    /// home-11. Until the first crystal detail has been opened, the row
-    /// under the jar holds a tip that crystals can be tapped, and a tapped
-    /// crystal's card in its place. Afterwards the tip's 72 pt row goes away
-    /// and the jar keeps its full height.
-    private var showsAggregateTipRow: Bool {
+    private var showsTimeProgressLink: Bool {
         totalGrams > 0
-    }
-
-    /// The row under the jar: the tip's, or a tapped crystal's card that
-    /// `AggregateCardPlacementPolicy` puts in a row of its own. That row is
-    /// inserted only while the card is up (`followAggregateInspectionCard`).
-    private func showsAggregateInspectionSlot(
-        _ placement: AggregateCardPlacementPolicy.Placement
-    ) -> Bool {
-        showsAggregateTipRow
-            || (placement == .row
-                && latestInspectableAggregateID != nil
-                && aggregateInspectionSummary != nil)
-    }
-
-    /// Where a tapped crystal's card shows under a jar laid out as
-    /// `jarLayout`. The tip's row holds it while that row is there.
-    private func aggregateCardPlacement(
-        jarLayout: JarHUDLayout,
-        hasActiveSubjects: Bool
-    ) -> AggregateCardPlacementPolicy.Placement {
-        guard !showsAggregateTipRow else { return .row }
-        return AggregateCardPlacementPolicy.placement(
-            isAccessibilitySize: dynamicTypeSize.isAccessibilitySize,
-            bottleBase: Self.bottleBaseInset(layout: jarLayout),
-            cardHeight: measuredAggregateCardHeight ?? AggregateCardPlacementPolicy.estimatedCardHeight,
-            // Controls not measured yet count as right under the jar.
-            pickerTop: hasActiveSubjects ? (measuredPickerRowTop ?? 0) : nil,
-            launcherTop: pinsFocusLauncher ? nil : measuredLauncherTop
-        )
-    }
-
-    /// The controls' tops in the Home content, for the card's room. Not
-    /// while the card's own row is inserted: it pushes them down, and
-    /// measured then the room would look big enough to take the card back
-    /// under the bottle, so the row would come and go.
-    private func recordAggregateCardRoom(
-        pickerTop: CGFloat? = nil,
-        launcherTop: CGFloat? = nil,
-        placement: AggregateCardPlacementPolicy.Placement
-    ) {
-        guard !(placement == .row && !showsAggregateTipRow && aggregateInspectionSummary != nil)
-        else { return }
-        if let pickerTop { measuredPickerRowTop = pickerTop }
-        if let launcherTop { measuredLauncherTop = launcherTop }
-    }
-
-    /// home-11 (#50 follow-up). At default sizes, once the tip's row has
-    /// gone, a tapped crystal's card hangs under the bottle's base, like the
-    /// capacity chip: in the room above the start button, never over the
-    /// readout, the time core or the pile, and nothing on the screen moves.
-    /// Over the upper jar (#47's lower, mouth-following readout, the time
-    /// core under it and a taller pile) it covered the core and the gems.
-    /// The card stays laid out, hidden, while a crystal can be tapped, so its
-    /// measured height places it before it first shows.
-    @ViewBuilder
-    private func aggregateCardUnderBottle(
-        jarLayout: JarHUDLayout,
-        placement: AggregateCardPlacementPolicy.Placement
-    ) -> some View {
-        if !dynamicTypeSize.isAccessibilitySize, !showsAggregateTipRow,
-           let aggregateID = latestInspectableAggregateID,
-           let restingSummary = inspectionSummary(for: aggregateID) {
-            let isPresented = aggregateInspectionSummary != nil && placement != .row
-            aggregateInspectionButton(aggregateInspectionSummary ?? restingSummary)
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
-                    measuredAggregateCardHeight = height
-                }
-                .opacity(isPresented ? 1 : 0)
-                .allowsHitTesting(isPresented)
-                .accessibilityHidden(!isPresented)
-                .frame(maxWidth: .infinity)
-                .padding(.top, Self.bottleBaseInset(layout: jarLayout) + AggregateCardPlacementPolicy.gap)
-        }
     }
 
     private static let aggregateInspectionSlotID = "home.aggregate-inspection"
     private static let homeContentCoordinateSpace = "home.content"
-
-    /// When the card is in a row of its own (at accessibility sizes, or at
-    /// default sizes on a screen without room above the start button), that
-    /// row is under the jar, mostly below the first screen, so a tap brings
-    /// the whole card into view. On a 4.7-inch phone that moves the jar up
-    /// out of sight, so once the card closes (after six seconds, on another
-    /// jar tap or for its detail) Home scrolls back to the jar.
-    private func followAggregateInspectionCard(
-        from oldID: UUID?,
-        to id: UUID?,
-        inRow: Bool,
-        with scrollProxy: ScrollViewProxy
-    ) {
-        guard dynamicTypeSize.isAccessibilitySize || (inRow && !showsAggregateTipRow) else { return }
-        let animation: Animation? = reduceMotion ? nil : .easeOut(duration: 0.3)
-        if id != nil {
-            // The row is inserted in this same update; scroll once it is
-            // laid out.
-            DispatchQueue.main.async {
-                guard aggregateInspectionID != nil else { return }
-                withAnimation(animation) {
-                    scrollProxy.scrollTo(Self.aggregateInspectionSlotID, anchor: .bottom)
-                }
-            }
-        } else if oldID != nil {
-            withAnimation(animation) {
-                scrollProxy.scrollTo("home.jar", anchor: .top)
-            }
-        }
-    }
 
     /// home-03. At accessibility sizes the start button stays in the first
     /// viewport on every iPhone instead of below a 520 pt jar and two
@@ -3139,6 +2836,7 @@ struct HomeView: View {
                     menuDestinationActions
                     menuAccumulationActions
                     menuAccumulationPlanAction
+                    menuWeightJourney
                     menuAtmospherePicker(scrollProxy: menuScrollProxy)
                 }
                 .padding(.horizontal, 16)
@@ -6737,30 +6435,13 @@ struct HomeView: View {
     }
 
     private func revealAggregateInspection(_ aggregateID: UUID) {
+        cancelTiltHintPresentation()
+        didSeeAggregateDetail = true
         if TimeFusionPolicy.isProjectionID(aggregateID) {
             overviewInitialClusterID = nil
             showAccumulationOverview = true
-            return
-        }
-        guard inspectionSummary(for: aggregateID) != nil else { return }
-        cancelTiltHintPresentation()
-        aggregateInspectionTask?.cancel()
-        aggregateInspectionTask = nil
-
-        withAnimation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.86)) {
-            aggregateInspectionID = aggregateID
-        }
-        aggregateInspectionTask = Task { @MainActor in
-            do {
-                try await Task.sleep(for: .seconds(6))
-            } catch {
-                return
-            }
-            guard aggregateInspectionID == aggregateID else { return }
-            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
-                aggregateInspectionID = nil
-            }
-            aggregateInspectionTask = nil
+        } else {
+            presentAggregateDetail(aggregateID)
         }
     }
 
@@ -6768,9 +6449,6 @@ struct HomeView: View {
         // Covers the card button and the jar's VoiceOver custom action.
         didSeeAggregateDetail = true
         cancelTiltHintPresentation()
-        aggregateInspectionTask?.cancel()
-        aggregateInspectionTask = nil
-        aggregateInspectionID = nil
         selectedAggregateDetail = summary
     }
 
@@ -6785,7 +6463,6 @@ struct HomeView: View {
                 for: selectedAggregateDetail.id
             ) else {
                 self.selectedAggregateDetail = nil
-                invalidateAggregateInspectionCard()
                 return
             }
             if refreshed != selectedAggregateDetail {
@@ -6793,10 +6470,6 @@ struct HomeView: View {
             }
         }
 
-        guard let aggregateInspectionID,
-              inspectionSummary(for: aggregateInspectionID) == nil
-        else { return }
-        invalidateAggregateInspectionCard()
     }
 
     private func inspectionSummary(
@@ -6818,50 +6491,6 @@ struct HomeView: View {
 
     private func invalidateAggregateInspection() {
         selectedAggregateDetail = nil
-        invalidateAggregateInspectionCard()
-    }
-
-    private func invalidateAggregateInspectionCard() {
-        aggregateInspectionTask?.cancel()
-        aggregateInspectionTask = nil
-        aggregateInspectionID = nil
-    }
-
-    private func aggregateInspectionButton(
-        _ summary: AccumulationClusterSummary
-    ) -> some View {
-        Button {
-            presentAggregateDetail(summary)
-        } label: {
-            aggregateInspectionCardLabel
-                .padding(.horizontal, 13)
-                .padding(.vertical, 10)
-                .frame(maxWidth: 350, minHeight: 52)
-                .background(
-                    .ultraThinMaterial,
-                    in: RoundedRectangle(cornerRadius: 18)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 18)
-                        .stroke(PomoGemTheme.amber.opacity(0.34), lineWidth: 1)
-                }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(
-            String(
-                localized: "\(CountText.gems(summary.pebbleCount))の結晶、\(aggregateInspectionSubtitle(summary))",
-                table: "Home",
-                comment: "VoiceOver, crystal inspection card: the gems inside (100粒), then what its detail shows"
-            )
-        )
-        .accessibilityHint(
-            summary.hasStrongPreservationEvidence
-                ? String(localized: "色、テーマ、期間などの内訳を表示します", table: "Home", comment: "VoiceOver hint of the crystal card: opens its details")
-                : (summary.colorMix.isEmpty
-                    ? String(localized: "保存されている粒数、質量などを表示します", table: "Home", comment: "VoiceOver hint of the crystal card of an older crystal without colors")
-                    : String(localized: "保存されている色、粒数、質量などを表示します", table: "Home", comment: "VoiceOver hint of the crystal card of an older crystal"))
-        )
-        .accessibilityIdentifier("jar.aggregate.inspect")
     }
 
     private func aggregateInspectionSlot(_ readout: LifetimeReadoutContinuityPolicy.Readout) -> some View {
@@ -6869,88 +6498,26 @@ struct HomeView: View {
             overviewInitialClusterID = nil
             showAccumulationOverview = true
         } label: {
-            VStack(spacing: 4) {
+            HStack(spacing: 8) {
                 Text(TimeFusionPresentation.progress(
                     totalGrams: readout.jarGrams,
                     isLowerBound: readout.isLowerBound || readout.isCloudVerificationPending
                 ))
-                    .font(.subheadline.weight(.semibold))
+                    .font(.subheadline.weight(.medium))
                     .monospacedDigit()
-                Text("時間のまとまりと元の記録を見る", tableName: "Home",
-                     comment: "Home link below the jar: opens time-based crystals and original records")
-                    .font(.caption)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(PomoGemTheme.muted)
+                    .accessibilityHidden(true)
             }
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, minHeight: 52)
-            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, minHeight: 44)
         }
         .buttonStyle(.plain)
+        .accessibilityHint(String(localized: "時間のまとまりと元の記録を見る", table: "Home",
+                                  comment: "Home link below the jar: opens time-based crystals and original records"))
         .accessibilityIdentifier("jar.time-fusion.progress")
-    }
-
-    @ViewBuilder
-    private var aggregateInspectionCardLabel: some View {
-        if dynamicTypeSize.isAccessibilitySize {
-            VStack(alignment: .leading, spacing: 7) {
-                HStack(spacing: 9) {
-                    aggregateInspectionIcon
-                    Text("結晶を見つけました", tableName: "Home")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(PomoGemTheme.text)
-                }
-                Text("保存されている粒数・質量などの内訳", tableName: "Home", comment: "Crystal card subtitle: its saved details (gem count, mass…)")
-                    .font(.caption2)
-                    .foregroundStyle(PomoGemTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 5) {
-                    Text("内訳を見る", tableName: "Home", comment: "Crystal card: open its details")
-                    Image(systemName: "chevron.right")
-                        .accessibilityHidden(true)
-                }
-                .font(.caption.weight(.bold))
-                .foregroundStyle(PomoGemTheme.amber)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        } else {
-            HStack(spacing: 11) {
-                aggregateInspectionIcon
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("結晶を見つけました", tableName: "Home")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(PomoGemTheme.text)
-                    Text("保存されている粒数・質量などの内訳", tableName: "Home", comment: "Crystal card subtitle: its saved details (gem count, mass…)")
-                        .font(.caption2)
-                        .foregroundStyle(PomoGemTheme.muted)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 4)
-                Text("内訳を見る", tableName: "Home", comment: "Crystal card: open its details")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(PomoGemTheme.amber)
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(PomoGemTheme.amber)
-                    .accessibilityHidden(true)
-            }
-        }
-    }
-
-    private var aggregateInspectionIcon: some View {
-        Image(systemName: "circle.grid.3x3.fill")
-            .font(.title3.weight(.bold))
-            // Decorative, in a fixed 32 pt circle: past xxxLarge the glyph
-            // outgrew it and ran into the card's title.
-            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-            .foregroundStyle(PomoGemTheme.amber)
-            .frame(width: 32, height: 32)
-            .background(
-                PomoGemTheme.amber.opacity(0.12),
-                in: Circle()
-            )
-            .accessibilityHidden(true)
     }
 
     private func aggregateInspectionSubtitle(
@@ -7504,7 +7071,6 @@ private struct JarStageSnapshot {
     let uniqueAchievementCount: Int
     let accentHex: String
     let inspectableAggregateID: UUID?
-    let aggregateInspectionSummary: AccumulationClusterSummary?
     /// 重さの旅 (D6, D11): the toggle, the chosen length and the study day,
     /// for the readout's next-target line.
     let journey: WeightJourneyStageInputs

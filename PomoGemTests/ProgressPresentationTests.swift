@@ -461,6 +461,10 @@ final class ProgressPresentationTests: XCTestCase {
         XCTAssertEqual(sixtyMinutes.progressLabel, "時間 1時間 / 4時間10分")
         XCTAssertEqual(tenMinutes.countLabel, "100g")
         XCTAssertEqual(sixtyMinutes.countLabel, "600g")
+        XCTAssertEqual(tenMinutes.gaugeLabel, "10分")
+        XCTAssertEqual(sixtyMinutes.gaugeLabel, "1時間")
+        XCTAssertEqual(tenMinutes.gaugeProgressFraction!, 0.04, accuracy: 0.0001)
+        XCTAssertEqual(sixtyMinutes.gaugeProgressFraction!, 0.24, accuracy: 0.0001)
         // D7 (v1.3): the orbit's ◇ are the 一里塚 (one per 10 hours), still
         // read from mass alone, never from the number of timers.
         XCTAssertEqual(tenMinutes.litOrbitSlotCount, 0)
@@ -1295,6 +1299,123 @@ final class ProgressPresentationTests: XCTestCase {
         XCTAssertNil(state.nextFusionLabel)
         XCTAssertEqual(state.progressLabel, "結晶を整理中")
         XCTAssertEqual(state.countLabel, "35.1万粒以上")
+    }
+
+    func testLifetimeGaugeKeepsCumulativeTimeAcrossMilestonesAndWithholdsUnknownProgress() throws {
+        let completed = try XCTUnwrap(JarLifetimeCorePresentation.state(
+            totalPebbleCount: 3,
+            totalGrams: 2_500,
+            projectionIsLowerBound: false
+        ))
+        let next = try XCTUnwrap(JarLifetimeCorePresentation.state(
+            totalPebbleCount: 4,
+            totalGrams: 2_510,
+            projectionIsLowerBound: false
+        ))
+        let syncing = try XCTUnwrap(JarLifetimeCorePresentation.state(
+            totalPebbleCount: 4,
+            totalGrams: 2_510,
+            projectionIsLowerBound: true
+        ))
+
+        XCTAssertEqual(completed.gaugeLabel, "4時間10分")
+        XCTAssertEqual(completed.gaugeProgressFraction, 1)
+        XCTAssertEqual(next.gaugeLabel, "4時間11分")
+        XCTAssertEqual(try XCTUnwrap(next.gaugeProgressFraction), 0.1004, accuracy: 0.0001)
+        XCTAssertEqual(syncing.gaugeLabel, "4時間11分以上")
+        XCTAssertNil(syncing.gaugeProgressFraction)
+    }
+
+    func testCompactLifetimeGaugeFindsClearGlassBesideASettledCentralGem() throws {
+        let stage = CGSize(width: 335, height: 330)
+        let core = JarHUDScrimPolicy.Body(center: CGPoint(x: 167.5, y: 199), radius: 35)
+        let floor = [80.0, 167.5, 255.0].map {
+            JarHUDScrimPolicy.Body(center: CGPoint(x: $0, y: 280), radius: 42)
+        }
+        let centerGem = JarHUDScrimPolicy.Body(center: CGPoint(x: 167.5, y: 194), radius: 42)
+        let bodies = floor + [centerGem]
+        let dock = try XCTUnwrap(JarLifetimeGaugePlacement.dock(
+            stageSize: stage, topClearance: 155, bottomLimit: 308,
+            core: core, settledBodies: bodies
+        ))
+        XCTAssertLessThan(dock.center.x, core.center.x)
+        XCTAssertGreaterThanOrEqual(dock.center.y - dock.radius, 161)
+        XCTAssertLessThanOrEqual(dock.center.y + dock.radius, 308)
+        let interior = JarScene.interiorRect(sceneSize: stage)
+        XCTAssertGreaterThanOrEqual(dock.center.x - dock.radius, interior.minX + 8)
+        for body in bodies {
+            XCTAssertGreaterThanOrEqual(
+                hypot(body.center.x - dock.center.x, body.center.y - dock.center.y),
+                body.radius + dock.radius + 6
+            )
+        }
+
+        let leftObstruction = JarHUDScrimPolicy.Body(center: dock.center, radius: 30)
+        let right = try XCTUnwrap(JarLifetimeGaugePlacement.dock(
+            stageSize: stage, topClearance: 155, bottomLimit: 308,
+            core: core, settledBodies: bodies + [leftObstruction]
+        ))
+        XCTAssertGreaterThan(right.center.x, core.center.x)
+        XCTAssertLessThanOrEqual(right.center.x + right.radius, interior.maxX - 8)
+        XCTAssertNil(JarLifetimeGaugePlacement.dock(
+            stageSize: stage, topClearance: 155, bottomLimit: 308,
+            core: core, settledBodies: bodies + [leftObstruction, right]
+        ), "When neither side is clear the summary must not cover another gem")
+    }
+
+    func testCompactLifetimeGaugeFitsTheShortGapAboveThreeFloorCrystals() throws {
+        let stage = CGSize(width: 335, height: 320)
+        let core = JarHUDScrimPolicy.Body(center: CGPoint(x: 167.5, y: 195), radius: 33.5)
+        let floor = [79.0, 167.5, 256.0].map {
+            JarHUDScrimPolicy.Body(center: CGPoint(x: $0, y: 266), radius: 44)
+        }
+        let bodies = floor + [JarHUDScrimPolicy.Body(center: CGPoint(x: 167.5, y: 178), radius: 43)]
+        let dock = try XCTUnwrap(JarLifetimeGaugePlacement.dock(
+            stageSize: stage, topClearance: 151.5, bottomLimit: 304,
+            core: core, settledBodies: bodies
+        ))
+        XCTAssertEqual(dock.radius, 28, "The normal side dial grazes the floor crystals in a short jar")
+        XCTAssertGreaterThanOrEqual(dock.center.y - dock.radius, 157.5)
+        for body in bodies {
+            XCTAssertGreaterThanOrEqual(
+                hypot(body.center.x - dock.center.x, body.center.y - dock.center.y),
+                body.radius + dock.radius + 6
+            )
+        }
+        XCTAssertEqual(JarLifetimeGaugePlacement.dock(
+            stageSize: stage, topClearance: 151.5, bottomLimit: 304,
+            core: core, settledBodies: [], retained: dock
+        ), dock, "The smaller dial must not grow back into a gem after being retained")
+    }
+
+    func testLifetimeGaugeKeepsClearCentersAndRetainsItsSideDuringMotion() throws {
+        let stage = CGSize(width: 335, height: 330)
+        let core = JarHUDScrimPolicy.Body(center: CGPoint(x: 167.5, y: 199), radius: 35)
+        let centerGem = JarHUDScrimPolicy.Body(center: core.center, radius: 42)
+        XCTAssertNil(JarLifetimeGaugePlacement.dock(
+            stageSize: stage, topClearance: 155, bottomLimit: 308,
+            core: core, settledBodies: []
+        ))
+        XCTAssertNil(JarLifetimeGaugePlacement.dock(
+            stageSize: CGSize(width: 400, height: 420), topClearance: 155, bottomLimit: 400,
+            core: core, settledBodies: [centerGem]
+        ), "Roomy jars retain their central layout")
+        XCTAssertNil(JarLifetimeGaugePlacement.dock(
+            stageSize: stage, topClearance: nil, bottomLimit: 308,
+            core: core, settledBodies: [centerGem]
+        ), "A readout above the mouth does not need the compact dock")
+        let dock = try XCTUnwrap(JarLifetimeGaugePlacement.dock(
+            stageSize: stage, topClearance: 155, bottomLimit: 308,
+            core: core, settledBodies: [centerGem]
+        ))
+        XCTAssertEqual(JarLifetimeGaugePlacement.dock(
+            stageSize: stage, topClearance: 155, bottomLimit: 308,
+            core: core, settledBodies: [], retained: dock
+        ), dock, "Moving bodies disappearing from the settled list must not move the dial")
+        XCTAssertEqual(JarLifetimeGaugePlacement.dock(
+            stageSize: stage, topClearance: 155, bottomLimit: 308,
+            core: core, settledBodies: [dock], retained: dock
+        ), dock, "The instrument stays put during a shake instead of chasing a gem")
     }
 
     func testAggregateImportanceIsVisuallyMonotonicWithoutGrowingPhysicsForever() {

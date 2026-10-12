@@ -426,23 +426,6 @@
         }
       }
     },
-    "%@の結晶、%@" : {
-      "comment" : "VoiceOver, crystal inspection card: the gems inside (100粒), then what its detail shows",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "A crystal of %1$@, %2$@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@の結晶、%@"
-          }
-        }
-      }
-    },
     "%@の自己申告を保存できませんでした。もう一度積んでください" : {
       "comment" : "Toast when a confirmed manual entry could not be saved; the argument is the theme",
       "localizations" : {
@@ -2722,57 +2705,6 @@
         }
       }
     },
-    "保存されている粒数、質量などを表示します" : {
-      "comment" : "VoiceOver hint of the crystal card of an older crystal without colors",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Shows the saved gem count, mass and more"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保存されている粒数、質量などを表示します"
-          }
-        }
-      }
-    },
-    "保存されている粒数・質量などの内訳" : {
-      "comment" : "Crystal card subtitle: its saved details (gem count, mass…)",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Saved details: gem count, mass and more"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保存されている粒数・質量などの内訳"
-          }
-        }
-      }
-    },
-    "保存されている色、粒数、質量などを表示します" : {
-      "comment" : "VoiceOver hint of the crystal card of an older crystal",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Shows the saved colors, gem count, mass and more"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保存されている色、粒数、質量などを表示します"
-          }
-        }
-      }
-    },
     "保存を再試行" : {
       "comment" : "Jar capsule button: try saving an unsaved crystal again",
       "localizations" : {
@@ -2837,35 +2769,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "元の記録"
-          }
-        }
-      }
-    },
-    "元の記録 %lld+件" : {
-      "comment" : "Jar readout pill: at least this many original records, not visible crystals",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld+ original record"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld+ original records"
-                }
-              }
-            }
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "元の記録 %lld+件"
           }
         }
       }
@@ -2980,23 +2883,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "内容の確認へ進みます"
-          }
-        }
-      }
-    },
-    "内訳を見る" : {
-      "comment" : "Crystal card: open its details",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "See Details"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "内訳を見る"
           }
         }
       }
@@ -4074,35 +3960,6 @@
         }
       }
     },
-    "確認済みの記録 %lld件" : {
-      "comment" : "Jar readout pill while iCloud is checked: original records this device has confirmed",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld confirmed record"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld confirmed records"
-                }
-              }
-            }
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "確認済みの記録 %lld件"
-          }
-        }
-      }
-    },
     "秒" : {
       "comment" : "Custom focus length: title and VoiceOver label of the seconds field and wheel",
       "localizations" : {
@@ -4491,22 +4348,6 @@
         }
       }
     },
-    "結晶を見つけました" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Found a crystal"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "結晶を見つけました"
-          }
-        }
-      }
-    },
     "続けた先の瓶と質量を予測" : {
       "comment" : "Home menu row detail: the planning sheet projects the jar and mass ahead",
       "localizations" : {
@@ -4626,23 +4467,6 @@
         }
       }
     },
-    "色、テーマ、期間などの内訳を表示します" : {
-      "comment" : "VoiceOver hint of the crystal card: opens its details",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Shows details such as colors, themes and dates"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "色、テーマ、期間などの内訳を表示します"
-          }
-        }
-      }
-    },
     "色・粒数・質量など、保存済みの内訳" : {
       "comment" : "VoiceOver, crystal card: what its details hold",
       "localizations" : {
@@ -4724,52 +4548,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "記念石"
-          }
-        }
-      }
-    },
-    "記念石 %lld" : {
-      "comment" : "Jar readout pill: the number of milestone stones",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld milestone stone"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld milestone stones"
-                }
-              }
-            }
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "記念石 %lld"
-          }
-        }
-      }
-    },
-    "記念石 %lld+" : {
-      "comment" : "Jar readout pill: at least this many milestone stones",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld+ milestone stones"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "記念石 %lld+"
           }
         }
       }

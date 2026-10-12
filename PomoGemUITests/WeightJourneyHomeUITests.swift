@@ -3,7 +3,7 @@ import XCTest
 /// 重さの旅 on Home (GemExperienceDesign §5.5, §5.6, §8.1; D5, D6, D7, D11):
 /// where the readout sits (above the mouth, or inside the jar on short
 /// screens and at accessibility sizes), that it never meets the time core or
-/// the start button, the one next-target line, and the 小 celebrations (the
+/// the start button, the next-target detail in the menu, and the 小 celebrations (the
 /// completion card's chip, the new-device chip and the chip for what arrived
 /// while away).
 ///
@@ -67,13 +67,11 @@ final class WeightJourneyHomeUITests: XCTestCase {
         saveScreenshot("hud-\(size.rawValue)")
         add(attachment("hud-\(size.rawValue)-geometry", context))
 
-        // Accessibility sizes and the iPhone SE keep the readout inside
-        // (§8.1); the tall phones put it above the mouth at the default size,
-        // the Pro Max at xxxL too. The rest follows the 320 pt rule.
-        if size == .accessibility5 || device == "se" {
+        // The compact readout uses whichever position the available height
+        // permits. Accessibility sizes keep it inside the bottle.
+        XCTAssertTrue(["above", "inside"].contains(placement), context)
+        if size == .accessibility5 {
             XCTAssertEqual(placement, "inside", context)
-        } else if device == "promax" || (device == "17pro" && size == .standard) {
-            XCTAssertEqual(placement, "above", context)
         }
         if placement == "above" {
             XCTAssertLessThanOrEqual(hud.maxY, bottle.minY + 0.5, "Above the mouth: \(context)")
@@ -87,25 +85,18 @@ final class WeightJourneyHomeUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(core.minY, bottle.minY, "The core is in the bottle: \(context)")
         XCTAssertTrue(launcher.isHittable, context)
 
-        // D6: one next-target line, in the readout, or at accessibility
-        // sizes in full-size text under the jar.
-        if size == .accessibility5 {
-            let card = app.descendants(matching: .any)["home.fusion-progress.large-text"]
-            XCTAssertTrue(card.waitForExistence(timeout: 5), context)
-            XCTAssertTrue(card.label.contains("つぎの名所　大玉スイカ1玉ほど・10時間"), card.label)
-            XCTAssertFalse(card.label.contains("核まであと"), card.label)
-        } else {
-            XCTAssertTrue(
-                (fields["journey"] ?? "").hasPrefix("つぎの名所　大玉スイカ1玉ほど・10時間・+1時間15分 積みました"),
-                context
-            )
-        }
+        // Home stays quiet at every text size; the full-size journey detail
+        // remains reachable from the menu.
+        XCTAssertFalse(journeyCard.exists, "Journey detail belongs in the menu: \(context)")
+        let line = journeyLineFromMenu(screenshot: "menu-journey-\(size.rawValue)")
+        XCTAssertTrue(line.hasPrefix("つぎの名所　大玉スイカ1玉ほど・10時間・+1時間15分 積みました"), line)
+        XCTAssertFalse(line.contains("核まであと"), line)
     }
 
     // MARK: - The showcase jars (§5.3)
 
     /// Home at 250 g, 3.75 kg, 9.75 kg, 29.25 kg, 251 kg and 2.5 t: what the
-    /// line says, and the screenshots for review. The two heavy fixtures
+    /// menu detail says, and the screenshots for review. The two heavy fixtures
     /// open as a lower bound (their bounded session page cannot cover the
     /// ×1千 and ×1万 roots, 「251.0kg以上」), so their line names the floor
     /// and never guesses the stretch (§5.5); a verified total would read
@@ -124,9 +115,9 @@ final class WeightJourneyHomeUITests: XCTestCase {
             app.launchEnvironment["POMOGEM_UI_TEST_GEM_SHOWCASE"] = jar.fixture
             launch(size: .standard)
             let fields = try waitForRestingJar(timeout: 60)
-            let line = fields["journey"] ?? "none"
             saveScreenshot(jar.name)
             add(attachment("\(jar.name)-probe", "\(fields)"))
+            let line = journeyLineFromMenu(screenshot: "\(jar.name)-journey-menu")
             XCTAssertTrue(
                 jar.lines.contains(line) || jar.lines.contains { line == $0 + "・あと1本" },
                 "\(jar.fixture): \(line)"
@@ -191,8 +182,9 @@ final class WeightJourneyHomeUITests: XCTestCase {
         // completion and reaches 10 hours.
         app.launchEnvironment["POMOGEM_UI_TEST_EDGE_GRAMS"] = "5750"
         launch(showcase: "edge", size: .standard)
-        let fields = try waitForRestingJar()
-        XCTAssertTrue((fields["journey"] ?? "").hasPrefix("つぎの名所　大玉スイカ1玉ほど・10時間・あと25分"), "\(fields)")
+        _ = try waitForRestingJar()
+        let before = journeyLineFromMenu()
+        XCTAssertTrue(before.hasPrefix("つぎの名所　大玉スイカ1玉ほど・10時間・あと25分"), before)
         runDemoFocus()
         let chip = app.descendants(matching: .any)["reward.journey"]
         XCTAssertTrue(chip.waitForExistence(timeout: 10), "The card names the landmark")
@@ -200,7 +192,8 @@ final class WeightJourneyHomeUITests: XCTestCase {
         pause(0.8)
         saveScreenshot("chip-card-landmark")
         finishCompletionCard()
-        let after = try waitForJourneyLine(prefix: "つぎの名所　コーギー1頭ほど・20時間")
+        let after = journeyLineFromMenu(expectedPrefix: "つぎの名所　コーギー1頭ほど・20時間",
+                                        screenshot: "menu-after-landmark")
         saveScreenshot("home-after-landmark")
         add(attachment("home-after-landmark-probe", after))
     }
@@ -218,7 +211,8 @@ final class WeightJourneyHomeUITests: XCTestCase {
         pause(0.8)
         saveScreenshot("chip-card-marker")
         finishCompletionCard()
-        let after = try waitForJourneyLine(prefix: "つぎの一里塚　40時間")
+        let after = journeyLineFromMenu(expectedPrefix: "つぎの一里塚　40時間",
+                                        screenshot: "menu-after-marker")
         pause(1)
         saveScreenshot("home-after-marker")
         add(attachment("home-after-marker-probe", after))
@@ -228,8 +222,10 @@ final class WeightJourneyHomeUITests: XCTestCase {
         app.launchArguments += ["-home.shows-next-target.v1", "NO"]
         launch(showcase: "home", size: .standard)
         let fields = try waitForRestingJar()
-        XCTAssertEqual(fields["journey"], "none", "「Home に次の目標を表示」 off: \(fields)")
         XCTAssertNotEqual(fields["hud"], "none", "The rest of the readout stays: \(fields)")
+        XCTAssertFalse(journeyCard.exists)
+        openMenu()
+        XCTAssertFalse(journeyCard.exists, "The next-target setting also hides its menu detail")
     }
 
     // MARK: - Helpers
@@ -244,7 +240,9 @@ final class WeightJourneyHomeUITests: XCTestCase {
         }
         app.launch()
         if waitsForMenu {
-            XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 20))
+            XCTAssertTrue(waitUntil(timeout: 20) {
+                app.buttons["home.menu.open"].exists || app.buttons["OverflowBarButtonItem"].exists
+            })
         }
     }
 
@@ -262,7 +260,7 @@ final class WeightJourneyHomeUITests: XCTestCase {
         while Date() < deadline {
             pause(0.2)
             let next = probeFields()
-            let keys = ["hud", "core", "bottle", "journey", "hudPlacement", "maxY"]
+            let keys = ["hud", "core", "bottle", "hudPlacement", "maxY"]
             if next["hud"] == "none" || keys.contains(where: { next[$0] != latest[$0] }) {
                 stillSince = Date()
             } else if Date().timeIntervalSince(stillSince) >= 1.2 {
@@ -274,14 +272,51 @@ final class WeightJourneyHomeUITests: XCTestCase {
         return latest
     }
 
-    private func waitForJourneyLine(prefix: String) throws -> String {
-        var fields: [String: String] = [:]
-        let found = waitUntil(timeout: 20) {
-            fields = self.probeFields()
-            return (fields["journey"] ?? "").hasPrefix(prefix)
+    private var journeyCard: XCUIElement {
+        app.descendants(matching: .any)["home.fusion-progress.large-text"]
+    }
+
+    private func openMenu() {
+        let menu = app.buttons["home.menu.open"]
+        if !menu.exists || !menu.isHittable {
+            let overflow = app.buttons["OverflowBarButtonItem"]
+            XCTAssertTrue(overflow.waitForExistence(timeout: 5))
+            overflow.tap()
         }
-        XCTAssertTrue(found, "Expected 「\(prefix)…」: \(fields)")
-        return "\(fields)"
+        // UIKit's toolbar overflow preserves the visible title, but not
+        // always the custom identifier of the original SwiftUI button.
+        let action = menu.exists ? menu : app.buttons["メニュー"].firstMatch
+        XCTAssertTrue(action.waitForExistence(timeout: 5))
+        action.tap()
+        XCTAssertTrue(app.buttons["home.menu.close"].waitForExistence(timeout: 5))
+    }
+
+    private func journeyLineFromMenu(expectedPrefix: String? = nil, screenshot: String? = nil) -> String {
+        openMenu()
+        let card = journeyCard
+        XCTAssertTrue(card.waitForExistence(timeout: 5), "The menu retains the full journey detail")
+        let scrollView = app.scrollViews.containing(.any, identifier: "home.fusion-progress.large-text").firstMatch
+        for _ in 0..<12 where !card.isHittable {
+            if scrollView.exists {
+                scrollView.swipeUp()
+            } else {
+                app.swipeUp()
+            }
+        }
+        XCTAssertTrue(card.isHittable, "Journey detail is reachable in the menu")
+        if let expectedPrefix {
+            XCTAssertTrue(waitUntil(timeout: 20) {
+                card.label.hasPrefix("重さの旅、" + expectedPrefix)
+            }, "Expected 「\(expectedPrefix)…」: \(card.label)")
+        }
+        let label = card.label
+        let prefix = "重さの旅、"
+        XCTAssertTrue(label.hasPrefix(prefix), label)
+        let line = label.hasPrefix(prefix) ? String(label.dropFirst(prefix.count)) : label
+        if let screenshot { saveScreenshot(screenshot) }
+        app.buttons["home.menu.close"].tap()
+        XCTAssertTrue(waitUntil(timeout: 5) { !app.buttons["home.menu.close"].exists })
+        return line
     }
 
     /// The 12-second Debug focus: picks it, starts it and stops its alarm.

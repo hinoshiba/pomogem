@@ -193,8 +193,10 @@ final class TimeFusionUITests: XCTestCase {
         let scrollView = app.scrollViews.containing(.button, identifier: "jar.time-fusion.progress").firstMatch
         let launcher = app.buttons["home.focus-launcher"]
         guard scrollView.waitForExistence(timeout: 5), progress.exists, launcher.exists else { return false }
+        guard waitUntilFrameSettles(progress), waitUntilFrameSettles(launcher) else { return false }
+        var observations: [String] = []
 
-        for _ in 0..<10 {
+        for attempt in 0..<10 {
             let window = app.windows.firstMatch.frame
             let scrollFrame = scrollView.frame
             let navigationBottom = app.navigationBars.allElementsBoundByIndex
@@ -203,31 +205,36 @@ final class TimeFusionUITests: XCTestCase {
             let visibleTop = max(window.minY, scrollFrame.minY, navigationBottom) + 8
             let visibleBottom = min(window.maxY, scrollFrame.maxY, launcher.frame.minY) - 8
             let frame = progress.frame
+            observations.append("attempt=\(attempt); progress=\(frame); visibleTop=\(visibleTop); visibleBottom=\(visibleBottom); launcher=\(launcher.frame); scrollView=\(scrollFrame)")
             if frame.minY >= visibleTop, frame.maxY <= visibleBottom, progress.isHittable {
-                let geometry = XCTAttachment(string:
-                    "progress=\(frame)\nvisibleTop=\(visibleTop)\nvisibleBottom=\(visibleBottom)\nlauncher=\(launcher.frame)\nscrollView=\(scrollFrame)"
-                )
+                let geometry = XCTAttachment(string: observations.joined(separator: "\n"))
                 geometry.name = "AX5 — complete time-progress action geometry"
                 geometry.lifetime = .keepAlways
                 add(geometry)
                 return true
             }
 
-            // Drag entirely in Home's scrollable viewport. A whole-screen
-            // swipe can start on the fixed launcher, and isHittable alone
-            // accepts a title whose remaining-time line is still covered.
+            // Drag entirely in Home's scrollable viewport using global
+            // coordinates, so scrolling cannot move the gesture's anchor.
+            // Center the whole action and hold before lifting the finger;
+            // a fling can overshoot from below Start to above navigation.
             let room = visibleBottom - visibleTop
             guard room > 60, frame.height <= room else { break }
-            let moveUp = frame.maxY > visibleBottom
-            let correction = moveUp ? frame.maxY - visibleBottom : visibleTop - frame.minY
-            let distance = min(room * 0.65, max(40, correction + 12))
+            let correction = frame.midY - (visibleTop + visibleBottom) / 2
+            let moveUp = correction > 0
+            let distance = min(room * 0.65, max(24, abs(correction)))
             let startY = moveUp ? visibleBottom - 12 : visibleTop + 12
-            let start = scrollView.coordinate(withNormalizedOffset: .zero)
-                .withOffset(CGVector(dx: scrollFrame.width * 0.5, dy: startY - scrollFrame.minY))
-            start.press(forDuration: 0.05, thenDragTo: start.withOffset(
-                CGVector(dx: 0, dy: moveUp ? -distance : distance)
-            ))
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            let start = origin.withOffset(CGVector(dx: scrollFrame.midX, dy: startY))
+            let end = origin.withOffset(CGVector(dx: scrollFrame.midX,
+                                                 dy: startY + (moveUp ? -distance : distance)))
+            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.2)
+            guard waitUntilFrameSettles(progress) else { break }
         }
+        let geometry = XCTAttachment(string: observations.joined(separator: "\n"))
+        geometry.name = "AX5 — time-progress action failed-fit geometry"
+        geometry.lifetime = .keepAlways
+        add(geometry)
         capture("AX5 — time-progress action could not fit above Start")
         return false
     }
