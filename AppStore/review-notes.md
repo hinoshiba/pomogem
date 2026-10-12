@@ -1,6 +1,6 @@
 # App Review notes draft
 
-対象: 1.1.1 (12) 提出準備。公開中の1.1.0 (11)や過去の実機記録とは区別します。
+対象: 1.1.1 (13) 提出準備。公開中の1.1.0 (11)や過去の実機記録とは区別します。
 2026-10-11に本体・Monitor拡張の有効な配布profileでFamily Controls権限を確認しました。
 最終署名済み候補の実到達試験は未確認です。
 Connectへ貼る短縮版は[review-notes-connect.txt](review-notes-connect.txt)を正本とします。
@@ -33,12 +33,20 @@ iPhoneの向きに合わせて切り替わります。既定値はこのiPhone�
 iOS 26以降は画面の向きのロックを尊重します。それより前のiOSではlock状態を取得する公開APIがないため、
 UIKitが届ける向きの通知に追従します。手動固定はすべての対応OSで利用できます。
 
+## Time-based crystals in 1.1.1 (13)
+
+結晶は記録の件数ではなく保存済み合計時間から表示します。250分ごとに結晶1個、10個で次の大きさに
+なり、端数は繰り越します。元の記録・日時・UUID・合計時間は変更せず、CloudKit schemaの追加や
+データ移行はありません。Homeのgemと「次の結晶まで」から時間の内訳と元の記録へ進めます。
+時間結晶は複数月にまたがるため、従来のPro月刻印を提供しません。月別記録と購入状態は保持し、
+Proの自由な集中時間・勉強アプリ数無制限は維持します。
+
 ## In-App Purchase
 
 - Product ID: `com.hinoshiba.pomogem.pro.lifetime`
 - Type: Non-Consumable
 - Entry: Homeの時間表示 → 「自由な時間を設定」、またはSettings → ポモジェムPro
-- Unlocks: 無料の25分／45分／60分／90分以外の任意の1分00秒〜360分00秒を秒単位で指定、結晶の月刻印、スクリーンタイムで粒にするアプリ数無制限（無料5つ）
+- Unlocks: 無料の25分／45分／60分／90分以外の任意の1分00秒〜360分00秒を秒単位で指定、スクリーンタイムで粒にするアプリ数無制限（無料5つ）
 - Restore: purchase screenの「購入を復元」
 - Pricing: United States USD 0.99 base price; Japan JPY 100 custom price; other available storefronts use Apple's automatically generated local equivalent
 - Availability: App and IAP are available in 148 of 175 storefronts. Austria, Belgium, Bulgaria, Croatia, Cyprus, Czech Republic, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Ireland, Italy, Latvia, Lithuania, Luxembourg, Malta, Netherlands, Poland, Portugal, Romania, Slovakia, Slovenia, Spain, and Sweden are excluded. United Kingdom, Norway, and Switzerland remain included; automatic availability for new storefronts is enabled.
@@ -159,10 +167,10 @@ UIKitが届ける向きの通知に追従します。手動固定はすべての
   次の曲のbuttonの代わりにAppleの`musicSubscriptionOffer`（登録・お試しの画面）を表示し、一覧のtapも同じ画面を
   開く。無料機能でPro・広告・affiliateとは無関係。自動再生は既定offの「集中を始めたら再生する」をオンにした
   場合だけで、ほかのappの音声が再生中なら入れ替えない。選んだ音楽のIDなどは端末内UserDefaultsだけに保存し、送信しない
-- 終了アラーム: Settings → 音と触覚 →「タイマー終了音」で8種（ベル、デジタル、マリンバ、
-  学校のチャイム、目覚まし時計と従来の3種。すべてコード内で合成し、選ぶと1回鳴る）、「終了アラームの強さ」で
+- 終了アラーム: Settings → 音と触覚 →「タイマー終了音」で11種（ベル、デジタル、マリンバ、
+  学校のチャイム、目覚まし時計、交互トーン、上昇アラーム、連続パルスと従来の3種。すべてコード内で合成し、選ぶと1回鳴る）、「終了アラームの強さ」で
   控えめ／標準（既定）／最大を選ぶ。休憩の終わりも同じ音と強さ。標準は、アプリを開いている間に終わると
-  止めるまで音と連続振動をくり返し、その間は画面をつけたままにし、3分で自動的に止まる（止めるボタンは残る）。
+  止めるまで音と選択した振動をくり返し、その間は画面をつけたままにし、3分で自動的に止まる（止めるボタンは残る）。
   音は消音モードに従い、ロック中の終了通知は約28秒の同じ音になる。控えめは従来どおり短い音の繰り返し。
   最大は、アプリを開いている間だけ消音モードでも鳴らす（`.playback`＋`.duckOthers`。ミュージックは止めずに
   小さくし、止めると戻す。background audioなしで、離れると止まる）。止めるボタン、VoiceOverの2本指の

@@ -1,6 +1,46 @@
 # App Store screenshots
 
-## Candidate 1.1.0 (10) refresh — 2026-09-30
+## Current 1.1.1 (13) capture — 2026-10-12
+
+The five `ja-JP/`, five `en-US/`, and `iap-review/01-pomogem-pro-live-price.png`
+files are unretouched XCTest attachments captured from main source
+`988830ec02d5585e18e1d6b747c4bcb3241147ff`, with the release version set to
+1.1.1 (13). The host, widget, and Screen Time monitor versions were verified.
+All three existing capture tests passed, with zero failures and zero skips,
+on a dedicated disposable iOS 26.5 iPhone 12 Pro Max Simulator at standard
+text size. No application or test source changes were needed for capture.
+
+The images were visually inspected and copied byte for byte. All eleven
+are 1284 × 2778 RGB PNGs without alpha. `checksums.sha256` and
+`ASSET_LICENSES.md` record the new hashes. The private release evidence keeps
+`Capture.xcresult`, `capture.log`, the original exported attachment manifest,
+and `capture-manifest.json` with exact attachment filenames, timestamps and hashes.
+The Simulator was shut down after capture; other Simulator devices were not changed.
+
+Home now shows 25 minutes of growing time and 3 hours 45 minutes until the
+first crystal. The overview uses the same 250 g fixture. Image 03 retains
+the real acknowledgement-before-landing transition: the reward card shows
+25 minutes / 250 g while Home behind it remains 0 g until Close. The English
+capture also includes the ordinary jar-interaction hint and GIF button.
+No screenshot advertises ten-session fusion or Pro month stamps. Image 05
+still shows the four shipped Timer Display choices.
+
+The Debug-only fixture shortens one focus to 12 seconds while retaining the
+production 25-minute reward; the test-only duration is hidden by the completion
+card and the ordinary 25-minute preset is restored before Home is captured.
+This is visual evidence, not evidence that a real 25-minute focus completed.
+No Pro entitlement or Screen Time authorization was fabricated.
+
+On 2026-10-12, all ten listing images and the IAP image were saved in App
+Store Connect and verified after media reload. Japanese and English each
+show five currentFaceIDLarge images. Older DynamicIslandLarge references
+were removed from the listing while their source assets remain in the asset
+library. The app and IAP were submitted at 13:38 JST and both show Waiting
+for Review. Comparison with the signed physical-device build remains pending;
+the Simulator captures and Connect receipt do not establish that comparison.
+The dated 1.1.0 sections below describe superseded capture history.
+
+## Historical 1.1.0 (10) refresh — 2026-09-30
 
 The five `ja-JP/` and five `en-US/` images are byte-for-byte XCTest attachments
 from the current product source at `b5441d3a0abc3214e2b5486ef7e2f4d5dd96d028`,
@@ -43,7 +83,7 @@ Both selected tests passed: two tests, zero failures, zero skips. No images
 from the earlier capture attempt are selected; its Settings accessibility-row
 locator was corrected and the complete capture was rerun.
 
-## IAP image refresh — 2026-10-01
+## Historical IAP image refresh — 2026-10-01
 
 `iap-review/01-pomogem-pro-live-price.png` now shows the paywall after the
 settings-04 changes, with its three current Pro features ordered by entry
@@ -86,34 +126,29 @@ Family Controls distribution approval, device behavior, or upload completion.
 
 Status: `captured_live_price`.
 
-`iap-review/01-pomogem-pro-live-price.png` comes from main
-`1c521ed2a90be5aa0c9153611bc6274de8522759`, captured on 2026-10-01 by
-`RuntimeFlowAuditUITests/testCaptureActualStoreKitPrice` on a disposable
-iOS 26.5 iPhone 12 Pro Max Simulator. The Debug build used version overrides
-1.1.0 (10), standard text size, Japanese UI, local-preview test isolation,
-and a 9:41 status bar. The test passed: one test, zero failures or skips.
-The actual production `Product.products` path returned
-`com.hinoshiba.pomogem.pro.lifetime`, without a StoreKit configuration file.
-The generated xctestrun opted the test runner in with
-`POMOGEM_CAPTURE_LIVE_STOREKIT=1`.
-`Product.displayPrice` was `$0.99`; the purchase control read `$0.99でProを購入`.
-The storefront country was not independently read, so this image establishes
-neither a US storefront nor a Japanese-yen price.
+`iap-review/01-pomogem-pro-live-price.png` was captured on 2026-10-12 at
+12:39:59.718 JST by `RuntimeFlowAuditUITests/testCaptureActualStoreKitPrice`
+from the same main source and 1.1.1 (13) Debug build as the listing images.
+The test passed without failures or skips. The generated xctestrun contained
+no StoreKit configuration reference; only the explicit test-runner opt-in
+`POMOGEM_CAPTURE_LIVE_STOREKIT=1` was added.
 
-The image shows all three current Pro benefits, including unlimited learning
-apps, the one-time price, seller-disclosure link, and purchase button. Restore
-Purchases starts below the captured viewport. No purchase, restore, or offer
-redemption was invoked. This is price/display evidence, not a purchase or
-restore test.
+The production `Product.products` path returned the existing
+`com.hinoshiba.pomogem.pro.lifetime` product. The live purchase label was
+`$0.99でProを購入`, and the image displays `$0.99`. The storefront country was
+not independently read, so this establishes neither a US storefront nor a
+Japanese-yen price. No purchase, restore, or offer redemption was invoked.
 
-The original source attachment was `82B5D009-430D-45BC-9293-62C5AC9E8C1C.png`,
-with attachment prefix `IAP_01-pomogem-pro-live-price`. It was copied byte for
-byte as a 1284 × 2778 RGB PNG without alpha. The result bundle and attachment
-are retained outside the public repository under
-`~/.codex/release-validation/pomogem-20261001/IAP/`. Its SHA-256 is recorded in
-`checksums.sha256` and `ASSET_LICENSES.md`. This Simulator image still needs
-comparison with the final signed device build; the older image remains in
-App Store Connect until that review and replacement are complete.
+The image shows the two current Pro benefits: custom focus durations and
+unlimited learning apps. It does not advertise month labels. The one-time
+price, seller-disclosure link, purchase button, and Restore Purchases are visible.
+It is price/display evidence, not a purchase or restore test.
+
+The original attachment is `60855EB9-8FE0-4C8B-AF0E-D85417BF8E51.png`, named
+`IAP_01-pomogem-pro-live-price`. Its SHA-256 is
+`0c7ef153e90c8022a946dc4e5c69212e8073ac33bd6e62b03410175e4892ec1d`.
+It was copied unchanged as a 1284 × 2778 opaque RGB PNG. App Store Connect
+replacement and signed-device comparison must be recorded separately.
 
 ## Reproduce
 
@@ -137,7 +172,7 @@ xcodebuild \
   -project PomoGem.xcodeproj -scheme PomoGem -configuration Debug \
   -destination "platform=iOS Simulator,id=$SCREENSHOT_DEVICE_ID" \
   -derivedDataPath "$SCREENSHOT_RESULTS/DerivedData" \
-  MARKETING_VERSION=1.1.0 CURRENT_PROJECT_VERSION=10 \
+  MARKETING_VERSION=1.1.1 CURRENT_PROJECT_VERSION=13 \
   build-for-testing
 ```
 
@@ -215,8 +250,7 @@ RGB PNG; its hash remains in `checksums.sha256` and `ASSET_LICENSES.md`.
 
 ## English product page
 
-The published 1.0.2 screenshots show Japanese UI. The 1.1.0 candidate supports
-English and Japanese UI; support remains in Japanese. The `en-US/` images show
-the English UI from the same Simulator candidate as `ja-JP/`. Compare them
-with the final signed physical-device build and replace the inherited Japanese
-images in App Store Connect before submission.
+The `en-US/` images show English production UI from the same 1.1.1 (13)
+Simulator capture as `ja-JP/`. The product supports English and Japanese UI;
+support remains in Japanese. Upload these files for English rather than
+inheriting older Japanese images, and verify the saved listing after reload.

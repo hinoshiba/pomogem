@@ -1,4 +1,6 @@
-- Choose a recording theme for each app that earns Screen Time gems, such as News for Podcasts and Reading for Audible. Apps assigned to the same theme combine their time toward a 100-gram gem every 10 minutes; different themes count separately. Your existing theme carries over to each app.
-- Selected app names now appear in the settings menu and detail screen.
-- Find these options under Add App Time, with clearer controls for apps that earn gems and apps that add black gems. Improved readability at larger text sizes.
-- Fixed settings screens shifting sideways on iPhone.
+- Choose a recording theme for each app that earns Screen Time gems. Apps with the same theme combine their use toward a 100-gram gem every 10 minutes. Your previous theme carries over to each app.
+- Crystals now grow from total time instead of the number of records. Every 250 minutes forms a crystal, and ten crystals form the next size. Remaining time carries forward; original records and total time are preserved.
+- A clearer Home screen distinguishes moving gems from the total-time meter. Tap a gem or the next-crystal link to explore your progress.
+- Added three end-of-timer sounds and five vibration patterns.
+- Selected app names now appear in settings. Improved larger-text layouts and fixed settings screens shifting sideways.
+- Time-based crystals do not offer the previous Pro month stamps. Session dates, monthly records, your Pro purchase, custom timers, and unlimited learning apps remain available.

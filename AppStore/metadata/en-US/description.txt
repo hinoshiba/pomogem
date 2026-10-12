@@ -1,29 +1,32 @@
 Turn focused time into colorful gems.
 
-Study and work time becomes visible progress. Earned gems stay when you take a day off. The app is in English and Japanese. Support is currently provided in Japanese.
+See your progress. Gems stay when you take a day off. English and Japanese UI; support is currently provided in Japanese.
 
 CHOOSE A THEME AND START
 
-Choose a theme and a free 25-, 45-, 60-, or 90-minute timer. Finish a session and a gem drops into your jar with sound and haptic feedback. Each completed minute becomes 10 grams: 25 minutes adds 250 grams.
+Choose a theme and a free 25-, 45-, 60-, or 90-minute timer. Finish and a gem drops into your jar with sound and haptics. Each completed minute adds 10 grams.
 
 • Custom themes for study and work
-• A tactile jar that responds to taps, tilt, and gentle shaking
-• Ten gems combine into a larger crystal
+• A jar that responds to taps and tilt
+• Every 250 minutes forms a crystal; ten form the next size. Remaining time carries forward
+• A clear total-time meter and links to your progress and records
 • Weekly and lifetime views, milestones, and manual records separate from timed focus
-• Weight Journey shows your next milestone and compares your total with the approximate weights of familiar objects
-• Focus and break-end alarms with a choice of sound and strength
+• Weight Journey compares progress with familiar objects
+• Focus and break alarms with sound and vibration choices
 • Images and short GIFs for sharing eligible records, always with PomoGem branding and its official website
 • Home and Lock Screen widgets that start a focus without displaying your records
 
 OPTIONAL SCREEN TIME GEMS
 
-In Settings > Add App Time, choose apps and a theme for each. App names appear in settings. Apps with the same theme combine their use: each confirmed 10 minutes adds a 100-gram gem. Themes count separately. Free: 5 apps; Pro: unlimited. OS notifications may be delayed. Periods under 10 minutes are not added. Gem recording pauses during focus timers.
+In Settings > Add App Time, choose apps and a theme for each. Apps with the same theme combine their use: each confirmed 10 minutes adds a 100-gram gem. Themes count separately. Free: 5 apps; Pro: unlimited. OS notifications may be delayed. Periods under 10 minutes are not added. Gem recording pauses during focus timers.
 
 You can also choose apps you want to use less. Each combined 10 minutes adds a black obstacle gem. This selection is unlimited for everyone. Black gems combine only with black gems; they do not count toward study time, study mass, rewards, or sharing, and never subtract earned study gems. The same app cannot belong to both selections. You choose whether to authorize and enable recording.
 
 POMOGEM PRO
 
-A one-time, non-consumable In-App Purchase unlocks custom timers from 1 minute 00 seconds to 360 minutes 00 seconds, month stamps on crystals, and unlimited learning apps for Screen Time recording. Enter minutes and seconds or use scroll wheels. Update both devices before handing off timers set with seconds. No subscription, trial, or automatic renewal. The purchase screen shows your App Store price.
+A one-time, non-consumable In-App Purchase unlocks custom timers from 1 minute 00 seconds to 360 minutes 00 seconds and unlimited learning apps for Screen Time recording. Enter minutes and seconds or use scroll wheels. Update both devices before handing off timers set with seconds. No subscription, trial, or automatic renewal. The purchase screen shows your App Store price.
+
+Time-based crystals no longer offer Pro month stamps. Session dates, monthly records, and your purchase remain intact.
 
 YOUR STORAGE CHOICE
 
