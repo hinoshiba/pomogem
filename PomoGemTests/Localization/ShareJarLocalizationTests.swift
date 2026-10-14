@@ -368,7 +368,7 @@ final class ShareJarLocalizationTests: XCTestCase {
         XCTAssertEqual(JarSubjectDisplayName.name("過去の集中", bundle: bundle, locale: en), "Earlier focus")
         XCTAssertEqual(JarSubjectDisplayName.name("過去の集中 3", bundle: bundle, locale: en), "Earlier focus 3")
         XCTAssertEqual(JarSubjectDisplayName.name("過去の集中 x", bundle: bundle, locale: en), "過去の集中 x", "only the stored shapes are mapped")
-        XCTAssertEqual(JarSubjectDisplayName.name("My theme", bundle: bundle, locale: en), "My theme")
+        XCTAssertEqual(JarSubjectDisplayName.name("My activity", bundle: bundle, locale: en), "My activity")
     }
 
     // MARK: Whole tables

@@ -257,7 +257,7 @@ actor PomoGemDataExportWorker {
                 // Semantic key: the same Japanese is the Themes section header.
                 displayName: String(
                     localized: "settings.export.collection.themes",
-                    defaultValue: "テーマ",
+                    defaultValue: "取り組み",
                     table: "Settings",
                     comment: "Export progress: the collection being written (themes, lower case in English)"
                 ),
@@ -688,6 +688,7 @@ private struct SubjectExportRecord: Encodable {
     let contentMutationID: UUID
     let name: String
     let colorHex: String
+    let defaultFocusSeconds: Int?
     let sortOrder: Int
     let isArchived: Bool
     let deletedAt: Date?
@@ -700,6 +701,7 @@ private struct SubjectExportRecord: Encodable {
         contentMutationID = value.contentMutationID
         name = value.name
         colorHex = value.colorHex
+        defaultFocusSeconds = value.defaultFocusSeconds
         sortOrder = value.sortOrder
         isArchived = value.isArchived
         deletedAt = value.deletedAt

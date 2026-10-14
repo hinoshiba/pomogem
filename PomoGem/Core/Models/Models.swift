@@ -333,6 +333,9 @@ final class Subject {
     var contentMutationID: UUID = UUID()
     var name: String = ""
     var colorHex: String = Constants.Color.english
+    /// nil keeps the shared preferred focus duration. An optional additive
+    /// field also lets older stores and partial CloudKit records use it.
+    var defaultFocusSeconds: Int?
     var sortOrder: Int = 0
     var isArchived: Bool = false
     /// Logical deletion tombstone. Physical CloudKit rows remain available so
@@ -353,6 +356,7 @@ final class Subject {
         name: String,
         colorHex: String,
         sortOrder: Int,
+        defaultFocusSeconds: Int? = nil,
         isArchived: Bool = false,
         deletedAt: Date? = nil,
         createdAt: Date = Date(),
@@ -369,10 +373,38 @@ final class Subject {
         self.contentMutationID = contentMutationID
         self.name = SubjectNamePolicy.sanitized(name)
         self.colorHex = colorHex
+        self.defaultFocusSeconds = defaultFocusSeconds
         self.sortOrder = sortOrder
         self.isArchived = isArchived
         self.deletedAt = deletedAt
         self.createdAt = createdAt
+    }
+}
+
+enum SubjectFocusDurationPolicy {
+    /// Validate synchronized values when reading them, preserving their raw
+    /// storage representation for exports and future compatibility.
+    static func savedDuration(
+        subjectDefaultSeconds: Int?,
+        preferredSeconds: Int?
+    ) -> PomodoroDuration {
+        for seconds in [subjectDefaultSeconds, preferredSeconds].compactMap({ $0 }) {
+            let duration = PomodoroDuration(totalSeconds: seconds)
+            if duration.isValid { return duration }
+        }
+        return .twentyFiveMinutes
+    }
+
+    static func availableDuration(
+        subjectDefaultSeconds: Int?,
+        preferredSeconds: Int?,
+        isPro: Bool
+    ) -> PomodoroDuration {
+        let saved = savedDuration(
+            subjectDefaultSeconds: subjectDefaultSeconds,
+            preferredSeconds: preferredSeconds
+        )
+        return saved.requiresPro && !isPro ? .twentyFiveMinutes : saved
     }
 }
 
@@ -385,10 +417,10 @@ enum SubjectSyncPolicy {
         var errorDescription: String? {
             switch self {
             case .revisionLimitReached:
-                String(localized: "このテーマは変更の回数が上限に達したため、これ以上変更できません。", table: "Models",
+                String(localized: "この取り組みは変更の回数が上限に達したため、これ以上変更できません。", table: "Models",
                        comment: "Theme edit error: the theme reached its edit limit")
             case .tooManyPhysicalRows:
-                String(localized: "テーマの保存データが多すぎるため、安全に変更できませんでした。", table: "Models",
+                String(localized: "取り組みの保存データが多すぎるため、安全に変更できませんでした。", table: "Models",
                        comment: "Theme edit error: too many stored copies of the theme to change it safely")
             }
         }

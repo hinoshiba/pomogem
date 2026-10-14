@@ -918,8 +918,8 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             let description = "\(themeLabel) / \(themeValue)"
             let hasChosenTheme = theme.exists
                 && !description.contains("選んでください")
-                && !description.contains("削除されたテーマ")
-                && (themeLabel != "記録先のテーマ" || (!themeValue.isEmpty && themeValue != "<missing>"))
+                && !description.contains("削除された取り組み")
+                && (themeLabel != "記録先の取り組み" || (!themeValue.isEmpty && themeValue != "<missing>"))
             guard hasChosenTheme else {
                 try skipWithEvidence("restart-monitoring-no-theme-\(index)",
                                      "Each learning app needs an existing saved theme; screen-time.learning-theme.\(index) reads \(description).")
@@ -1802,7 +1802,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
 
         // The reads above end at `screen-time.negative-total`, i.e. with the
         // List scrolled to the BOTTOM — and the status line, the monitoring
-        // error and 記録先のテーマ all live at the TOP. Sampling them from down
+        // error and 記録先の取り組み all live at the TOP. Sampling them from down
         // there reports every one of them as absent, which reads exactly like
         // "the app shows no status at all". Go back up first.
         scrollSettingsToTop(app)
@@ -1847,8 +1847,8 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         let candidates = [
             "スクリーンタイムへのアクセスを許可してください。",
             "記録するアプリを1つ以上選んでください。",
-            "各アプリの記録先のテーマを選んでください。",
-            "各アプリの記録先のテーマを選んでください。",
+            "各アプリの記録先の取り組みを選んでください。",
+            "各アプリの記録先の取り組みを選んでください。",
             "カテゴリやWebサイトは選べません",
             "同じアプリを「粒にするアプリ」と「黒い石にするアプリ」の両方には登録できません",
             "無料では粒にするアプリを5つまで選べます"
@@ -1928,7 +1928,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             XCTFail("\(identifier) must be operable to choose a recording theme.")
             throw AuditFailure.stopped
         }
-        // The row publishes the chosen theme in its LABEL (「記録先のテーマ、<name>」)
+        // The row publishes the chosen theme in its LABEL (「記録先の取り組み、<name>」)
         // and leaves `value` empty, so checking only the value re-opened the
         // sheet on every run for a theme that was already selected.
         // Never touch `label` without the same guard `describeValue` applies:
@@ -1944,7 +1944,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         pause(2)
         capture("theme-picker-choose")
         dumpHierarchy(app, name: "theme-picker-choose")
-        let excluded: Set<String> = ["選んでください", "削除されたテーマ", "記録先のテーマ", "キャンセル", "保存"]
+        let excluded: Set<String> = ["選んでください", "削除された取り組み", "記録先の取り組み", "キャンセル", "保存"]
         var chosen: XCUIElement?
         var chosenLabel = ""
         if let themeName = preferredTheme {

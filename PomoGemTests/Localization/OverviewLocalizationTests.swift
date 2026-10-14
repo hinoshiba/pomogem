@@ -52,7 +52,7 @@ final class OverviewLocalizationTests: XCTestCase {
         )
         XCTAssertEqual(
             legacy.preservationMessage,
-            "色・粒数・質量と、まとめた日は残っています。元記録への参照は残っています。旧形式のため、テーマ・入力方法・レアの内訳はこの粒自体には保存されていません。記念石は別の石として残します。"
+            "色・粒数・質量と、まとめた日は残っています。元記録への参照は残っています。旧形式のため、取り組み・入力方法・レアの内訳はこの粒自体には保存されていません。記念石は別の石として残します。"
         )
 
         XCTAssertEqual(

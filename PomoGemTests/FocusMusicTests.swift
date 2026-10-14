@@ -53,6 +53,37 @@ final class FocusMusicTests: XCTestCase {
     private var station: FocusMusicSource { sources[1] }
     private var pianoChill: FocusMusicSource { sources[2] }
 
+    func testDiscoveryPermissionRecoveryClearsOnlyThePermissionFailure() async {
+        authorizer.status = .denied
+        let controller = makeController()
+        var permissionFailure: FocusMusicDiscoveryFailure?
+        do {
+            _ = try await controller.search(term: "piano")
+            XCTFail("Searching while denied must fail before querying the catalog")
+        } catch {
+            permissionFailure = FocusMusicDiscoveryFailure(error: error, authorization: controller.authorization)
+        }
+        XCTAssertEqual(permissionFailure, .permissionRequired)
+        XCTAssertTrue(catalog.searchedTerms.isEmpty)
+
+        let requestFailure = FocusMusicDiscoveryFailure(
+            error: FocusMusicPlaybackError.failed, authorization: .authorized
+        )
+        XCTAssertEqual(requestFailure, .requestFailed)
+        authorizer.status = .authorized
+        await controller.refresh(forceSubscriptionCheck: true)
+        XCTAssertNil(permissionFailure?.remaining(after: controller.authorization))
+        XCTAssertEqual(requestFailure.remaining(after: controller.authorization), .requestFailed,
+                       "Permission recovery does not prove that a network request succeeded")
+        XCTAssertEqual(permissionFailure?.remaining(after: .denied), .permissionRequired)
+        XCTAssertEqual(permissionFailure?.remaining(after: .restricted), .permissionRequired)
+        XCTAssertEqual(requestFailure.remaining(after: .denied), .requestFailed)
+        XCTAssertNil(FocusMusicDiscoveryFailure(
+            error: FocusMusicPlaybackError.permissionDenied, authorization: .authorized
+        ).remaining(after: .authorized),
+        "A permission failure delivered just after authorization recovers must not revive the prompt")
+    }
+
     // MARK: - Catalog
 
     func testCatalogListsTheVerifiedSourcesInFallbackOrder() {
@@ -136,7 +167,7 @@ final class FocusMusicTests: XCTestCase {
         XCTAssertNil(controller.hint)
         // A paused queue is no longer this process's: the next tap starts the
         // choice again instead of resuming.
-        controller.pause()
+        player.pause()
         let action = await controller.handleHeaderTap()
         XCTAssertEqual(action, .play(classical))
     }
@@ -145,8 +176,412 @@ final class FocusMusicTests: XCTestCase {
         // MusicAuthorization.request() terminates an app without this key.
         XCTAssertEqual(
             Bundle.main.object(forInfoDictionaryKey: "NSAppleMusicUsageDescription") as? String,
-            "タイマー画面から『ミュージック』アプリで集中用の音楽を再生するために使います。"
+            "集中用の音楽を再生し、自分のライブラリからプレイリストを選ぶために使います。"
         )
+    }
+
+    // MARK: - Personal choices and subject defaults
+
+    func testSubjectMusicDraftIsSavedWithoutPlayingAndSurvivesRelaunch() {
+        let subject = UUID()
+        let otherSubject = UUID()
+        let controller = makeController()
+        controller.setAutoplayEnabled(true)
+        FocusMusicPreferences.setChosenSource(classical, defaults: defaults)
+        var draft = controller.subjectSettings(for: subject)
+        draft.source = .libraryPlaylist(id: "p.private", title: "My study playlist")
+        draft.autoplay = false
+        XCTAssertEqual(controller.subjectSettings(for: subject), FocusMusicSubjectSettings())
+        XCTAssertTrue(controller.savedSources.isEmpty, "Editing or cancelling a draft must not save a favorite")
+
+        controller.setSubjectSettings(draft, for: subject)
+        let relaunched = makeController()
+        XCTAssertEqual(relaunched.subjectSettings(for: subject), draft)
+        XCTAssertEqual(relaunched.chosenSource(for: subject), draft.source)
+        XCTAssertFalse(relaunched.isAutoplayEnabled(for: subject))
+        XCTAssertTrue(relaunched.isAutoplayEnabled(for: otherSubject))
+        XCTAssertEqual(relaunched.chosenSource(for: otherSubject), classical)
+        XCTAssertEqual(player.attempts, [])
+        XCTAssertEqual(authorizer.requestCount, 0)
+
+        relaunched.setSubjectSettings(FocusMusicSubjectSettings(), for: subject)
+        XCTAssertTrue(relaunched.isAutoplayEnabled(for: subject))
+        XCTAssertEqual(relaunched.chosenSource(for: subject), classical)
+    }
+
+    func testLibraryPlaylistSourceDecodesAlongsideLegacySavedFavorites() throws {
+        let old = Data(#"{"id":"pl.saved","fallbackTitle":"Saved","kind":"playlist"}"#.utf8)
+        let legacy = try JSONDecoder().decode(FocusMusicSource.self, from: old)
+        XCTAssertNil(legacy.libraryID)
+        let library = FocusMusicSource.libraryPlaylist(id: "pl.saved", title: "Personal")
+        XCTAssertNotEqual(library.id, legacy.id, "A library ID must never collide with a catalog choice")
+        XCTAssertEqual(try JSONDecoder().decode(FocusMusicSource.self, from: JSONEncoder().encode(library)), library)
+        XCTAssertEqual(FocusMusicCatalog.fallbackOrder(startingWith: library), [library])
+        XCTAssertEqual(FocusMusicCatalogRoutePolicy.route(for: library, after: .developerTokenUnavailable),
+                       .fail(.needsCatalogAccess), "Never send a library ID to the catalog store-ID fallback")
+    }
+
+    func testSubjectAutoplayCanOverrideCommonOffOrOnIndependently() async {
+        let enabledSubject = UUID()
+        let disabledSubject = UUID()
+        let controller = makeController()
+        let library = FocusMusicSource.libraryPlaylist(id: "p.study", title: "Study")
+        controller.setSubjectSettings(.init(source: library, autoplay: true), for: enabledSubject)
+        controller.setSubjectSettings(.init(source: classical, autoplay: false), for: disabledSubject)
+        XCTAssertFalse(controller.isAutoplayEnabled())
+        await controller.autoplayIfNeeded(sessionID: UUID(), startedAt: clock,
+                                         isStartedOnThisIPhone: true, subjectID: enabledSubject)
+        XCTAssertEqual(player.attempts, [library.id])
+        player.nowPlaying.status = .stopped
+        controller.setAutoplayEnabled(true)
+        await controller.autoplayIfNeeded(sessionID: UUID(), startedAt: clock,
+                                         isStartedOnThisIPhone: true, subjectID: disabledSubject)
+        XCTAssertEqual(player.attempts, [library.id], "A subject's explicit Off wins over common On")
+        controller.clearSubjectAutoplay(disabledSubject)
+        await controller.autoplayIfNeeded(sessionID: UUID(), startedAt: clock,
+                                         isStartedOnThisIPhone: true, subjectID: disabledSubject)
+        XCTAssertEqual(player.attempts, [library.id, classical.id])
+    }
+
+    func testLibraryPickerLoadsEveryPageOnlyAfterExplicitPermissionAndSavesNothing() async throws {
+        authorizer.status = .notDetermined
+        let controller = makeController()
+        await controller.refresh()
+        XCTAssertEqual(authorizer.requestCount, 0)
+        XCTAssertEqual(catalog.libraryOffsets, [])
+        catalog.libraryPages = [
+            0: [.libraryPlaylist(id: "p.one", title: "One"), .libraryPlaylist(id: "p.two", title: "Two")],
+            2: [.libraryPlaylist(id: "p.three", title: "Three")]
+        ]
+        let result = try await controller.libraryPlaylists()
+        XCTAssertEqual(result.map(\.libraryID), ["p.one", "p.two", "p.three"])
+        XCTAssertEqual(catalog.libraryOffsets, [0, 2, 3], "A short provider page must not hide later playlists")
+        XCTAssertEqual(authorizer.requestCount, 1)
+        XCTAssertEqual(player.attempts, [])
+        XCTAssertNil(controller.chosenSource)
+        XCTAssertEqual(controller.savedSources, [])
+        XCTAssertNil(defaults.object(forKey: FocusMusicPreferences.savedSourcesKey))
+    }
+
+    func testDeniedLibraryPickerDoesNotReadPlaylists() async {
+        authorizer.status = .denied
+        do {
+            _ = try await makeController().libraryPlaylists()
+            XCTFail("A denied library request must not load personal playlists")
+        } catch {
+            XCTAssertEqual(error as? FocusMusicPlaybackError, .permissionDenied)
+        }
+        XCTAssertEqual(catalog.libraryOffsets, [])
+        XCTAssertEqual(authorizer.requestCount, 0)
+    }
+
+    func testRepeatedLibraryPageFailsInsteadOfLoopingOrShowingATruncatedSuccess() async {
+        let source = FocusMusicSource.libraryPlaylist(id: "p.one", title: "One")
+        catalog.libraryPages = [0: [source], 1: [source]]
+        do {
+            _ = try await makeController().libraryPlaylists()
+            XCTFail("Repeated pages are not a completed library listing")
+        } catch {
+            XCTAssertEqual(error as? FocusMusicPlaybackError, .failed)
+        }
+        XCTAssertEqual(catalog.libraryOffsets, [0, 1])
+    }
+
+    func testPersonalSourcesSurviveRelaunchAndSubjectOverridesDoNotChangeTheCommonChoice() {
+        let subject = UUID()
+        let otherSubject = UUID()
+        let song = FocusMusicSource(id: "123456", fallbackTitle: "My song", kind: .song)
+        FocusMusicPreferences.setChosenSource(classical, defaults: defaults)
+        FocusMusicPreferences.setChosenSource(song, subjectID: subject, defaults: defaults)
+
+        let relaunched = UserDefaults(suiteName: domain)!
+        XCTAssertEqual(FocusMusicPreferences.chosenSource(subjectID: subject, defaults: relaunched), song)
+        XCTAssertEqual(FocusMusicPreferences.chosenSource(subjectID: otherSubject, defaults: relaunched), classical)
+        XCTAssertEqual(FocusMusicPreferences.chosenSource(defaults: relaunched), classical)
+        XCTAssertEqual(FocusMusicPreferences.savedSources(defaults: relaunched), [song])
+
+        FocusMusicPreferences.setChosenSource(nil, subjectID: subject, defaults: defaults)
+        XCTAssertEqual(FocusMusicPreferences.chosenSource(subjectID: subject, defaults: defaults), classical)
+    }
+
+    func testAnOptionalFavoriteNameSurvivesSelectionAndCatalogTitleRefresh() async {
+        let named = FocusMusicSource(id: station.id, fallbackTitle: "Radio", kind: .station, customTitle: "Radio")
+        let controller = makeController()
+        controller.saveSource(named)
+        await controller.choose(named)
+        catalog.names = [station.id: "Catalog station title"]
+        await controller.loadCatalogTitlesIfNeeded()
+        XCTAssertEqual(controller.chosenSource, named)
+        XCTAssertEqual(controller.title(for: named), "Radio")
+        XCTAssertEqual(FocusMusicPreferences.chosenSource(defaults: UserDefaults(suiteName: domain)!), named)
+    }
+
+    func testRemovingFavoriteKeepsCommonAndSubjectChoicesAcrossRelaunch() {
+        let subject = UUID()
+        let otherSubject = UUID()
+        let album = FocusMusicSource(id: "67890", fallbackTitle: "My album", kind: .album)
+        FocusMusicPreferences.setChosenSource(album, defaults: defaults)
+        FocusMusicPreferences.setChosenSource(album, subjectID: subject, defaults: defaults)
+        FocusMusicPreferences.setChosenSource(album, subjectID: otherSubject, defaults: defaults)
+        FocusMusicPreferences.saveSource(album, defaults: defaults)
+        XCTAssertEqual(FocusMusicPreferences.savedSources(defaults: defaults).count, 1)
+
+        FocusMusicPreferences.removeSavedSource(album, defaults: defaults)
+        let relaunched = UserDefaults(suiteName: domain)!
+        XCTAssertEqual(FocusMusicPreferences.chosenSource(defaults: relaunched), album)
+        for id in [subject, otherSubject] {
+            XCTAssertEqual(FocusMusicPreferences.subjectSource(for: id, defaults: relaunched), album)
+        }
+        XCTAssertEqual(FocusMusicPreferences.savedSources(defaults: relaunched), [])
+        FocusMusicPreferences.setChosenSource(album, subjectID: subject, defaults: relaunched)
+        XCTAssertEqual(FocusMusicPreferences.savedSources(defaults: relaunched), [],
+                       "Selecting an unfavorited source must not silently restore its heart")
+        FocusMusicPreferences.saveSource(album, defaults: relaunched)
+        XCTAssertEqual(FocusMusicPreferences.savedSources(defaults: relaunched), [album])
+    }
+
+    func testLegacyFavoriteJSONStillResolvesChoicesWithoutNewMembershipData() throws {
+        let legacy = Data(#"[{"id":"123456","fallbackTitle":"Old song","kind":"song"}]"#.utf8)
+        defaults.set(legacy, forKey: FocusMusicPreferences.savedSourcesKey)
+        defaults.set("123456", forKey: FocusMusicPreferences.sourceKey)
+        let source = try XCTUnwrap(FocusMusicPreferences.chosenSource(defaults: defaults))
+        XCTAssertEqual(FocusMusicPreferences.savedSources(defaults: defaults), [source])
+        FocusMusicPreferences.removeSavedSource(source, defaults: defaults)
+        XCTAssertEqual(defaults.data(forKey: FocusMusicPreferences.savedSourcesKey), legacy,
+                       "Favorite membership must not rewrite the existing metadata JSON")
+        XCTAssertEqual(FocusMusicPreferences.chosenSource(defaults: defaults), source)
+    }
+
+    func testBrokenPersonalMetadataKeepsLegacyCommonMusicUsable() {
+        defaults.set(Data("broken".utf8), forKey: FocusMusicPreferences.savedSourcesKey)
+        defaults.set(Data("broken".utf8), forKey: FocusMusicPreferences.subjectSourcesKey)
+        FocusMusicPreferences.setChosenSource(pianoChill, defaults: defaults)
+        XCTAssertEqual(FocusMusicPreferences.chosenSource(subjectID: UUID(), defaults: defaults), pianoChill)
+        XCTAssertEqual(FocusMusicPreferences.savedSources(defaults: defaults), [])
+    }
+
+    func testAppleMusicLinksIdentifySongAlbumPlaylistAndStationWithoutOpeningURLs() {
+        let cases: [(String, String, FocusMusicSource.Kind)] = [
+            ("https://music.apple.com/jp/album/album-name/123?i=456", "456", .song),
+            ("https://music.apple.com/us/song/song-name/456", "456", .song),
+            ("https://music.apple.com/jp/album/album-name/123", "123", .album),
+            ("https://music.apple.com/jp/playlist/focus/pl.abc123", "pl.abc123", .playlist),
+            ("https://music.apple.com/us/station/classical/ra.985486574", "ra.985486574", .station),
+            (" https://music.apple.com/playlist/pl.abc123 ", "pl.abc123", .playlist),
+            ("https://music.apple.com/jp/station/my-station/ra.u-abc123", "ra.u-abc123", .station),
+        ]
+        for (url, id, kind) in cases {
+            XCTAssertEqual(FocusMusicSourceLink.parse(url)?.id, id, url)
+            XCTAssertEqual(FocusMusicSourceLink.parse(url)?.kind, kind, url)
+        }
+        for invalid in [
+            "https://music.apple.com.evil.example/jp/song/name/456",
+            "http://music.apple.com/jp/song/name/456",
+            "https://user@music.apple.com/jp/song/name/456",
+            "https://music.apple.com:123/jp/song/name/456",
+            "https://music.apple.com/jp/artist/name/456",
+            "https://music.apple.com/jp/song/name/not-an-id",
+            "https://music.apple.com/jp/album/name/123?i=bad",
+            "https://music.apple.com/jp/station/name/ra.",
+            "https://music.apple.com/jp/playlist/name/pl.",
+            "https://example.com/playlist/pl.abc123",
+        ] {
+            XCTAssertNil(FocusMusicSourceLink.parse(invalid), invalid)
+        }
+    }
+
+    func testReselectingAStationContinuesWithoutReplacingItsQueue() async {
+        let controller = makeController()
+        await controller.choose(station)
+        await controller.choose(station)
+        XCTAssertEqual(player.attempts, [station.id])
+        controller.pause()
+        await controller.choose(station)
+        XCTAssertEqual(player.attempts, [station.id])
+        XCTAssertEqual(player.resumeCount, 1)
+        XCTAssertTrue(controller.isPlaying)
+    }
+
+    func testShuffleIsEnabledForCollectionsOnlyAndHonorsThePreference() async {
+        let controller = makeController()
+        await controller.choose(classical)
+        await controller.choose(station)
+        let song = FocusMusicSource(id: "123456", fallbackTitle: "Song", kind: .song)
+        await controller.choose(song)
+        defaults.set(false, forKey: FocusMusicPreferences.shuffleKey)
+        await controller.choose(pianoChill)
+        XCTAssertEqual(player.shuffleChoices, [true, false, false, false])
+    }
+
+    func testUnavailablePersonalChoiceDoesNotSilentlyPlayUnrelatedCuratedMusic() async {
+        let song = FocusMusicSource(id: "123456", fallbackTitle: "Song", kind: .song)
+        player.failures[song.id] = .notInStorefront
+        let controller = makeController()
+        await controller.choose(song)
+        XCTAssertEqual(player.attempts, [song.id])
+        XCTAssertEqual(controller.chosenSource, song)
+        XCTAssertEqual(controller.hint, .noSourceAvailable)
+    }
+
+    func testSubjectChoiceDrivesFreshFocusAutoplayAndHeaderPlayback() async {
+        let subject = UUID()
+        let controller = makeController()
+        FocusMusicPreferences.setChosenSource(classical, defaults: defaults)
+        FocusMusicPreferences.setChosenSource(pianoChill, subjectID: subject, defaults: defaults)
+        FocusMusicPreferences.setAutoplayEnabled(true, defaults: defaults)
+        await controller.autoplayIfNeeded(sessionID: UUID(), startedAt: clock, isStartedOnThisIPhone: true, subjectID: subject)
+        XCTAssertEqual(player.attempts, [pianoChill.id])
+        XCTAssertEqual(controller.chosenSource, classical)
+        XCTAssertEqual(controller.chosenSource(for: subject), pianoChill)
+
+        player.nowPlaying.status = .stopped
+        await controller.handleHeaderTap(subjectID: subject)
+        XCTAssertEqual(player.attempts, [pianoChill.id, pianoChill.id])
+    }
+
+    func testSwitchingSubjectsWhilePausedStartsTheNewSubjectsMusic() async {
+        let subject = UUID()
+        let controller = makeController()
+        FocusMusicPreferences.setChosenSource(pianoChill, subjectID: subject, defaults: defaults)
+        await controller.choose(classical)
+        controller.pause()
+        XCTAssertEqual(controller.headerAction(for: subject), .play(pianoChill))
+        XCTAssertEqual(controller.transportToggle(for: subject), .play(pianoChill))
+        await controller.handleHeaderTap(subjectID: subject)
+        XCTAssertEqual(player.attempts, [classical.id, pianoChill.id])
+        XCTAssertEqual(player.resumeCount, 0)
+        controller.pause(subjectID: subject)
+        await controller.togglePlayback()
+        XCTAssertEqual(player.attempts, [classical.id, pianoChill.id, classical.id])
+    }
+
+    func testReselectingACuratedFallbackContinuesItsQueue() async {
+        let controller = makeController()
+        player.failures[classical.id] = .notInStorefront
+        await controller.choose(classical)
+        XCTAssertEqual(controller.queuedSourceID, station.id)
+        controller.pause()
+        XCTAssertEqual(controller.headerAction, .resume)
+        await controller.choose(classical)
+        XCTAssertEqual(player.attempts, [classical.id, station.id])
+        XCTAssertEqual(player.resumeCount, 1)
+    }
+
+    func testFailedQueueReplacementDoesNotResumeItAsThePreviousChoice() async {
+        let controller = makeController()
+        await controller.choose(classical)
+        player.failures[pianoChill.id] = .failed
+        player.beforeFailure = {
+            self.player.nowPlaying = FocusMusicNowPlaying(status: .paused, title: "Failed replacement")
+        }
+        await controller.choose(pianoChill)
+        XCTAssertNil(controller.queuedSourceID)
+        await controller.choose(classical)
+        XCTAssertEqual(player.attempts, [classical.id, pianoChill.id, classical.id])
+        XCTAssertEqual(player.resumeCount, 0)
+    }
+
+    func testExternalQueueReplacementMakesExplicitReselectionStartTheChosenSource() async {
+        let controller = makeController()
+        for status in [FocusMusicPlaybackStatus.playing, .paused] {
+            await controller.choose(classical)
+            let previousAttempts = player.attempts.count
+            player.currentEntryID = "external-\(UUID())"
+            player.nowPlaying = FocusMusicNowPlaying(status: status, title: "External music")
+            player.onChange?()
+            XCTAssertNil(controller.queuedSourceID)
+            await controller.choose(classical)
+            XCTAssertEqual(player.attempts.count, previousAttempts + 1)
+            XCTAssertEqual(player.attempts.last, classical.id)
+            XCTAssertEqual(player.resumeCount, 0, "Explicitly selecting A must not resume external B")
+        }
+    }
+
+    func testNaturalNextTrackStillAllowsOurPauseAndResumeWithoutReplacingQueue() async {
+        let subject = UUID()
+        let controller = makeController()
+        await controller.choose(classical, subjectID: subject)
+        player.currentEntryID = "natural-next-entry"
+        player.nowPlaying = FocusMusicNowPlaying(status: .playing, title: "Next track")
+        player.onChange?()
+        XCTAssertNil(controller.queuedSourceID, "A new entry alone cannot prove source ownership")
+        XCTAssertTrue(controller.showsNowPlaying)
+        XCTAssertEqual(controller.headerAction(for: subject), .pause)
+        await controller.handleHeaderTap(subjectID: subject)
+        XCTAssertEqual(controller.headerAction(for: subject), .resume)
+        await controller.handleHeaderTap(subjectID: subject)
+        XCTAssertEqual(player.attempts, [classical.id])
+        XCTAssertEqual(player.resumeCount, 1)
+        await controller.togglePlayback(subjectID: subject)
+        await controller.togglePlayback(subjectID: subject)
+        XCTAssertEqual(player.attempts, [classical.id])
+        XCTAssertEqual(player.resumeCount, 2)
+    }
+
+    func testOurPausedEntryCannotResumeAfterExternalMusicOrSelectedSubjectChanges() async {
+        let subject = UUID()
+        let otherSubject = UUID()
+        let controller = makeController()
+        await controller.choose(classical, subjectID: subject)
+        controller.setSubjectSettings(.init(source: pianoChill), for: otherSubject)
+        player.currentEntryID = "next-track"
+        player.onChange?()
+        controller.pause(subjectID: subject)
+        XCTAssertEqual(controller.headerAction(for: otherSubject), .play(pianoChill))
+        player.currentEntryID = "external-paused-track"
+        player.nowPlaying = FocusMusicNowPlaying(status: .paused, title: "External")
+        player.onChange?()
+        XCTAssertEqual(controller.headerAction(for: subject), .play(classical))
+    }
+
+    func testUnknownQueueIdentityDoesNotTreatExternalMusicAsTheSelectedSource() async {
+        let controller = makeController()
+        await controller.choose(classical)
+        player.currentEntryID = nil
+        player.onChange?()
+        XCTAssertNil(controller.queuedSourceID)
+        await controller.choose(classical)
+        XCTAssertEqual(player.attempts, [classical.id, classical.id])
+    }
+
+    func testCompleteDeletionAlsoClearsPersonalSourcesSubjectsAndShuffle() throws {
+        let song = FocusMusicSource(id: "123456", fallbackTitle: "Song", kind: .song)
+        FocusMusicPreferences.setChosenSource(song, subjectID: UUID(), defaults: defaults)
+        FocusMusicPreferences.setAutoplayEnabled(true, subjectID: UUID(), defaults: defaults)
+        defaults.set(false, forKey: FocusMusicPreferences.shuffleKey)
+        try CompleteDataDeletionDefaultsCleaner.clear(defaults: defaults, persistentDomainName: domain)
+        for key in FocusMusicPreferences.allKeys { XCTAssertNil(defaults.object(forKey: key), key) }
+        XCTAssertEqual(FocusMusicPreferences.savedSources(defaults: defaults), [])
+        XCTAssertTrue(FocusMusicPreferences.isShuffleEnabled(defaults: defaults))
+    }
+
+    func testSearchRequiresAnExplicitPermissionGrantAndNeverStartsPlayback() async throws {
+        authorizer.status = .notDetermined
+        authorizer.requestResult = .authorized
+        let controller = makeController()
+        await controller.refresh()
+        XCTAssertEqual(authorizer.requestCount, 0)
+        let song = FocusMusicSource(id: "123456", fallbackTitle: "Song", kind: .song)
+        catalog.results = [song]
+        let results = try await controller.search(term: " piano ")
+        XCTAssertEqual(results, [song])
+        XCTAssertEqual(catalog.searchedTerms, ["piano"])
+        XCTAssertEqual(authorizer.requestCount, 1)
+        XCTAssertEqual(player.attempts, [])
+        XCTAssertNil(controller.chosenSource)
+    }
+
+    func testDeniedSearchNeverQueriesTheCatalog() async {
+        authorizer.status = .denied
+        let controller = makeController()
+        do {
+            _ = try await controller.search(term: "piano")
+            XCTFail("Denied search must not reach Apple Music")
+        } catch {
+            XCTAssertEqual(error as? FocusMusicPlaybackError, .permissionDenied)
+        }
+        XCTAssertEqual(catalog.searchedTerms, [])
+        XCTAssertEqual(authorizer.requestCount, 0)
     }
 
     // MARK: - Pure policies
@@ -458,6 +893,21 @@ final class FocusMusicTests: XCTestCase {
         XCTAssertEqual(subscriptions.callCount, 0)
         XCTAssertEqual(player.observeCount, 0, "the Music app's player is untouched before authorization")
         XCTAssertEqual(player.attempts, [])
+    }
+
+    func testForegroundRefreshReadsChangedPermissionWithoutPromptingOrPlaying() async {
+        authorizer.status = .denied
+        let controller = makeController()
+        await controller.refresh(forceSubscriptionCheck: true)
+        XCTAssertEqual(controller.availability, .denied)
+        authorizer.status = .authorized
+        await controller.refresh(forceSubscriptionCheck: true)
+        XCTAssertEqual(controller.availability, .ready)
+        authorizer.status = .denied
+        await controller.refresh(forceSubscriptionCheck: true)
+        XCTAssertEqual(controller.availability, .denied)
+        XCTAssertEqual(authorizer.requestCount, 0)
+        XCTAssertTrue(player.attempts.isEmpty)
     }
 
     func testTheTapInTheSheetAsksOnceThenChecksTheSubscription() async {
@@ -968,6 +1418,43 @@ final class FocusMusicTests: XCTestCase {
         XCTAssertEqual(subscriptions.callCount, 1)
     }
 
+    func testCancelledAutoplayDoesNotStartAfterTheSharedSubscriptionCheckFinishes() async {
+        FocusMusicPreferences.setChosenSource(pianoChill, defaults: defaults)
+        FocusMusicPreferences.setAutoplayEnabled(true, defaults: defaults)
+        subscriptions.suspends = true
+        let controller = makeController()
+        let autoplay = Task {
+            await controller.autoplayIfNeeded(sessionID: UUID(), startedAt: self.clock,
+                                             isStartedOnThisIPhone: true)
+        }
+        await subscriptions.waitUntilCalled()
+        autoplay.cancel()
+        subscriptions.resume()
+        await autoplay.value
+        XCTAssertEqual(controller.availability, .ready, "Other callers can still use the shared answer")
+        XCTAssertTrue(player.attempts.isEmpty)
+        XCTAssertNil(FocusMusicPreferences.lastAutoplayedSessionID(defaults: defaults))
+    }
+
+    func testLatestRowChoiceWinsWhileTheInitialSubscriptionCheckIsPending() async {
+        subscriptions.suspends = true
+        player.suspendsPlay = true
+        let controller = makeController()
+        let first = Task { await controller.choose(self.classical) }
+        await subscriptions.waitUntilCalled()
+        let second = Task { await controller.choose(self.pianoChill) }
+        for _ in 0..<100 where controller.chosenSource != pianoChill { await Task.yield() }
+        XCTAssertEqual(controller.chosenSource, pianoChill)
+        subscriptions.resume()
+        await waitForPlayAttempts(1)
+        XCTAssertEqual(player.attempts, [pianoChill.id])
+        player.releasePlay()
+        _ = await first.value
+        _ = await second.value
+        XCTAssertEqual(controller.nowPlaying.title, "T-\(pianoChill.id)")
+        XCTAssertEqual(controller.chosenSource, pianoChill)
+    }
+
     func testTheSheetsRecheckKeepsTheKnownAnswerSoARowTapPlaysAtOnce() async {
         let controller = makeController()
         await controller.refresh()
@@ -1219,6 +1706,81 @@ final class FocusMusicTests: XCTestCase {
         XCTAssertEqual(player.attempts, [pianoChill.id])
     }
 
+    func testAutoplayLeavesAudioStartedWhileTheSourceLoadsAlone() async {
+        FocusMusicPreferences.setAutoplayEnabled(true, defaults: defaults)
+        for source in [pianoChill, .libraryPlaylist(id: "p.study", title: "Study")] {
+            for musicAppIsPlaying in [false, true] {
+                FocusMusicPreferences.setChosenSource(source, defaults: defaults)
+                player.nowPlaying = FocusMusicNowPlaying()
+                player.isOtherAudioPlaying = false
+                player.suspendsPlay = true
+                let controller = makeController()
+                let session = UUID()
+                let expectedAttempts = player.attempts.count + 1
+                let start = Task {
+                    await controller.autoplayIfNeeded(
+                        sessionID: session, startedAt: clock, isStartedOnThisIPhone: true
+                    )
+                }
+                await waitForPlayAttempts(expectedAttempts)
+                XCTAssertTrue(controller.isBusy)
+
+                // Either Music or an unrelated audio app starts while the
+                // selected catalog/library source is still being prepared.
+                let externalState = FocusMusicNowPlaying(
+                    status: musicAppIsPlaying ? .playing : .stopped,
+                    title: musicAppIsPlaying ? "My Music queue" : nil
+                )
+                player.nowPlaying = externalState
+                player.currentEntryID = "external-queue"
+                player.isOtherAudioPlaying = !musicAppIsPlaying
+                player.releasePlay()
+                await start.value
+
+                XCTAssertEqual(player.nowPlaying, externalState)
+                XCTAssertEqual(player.currentEntryID, "external-queue")
+                XCTAssertEqual(player.attempts.count, expectedAttempts, "skipping must not try another source")
+                XCTAssertNil(controller.queuedSourceID, "the external queue must not become our choice")
+                XCTAssertNil(controller.hint, "yielding to another app is not a playback failure")
+                XCTAssertFalse(controller.isBusy)
+
+                // This focus consumed its one automatic attempt. It must not
+                // start later merely because the external audio stopped.
+                player.nowPlaying = FocusMusicNowPlaying()
+                player.isOtherAudioPlaying = false
+                await controller.autoplayIfNeeded(
+                    sessionID: session, startedAt: clock, isStartedOnThisIPhone: true
+                )
+                XCTAssertEqual(player.attempts.count, expectedAttempts)
+            }
+        }
+    }
+
+    func testManualSelectionMayReplaceAudioStartedWhileTheSourceLoads() async {
+        for musicAppIsPlaying in [false, true] {
+            player.nowPlaying = FocusMusicNowPlaying()
+            player.isOtherAudioPlaying = false
+            player.suspendsPlay = true
+            let controller = makeController()
+            let expectedAttempts = player.attempts.count + 1
+            let start = Task { await controller.choose(pianoChill) }
+            await waitForPlayAttempts(expectedAttempts)
+
+            player.nowPlaying = FocusMusicNowPlaying(status: musicAppIsPlaying ? .playing : .stopped)
+            player.currentEntryID = "external-queue"
+            player.isOtherAudioPlaying = !musicAppIsPlaying
+            player.releasePlay()
+            _ = await start.value
+
+            XCTAssertEqual(player.attempts.count, expectedAttempts)
+            XCTAssertEqual(player.nowPlaying, FocusMusicNowPlaying(status: .playing, title: "T-\(pianoChill.id)"))
+            XCTAssertNotEqual(player.currentEntryID, "external-queue")
+            XCTAssertEqual(controller.queuedSourceID, pianoChill.id)
+            XCTAssertNil(controller.hint)
+            XCTAssertFalse(controller.isBusy)
+        }
+    }
+
     // MARK: - MediaPlayer's prepareToPlay deadline
 
     func testACallbackThatNeverComesTimesOut() async {
@@ -1338,6 +1900,7 @@ private final class FakeMusicSubscriptions: FocusMusicSubscriptionChecking {
 @MainActor
 private final class FakeMusicPlayer: FocusMusicPlaying {
     var nowPlaying = FocusMusicNowPlaying()
+    var currentEntryID: String? = "initial-entry"
     var isOtherAudioPlaying = false
     var failures: [String: FocusMusicPlaybackError] = [:]
     var resumeError: Error?
@@ -1353,8 +1916,13 @@ private final class FakeMusicPlayer: FocusMusicPlaying {
     private(set) var onChange: (@MainActor () -> Void)?
     private var playGate: CheckedContinuation<Void, Never>?
 
-    func play(_ source: FocusMusicSource) async throws {
+    private(set) var shuffleChoices: [Bool] = []
+
+    func play(
+        _ source: FocusMusicSource, shuffle: Bool, intent: FocusMusicPlaybackIntent
+    ) async throws -> FocusMusicPlaybackStartOutcome {
         attempts.append(source.id)
+        shuffleChoices.append(shuffle)
         if suspendsPlay {
             await withCheckedContinuation { playGate = $0 }
         }
@@ -1362,7 +1930,13 @@ private final class FakeMusicPlayer: FocusMusicPlaying {
             beforeFailure?()
             throw failure
         }
+        try Task.checkCancellation()
+        guard intent.allowsStarting(
+            playback: nowPlaying.status, isOtherAudioPlaying: isOtherAudioPlaying
+        ) else { return .skippedForOtherAudio }
+        currentEntryID = UUID().uuidString
         nowPlaying = FocusMusicNowPlaying(status: .playing, title: "T-\(source.id)")
+        return .started
     }
 
     func releasePlay() {
@@ -1395,7 +1969,21 @@ private final class FakeMusicPlayer: FocusMusicPlaying {
 @MainActor
 private final class FakeMusicCatalog: FocusMusicCatalogNaming {
     var names: [String: String] = [:]
+    var results: [FocusMusicSource] = []
+    private(set) var searchedTerms: [String] = []
     private(set) var callCount = 0
+    var libraryPages: [Int: [FocusMusicSource]] = [:]
+    private(set) var libraryOffsets: [Int] = []
+
+    func libraryPlaylists(offset: Int, limit: Int) async throws -> [FocusMusicSource] {
+        libraryOffsets.append(offset)
+        return libraryPages[offset] ?? []
+    }
+
+    func search(term: String) async throws -> [FocusMusicSource] {
+        searchedTerms.append(term)
+        return results
+    }
 
     func titles(for sources: [FocusMusicSource]) async -> [String: String] {
         callCount += 1

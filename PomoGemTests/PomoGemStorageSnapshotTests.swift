@@ -21,7 +21,7 @@ final class PomoGemStorageSnapshotTests: XCTestCase {
         let logicalID = UUID()
         let physicalID = UUID()
         let first = Subject(id: logicalID, name: "first physical copy", colorHex: "blue", sortOrder: 0,
-                            deletedAt: date, syncRecordID: physicalID)
+                            defaultFocusSeconds: 95, deletedAt: date, syncRecordID: physicalID)
         let second = Subject(id: logicalID, name: "second physical copy", colorHex: "red", sortOrder: 1,
                              syncRecordID: physicalID)
         context.insert(first)
@@ -73,6 +73,8 @@ final class PomoGemStorageSnapshotTests: XCTestCase {
         XCTAssertEqual(receipt.recordCounts, snapshot.recordCounts)
         let children = try ModelContext(target).fetch(FetchDescriptor<StudySession>())
         XCTAssertEqual(Set(children.compactMap { $0.subject?.name }), ["first physical copy", "second physical copy"])
+        XCTAssertEqual(children.first { $0.subject?.name == "first physical copy" }?.subject?.defaultFocusSeconds, 95)
+        XCTAssertNil(children.first { $0.subject?.name == "second physical copy" }?.subject?.defaultFocusSeconds)
         XCTAssertEqual(Set(children.map(\.id)).count, 1)
         XCTAssertEqual(Set(children.map(\.syncRecordID)).count, 1)
         XCTAssertEqual(Set(children.compactMap { $0.subject?.persistentModelID }).count, 2)
@@ -207,6 +209,43 @@ final class PomoGemStorageSnapshotTests: XCTestCase {
         let readback = try PomoGemStorageSnapshot.capture(from: reader)
         XCTAssertTrue(try decoded.isEquivalent(to: readback))
         XCTAssertTrue(try readback.isEquivalent(to: decoded))
+    }
+
+    func testLegacySubjectSnapshotKeepsReceiptBytesAndImportsSharedDuration() throws {
+        let source = try fixture()
+        var legacy = try PomoGemStorageSnapshot.capture(from: ModelContext(source))
+        for index in legacy.records.indices where legacy.records[index].entity == "Subject" {
+            legacy.records[index].fields.removeValue(forKey: "defaultFocusSeconds")
+        }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("legacy-subject.json")
+        let receipt = try legacy.write(to: file)
+        let bytes = try Data(contentsOf: file)
+        let decoded = try PomoGemStorageSnapshot.read(from: file, expectedDigest: receipt.sha256)
+        XCTAssertEqual(decoded, legacy, "An interrupted transfer must retain its original digest")
+        let target = try container()
+        XCTAssertEqual(try decoded.importIntoEmpty(target.mainContext), receipt)
+        XCTAssertEqual(try Data(contentsOf: file), bytes)
+        let reader = ModelContext(target)
+        let subjects = try reader.fetch(FetchDescriptor<Subject>())
+        XCTAssertEqual(subjects.count, 2)
+        XCTAssertTrue(subjects.allSatisfy { $0.defaultFocusSeconds == nil })
+        let readback = try PomoGemStorageSnapshot.capture(from: reader)
+        XCTAssertTrue(try decoded.isEquivalent(to: readback))
+        XCTAssertTrue(try readback.isEquivalent(to: decoded))
+    }
+
+    func testSubjectDefaultSnapshotRejectsWrongTypeBeforeInsertion() throws {
+        let source = try fixture()
+        var snapshot = try PomoGemStorageSnapshot.capture(from: ModelContext(source))
+        let index = try XCTUnwrap(snapshot.records.firstIndex { $0.entity == "Subject" })
+        snapshot.records[index].fields["defaultFocusSeconds"] = .string("95")
+        let target = try container()
+        XCTAssertThrowsError(try snapshot.importIntoEmpty(target.mainContext))
+        XCTAssertFalse(target.mainContext.hasChanges)
+        XCTAssertEqual(try target.mainContext.fetchCount(FetchDescriptor<Subject>()), 0)
     }
 
     func testPartialOrWrongTypedPrecisionSnapshotFieldsStillFailBeforeInsertion() throws {

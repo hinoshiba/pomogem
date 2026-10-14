@@ -23,7 +23,7 @@ final class StorageTransferOverwriteCopyTests: XCTestCase {
         XCTAssertEqual(StorageTransferOverwriteCopy.retryPreviewTitle,
                        "iCloudの内容をもう一度確認")
         XCTAssertEqual(StorageTransferOverwriteCopy.dataLossWarning,
-                       "iCloudにある現在のPomoGemのテーマ・記録・設定を削除し、このiPhoneのデータで置き換えます。2つのデータは結合しません。削除したiCloudのデータを元に戻すことはできません。同じApple Accountの他の端末は、次に開いたときにこの画面と同じ確認を求められ、その端末だけにある未送信のデータは残りません。")
+                       "iCloudにある現在のPomoGemの取り組み・記録・設定を削除し、このiPhoneのデータで置き換えます。2つのデータは結合しません。削除したiCloudのデータを元に戻すことはできません。同じApple Accountの他の端末は、次に開いたときにこの画面と同じ確認を求められ、その端末だけにある未送信のデータは残りません。")
         XCTAssertEqual(StorageTransferOverwriteCopy.exportTitle, "先にこの端末の記録を書き出す")
         XCTAssertEqual(StorageTransferOverwriteCopy.exportNote,
                        "書き出したファイルはポモジェムに読み込めません。記録の控えとして保存します。")
@@ -65,7 +65,7 @@ final class StorageTransferOverwriteCopyTests: XCTestCase {
     func testFinalConfirmationStringsAreTheApprovedWording() {
         XCTAssertEqual(StorageTransferOverwriteCopy.sheetTitle, "最後の確認")
         XCTAssertEqual(StorageTransferOverwriteCopy.sheetWarning,
-                       "現在iCloudにあるPomoGemのテーマ・記録・設定をすべて削除し、この端末のデータに置き換えます。削除するiCloudのデータを元に戻すことはできません。")
+                       "現在iCloudにあるPomoGemの取り組み・記録・設定をすべて削除し、この端末のデータに置き換えます。削除するiCloudのデータを元に戻すことはできません。")
         XCTAssertEqual(StorageTransferOverwriteCopy.recoveryCopy,
                        "置き換えるデータの復旧用コピーをiCloudに保存し、受領を確認してから削除を始めます。復旧用コピーには、このiPhoneだけの過去の記録も含まれます。処理完了後に復旧用コピーを削除します。通信が途切れた場合は、削除の再試行までiCloudに残ることがあります。")
         XCTAssertEqual(StorageTransferOverwriteCopy.relaunch,
@@ -85,7 +85,7 @@ final class StorageTransferOverwriteCopyTests: XCTestCase {
     func testTheRefreshDirectionsOwnWordingIsTheApprovedWordingAndNamesTheDeviceSide() {
         XCTAssertEqual(StorageTransferRefreshCopy.settingsTitle, "iCloudのデータでこの端末を置き換える")
         XCTAssertEqual(StorageTransferRefreshCopy.dataLossWarning,
-                       "この端末のテーマ・記録・設定を削除し、現在のiCloudのデータに置き換えます。未送信の端末データは失われ、iCloudのデータとは結合されません。iCloudのデータは残ります。")
+                       "この端末の取り組み・記録・設定を削除し、現在のiCloudのデータに置き換えます。未送信の端末データは失われ、iCloudのデータとは結合されません。iCloudのデータは残ります。")
         XCTAssertEqual(StorageTransferRefreshCopy.acknowledgement, "端末データの削除を確認しました")
         XCTAssertEqual(StorageTransferRefreshCopy.confirmTitle, "iCloudから再取得")
         XCTAssertEqual(StorageTransferRefreshCopy.relaunch,
@@ -232,7 +232,7 @@ final class StorageTransferOverwriteCopyTests: XCTestCase {
         let device = StorageTransferCloudPreview(recordCounts: counts, latestRecordAt: nil,
                                                  otherDeviceIDs: 0, ignoredWriterIDs: 0)
         let warning = StorageTransferEnableCopy.cloudSideEmpty(device: device)
-        XCTAssertTrue(warning.contains("このiPhoneのテーマ12・記録480・成果36"), warning)
+        XCTAssertTrue(warning.contains("このiPhoneの取り組み12・記録480・成果36"), warning)
         XCTAssertTrue(warning.contains("空の状態からiCloudの同期を始めます"))
         XCTAssertTrue(warning.contains("元に戻すことはできません"))
         XCTAssertTrue(StorageTransferEnableCopy.cloudSideEmpty(device: nil).contains("元に戻すことはできません"))
@@ -241,7 +241,7 @@ final class StorageTransferOverwriteCopyTests: XCTestCase {
             "A failed read names the control the user presses again")
         XCTAssertTrue(StorageTransferEnableCopy.previewUnavailable.contains("どちらの記録も削除していません"))
         XCTAssertEqual(StorageTransferOverwriteCopy.countsOnly("iCloud", preview: device),
-                       "iCloud: テーマ12・記録480・成果36")
+                       "iCloud: 取り組み12・記録480・成果36")
     }
 
     /// transfer-07. What a switch resets, and what it keeps, in the Screen
@@ -272,7 +272,7 @@ final class StorageTransferOverwriteCopyTests: XCTestCase {
 
     func testLateArrivalBannerIsTheApprovedWordingAndOffersOnlyNonDestructiveActions() {
         XCTAssertEqual(StorageTransferOverwriteCopy.lateArrival,
-                       "置き換えの後に、他の端末から古い記録が届いた可能性があります。削除したはずのテーマが戻っていないか確認してください。もう一度この端末のデータで置き換えることもできます。")
+                       "置き換えの後に、他の端末から古い記録が届いた可能性があります。削除したはずの取り組みが戻っていないか確認してください。もう一度この端末のデータで置き換えることもできます。")
         XCTAssertEqual(StorageTransferOverwriteCopy.lateArrivalOpenSettings, "設定を開く")
         XCTAssertEqual(StorageTransferOverwriteCopy.lateArrivalDismiss, "このまま使う")
         // It is a hedged detector, never a claim of fact and never an action.
@@ -287,13 +287,13 @@ final class StorageTransferOverwriteCopyTests: XCTestCase {
         let preview = Self.preview(subjects: 12, sessions: 480, stones: 36,
                                    latest: Self.date(2026, 9, 20))
         XCTAssertEqual(StorageTransferOverwriteCopy.side("このiPhone", preview: preview),
-                       "このiPhone: テーマ12・記録480・成果36（最終 2026年9月20日）")
+                       "このiPhone: 取り組み12・記録480・成果36（最終 2026年9月20日）")
         XCTAssertEqual(StorageTransferOverwriteCopy.side("iCloud", preview:
             Self.preview(subjects: 9, sessions: 312, stones: 28, latest: Self.date(2025, 9, 18))),
-                       "iCloud: テーマ9・記録312・成果28（最終 2025年9月18日）")
+                       "iCloud: 取り組み9・記録312・成果28（最終 2025年9月18日）")
         XCTAssertEqual(StorageTransferOverwriteCopy.side("iCloud", preview:
             Self.preview(subjects: 0, sessions: 0, stones: 0, latest: nil)),
-                       "iCloud: テーマ0・記録0・成果0（日付のある記録なし）")
+                       "iCloud: 取り組み0・記録0・成果0（日付のある記録なし）")
         // One fallback for both sides: an unreadable side says so in the same
         // shape as a readable one, so neither can look like the other's answer.
         XCTAssertEqual(StorageTransferOverwriteCopy.side("このiPhone", preview: nil),

@@ -103,7 +103,7 @@ extension AccumulationTimelineRepository {
 }
 
 /// One canonical record as 記録 uses it: the history row, plus what
-/// 「テーマの構成」 groups by. Copied on the repository's actor.
+/// 「取り組みの構成」 groups by. Copied on the repository's actor.
 struct LogSessionRecord: Identifiable, Equatable, Sendable {
     let row: HistorySessionSummary
     let subjectID: UUID?
@@ -145,7 +145,7 @@ struct LogDailyMass: Identifiable, Equatable, Sendable {
     let grams: Int
 }
 
-/// One theme in 「テーマの構成」.
+/// One theme in 「取り組みの構成」.
 struct LogSubjectMass: Identifiable, Equatable, Sendable {
     let id: String
     let name: String

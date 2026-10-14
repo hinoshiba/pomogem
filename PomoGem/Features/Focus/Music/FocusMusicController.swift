@@ -24,12 +24,17 @@ protocol FocusMusicSubscriptionChecking {
 @MainActor
 protocol FocusMusicPlaying: AnyObject {
     var nowPlaying: FocusMusicNowPlaying { get }
+    /// A queue-entry identity, never a track title. Nil means that this
+    /// adapter cannot establish continuity with a queue it started earlier.
+    var currentEntryID: String? { get }
     /// Whether any other app (including the Music app) is playing audio right
     /// now. Reading it activates nothing.
     var isOtherAudioPlaying: Bool { get }
-    /// Replaces the Music app's queue with `source` and starts it. Throws
-    /// `FocusMusicPlaybackError`.
-    func play(_ source: FocusMusicSource) async throws
+    /// Replaces the Music app's queue with `source` and starts it. Autoplay
+    /// rechecks other audio after preparation, before changing the queue.
+    func play(
+        _ source: FocusMusicSource, shuffle: Bool, intent: FocusMusicPlaybackIntent
+    ) async throws -> FocusMusicPlaybackStartOutcome
     func pause()
     func resume() async throws
     func skipToNext() async throws
@@ -41,6 +46,14 @@ protocol FocusMusicPlaying: AnyObject {
 protocol FocusMusicCatalogNaming {
     /// Catalog titles by source ID. Missing entries keep the fallback title.
     func titles(for sources: [FocusMusicSource]) async -> [String: String]
+    func search(term: String) async throws -> [FocusMusicSource]
+    /// Playlist metadata only. Paging never expands tracks or reads history.
+    func libraryPlaylists(offset: Int, limit: Int) async throws -> [FocusMusicSource]
+}
+
+extension FocusMusicCatalogNaming {
+    func search(term: String) async throws -> [FocusMusicSource] { [] }
+    func libraryPlaylists(offset: Int, limit: Int) async throws -> [FocusMusicSource] { [] }
 }
 
 enum FocusMusicChoiceOutcome: Equatable, Sendable {
@@ -68,9 +81,19 @@ final class FocusMusicController {
     private(set) var nowPlaying = FocusMusicNowPlaying()
     /// The source this process last queued in the Music app, if any.
     private(set) var queuedSourceID: String?
+    /// The requested choice can differ from the actual curated fallback.
+    private var queuedChoiceID: String?
+    @ObservationIgnored private var queuedEntryID: String?
+    @ObservationIgnored private var choiceGeneration = 0
+    private struct PausedPlayback {
+        let entryID: String
+        let choiceID: String?
+    }
+    @ObservationIgnored private var pausedPlayback: PausedPlayback?
     private(set) var isBusy = false
     private(set) var hint: FocusMusicHint?
     private(set) var catalogTitles: [String: String] = [:]
+    private(set) var preferenceRevision = 0
 
     @ObservationIgnored private let authorizer: any FocusMusicAuthorizing
     @ObservationIgnored private let subscriptions: any FocusMusicSubscriptionChecking
@@ -110,31 +133,143 @@ final class FocusMusicController {
 
     var isPlaying: Bool { nowPlaying.status == .playing }
 
-    var chosenSource: FocusMusicSource? {
-        FocusMusicPreferences.chosenSource(defaults: defaults)
+    var chosenSource: FocusMusicSource? { chosenSource(for: nil) }
+
+    func chosenSource(for subjectID: UUID? = nil) -> FocusMusicSource? {
+        _ = preferenceRevision
+        return FocusMusicPreferences.chosenSource(subjectID: subjectID, defaults: defaults)
+    }
+
+    func subjectSource(for subjectID: UUID) -> FocusMusicSource? {
+        _ = preferenceRevision
+        return FocusMusicPreferences.subjectSource(for: subjectID, defaults: defaults)
+    }
+
+    var savedSources: [FocusMusicSource] {
+        _ = preferenceRevision
+        return FocusMusicPreferences.savedSources(defaults: defaults)
+    }
+
+    func saveSource(_ source: FocusMusicSource) {
+        FocusMusicPreferences.saveSource(source, defaults: defaults)
+        preferenceRevision += 1
+    }
+
+    func removeSavedSource(_ source: FocusMusicSource) {
+        FocusMusicPreferences.removeSavedSource(source, defaults: defaults)
+        preferenceRevision += 1
+    }
+
+    func clearSubjectSource(_ subjectID: UUID) {
+        FocusMusicPreferences.setChosenSource(nil, subjectID: subjectID, defaults: defaults)
+        preferenceRevision += 1
+    }
+
+    func subjectSettings(for subjectID: UUID) -> FocusMusicSubjectSettings {
+        FocusMusicSubjectSettings(
+            source: subjectSource(for: subjectID),
+            autoplay: subjectAutoplayOverride(for: subjectID)
+        )
+    }
+
+    /// Commit the editor draft without changing the Music app's playback.
+    func setSubjectSettings(_ settings: FocusMusicSubjectSettings, for subjectID: UUID) {
+        FocusMusicPreferences.setChosenSource(settings.source, subjectID: subjectID, defaults: defaults)
+        if let autoplay = settings.autoplay {
+            FocusMusicPreferences.setAutoplayEnabled(autoplay, subjectID: subjectID, defaults: defaults)
+        } else {
+            FocusMusicPreferences.clearSubjectAutoplay(subjectID, defaults: defaults)
+        }
+        preferenceRevision += 1
+    }
+
+    func isAutoplayEnabled(for subjectID: UUID? = nil) -> Bool {
+        _ = preferenceRevision
+        return FocusMusicPreferences.isAutoplayEnabled(subjectID: subjectID, defaults: defaults)
+    }
+
+    func setAutoplayEnabled(_ enabled: Bool, for subjectID: UUID? = nil) {
+        FocusMusicPreferences.setAutoplayEnabled(enabled, subjectID: subjectID, defaults: defaults)
+        preferenceRevision += 1
+    }
+
+    func subjectAutoplayOverride(for subjectID: UUID) -> Bool? {
+        _ = preferenceRevision
+        return FocusMusicPreferences.subjectAutoplayOverride(for: subjectID, defaults: defaults)
+    }
+
+    func clearSubjectAutoplay(_ subjectID: UUID) {
+        FocusMusicPreferences.clearSubjectAutoplay(subjectID, defaults: defaults)
+        preferenceRevision += 1
+    }
+
+    /// Called only by the person's library-selection button. Loading the
+    /// list never saves it; only a subsequent committed choice is stored.
+    func libraryPlaylists() async throws -> [FocusMusicSource] {
+        if authorizer.currentStatus == .notDetermined { await requestAuthorization() }
+        guard refreshLocalState() else { throw FocusMusicPlaybackError.permissionDenied }
+        var result: [FocusMusicSource] = []
+        var seen = Set<String>()
+        var offset = 0
+        while true {
+            try Task.checkCancellation()
+            let page = try await catalog.libraryPlaylists(offset: offset, limit: 100)
+            try Task.checkCancellation()
+            guard !page.isEmpty else { return result }
+            let additions = page.filter { seen.insert($0.id).inserted }
+            // A provider repeating the same page must not loop forever or
+            // silently claim that a truncated list is the whole library.
+            guard !additions.isEmpty else { throw FocusMusicPlaybackError.failed }
+            result.append(contentsOf: additions)
+            offset += page.count
+        }
+    }
+
+    /// Search is called by an explicit button; appearing never prompts.
+    func search(term: String) async throws -> [FocusMusicSource] {
+        let term = term.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !term.isEmpty else { return [] }
+        if authorizer.currentStatus == .notDetermined { await requestAuthorization() }
+        guard refreshLocalState() else { throw FocusMusicPlaybackError.permissionDenied }
+        return try await catalog.search(term: term)
     }
 
     /// What a timer header tap would do with the state as it is now. The
     /// button's icon and VoiceOver label follow it, so they never promise a
     /// pause that the tap would not perform.
-    var headerAction: FocusMusicHeaderAction {
+    var headerAction: FocusMusicHeaderAction { headerAction(for: nil) }
+
+    func headerAction(for subjectID: UUID?) -> FocusMusicHeaderAction {
         FocusMusicHeaderPolicy.action(
             availability: availability,
-            chosen: chosenSource,
+            chosen: chosenSource(for: subjectID),
             nowPlaying: nowPlaying,
-            queuedSourceID: queuedSourceID,
+            queuedSourceID: resumableQueueID(for: subjectID),
             isBusy: isBusy
         )
     }
 
     /// What the sheet's play/pause button would do now.
-    var transportToggle: FocusMusicTransportPolicy.Toggle {
+    var transportToggle: FocusMusicTransportPolicy.Toggle { transportToggle(for: nil) }
+
+    func transportToggle(for subjectID: UUID?) -> FocusMusicTransportPolicy.Toggle {
         FocusMusicTransportPolicy.toggle(
             availability: availability,
-            chosen: chosenSource,
+            chosen: chosenSource(for: subjectID),
             nowPlaying: nowPlaying,
-            queuedSourceID: queuedSourceID
+            queuedSourceID: resumableQueueID(for: subjectID)
         )
+    }
+
+    private func resumableQueueID(for subjectID: UUID?) -> String? {
+        if let pausedPlayback,
+           pausedPlayback.choiceID == chosenSource(for: subjectID)?.id,
+           pausedPlayback.entryID == player.currentEntryID,
+           nowPlaying.status == .paused || nowPlaying.status == .interrupted {
+            return pausedPlayback.entryID
+        }
+        guard let chosen = chosenSource(for: subjectID) else { return queuedSourceID }
+        return queuedChoiceID == chosen.id ? queuedSourceID : nil
     }
 
     var showsNowPlaying: Bool {
@@ -146,7 +281,7 @@ final class FocusMusicController {
 
     /// The catalog's (localized) title when known, else our Japanese label.
     func title(for source: FocusMusicSource) -> String {
-        catalogTitles[source.id] ?? source.fallbackTitle
+        source.customTitle ?? catalogTitles[source.id] ?? source.fallbackTitle
     }
 
     // MARK: - Status
@@ -188,7 +323,7 @@ final class FocusMusicController {
     func loadCatalogTitlesIfNeeded() async {
         guard authorization == .authorized, !didLoadCatalogTitles else { return }
         didLoadCatalogTitles = true
-        let titles = await catalog.titles(for: FocusMusicCatalog.sources)
+        let titles = await catalog.titles(for: FocusMusicCatalog.sources + savedSources)
         catalogTitles = titles.filter { !$0.value.isEmpty }
     }
 
@@ -228,7 +363,7 @@ final class FocusMusicController {
     /// The timer header tap (D4.4a). Returns what it did so the button can
     /// open the sheet when playback is not possible from the timer alone.
     @discardableResult
-    func handleHeaderTap() async -> FocusMusicHeaderAction {
+    func handleHeaderTap(subjectID: UUID? = nil) async -> FocusMusicHeaderAction {
         // Wait only for a first answer. After a failed check the tap opens
         // the sheet at once, and the sheet retries.
         switch subscription {
@@ -239,16 +374,16 @@ final class FocusMusicController {
         }
         let action = FocusMusicHeaderPolicy.action(
             availability: availability,
-            chosen: chosenSource,
+            chosen: chosenSource(for: subjectID),
             nowPlaying: nowPlaying,
-            queuedSourceID: queuedSourceID,
+            queuedSourceID: resumableQueueID(for: subjectID),
             isBusy: isBusy
         )
         switch action {
         case .play(let source):
             await startPlayback(from: source)
         case .pause:
-            pause()
+            pause(subjectID: subjectID)
         case .resume:
             await resume()
         case .presentSheet, .ignore:
@@ -271,14 +406,21 @@ final class FocusMusicController {
     /// A row tap in the sheet: remember the choice, then play it when
     /// possible. A first tap may ask for permission (the person's own tap).
     @discardableResult
-    func choose(_ source: FocusMusicSource) async -> FocusMusicChoiceOutcome {
+    func choose(_ source: FocusMusicSource, subjectID: UUID? = nil) async -> FocusMusicChoiceOutcome {
         guard !isBusy else { return .handled }
-        FocusMusicPreferences.setChosenSource(source, defaults: defaults)
+        choiceGeneration &+= 1
+        let generation = choiceGeneration
+        FocusMusicPreferences.setChosenSource(source, subjectID: subjectID, defaults: defaults)
+        preferenceRevision += 1
+        refreshLocalState()
         if availability == .needsAuthorization {
             await requestAuthorization()
         } else if availability == .checking || availability == .checkFailed {
             await refresh()
         }
+        // Rows stay selectable while the initial subscription answer is
+        // pending. Only the latest explicit choice may start when it arrives.
+        guard !Task.isCancelled, generation == choiceGeneration else { return .handled }
         switch availability {
         case .ready:
             await startPlayback(from: source)
@@ -297,10 +439,10 @@ final class FocusMusicController {
     }
 
     /// The sheet's play/pause control.
-    func togglePlayback() async {
-        switch transportToggle {
+    func togglePlayback(subjectID: UUID? = nil) async {
+        switch transportToggle(for: subjectID) {
         case .pause:
-            pause()
+            pause(subjectID: subjectID)
         case .resume:
             await resume()
         case .play(let chosen):
@@ -312,11 +454,18 @@ final class FocusMusicController {
 
     /// Always allowed once authorized, even while a start is in flight: the
     /// person's pause wins, and that start then ends paused.
-    func pause() {
+    func pause(subjectID: UUID? = nil) {
         guard authorization == .authorized else { return }
+        choiceGeneration &+= 1
         if isBusy { pausesPendingStart = true }
         player.pause()
         syncNowPlaying()
+        // A queue may have naturally advanced beyond the entry we started.
+        // Our own pause still identifies precisely what this control should
+        // resume, provided neither the selected source nor entry changes.
+        pausedPlayback = player.currentEntryID.map {
+            PausedPlayback(entryID: $0, choiceID: chosenSource(for: subjectID)?.id)
+        }
     }
 
     func skipToNext() async {
@@ -344,8 +493,25 @@ final class FocusMusicController {
     /// Tries the chosen source, then the others in catalog order, moving on
     /// only when a source is missing from the storefront or needs the
     /// catalog. Any other failure stops with one gentle hint.
-    private func startPlayback(from chosen: FocusMusicSource) async {
-        guard authorization == .authorized, !isBusy else { return }
+    private func startPlayback(
+        from chosen: FocusMusicSource, intent: FocusMusicPlaybackIntent = .manual
+    ) async {
+        guard !Task.isCancelled, authorization == .authorized, !isBusy else { return }
+        syncNowPlaying()
+        // Re-selecting the same station or playlist continues its queue.
+        // Replacing it on every tap restarts many radio programs from zero.
+        if queuedChoiceID == chosen.id {
+            switch nowPlaying.status {
+            case .playing:
+                hint = nil
+                return
+            case .paused, .interrupted:
+                await resume()
+                return
+            case .stopped:
+                break
+            }
+        }
         isBusy = true
         pausesPendingStart = false
         defer {
@@ -358,8 +524,23 @@ final class FocusMusicController {
             // Paused while an earlier source was being tried: start nothing.
             if pausesPendingStart { return }
             do {
-                try await player.play(source)
+                // A failed start may already have replaced the Music app's
+                // queue. Never treat it as our previous successful choice.
+                queuedSourceID = nil
+                queuedChoiceID = nil
+                queuedEntryID = nil
+                pausedPlayback = nil
+                let outcome = try await player.play(
+                    source,
+                    shuffle: source.supportsShuffle && FocusMusicPreferences.isShuffleEnabled(defaults: defaults),
+                    intent: intent
+                )
+                // Audio started elsewhere while the source was loading.
+                // Leave it alone, without a hint, fallback, or queue claim.
+                guard outcome == .started else { return }
                 queuedSourceID = source.id
+                queuedChoiceID = chosen.id
+                queuedEntryID = player.currentEntryID
                 if case .known = subscription {} else {
                     // Catalog music just started, so this person can play
                     // it. A later failed re-check keeps this answer.
@@ -370,7 +551,10 @@ final class FocusMusicController {
                 }
                 if pausesPendingStart { player.pause() }
                 return
+            } catch is CancellationError {
+                return
             } catch let error as FocusMusicPlaybackError where error.triesNextSource {
+                guard !Task.isCancelled else { return }
                 continue
             } catch let error as FocusMusicPlaybackError {
                 await handle(error)
@@ -407,19 +591,23 @@ final class FocusMusicController {
     func autoplayIfNeeded(
         sessionID: UUID?,
         startedAt: Date?,
-        isStartedOnThisIPhone: Bool
+        isStartedOnThisIPhone: Bool,
+        subjectID: UUID? = nil
     ) async {
         guard let sessionID,
               isStartedOnThisIPhone,
-              FocusMusicPreferences.isAutoplayEnabled(defaults: defaults),
-              chosenSource != nil,
+              FocusMusicPreferences.isAutoplayEnabled(subjectID: subjectID, defaults: defaults),
+              chosenSource(for: subjectID) != nil,
               FocusMusicPreferences.lastAutoplayedSessionID(defaults: defaults) != sessionID
         else { return }
         await refresh()
+        // SwiftUI cancels the start task when the timer pauses, ends, or
+        // disappears. The shared subscription task can still finish normally.
+        guard !Task.isCancelled else { return }
         syncNowPlaying()
         let input = FocusMusicAutoplayPolicy.Input(
-            isEnabled: FocusMusicPreferences.isAutoplayEnabled(defaults: defaults),
-            chosen: chosenSource,
+            isEnabled: FocusMusicPreferences.isAutoplayEnabled(subjectID: subjectID, defaults: defaults),
+            chosen: chosenSource(for: subjectID),
             availability: availability,
             sessionID: sessionID,
             startedAt: startedAt,
@@ -434,7 +622,7 @@ final class FocusMusicController {
               !isBusy
         else { return }
         FocusMusicPreferences.recordAutoplay(sessionID: sessionID, defaults: defaults)
-        await startPlayback(from: chosen)
+        await startPlayback(from: chosen, intent: .autoplay)
     }
 
     // MARK: - Lifecycle
@@ -444,7 +632,13 @@ final class FocusMusicController {
     /// itself is the person's and keeps playing.
     func resetForCompleteDataDeletion() {
         queuedSourceID = nil
+        queuedChoiceID = nil
+        queuedEntryID = nil
+        pausedPlayback = nil
         hint = nil
+        catalogTitles = [:]
+        didLoadCatalogTitles = false
+        preferenceRevision += 1
     }
 
     private func startObservingPlayerIfNeeded() {
@@ -461,6 +655,20 @@ final class FocusMusicController {
             return
         }
         let current = player.nowPlaying
+        if let pausedPlayback,
+           pausedPlayback.entryID != player.currentEntryID
+            || (current.status != .paused && current.status != .interrupted) {
+            self.pausedPlayback = nil
+        }
+        if queuedChoiceID != nil,
+           queuedEntryID == nil || queuedEntryID != player.currentEntryID {
+            // SystemMusicPlayer does not expose its full queue. A different
+            // entry (including natural advance), or an adapter without entry
+            // identity, cannot prove that it still contains our chosen source.
+            queuedSourceID = nil
+            queuedChoiceID = nil
+            queuedEntryID = nil
+        }
         if current != nowPlaying { nowPlaying = current }
     }
 }

@@ -198,11 +198,11 @@ final class AccessibilityAdversarialUITests: XCTestCase {
 
         XCTAssertTrue(scrollUntilFullyVisibleInContent(themePicker, attempts: 12))
         themePicker.tap()
-        let manageThemes = app.buttons["テーマを管理"]
+        let manageThemes = app.buttons["取り組みを管理"]
         XCTAssertTrue(manageThemes.waitForExistence(timeout: 4))
         XCTAssertTrue(scrollUntilHittable(manageThemes))
         manageThemes.tap()
-        let settingsNavigation = app.navigationBars["テーマ"]
+        let settingsNavigation = app.navigationBars["取り組み"]
         XCTAssertTrue(settingsNavigation.waitForExistence(timeout: 6))
         XCTAssertFalse(app.buttons["一時停止"].exists)
 

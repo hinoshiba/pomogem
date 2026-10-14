@@ -802,23 +802,6 @@
         }
       }
     },
-    "4時間10分を積み上げ、時間の核が生まれました。これからも、集中した時間で育ちます。" : {
-      "comment" : "Fusion sheet, only when the first crystal and the first time core arrive together",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "After 4 hr 10 min, your time core is born. It will keep growing with your focus time."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "4時間10分を積み上げ、時間の核が生まれました。これからも、集中した時間で育ちます。"
-          }
-        }
-      }
-    },
     "GIF・質量・#ポモジェム をSNSへ" : {
       "comment" : "Home menu row detail: a GIF of the jar with the mass and the app's hashtag (en: #PomoGem) for social media",
       "localizations" : {
@@ -832,6 +815,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "GIF・質量・#ポモジェム をSNSへ"
+          }
+        }
+      }
+    },
+    "Gemをタップすると跳ね、長押しすると内訳を確認できます" : {
+      "comment" : "One-time jar tip: a tap plays with the gem, a long press opens its breakdown",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap a gem to bounce it. Touch and hold to see its breakdown."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemをタップすると跳ね、長押しすると内訳を確認できます"
           }
         }
       }
@@ -1945,36 +1945,36 @@
         }
       }
     },
-    "タイマーを開始します。上のテーマと時間のボタンで内容を変更できます" : {
+    "タイマーを開始します。上の取り組みと時間のボタンで内容を変更できます" : {
       "comment" : "VoiceOver hint of Home's start button",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Starts the timer. Use the theme and length buttons above to change it"
+            "value" : "Starts the timer. Use the activity and length buttons above to change it"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "タイマーを開始します。上のテーマと時間のボタンで内容を変更できます"
+            "value" : "タイマーを開始します。上の取り組みと時間のボタンで内容を変更できます"
           }
         }
       }
     },
-    "タイマー・テーマ・通知・データ" : {
+    "タイマー・取り組み・通知・データ" : {
       "comment" : "Home menu row detail: what Settings holds",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Timers, themes, notifications, and data"
+            "value" : "Timers, activities, notifications, and data"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "タイマー・テーマ・通知・データ"
+            "value" : "タイマー・取り組み・通知・データ"
           }
         }
       }
@@ -1996,189 +1996,19 @@
         }
       }
     },
-    "テーマ" : {
-      "comment" : "The word theme, alone: the caption above the sheets' theme menu, the manual-entry confirmation row, and the stand-in for a missing theme name",
+    "タップで跳ねる・長押しで内訳" : {
+      "comment" : "One-line jar tip in a short jar: a tap bounces gems, a long press opens details",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Theme"
+            "value" : "Tap to bounce · Hold for details"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "テーマ"
-          }
-        }
-      }
-    },
-    "テーマ、%@" : {
-      "comment" : "VoiceOver label of a theme menu; the argument is the chosen theme or 未選択",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Theme, %@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマ、%@"
-          }
-        }
-      }
-    },
-    "テーマの色はそのままに、\n背景の空気だけを変えます。" : {
-      "comment" : "Atmosphere picker note at accessibility text sizes, broken into two lines at a natural point",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Your theme colors stay the same;\nonly the background's mood changes."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマの色はそのままに、\n背景の空気だけを変えます。"
-          }
-        }
-      }
-    },
-    "テーマの色はそのままに、背景の空気だけを変えます。" : {
-      "comment" : "Atmosphere picker note: the theme colors stay, only the background changes",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Your theme colors stay the same; only the background's mood changes."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマの色はそのままに、背景の空気だけを変えます。"
-          }
-        }
-      }
-    },
-    "テーマは%@です。" : {
-      "comment" : "VoiceOver, completion card: the theme",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Theme: %@."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマは%@です。"
-          }
-        }
-      }
-    },
-    "テーマを変更できます。タイマーは開始しません" : {
-      "comment" : "VoiceOver hint of Home's theme menu",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Changes the theme. The timer doesn't start"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマを変更できます。タイマーは開始しません"
-          }
-        }
-      }
-    },
-    "テーマを管理" : {
-      "comment" : "Home theme menu: open the theme settings",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Manage Themes"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマを管理"
-          }
-        }
-      }
-    },
-    "テーマを選ぶ" : {
-      "comment" : "Home theme menu while no theme exists yet",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Choose a Theme"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマを選ぶ"
-          }
-        }
-      }
-    },
-    "テーマを選ぶと、集中を始められます" : {
-      "comment" : "Toast: a widget, link or Siri asked to start a focus before any theme exists",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Choose a theme to start a focus"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマを選ぶと、集中を始められます"
-          }
-        }
-      }
-    },
-    "テーマを選んでください" : {
-      "comment" : "Achievement details: shown under the kind while no theme is chosen",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Choose a theme"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマを選んでください"
-          }
-        }
-      }
-    },
-    "テーマを選んではじめる" : {
-      "comment" : "Home start button before any theme exists; it opens Settings",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Choose a Theme to Start"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマを選んではじめる"
+            "value" : "タップで跳ねる・長押しで内訳"
           }
         }
       }
@@ -2336,19 +2166,19 @@
         }
       }
     },
-    "下のボタンから、最初のテーマを追加しよう。" : {
+    "下のボタンから、最初の取り組みを追加しよう。" : {
       "comment" : "Empty jar before any theme exists",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Add your first theme with the button below."
+            "value" : "Add your first activity with the button below."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "下のボタンから、最初のテーマを追加しよう。"
+            "value" : "下のボタンから、最初の取り組みを追加しよう。"
           }
         }
       }
@@ -2802,36 +2632,36 @@
         }
       }
     },
-    "先にテーマを追加してください" : {
+    "先に取り組みを追加してください" : {
       "comment" : "Toast: add a theme before adding time",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Please add a theme first"
+            "value" : "Please add an activity first"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "先にテーマを追加してください"
+            "value" : "先に取り組みを追加してください"
           }
         }
       }
     },
-    "先にテーマを追加してください。" : {
+    "先に取り組みを追加してください。" : {
       "comment" : "Manual entry error: add a theme before adding time",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Please add a theme first."
+            "value" : "Please add an activity first."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "先にテーマを追加してください。"
+            "value" : "先に取り組みを追加してください。"
           }
         }
       }
@@ -3091,6 +2921,193 @@
         }
       }
     },
+    "取り組み" : {
+      "comment" : "The word theme, alone: the caption above the sheets' theme menu, the manual-entry confirmation row, and the stand-in for a missing theme name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activity"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組み"
+          }
+        }
+      }
+    },
+    "取り組み、%@" : {
+      "comment" : "VoiceOver label of a theme menu; the argument is the chosen theme or 未選択",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activity, %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組み、%@"
+          }
+        }
+      }
+    },
+    "取り組みの色はそのままに、\n背景の空気だけを変えます。" : {
+      "comment" : "Atmosphere picker note at accessibility text sizes, broken into two lines at a natural point",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your activity colors stay the same;\nonly the background's mood changes."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みの色はそのままに、\n背景の空気だけを変えます。"
+          }
+        }
+      }
+    },
+    "取り組みの色はそのままに、背景の空気だけを変えます。" : {
+      "comment" : "Atmosphere picker note: the theme colors stay, only the background changes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your activity colors stay the same; only the background's mood changes."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みの色はそのままに、背景の空気だけを変えます。"
+          }
+        }
+      }
+    },
+    "取り組みは%@です。" : {
+      "comment" : "VoiceOver, completion card: the theme",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activity: %@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みは%@です。"
+          }
+        }
+      }
+    },
+    "取り組みを変更できます。タイマーは開始しません" : {
+      "comment" : "VoiceOver hint of Home's theme menu",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Changes the activity. The timer doesn't start"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みを変更できます。タイマーは開始しません"
+          }
+        }
+      }
+    },
+    "取り組みを管理" : {
+      "comment" : "Home theme menu: open the theme settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manage Activities"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みを管理"
+          }
+        }
+      }
+    },
+    "取り組みを選ぶ" : {
+      "comment" : "Home theme menu while no theme exists yet",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose an Activity"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みを選ぶ"
+          }
+        }
+      }
+    },
+    "取り組みを選ぶと、集中を始められます" : {
+      "comment" : "Toast: a widget, link or Siri asked to start a focus before any theme exists",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose an activity to start a focus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みを選ぶと、集中を始められます"
+          }
+        }
+      }
+    },
+    "取り組みを選んでください" : {
+      "comment" : "Achievement details: shown under the kind while no theme is chosen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose an activity"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みを選んでください"
+          }
+        }
+      }
+    },
+    "取り組みを選んではじめる" : {
+      "comment" : "Home start button before any theme exists; it opens Settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose an Activity to Start"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みを選んではじめる"
+          }
+        }
+      }
+    },
     "合計4時間10分で結晶1個。10個分の時間で、次の大きさにまとまります。途中の時間も繰り越すので、短く分けても同じ時間なら同じ結晶になります。" : {
       "comment" : "Time-based fusion rules: exact remainder and split-invariant crystal sizes and counts",
       "localizations" : {
@@ -3239,19 +3256,19 @@
         }
       }
     },
-    "成果を結びつけるテーマを変更できます" : {
+    "成果を結びつける取り組みを変更できます" : {
       "comment" : "VoiceOver hint of the achievement sheet's theme menu",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Changes the theme this achievement belongs to"
+            "value" : "Changes the activity this achievement belongs to"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "成果を結びつけるテーマを変更できます"
+            "value" : "成果を結びつける取り組みを変更できます"
           }
         }
       }
@@ -3405,6 +3422,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "時間の核が生まれました。これからは核が、積み上げた時間の重さを表します。"
+          }
+        }
+      }
+    },
+    "時間の核が生まれました。集中した時間で育ちます。" : {
+      "comment" : "Fusion sheet, only when the first crystal and the first time core arrive together",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your time core is born. It grows with your focus time."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間の核が生まれました。集中した時間で育ちます。"
           }
         }
       }
@@ -3597,7 +3631,7 @@
       }
     },
     "未選択" : {
-      "comment" : "No theme chosen yet: read after テーマ、 by VoiceOver and shown in the manual-entry confirmation row",
+      "comment" : "No theme chosen yet: read after 取り組み、 by VoiceOver and shown in the manual-entry confirmation row",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3795,19 +3829,19 @@
         }
       }
     },
-    "瓶はまだ空です。下のボタンからテーマを追加できます" : {
+    "瓶はまだ空です。下のボタンから取り組みを追加できます" : {
       "comment" : "VoiceOver, empty jar at accessibility text sizes, no theme yet",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The jar is still empty. You can add a theme with the button below"
+            "value" : "The jar is still empty. You can add an activity with the button below"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "瓶はまだ空です。下のボタンからテーマを追加できます"
+            "value" : "瓶はまだ空です。下のボタンから取り組みを追加できます"
           }
         }
       }
@@ -4130,19 +4164,19 @@
         }
       }
     },
-    "積むテーマを変更できます。ホームで選んでいるテーマは変わりません" : {
+    "積む取り組みを変更できます。ホームで選んでいる取り組みは変わりません" : {
       "comment" : "VoiceOver hint of the manual-entry sheet's theme menu",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Changes the theme to add to. The theme chosen on Home stays the same"
+            "value" : "Changes the activity to add to. The activity chosen on Home stays the same"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "積むテーマを変更できます。ホームで選んでいるテーマは変わりません"
+            "value" : "積む取り組みを変更できます。ホームで選んでいる取り組みは変わりません"
           }
         }
       }
@@ -4869,36 +4903,53 @@
         }
       }
     },
-    "選んだアプリをテーマ別に記録" : {
+    "選ぶ" : {
+      "comment" : "Home music button value before any source is chosen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選ぶ"
+          }
+        }
+      }
+    },
+    "選んだアプリを取り組み別に記録" : {
       "comment" : "Home menu row detail: every 10 minutes in the chosen study apps adds one pebble",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Record selected apps by theme"
+            "value" : "Record selected apps by activity"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "選んだアプリをテーマ別に記録"
+            "value" : "選んだアプリを取り組み別に記録"
           }
         }
       }
     },
-    "選んだテーマが見つかりません。テーマを選び直してください。" : {
+    "選んだ取り組みが見つかりません。取り組みを選び直してください。" : {
       "comment" : "Manual entry error: the chosen theme was archived or removed while the sheet was open",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The theme you chose can't be found. Please choose a theme again."
+            "value" : "The activity you chose can't be found. Please choose an activity again."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "選んだテーマが見つかりません。テーマを選び直してください。"
+            "value" : "選んだ取り組みが見つかりません。取り組みを選び直してください。"
           }
         }
       }
@@ -4909,7 +4960,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Choose a theme"
+            "value" : "Choose an activity"
           }
         },
         "ja" : {
@@ -4920,19 +4971,19 @@
         }
       }
     },
-    "選択中のテーマ" : {
+    "選択中の取り組み" : {
       "comment" : "Stands in for the theme name on Home's start button if it is momentarily missing",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Selected theme"
+            "value" : "Selected activity"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "選択中のテーマ"
+            "value" : "選択中の取り組み"
           }
         }
       }
@@ -5222,6 +5273,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "集中時間を選ぶ"
+          }
+        }
+      }
+    },
+    "集中用の音楽や取り組みごとの音楽を選べます" : {
+      "comment" : "VoiceOver hint: the Home music button opens music selection, including theme-specific choices",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose focus music, including music for each activity"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中用の音楽や取り組みごとの音楽を選べます"
+          }
+        }
+      }
+    },
+    "音楽" : {
+      "comment" : "Home button beside the focus controls: choose focus music",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Music"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音楽"
           }
         }
       }

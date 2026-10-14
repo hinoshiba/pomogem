@@ -96,8 +96,8 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         // iPhone is counted in every build now.
         let comparison = app.staticTexts["storage-dataset-comparison"]
         XCTAssertTrue(reveal(comparison))
-        XCTAssertTrue(comparison.label.contains("このiPhone: テーマ12・記録480・成果36"), "saw: \(comparison.label)")
-        XCTAssertTrue(comparison.label.contains("iCloud: テーマ9・記録312・成果28"))
+        XCTAssertTrue(comparison.label.contains("このiPhone: 取り組み12・記録480・成果36"), "saw: \(comparison.label)")
+        XCTAssertTrue(comparison.label.contains("iCloud: 取り組み9・記録312・成果28"))
         XCTAssertFalse(comparison.label.contains("確認できませんでした"))
         XCTAssertFalse(app.staticTexts["storage-refresh-empty-cloud"].exists,
             "iCloud holds the user's records here")
@@ -129,7 +129,7 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         XCTAssertTrue(reveal(comparison))
         XCTAssertTrue(comparison.label.contains("このiPhone"))
         XCTAssertTrue(comparison.label.contains("iCloud"))
-        XCTAssertTrue(comparison.label.contains("テーマ"))
+        XCTAssertTrue(comparison.label.contains("取り組み"))
         XCTAssertTrue(comparison.label.contains("記録"))
 
         let evidence = app.staticTexts["storage-overwrite-other-devices"]
@@ -214,7 +214,7 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         let rearmed = app.staticTexts["storage-dataset-comparison"]
         XCTAssertTrue(reveal(rearmed))
         XCTAssertTrue(rearmed.label.contains("このiPhone"))
-        XCTAssertTrue(rearmed.label.contains("テーマ"))
+        XCTAssertTrue(rearmed.label.contains("取り組み"))
         XCTAssertFalse(rearmed.label.contains("確認できませんでした"))
         XCTAssertFalse(app.buttons["storage-dataset-retry-preview"].exists,
             "A succeeded read is not offered a re-read")
@@ -282,12 +282,12 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         launch("datasetRefreshEmptyCloud")
         let comparison = app.staticTexts["storage-dataset-comparison"]
         XCTAssertTrue(reveal(comparison))
-        XCTAssertTrue(comparison.label.contains("このiPhone: テーマ12・記録480・成果36"), "saw: \(comparison.label)")
-        XCTAssertTrue(comparison.label.contains("iCloud: テーマ5・記録0・成果0"), "saw: \(comparison.label)")
+        XCTAssertTrue(comparison.label.contains("このiPhone: 取り組み12・記録480・成果36"), "saw: \(comparison.label)")
+        XCTAssertTrue(comparison.label.contains("iCloud: 取り組み5・記録0・成果0"), "saw: \(comparison.label)")
         let empty = app.staticTexts["storage-refresh-empty-cloud"]
         XCTAssertTrue(reveal(empty))
         XCTAssertTrue(empty.label.contains("1件も見つかりませんでした"), "saw: \(empty.label)")
-        XCTAssertTrue(empty.label.contains("このiPhoneのテーマ12・記録480・成果36"), "saw: \(empty.label)")
+        XCTAssertTrue(empty.label.contains("このiPhoneの取り組み12・記録480・成果36"), "saw: \(empty.label)")
         let screenTime = app.staticTexts["storage-refresh-screen-time"]
         XCTAssertTrue(reveal(screenTime))
         XCTAssertTrue(screenTime.label.hasPrefix("スクリーンタイムの自動記録を使っている場合"))
@@ -480,7 +480,7 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         XCTAssertTrue(reveal(banner))
         XCTAssertTrue(banner.label.contains("他の端末から古い記録が届いた可能性があります"),
             "A bounded detector must be phrased as a possibility, never as a fact")
-        XCTAssertTrue(banner.label.contains("削除したはずのテーマが戻っていないか確認してください"))
+        XCTAssertTrue(banner.label.contains("削除したはずの取り組みが戻っていないか確認してください"))
         // Nothing on it is a destructive control.
         XCTAssertFalse(app.buttons["storage-overwrite-confirm"].exists)
         XCTAssertFalse(app.buttons["storage-refresh-confirm"].exists)
@@ -584,9 +584,9 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["iCloudのデータを取り込み直す"].exists)
         let comparison = app.staticTexts["storage-lineage-comparison"]
         XCTAssertTrue(reveal(comparison, upwards: false))
-        XCTAssertTrue(comparison.label.contains("このiPhone: テーマ12・記録480・成果36"),
+        XCTAssertTrue(comparison.label.contains("このiPhone: 取り組み12・記録480・成果36"),
             "The side this door deletes is counted, saw: \(comparison.label)")
-        XCTAssertTrue(comparison.label.contains("iCloud: テーマ9・記録312・成果28"),
+        XCTAssertTrue(comparison.label.contains("iCloud: 取り組み9・記録312・成果28"),
             "saw: \(comparison.label)")
         XCTAssertFalse(app.staticTexts["storage-lineage-refresh-empty-cloud"].exists,
             "This account's iCloud side holds the user's records")
@@ -638,8 +638,8 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         XCTAssertTrue(warning.label.contains("未送信の端末データは失われ"))
         let comparison = app.staticTexts["storage-switch.refresh-from-cloud-comparison"]
         XCTAssertTrue(reveal(comparison))
-        XCTAssertTrue(comparison.label.contains("このiPhone: テーマ12・記録480・成果36"))
-        XCTAssertTrue(comparison.label.contains("iCloud: テーマ9・記録312・成果28"))
+        XCTAssertTrue(comparison.label.contains("このiPhone: 取り組み12・記録480・成果36"))
+        XCTAssertTrue(comparison.label.contains("iCloud: 取り組み9・記録312・成果28"))
         // transfer-07. The switch resets Screen Time, and no Screen Time owner
         // is mounted on the launch host, so the sheet always carries the
         // conditional sentence — before the acknowledgement.
@@ -684,7 +684,7 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         let empty = app.staticTexts["storage-lineage-refresh-empty-cloud"]
         XCTAssertTrue(reveal(empty, upwards: false))
         XCTAssertTrue(empty.label.contains("1件も見つかりませんでした"), "saw: \(empty.label)")
-        XCTAssertTrue(empty.label.contains("このiPhoneのテーマ12・記録480・成果36"), "saw: \(empty.label)")
+        XCTAssertTrue(empty.label.contains("このiPhoneの取り組み12・記録480・成果36"), "saw: \(empty.label)")
         attach("Lineage refresh — iCloud holds none of the user's records")
         let refresh = app.buttons["storage-lineage-refresh"]
         XCTAssertTrue(reveal(refresh, upwards: false))
@@ -725,7 +725,7 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         XCTAssertTrue(warning.label.contains("元に戻すことはできません"))
         let sheetComparison = app.staticTexts["storage-lineage-sheet-comparison"]
         XCTAssertTrue(reveal(sheetComparison))
-        XCTAssertTrue(sheetComparison.label.contains("iCloud: テーマ9・記録312・成果28"))
+        XCTAssertTrue(sheetComparison.label.contains("iCloud: 取り組み9・記録312・成果28"))
         XCTAssertTrue(reveal(app.staticTexts["storage-lineage-sheet-other-devices"]))
         XCTAssertTrue(reveal(app.staticTexts["storage-lineage-other-builds"]))
         let toggle = app.switches["storage-lineage-confirm-data-loss"]
@@ -835,7 +835,7 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         reRead.tap()
         XCTAssertTrue(reveal(comparison))
         let counted = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "label CONTAINS %@", "iCloud: テーマ9・記録312・成果28"),
+            predicate: NSPredicate(format: "label CONTAINS %@", "iCloud: 取り組み9・記録312・成果28"),
             object: comparison)
         XCTAssertEqual(XCTWaiter.wait(for: [counted], timeout: 6), .completed,
             "saw: \(comparison.label)")

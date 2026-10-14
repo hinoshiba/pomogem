@@ -712,16 +712,16 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         openMenuAction(containing: "設定")
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
         PomoGemSettingsUITestNavigation.open(.themes, in: app)
-        let addTheme = app.buttons["テーマを追加"]
+        let addTheme = app.buttons["取り組みを追加"]
         XCTAssertTrue(scrollUntilHittable(addTheme, swiping: .up))
         addTheme.tap()
-        XCTAssertTrue(app.navigationBars["テーマを追加"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["取り組みを追加"].waitForExistence(timeout: 5))
         let nameField = app.textFields.firstMatch
         XCTAssertTrue(nameField.waitForExistence(timeout: 4))
         nameField.tap()
         nameField.typeText(themeName)
-        app.navigationBars["テーマを追加"].buttons["保存"].tap()
-        XCTAssertTrue(app.navigationBars["テーマ"].waitForExistence(timeout: 5))
+        app.navigationBars["取り組みを追加"].buttons["保存"].tap()
+        XCTAssertTrue(app.navigationBars["取り組み"].waitForExistence(timeout: 5))
         waitForUISettle()
         PomoGemSettingsUITestNavigation.returnHome(in: app)
 
@@ -985,7 +985,7 @@ final class RareRewardOptInUITests: XCTestCase {
         next.tap()
 
         XCTAssertTrue(
-            app.staticTexts["最初のテーマを選ぶ"].waitForExistence(timeout: 4)
+            app.staticTexts["最初の取り組みを選ぶ"].waitForExistence(timeout: 4)
         )
         XCTAssertFalse(app.buttons["勉強"].exists)
         XCTAssertFalse(app.buttons["仕事"].exists)

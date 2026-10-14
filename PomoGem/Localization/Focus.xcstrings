@@ -280,6 +280,22 @@
         }
       }
     },
+    "Apple Musicで検索" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search Apple Music"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Musicで検索"
+          }
+        }
+      }
+    },
     "Apple Musicについて見る" : {
       "localizations" : {
         "en" : {
@@ -308,6 +324,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Apple Musicに登録すると、ここから再生できます。"
+          }
+        }
+      }
+    },
+    "Apple Musicの共有リンク" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Music sharing link"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Musicの共有リンク"
           }
         }
       }
@@ -460,6 +492,40 @@
         }
       }
     },
+    "「%@」をお気に入りから削除" : {
+      "comment" : "VoiceOver label; argument is the music title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove “%@” from favorites"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」をお気に入りから削除"
+          }
+        }
+      }
+    },
+    "「%@」をお気に入りに追加" : {
+      "comment" : "VoiceOver label; argument is the music title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add “%@” to favorites"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」をお気に入りに追加"
+          }
+        }
+      }
+    },
     "「設定」アプリを開く" : {
       "localizations" : {
         "en" : {
@@ -472,6 +538,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "「設定」アプリを開く"
+          }
+        }
+      }
+    },
+    "お気に入り" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Favorites"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "お気に入り"
+          }
+        }
+      }
+    },
+    "お気に入りに追加" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add to favorites"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "お気に入りに追加"
           }
         }
       }
@@ -625,6 +723,23 @@
         }
       }
     },
+    "この音楽を選ぶ" : {
+      "comment" : "Use the pasted music link in the activity editor draft",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use This Music"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この音楽を選ぶ"
+          }
+        }
+      }
+    },
     "この音楽を選んでおきます。今は再生しません" : {
       "comment" : "VoiceOver hint of a music row while Apple Music cannot play: the tap only remembers the choice",
       "localizations" : {
@@ -726,6 +841,23 @@
         }
       }
     },
+    "アルバム" : {
+      "comment" : "An Apple Music album",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Album"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アルバム"
+          }
+        }
+      }
+    },
     "キーンコーンカーンコーンの鐘の旋律" : {
       "comment" : "Alarm sound description; the onomatopoeia is how Japanese hear the Westminster chime. Suggested English: The Westminster chime heard at school",
       "localizations" : {
@@ -756,6 +888,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "クラシックステーション"
+          }
+        }
+      }
+    },
+    "シャッフルで再生する" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shuffle music"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "シャッフルで再生する"
           }
         }
       }
@@ -929,6 +1077,40 @@
         }
       }
     },
+    "プレイリストを読み込めませんでした。もう一度お試しください。" : {
+      "comment" : "Music library playlist load failed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t load your playlists. Please try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プレイリストを読み込めませんでした。もう一度お試しください。"
+          }
+        }
+      }
+    },
+    "プレイリストを選ぶには、Apple Musicへのアクセスを許可してください。" : {
+      "comment" : "Music library playlist picker requires permission",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow access to Apple Music to choose a playlist."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プレイリストを選ぶには、Apple Musicへのアクセスを許可してください。"
+          }
+        }
+      }
+    },
     "ベル" : {
       "comment" : "Alarm sound name: a small struck bell rung three times. Suggested English: Bell",
       "localizations" : {
@@ -962,19 +1144,19 @@
         }
       }
     },
-    "ポモジェムを開き、ホームで選んでいるテーマで集中を始めます。" : {
+    "ポモジェムを開き、ホームで選んでいる取り組みで集中を始めます。" : {
       "comment" : "Shortcuts: what the start-focus action does",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Opens PomoGem and starts a focus with the theme selected on Home."
+            "value" : "Opens PomoGem and starts a focus with the activity selected on Home."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ポモジェムを開き、ホームで選んでいるテーマで集中を始めます。"
+            "value" : "ポモジェムを開き、ホームで選んでいる取り組みで集中を始めます。"
           }
         }
       }
@@ -1013,18 +1195,35 @@
         }
       }
     },
-    "ミュージックアプリで再生します。Apple Musicの登録が必要です。" : {
+    "ミュージックのライブラリにプレイリストがありません。" : {
+      "comment" : "Library playlist picker empty state",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Plays in the Music app. Requires an Apple Music subscription."
+            "value" : "There are no playlists in your Music library."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ミュージックアプリで再生します。Apple Musicの登録が必要です。"
+            "value" : "ミュージックのライブラリにプレイリストがありません。"
+          }
+        }
+      }
+    },
+    "ミュージックアプリで再生します。配信曲にはApple Musicの登録が必要です。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plays in the Music app. Streaming music requires an Apple Music subscription."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ミュージックアプリで再生します。配信曲にはApple Musicの登録が必要です。"
           }
         }
       }
@@ -1042,6 +1241,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "ミュージックアプリで再生する音楽を選びます"
+          }
+        }
+      }
+    },
+    "リンク" : {
+      "comment" : "Paste an Apple Music link to add a favorite",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "リンク"
           }
         }
       }
@@ -1673,6 +1889,71 @@
         }
       }
     },
+    "共通の自動再生設定に戻す" : {
+      "comment" : "Restore the shared autoplay preference for this activity",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use Shared Autoplay Setting"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共通の自動再生設定に戻す"
+          }
+        }
+      }
+    },
+    "共通の音楽" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Default music"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共通の音楽"
+          }
+        }
+      }
+    },
+    "共通の音楽を使う" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use default music"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共通の音楽を使う"
+          }
+        }
+      }
+    },
+    "共通の音楽を使っています。下で選ぶと、この取り組みだけの音楽になります。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Using the default music. Choose below to set music for this activity."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共通の音楽を使っています。下で選ぶと、この取り組みだけの音楽になります。"
+          }
+        }
+      }
+    },
     "再生" : {
       "comment" : "Play the chosen focus music",
       "localizations" : {
@@ -1853,6 +2134,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "別の端末で記録がリセットされたため、このタイマーを終了しました"
+          }
+        }
+      }
+    },
+    "取り組みごとの指定がないときに使う音楽です。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Used for activities without their own music selection."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みごとの指定がないときに使う音楽です。"
           }
         }
       }
@@ -2061,6 +2358,39 @@
         }
       }
     },
+    "曲" : {
+      "comment" : "One song in Apple Music",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Song"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "曲"
+          }
+        }
+      }
+    },
+    "曲、アルバム、プレイリスト、ステーションのApple Music共有リンクを貼り付けてください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paste an Apple Music sharing link for a song, album, playlist, or station."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "曲、アルバム、プレイリスト、ステーションのApple Music共有リンクを貼り付けてください。"
+          }
+        }
+      }
+    },
     "最大" : {
       "comment" : "Alarm strength option: also rings through the silent switch and as a system alarm. Suggested English: Maximum",
       "localizations" : {
@@ -2091,6 +2421,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未選択"
+          }
+        }
+      }
+    },
+    "検索" : {
+      "comment" : "Search Apple Music to add a favorite",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "検索"
+          }
+        }
+      }
+    },
+    "検索できませんでした。通信を確認して、もう一度お試しください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t search. Check your connection and try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "検索できませんでした。通信を確認して、もう一度お試しください。"
           }
         }
       }
@@ -2142,6 +2505,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "標準に加えて、サイレントスイッチがオンでも鳴らします"
+          }
+        }
+      }
+    },
+    "次にプレイリストやアルバムを再生するとき、曲順をランダムにします。ステーションの曲順はApple Musicが決めます。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shuffle the next playlist or album you start. Apple Music controls the order of songs on stations."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "次にプレイリストやアルバムを再生するとき、曲順をランダムにします。ステーションの曲順はApple Musicが決めます。"
           }
         }
       }
@@ -2876,6 +3255,23 @@
         }
       }
     },
+    "自分のプレイリストから選ぶ" : {
+      "comment" : "Load playlists from the person's Music library after an explicit tap",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose from My Playlists"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自分のプレイリストから選ぶ"
+          }
+        }
+      }
+    },
     "自動" : {
       "comment" : "Settings: default timer orientation option that follows the device",
       "localizations" : {
@@ -2906,6 +3302,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "自己申告あつかい・一時停止"
+          }
+        }
+      }
+    },
+    "表示名（任意）" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name (optional)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表示名（任意）"
           }
         }
       }
@@ -3435,6 +3847,22 @@
         }
       }
     },
+    "音楽が見つかりませんでした。別の名前で試してみてください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No music found. Try another name."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音楽が見つかりませんでした。別の名前で試してみてください。"
+          }
+        }
+      }
+    },
     "音楽の画面を閉じる" : {
       "comment" : "VoiceOver label of the music sheet's close button",
       "localizations" : {
@@ -3448,6 +3876,119 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "音楽の画面を閉じる"
+          }
+        }
+      }
+    },
+    "音楽の設定先" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Music for"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音楽の設定先"
+          }
+        }
+      }
+    },
+    "音楽の追加方法" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add music with"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音楽の追加方法"
+          }
+        }
+      }
+    },
+    "音楽は取り組みの「保存」で確定します。" : {
+      "comment" : "Activity editor music picker: choosing is a draft, saved only with the activity",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your music choice is saved with the activity."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音楽は取り組みの「保存」で確定します。"
+          }
+        }
+      }
+    },
+    "音楽やアーティストの名前" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Music or artist name"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音楽やアーティストの名前"
+          }
+        }
+      }
+    },
+    "音楽を探しています" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Searching for music"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音楽を探しています"
+          }
+        }
+      }
+    },
+    "音楽を探す" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Find music"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音楽を探す"
+          }
+        }
+      }
+    },
+    "音楽を検索するには、Apple Musicへのアクセスを許可してください。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow access to Apple Music to search for music."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音楽を検索するには、Apple Musicへのアクセスを許可してください。"
           }
         }
       }

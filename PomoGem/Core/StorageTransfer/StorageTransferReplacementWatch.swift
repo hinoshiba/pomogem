@@ -147,7 +147,7 @@ extension StorageTransferStateFile {
 /// evidence that another device flushed pre-purge rows, and reporting it would
 /// make a single-device account accuse itself on every overwrite.
 ///
-/// The banner names 「削除したはずのテーマ」, so the models it may speak about are
+/// The banner names 「削除したはずの取り組み」, so the models it may speak about are
 /// exactly the ones a user recognizes as their records.
 enum StorageTransferLateArrivalPolicy {
     /// Written by this installation as part of mounting and running, so their

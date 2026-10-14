@@ -38,19 +38,19 @@
       }
     },
     "NSAppleMusicUsageDescription" : {
-      "comment" : "Apple Music permission prompt: why the timer controls the Music app (focus background music)",
+      "comment" : "Apple Music permission prompt: play focus music and choose playlists from the personal library",
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Used to play focus music in the Music app from the timer screen."
+            "value" : "Used to play focus music and let you choose playlists from your music library."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "タイマー画面から『ミュージック』アプリで集中用の音楽を再生するために使います。"
+            "value" : "集中用の音楽を再生し、自分のライブラリからプレイリストを選ぶために使います。"
           }
         }
       }

@@ -1215,6 +1215,43 @@ enum HomeProjectionPolicy {
             .map { ($0.id, $0.grams) }, uniquingKeysWith: max)
     }
 
+    /// The same landed records as `landedTotals`, retaining their saved
+    /// colours when time is regrouped into visual crystals. Root colours
+    /// use the existing lifetime-core weighting (legacy root mixes are an
+    /// approximation); pending receipts must not tint the jar before landing.
+    static func timeFusionColorMix(
+        roots: [AggregatePebble],
+        looseSessions: [StudySession],
+        unlandedSessionIDs: Set<UUID>,
+        representedPendingSessions: [StudySession] = []
+    ) -> [StratumColorFraction] {
+        let loose = StudySessionSyncPolicy.canonicalSessions(from: looseSessions)
+        let contributions = roots.map { root in
+            let mix = root.colorMix.isEmpty
+                ? StrataMath.weightedColorMix(root.subjectMix.map {
+                    ([StratumColorFraction(hex: $0.colorHex, fraction: 1)], Double($0.pebbleCount))
+                })
+                : root.colorMix
+            return JarLifetimeCorePresentation.ColorContribution(grams: root.grams, colorMix: mix)
+        } + loose.map {
+            JarLifetimeCorePresentation.ColorContribution(grams: $0.grams, hex: $0.displaySubjectColorHex)
+        }
+        var weights: [String: Double] = [:]
+        for (hex, grams) in JarLifetimeCorePresentation.colorWeights(contributions) {
+            weights[hex.uppercased(), default: 0] += grams
+        }
+        let pending = StudySessionSyncPolicy.canonicalSessions(
+            from: loose + representedPendingSessions
+        ).filter { unlandedSessionIDs.contains($0.id) }
+        for session in pending {
+            let hex = session.displaySubjectColorHex.uppercased()
+            weights[hex] = max(0, (weights[hex] ?? 0) - Double(max(0, session.grams)))
+        }
+        return JarLifetimeCorePresentation.colorShares(
+            weights: weights.filter { $0.value.isFinite && $0.value > 0 }
+        ).map { StratumColorFraction(hex: $0.hex, fraction: $0.fraction) }
+    }
+
     /// A pending/held headline may already include saved completions. Only
     /// the verified landed baseline authorizes an incremental visual credit.
     /// Other presentations absorb the transient gem and await an exact total.

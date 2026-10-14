@@ -257,7 +257,7 @@ struct JarSpriteView: View {
     let isMotionEnabled: Bool
     let inspectableAggregateID: UUID?
     let onJarTapAccepted: (() -> Void)?
-    let onAggregateTapped: ((UUID) -> Void)?
+    let onAggregateLongPressed: ((UUID) -> Void)?
     let onAggregateAccessibilityAction: ((UUID) -> Void)?
 
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
@@ -289,9 +289,6 @@ struct JarSpriteView: View {
     /// Low Power Mode and the thermal state, followed live (round 14), so
     /// an awake jar drops to 30 fps the moment either changes.
     @State private var allowsAmbientSparkle = JarScene.allowsAmbientSparkle
-#if targetEnvironment(macCatalyst)
-    @State private var catalystGestureOwnership = JarDragGestureOwnership()
-#endif
 
     private var reduceMotion: Bool {
         reduceMotionOverride ?? systemReduceMotion
@@ -322,7 +319,7 @@ struct JarSpriteView: View {
         isMotionEnabled: Bool = true,
         inspectableAggregateID: UUID? = nil,
         onJarTapAccepted: (() -> Void)? = nil,
-        onAggregateTapped: ((UUID) -> Void)? = nil,
+        onAggregateLongPressed: ((UUID) -> Void)? = nil,
         onAggregateAccessibilityAction: ((UUID) -> Void)? = nil
     ) {
         _scene = ObservedObject(wrappedValue: scene)
@@ -353,7 +350,7 @@ struct JarSpriteView: View {
         self.isMotionEnabled = isMotionEnabled
         self.inspectableAggregateID = inspectableAggregateID
         self.onJarTapAccepted = onJarTapAccepted
-        self.onAggregateTapped = onAggregateTapped
+        self.onAggregateLongPressed = onAggregateLongPressed
         self.onAggregateAccessibilityAction = onAggregateAccessibilityAction
         _motionObserver = StateObject(wrappedValue: JarMotionObserver(scene: scene))
     }
@@ -589,31 +586,17 @@ struct JarSpriteView: View {
                 // The scene's light fades out before the SKView's edge in
                 // the scene itself (`JarLightEdgeFade`, round 13): no SwiftUI
                 // mask, so no offscreen pass on awake frames.
-#if targetEnvironment(macCatalyst)
-                // One zero-distance gesture owns both click and drag on Mac.
-                // Once travel reaches 3 pt it can only be a tilt drag, so the
-                // former 3...18 pt tap/drag double-fire cannot occur.
-                .gesture(catalystInteractionGesture(
-                    width: proxy.size.width,
-                    height: proxy.size.height
-                ))
-#else
-                // Own the iPhone tap at the SwiftUI boundary. Relying on
-                // SpriteKit's UITouch forwarding beneath an accessibility
-                // element can occasionally lose the touch end during a view
-                // update. SpatialTapGesture preserves the exact local point
-                // and gives the scene one deterministic input path.
-                .contentShape(Rectangle())
-                .highPriorityGesture(
-                    SpatialTapGesture(coordinateSpace: .local)
-                        .onEnded { value in
-                            performSpatialTap(at: CGPoint(
-                                x: value.location.x,
-                                y: proxy.size.height - value.location.y
-                            ))
-                        }
-                )
-#endif
+                // Native recognizers arbitrate tap, hold, and the enclosing
+                // scroll view's pan. A recognized hold cannot also bounce on
+                // release, and a scroll that starts first cancels inspection.
+                .overlay {
+                    JarInteractionSurface(
+                        scene: scene,
+                        onTap: performSpatialTap,
+                        onLongPress: performSpatialLongPress
+                    )
+                    .accessibilityHidden(true)
+                }
                 .onAppear {
 #if DEBUG && targetEnvironment(simulator)
                     JarFrameProbe.shared?.attach(scene)
@@ -739,8 +722,8 @@ struct JarSpriteView: View {
             aggregateID: effectiveInspectableAggregateID,
             onInspectAggregate:
                 scene.timeFusionSnapshot == nil
-                    ? (onAggregateAccessibilityAction ?? onAggregateTapped)
-                    : onAggregateTapped
+                    ? (onAggregateAccessibilityAction ?? onAggregateLongPressed)
+                    : onAggregateLongPressed
         ))
         .onChange(of: reduceMotion) { _, enabled in
             updateMotionBehavior(reduceMotion: enabled)
@@ -974,15 +957,18 @@ struct JarSpriteView: View {
     private var effectiveInspectableAggregateID: UUID? {
         guard let snapshot = scene.timeFusionSnapshot else { return inspectableAggregateID }
         return snapshot.visibleCrystals.last?.id
+            ?? (snapshot.remainderGrams > 0
+                ? TimeFusionUnit(level: 0, grams: 0, ordinal: 0).id : nil)
     }
 
     private func performSpatialTap(at point: CGPoint) {
         guard scene.bouncePebbles(at: point) else { return }
         onJarTapAccepted?()
-        guard let aggregateID = scene.lastAcceptedTapSelection?
-            .inspectableAggregateID
-        else { return }
-        onAggregateTapped?(aggregateID)
+    }
+
+    private func performSpatialLongPress(at point: CGPoint) {
+        guard let aggregateID = scene.inspectableAggregateID(at: point) else { return }
+        onAggregateLongPressed?(aggregateID)
     }
 
     /// One physical source of truth covers loose pebbles, aggregates,
@@ -1025,48 +1011,103 @@ struct JarSpriteView: View {
         }
 #endif
     }
+}
+
+/// Keeps position-aware input separate from the jar's single VoiceOver
+/// element. UIKit resolves a quick tap when the finger lifts, recognizes a
+/// stationary hold while it is still down, and lets ancestor scrolling win
+/// as soon as the finger moves. No timer or gesture state survives a cancel.
+private struct JarInteractionSurface: UIViewRepresentable {
+    let scene: JarScene
+    let onTap: (CGPoint) -> Void
+    let onLongPress: (CGPoint) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(surface: self) }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .clear
+        view.isAccessibilityElement = false
+        view.accessibilityElementsHidden = true
+        let coordinator = context.coordinator
+        let tap = UITapGestureRecognizer(target: coordinator, action: #selector(Coordinator.tap(_:)))
+        let hold = UILongPressGestureRecognizer(target: coordinator, action: #selector(Coordinator.hold(_:)))
+        hold.minimumPressDuration = 0.5
+        hold.allowableMovement = 10
+        hold.numberOfTouchesRequired = 1
+        tap.require(toFail: hold)
+        view.addGestureRecognizer(tap)
+        view.addGestureRecognizer(hold)
+#if targetEnvironment(macCatalyst)
+        // Mouse drag still tilts the jar. Its recognizer owns the complete
+        // drag, including a return to the origin, and excludes both actions.
+        let pan = UIPanGestureRecognizer(target: coordinator, action: #selector(Coordinator.pan(_:)))
+        pan.maximumNumberOfTouches = 1
+        tap.require(toFail: pan)
+        view.addGestureRecognizer(pan)
+#endif
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.surface = self
+    }
+
+    static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
+#if targetEnvironment(macCatalyst)
+        coordinator.surface.scene.resetGravity()
+#endif
+        uiView.gestureRecognizers?.forEach { $0.isEnabled = false }
+    }
+
+    @MainActor
+    final class Coordinator: NSObject {
+        var surface: JarInteractionSurface
+#if targetEnvironment(macCatalyst)
+        private var dragOwnership = JarDragGestureOwnership()
+#endif
+        init(surface: JarInteractionSurface) { self.surface = surface }
+
+        private func scenePoint(_ recognizer: UIGestureRecognizer) -> CGPoint? {
+            guard let view = recognizer.view else { return nil }
+            let point = recognizer.location(in: view)
+            return CGPoint(x: point.x, y: view.bounds.height - point.y)
+        }
+
+        @objc func tap(_ recognizer: UITapGestureRecognizer) {
+            guard recognizer.state == .ended, let point = scenePoint(recognizer) else { return }
+            surface.onTap(point)
+        }
+
+        @objc func hold(_ recognizer: UILongPressGestureRecognizer) {
+            guard recognizer.state == .began, let point = scenePoint(recognizer) else { return }
+            surface.onLongPress(point)
+        }
 
 #if targetEnvironment(macCatalyst)
-    private func catalystInteractionGesture(width: CGFloat, height: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 0, coordinateSpace: .local)
-            .onChanged { value in
-                let distance = hypot(value.translation.width, value.translation.height)
-                var ownership = catalystGestureOwnership
-                let ownsDrag = ownership.observe(distance: distance)
-                catalystGestureOwnership = ownership
-                guard ownsDrag else { return }
-                let travel = max(width * 0.22, 1)
-                let horizontalFraction = min(
-                    max(value.translation.width / travel, -1),
-                    1
-                )
-                scene.setGravityVector(
-                    CGVector(
-                        dx: horizontalFraction * JarGravityMapping.strength,
-                        dy: Constants.Jar.gravity
-                    ),
+        @objc func pan(_ recognizer: UIPanGestureRecognizer) {
+            guard let view = recognizer.view else { return }
+            let translation = recognizer.translation(in: view)
+            let distance = hypot(translation.x, translation.y)
+            switch recognizer.state {
+            case .began, .changed:
+                guard dragOwnership.observe(distance: distance) else { return }
+                let travel = max(view.bounds.width * 0.22, 1)
+                let fraction = min(max(translation.x / travel, -1), 1)
+                surface.scene.setGravityVector(
+                    CGVector(dx: fraction * JarGravityMapping.strength, dy: Constants.Jar.gravity),
                     smoothing: false,
                     wakesSimulation: true
                 )
+            case .ended, .cancelled, .failed:
+                _ = dragOwnership.finish(distance: distance)
+                surface.scene.resetGravity()
+            default:
+                break
             }
-            .onEnded { value in
-                let distance = hypot(value.translation.width, value.translation.height)
-                var ownership = catalystGestureOwnership
-                let wasDrag = ownership.finish(distance: distance)
-                catalystGestureOwnership = ownership
-                if wasDrag {
-                    // A drag owns the entire gesture once the threshold has
-                    // ever been crossed, even if the pointer returns to origin.
-                    scene.resetGravity()
-                } else {
-                    performSpatialTap(at: CGPoint(
-                        x: value.location.x,
-                        y: height - value.location.y
-                    ))
-                }
-            }
-    }
+        }
 #endif
+    }
 }
 
 #if !targetEnvironment(macCatalyst)

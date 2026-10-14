@@ -60,7 +60,7 @@ final class StorageTransferConsentEvidenceTests: XCTestCase {
     func testTheNoLineageCloudRowCountsTheRecordsAndImpliesNoLedger() {
         let row = StorageTransferOverwriteCopy.cloudSideWithoutLineage(preview: Self.preview(
             subjects: 9, sessions: 312, stones: 28, otherDeviceIDs: 1))
-        XCTAssertEqual(row, "iCloud: テーマ9・記録312・成果28")
+        XCTAssertEqual(row, "iCloud: 取り組み9・記録312・成果28")
         XCTAssertFalse(row.contains("最終"))
         // transfer-10. No internal term on a screen where a deletion is chosen.
         XCTAssertFalse(row.contains("管理情報"))
@@ -85,7 +85,7 @@ final class StorageTransferConsentEvidenceTests: XCTestCase {
         XCTAssertTrue(StorageTransferRefreshCopy.cloudSideIsEmpty(bookkeeping),
                       "The documented 0件 warning must fire for this account")
         XCTAssertEqual(StorageTransferOverwriteCopy.cloudSideWithoutLineage(preview: bookkeeping),
-                       "iCloud: テーマ5・記録0・成果0")
+                       "iCloud: 取り組み5・記録0・成果0")
 
         let withRecords = Self.preview(subjects: 0, sessions: 1, stones: 0, otherDeviceIDs: 0)
         XCTAssertFalse(StorageTransferRefreshCopy.cloudSideIsEmpty(withRecords))
@@ -188,7 +188,7 @@ final class StorageTransferConsentEvidenceTests: XCTestCase {
         // is about to lose, in the same three nouns as the comparison rows.
         let counted = StorageTransferRefreshCopy.cloudSideEmpty(device: Self.preview(
             subjects: 12, sessions: 480, stones: 36, otherDeviceIDs: 0))
-        XCTAssertTrue(counted.contains("このiPhoneのテーマ12・記録480・成果36"), counted)
+        XCTAssertTrue(counted.contains("このiPhoneの取り組み12・記録480・成果36"), counted)
         XCTAssertTrue(counted.contains("元に戻すことはできません"))
         // The reassurance sentence on its own must never be the whole story.
         XCTAssertTrue(StorageTransferRefreshCopy.dataLossWarning.contains("iCloudのデータは残ります"))

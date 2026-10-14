@@ -1255,19 +1255,19 @@
         }
       }
     },
-    "保存済みのテーマ名・成果メモ・顧客名は自動で含めません。追加タグへ入力した内容は共有されます" : {
+    "保存済みの取り組み名・成果メモ・顧客名は自動で含めません。追加タグへ入力した内容は共有されます" : {
       "comment" : "Share composer privacy note under the hashtags",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Saved theme names, achievement notes and client names are never added automatically. Whatever you type as an extra hashtag is shared."
+            "value" : "Saved activity names, achievement notes and client names are never added automatically. Whatever you type as an extra hashtag is shared."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "保存済みのテーマ名・成果メモ・顧客名は自動で含めません。追加タグへ入力した内容は共有されます"
+            "value" : "保存済みの取り組み名・成果メモ・顧客名は自動で含めません。追加タグへ入力した内容は共有されます"
           }
         }
       }

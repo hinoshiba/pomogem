@@ -133,7 +133,7 @@
       }
     },
     "YOUR BOTTLE" : {
-      "comment" : "Decorative uppercase eyebrow above 最初のテーマを選ぶ. en: YOUR JAR (glossary: jar, never bottle)",
+      "comment" : "Decorative uppercase eyebrow above 最初の取り組みを選ぶ. en: YOUR JAR (glossary: jar, never bottle)",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -189,13 +189,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Theme"
+            "value" : "Activity"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "テーマ"
+            "value" : "取り組み"
           }
         }
       }
@@ -269,7 +269,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "You can add and edit themes later in Settings."
+            "value" : "You can add and edit activities later in Settings."
           }
         },
         "ja" : {
@@ -297,19 +297,19 @@
         }
       }
     },
-    "このあとはホームで時間を選び、開始ボタンをタップ。テーマはいつでも変更できます。" : {
+    "このあとはホームで時間を選び、開始ボタンをタップ。取り組みはいつでも変更できます。" : {
       "comment" : "Onboarding theme page: what happens next on Home",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Next, choose a length on Home and tap Start. You can change the theme anytime."
+            "value" : "Next, choose a length on Home and tap Start. You can change the activity anytime."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このあとはホームで時間を選び、開始ボタンをタップ。テーマはいつでも変更できます。"
+            "value" : "このあとはホームで時間を選び、開始ボタンをタップ。取り組みはいつでも変更できます。"
           }
         }
       }
@@ -552,184 +552,53 @@
         }
       }
     },
-    "アーカイブ済みのテーマ" : {
+    "アーカイブ済みの取り組み" : {
       "comment" : "Name shown for a record whose theme was deleted and left no name",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Archived theme"
+            "value" : "Archived activity"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "アーカイブ済みのテーマ"
+            "value" : "アーカイブ済みの取り組み"
           }
         }
       }
     },
-    "シェアカードにテーマ名は載せません。成果メモも載せません。終了通知にもテーマ名は表示しません。案件名・顧客名・個人名などの守秘情報は入れず、「企画」「顧客対応」のような大分類がおすすめです。" : {
+    "シェアカードに取り組み名は載せません。成果メモも載せません。終了通知にも取り組み名は表示しません。案件名・顧客名・個人名などの守秘情報は入れず、「企画」「顧客対応」のような大分類がおすすめです。" : {
       "comment" : "Legacy usage purpose: privacy note for work themes (theme names never appear on share cards or notifications)",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Share cards never show theme names or achievement notes, and timer-end notifications never show theme names. Leave out confidential details such as project, client or personal names; broad categories like “Planning” or “Customer Support” work best."
+            "value" : "Share cards never show activity names or achievement notes, and timer-end notifications never show activity names. Leave out confidential details such as project, client or personal names; broad categories like “Planning” or “Customer Support” work best."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "シェアカードにテーマ名は載せません。成果メモも載せません。終了通知にもテーマ名は表示しません。案件名・顧客名・個人名などの守秘情報は入れず、「企画」「顧客対応」のような大分類がおすすめです。"
+            "value" : "シェアカードに取り組み名は載せません。成果メモも載せません。終了通知にも取り組み名は表示しません。案件名・顧客名・個人名などの守秘情報は入れず、「企画」「顧客対応」のような大分類がおすすめです。"
           }
         }
       }
     },
-    "テーマ" : {
-      "comment" : "Restore waiting screen: count label for themes",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Themes"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマ"
-          }
-        }
-      }
-    },
-    "テーマと時間を選んで、集中をはじめる。\n完走すると、その時間が一粒になって瓶に残ります。" : {
-      "comment" : "Onboarding page 1: how a focus becomes a gem in the jar",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Choose a theme and a length, then start a focus.\nFinish it, and that time stays in your jar as a gem."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマと時間を選んで、集中をはじめる。\n完走すると、その時間が一粒になって瓶に残ります。"
-          }
-        }
-      }
-    },
-    "テーマは合計最大%lld件です。不要なテーマは設定から削除できます。" : {
-      "comment" : "Onboarding: theme limit reached; %lld is the maximum number of themes (12)",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "You can have up to %lld theme in all. You can delete themes you don’t need in Settings."
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "You can have up to %lld themes in all. You can delete themes you don’t need in Settings."
-                }
-              }
-            }
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマは合計最大%lld件です。不要なテーマは設定から削除できます。"
-          }
-        }
-      }
-    },
-    "テーマを1つ選ぶと、瓶をひらけます" : {
-      "comment" : "Onboarding theme summary before a theme is chosen",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Choose a theme to open the jar"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマを1つ選ぶと、瓶をひらけます"
-          }
-        }
-      }
-    },
-    "テーマを1つ選ぶと瓶をひらけます" : {
-      "comment" : "VoiceOver hint: the button is disabled until a theme is chosen",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Choose a theme to open the jar"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマを1つ選ぶと瓶をひらけます"
-          }
-        }
-      }
-    },
-    "テーマ名は%lld文字以内で入力してください（%lld文字超過）。" : {
-      "comment" : "Theme name validation: %1$lld is the character limit (always 40), %2$lld how many characters too many",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Theme names can be up to %1$lld characters (%2$lld over)."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマ名は%lld文字以内で入力してください（%lld文字超過）。"
-          }
-        }
-      }
-    },
-    "テーマ名を入力してください。" : {
-      "comment" : "Theme name validation: the name is empty",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Enter a theme name."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマ名を入力してください。"
-          }
-        }
-      }
-    },
-    "ホームへ進みます。テーマと時間を確認してから集中を始められます" : {
+    "ホームへ進みます。取り組みと時間を確認してから集中を始められます" : {
       "comment" : "VoiceOver hint for the finishing button",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Goes to Home. You can check your theme and length before you start a focus"
+            "value" : "Goes to Home. You can check your activity and length before you start a focus"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ホームへ進みます。テーマと時間を確認してから集中を始められます"
+            "value" : "ホームへ進みます。取り組みと時間を確認してから集中を始められます"
           }
         }
       }
@@ -972,19 +841,19 @@
         }
       }
     },
-    "体験を省略して、最初のテーマを選べます" : {
+    "体験を省略して、最初の取り組みを選べます" : {
       "comment" : "VoiceOver hint for Next on the trial page: skip the trial",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Skips the trial so you can choose your first theme"
+            "value" : "Skips the trial so you can choose your first activity"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "体験を省略して、最初のテーマを選べます"
+            "value" : "体験を省略して、最初の取り組みを選べます"
           }
         }
       }
@@ -1159,19 +1028,19 @@
         }
       }
     },
-    "勉強も仕事も同じテーマ一覧で管理できます。候補を1つ選ぶか、自由に入力してください。" : {
+    "勉強も仕事も同じ取り組み一覧で管理できます。候補を1つ選ぶか、自由に入力してください。" : {
       "comment" : "Onboarding theme step: study and work themes share one list",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Study and work themes live in the same list. Pick a suggestion or type your own."
+            "value" : "Study and work activities live in the same list. Pick a suggestion or type your own."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "勉強も仕事も同じテーマ一覧で管理できます。候補を1つ選ぶか、自由に入力してください。"
+            "value" : "勉強も仕事も同じ取り組み一覧で管理できます。候補を1つ選ぶか、自由に入力してください。"
           }
         }
       }
@@ -1189,6 +1058,137 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "動きを使わず一粒を試す"
+          }
+        }
+      }
+    },
+    "取り組み" : {
+      "comment" : "Restore waiting screen: count label for themes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activities"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組み"
+          }
+        }
+      }
+    },
+    "取り組みと時間を選んで、集中をはじめる。\n完走すると、その時間が一粒になって瓶に残ります。" : {
+      "comment" : "Onboarding page 1: how a focus becomes a gem in the jar",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose an activity and a length, then start a focus.\nFinish it, and that time stays in your jar as a gem."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みと時間を選んで、集中をはじめる。\n完走すると、その時間が一粒になって瓶に残ります。"
+          }
+        }
+      }
+    },
+    "取り組みは合計最大%lld件です。不要な取り組みは設定から削除できます。" : {
+      "comment" : "Onboarding: theme limit reached; %lld is the maximum number of themes (12)",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "You can have up to %lld activity in all. You can delete activities you don’t need in Settings."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "You can have up to %lld activities in all. You can delete activities you don’t need in Settings."
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みは合計最大%lld件です。不要な取り組みは設定から削除できます。"
+          }
+        }
+      }
+    },
+    "取り組みを1つ選ぶと、瓶をひらけます" : {
+      "comment" : "Onboarding theme summary before a theme is chosen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose an activity to open the jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みを1つ選ぶと、瓶をひらけます"
+          }
+        }
+      }
+    },
+    "取り組みを1つ選ぶと瓶をひらけます" : {
+      "comment" : "VoiceOver hint: the button is disabled until a theme is chosen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose an activity to open the jar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みを1つ選ぶと瓶をひらけます"
+          }
+        }
+      }
+    },
+    "取り組み名は%lld文字以内で入力してください（%lld文字超過）。" : {
+      "comment" : "Theme name validation: %1$lld is the character limit (always 40), %2$lld how many characters too many",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activity names can be up to %1$lld characters (%2$lld over)."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組み名は%lld文字以内で入力してください（%lld文字超過）。"
+          }
+        }
+      }
+    },
+    "取り組み名を入力してください。" : {
+      "comment" : "Theme name validation: the name is empty",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter an activity name."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組み名を入力してください。"
           }
         }
       }
@@ -1261,7 +1261,7 @@
         }
       }
     },
-    "届いた記録：テーマ%lld件。" : {
+    "届いた記録：取り組み%lld件。" : {
       "comment" : "VoiceOver summary of the restore progress; %lld is the number of themes received",
       "localizations" : {
         "en" : {
@@ -1270,13 +1270,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "Received so far: %lld theme."
+                  "value" : "Received so far: %lld activity."
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "Received so far: %lld themes."
+                  "value" : "Received so far: %lld activities."
                 }
               }
             }
@@ -1285,7 +1285,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "届いた記録：テーマ%lld件。"
+            "value" : "届いた記録：取り組み%lld件。"
           }
         }
       }
@@ -1392,19 +1392,19 @@
         }
       }
     },
-    "新しいテーマの枠がありません。既存のテーマを選ぶか、瓶をひらいた後に整理してください。" : {
+    "新しい取り組みの枠がありません。既存の取り組みを選ぶか、瓶をひらいた後に整理してください。" : {
       "comment" : "Onboarding theme page: the theme limit leaves no room for a new theme",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "There’s no room for a new theme. Choose an existing theme, or tidy up your themes after the jar opens."
+            "value" : "There’s no room for a new activity. Choose an existing activity, or tidy up your activities after the jar opens."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "新しいテーマの枠がありません。既存のテーマを選ぶか、瓶をひらいた後に整理してください。"
+            "value" : "新しい取り組みの枠がありません。既存の取り組みを選ぶか、瓶をひらいた後に整理してください。"
           }
         }
       }
@@ -1443,57 +1443,6 @@
         }
       }
     },
-    "最初のテーマ" : {
-      "comment" : "Onboarding step 3 title: your first theme",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Your First Theme"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最初のテーマ"
-          }
-        }
-      }
-    },
-    "最初のテーマを選ぶ" : {
-      "comment" : "Onboarding theme page heading: choose your first theme",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Choose Your First Theme"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最初のテーマを選ぶ"
-          }
-        }
-      }
-    },
-    "最初のテーマ：%@" : {
-      "comment" : "Onboarding theme summary; %@ is the chosen theme's name",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "First theme: %@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最初のテーマ：%@"
-          }
-        }
-      }
-    },
     "最初の仕事カテゴリ" : {
       "comment" : "Legacy usage purpose: heading for the first work theme",
       "localizations" : {
@@ -1507,6 +1456,57 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "最初の仕事カテゴリ"
+          }
+        }
+      }
+    },
+    "最初の取り組み" : {
+      "comment" : "Onboarding step 3 title: your first theme",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your First Activity"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最初の取り組み"
+          }
+        }
+      }
+    },
+    "最初の取り組みを選ぶ" : {
+      "comment" : "Onboarding theme page heading: choose your first theme",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose Your First Activity"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最初の取り組みを選ぶ"
+          }
+        }
+      }
+    },
+    "最初の取り組み：%@" : {
+      "comment" : "Onboarding theme summary; %@ is the chosen theme's name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "First activity: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最初の取り組み：%@"
           }
         }
       }
@@ -1829,19 +1829,19 @@
         }
       }
     },
-    "積んだ粒と記録は、そのまま残る" : {
-      "comment" : "Onboarding promise detail: your gems and records stay",
+    "積んだ時間と記録は、そのまま残る" : {
+      "comment" : "Onboarding promise detail: your accumulated time and records stay",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The gems and records you add stay just as they are"
+            "value" : "The time and records you add stay with you"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "積んだ粒と記録は、そのまま残る"
+            "value" : "積んだ時間と記録は、そのまま残る"
           }
         }
       }
@@ -1999,36 +1999,36 @@
         }
       }
     },
-    "記録の到着を待たずに、最初のテーマ選びへ進みます" : {
+    "記録の到着を待たずに、最初の取り組み選びへ進みます" : {
       "comment" : "VoiceOver hint for 新しく始める on the restore waiting screen",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Goes on to choosing your first theme without waiting for your records"
+            "value" : "Goes on to choosing your first activity without waiting for your records"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "記録の到着を待たずに、最初のテーマ選びへ進みます"
+            "value" : "記録の到着を待たずに、最初の取り組み選びへ進みます"
           }
         }
       }
     },
-    "記録の到着を待たずに、最初のテーマ選びへ進みます。iCloudの記録は、届きしだいこのiPhoneにも表示されます。" : {
+    "記録の到着を待たずに、最初の取り組み選びへ進みます。iCloudの記録は、届きしだいこのiPhoneにも表示されます。" : {
       "comment" : "Restore waiting screen: what starting without waiting means",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "You’ll go on to choosing your first theme without waiting for your records. Your iCloud records will appear on this iPhone as soon as they arrive."
+            "value" : "You’ll go on to choosing your first activity without waiting for your records. Your iCloud records will appear on this iPhone as soon as they arrive."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "記録の到着を待たずに、最初のテーマ選びへ進みます。iCloudの記録は、届きしだいこのiPhoneにも表示されます。"
+            "value" : "記録の到着を待たずに、最初の取り組み選びへ進みます。iCloudの記録は、届きしだいこのiPhoneにも表示されます。"
           }
         }
       }
@@ -2084,7 +2084,7 @@
         }
       }
     },
-    "追加できるテーマは合計最大%lld件です。" : {
+    "追加できる取り組みは合計最大%lld件です。" : {
       "comment" : "Onboarding: theme limit reached; %lld is the maximum number of themes (12)",
       "localizations" : {
         "en" : {
@@ -2093,13 +2093,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "You can have up to %lld theme in all."
+                  "value" : "You can have up to %lld activity in all."
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "You can have up to %lld themes in all."
+                  "value" : "You can have up to %lld activities in all."
                 }
               }
             }
@@ -2108,7 +2108,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "追加できるテーマは合計最大%lld件です。"
+            "value" : "追加できる取り組みは合計最大%lld件です。"
           }
         }
       }

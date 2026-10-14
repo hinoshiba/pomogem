@@ -254,7 +254,7 @@ final class FocusStartEntryPolicyTests: XCTestCase {
         )
         XCTAssertEqual(
             FocusStartEntryPolicy.message(for: .noTheme),
-            "テーマを選ぶと、集中を始められます"
+            "取り組みを選ぶと、集中を始められます"
         )
     }
 }

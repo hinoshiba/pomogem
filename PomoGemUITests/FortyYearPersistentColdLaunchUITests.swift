@@ -849,18 +849,18 @@ final class FortyYearPlanningUITests: XCTestCase {
         // the same Settings path as an empty Home before checking its timer menu.
         let launcher = app.buttons["home.focus-launcher"]
         XCTAssertTrue(scrollUntilHittable(launcher, in: app))
-        XCTAssertEqual(launcher.label, "テーマを選んではじめる")
+        XCTAssertEqual(launcher.label, "取り組みを選んではじめる")
         launcher.tap()
-        XCTAssertTrue(app.navigationBars["テーマ"].waitForExistence(timeout: 5))
-        let addTheme = app.buttons["テーマを追加"]
+        XCTAssertTrue(app.navigationBars["取り組み"].waitForExistence(timeout: 5))
+        let addTheme = app.buttons["取り組みを追加"]
         XCTAssertTrue(scrollUntilHittable(addTheme, in: app))
         addTheme.tap()
-        let themeEditor = app.navigationBars["テーマを追加"]
+        let themeEditor = app.navigationBars["取り組みを追加"]
         XCTAssertTrue(themeEditor.waitForExistence(timeout: 5))
         let nameField = app.textFields.firstMatch
         XCTAssertTrue(nameField.waitForExistence(timeout: 4))
         nameField.tap()
-        nameField.typeText("通常起動のテーマ")
+        nameField.typeText("通常起動の取り組み")
         themeEditor.buttons["保存"].tap()
         XCTAssertEqual(
             XCTWaiter.wait(for: [XCTNSPredicateExpectation(

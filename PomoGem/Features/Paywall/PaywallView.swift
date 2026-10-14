@@ -141,7 +141,7 @@ struct PaywallView: View {
 
             if !purchase.isPro {
                 Text(
-                    "記録・テーマ・iCloud同期・シェアなど、ほかの機能はすべて無料で使えます。",
+                    "記録・取り組み・iCloud同期・シェアなど、ほかの機能はすべて無料で使えます。",
                     tableName: "Paywall",
                     comment: "Paywall note under the Pro features: everything else stays free"
                 )

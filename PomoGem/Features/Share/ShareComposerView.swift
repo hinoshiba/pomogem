@@ -1054,7 +1054,7 @@ struct ShareComposerView: View {
                     .font(.caption2)
                     .foregroundStyle(PomoGemTheme.muted)
             }
-            Text("保存済みのテーマ名・成果メモ・顧客名は自動で含めません。追加タグへ入力した内容は共有されます", tableName: "Share",
+            Text("保存済みの取り組み名・成果メモ・顧客名は自動で含めません。追加タグへ入力した内容は共有されます", tableName: "Share",
                  comment: "Share composer privacy note under the hashtags")
                 .font(.caption2)
                 .foregroundStyle(PomoGemTheme.muted)
@@ -2841,6 +2841,22 @@ enum ShareTimeFusionPresentation {
             sessions.map(\.grams) + aggregates.filter(\.contributesStandaloneTotals).map(\.grams)
         ))
     }
+
+    /// Uses the same already-filtered public records as the displayed time.
+    /// Linked summaries must not tint a record twice or reintroduce colours
+    /// from personal history that the share selection excluded.
+    static func colorShares(
+        sessions: [ShareSessionVisual],
+        aggregates: [ShareAggregateVisual]
+    ) -> [GemColorShare] {
+        JarLifetimeCorePresentation.colorShares(
+            sessions.map {
+                JarLifetimeCorePresentation.ColorContribution(grams: $0.grams, hex: $0.colorHex)
+            } + aggregates.filter(\.contributesStandaloneTotals).map {
+                JarLifetimeCorePresentation.ColorContribution(grams: $0.grams, colorMix: $0.colorMix)
+            }
+        )
+    }
 }
 
 private func shareRewardSemantics(
@@ -3524,7 +3540,11 @@ private struct ShareJarGraphic: View {
         return ZStack(alignment: .bottom) {
             bottleBackground(size: size)
             bottomGlow(size: size)
-            TimeFusionPileArtwork(totalGrams: projection.totalGrams, showsVessel: false)
+            TimeFusionPileArtwork(
+                totalGrams: projection.totalGrams,
+                colors: ShareTimeFusionPresentation.colorShares(sessions: sessions, aggregates: aggregates),
+                showsVessel: false
+            )
                 .padding(.bottom, stoneBand)
             achievementLayer(stoneSize: stoneSize, bottoms: stoneBottoms)
             leadingGlassHighlight(size: size)

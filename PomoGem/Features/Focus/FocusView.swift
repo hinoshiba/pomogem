@@ -438,6 +438,7 @@ struct FocusView: View {
 
     @State private var engine: PomodoroEngine
     @State private var orientationSessionID = UUID()
+    @State private var returnToPortraitRequested = false
     @State private var displayNow = Date.now
     @State private var didStart = false
     @State private var didActivate = false
@@ -947,30 +948,31 @@ struct FocusView: View {
                     errorMessage: rareRewardChoiceError,
                     isSaving: isSavingRareRewardChoice,
                     onConfirm: saveRareRewardChoiceAndStart,
-                    onCancel: { dismiss() }
-                )
-                .transition(.opacity)
-            } else if let completion {
-                FocusCompletionView(
-                    completion: completion,
-                    subjectColor: accent,
-                    reduceMotion: reduceMotion,
-                    onStartBreak: startBreak,
-                    onReturnToJar: { dismiss() }
+                    onCancel: { returnToJar() }
                 )
                 .transition(.opacity)
             } else {
-                // One container spans the running timer, its completion and
-                // the legacy break end, so the scene keeps the timer's
-                // orientation until the cover closes (Docs/TimerOrientation.md).
-                // Swapping branches around the container released the rotation
-                // the moment the completion alarm began.
-                TimerOrientationContainer(sessionID: timerOrientationSessionID) { context in
-                    if let pendingCompletion {
+                // Keep every timer/end state covered until native portrait
+                // geometry has settled; only then reveal Home and its gem.
+                TimerOrientationContainer(
+                    sessionID: timerOrientationSessionID,
+                    returnToPortraitRequested: returnToPortraitRequested,
+                    onPortraitReady: { dismiss() }
+                ) { context in
+                    if let completion {
+                        FocusCompletionView(
+                            completion: completion,
+                            subjectColor: accent,
+                            reduceMotion: reduceMotion,
+                            onStartBreak: startBreak,
+                            onReturnToJar: returnToJar
+                        )
+                        .transition(.opacity)
+                    } else if let pendingCompletion {
                         completionCommitView(pendingCompletion, context: context)
                             .transition(.opacity)
                     } else if breakFinished {
-                        BreakFinishedView { dismiss() }
+                        BreakFinishedView { returnToJar() }
                             .transition(.opacity)
                     } else {
                         timerBody(context)
@@ -1115,7 +1117,7 @@ struct FocusView: View {
             set: { if !$0 { setupErrorMessage = nil } }
         )) {
             Button(String(localized: "閉じる", table: "Focus", comment: "Alert button: dismiss"),
-                   role: .cancel) { dismiss() }
+                   role: .cancel) { returnToJar() }
         } message: {
             Text(setupErrorMessage ?? "")
         }
@@ -1176,6 +1178,15 @@ struct FocusView: View {
             return
         }
         UIAccessibility.post(notification: .announcement, argument: announcement)
+    }
+
+    private func returnToJar() {
+        // The pre-focus choice never claimed a native timer orientation.
+        if needsRareRewardChoice {
+            dismiss()
+        } else {
+            returnToPortraitRequested = true
+        }
     }
 
     private var timerOrientationSessionID: AnyHashable {
@@ -1277,7 +1288,9 @@ struct FocusView: View {
                 keepsSheetClosed: FocusMusicSheetPolicy.keepsSheetClosed(
                     isRunning: snapshot.phase == .focusing,
                     remainingSeconds: snapshot.remainingSeconds
-                )
+                ),
+                subjectID: subjectSnapshot.id,
+                subjectName: displayedSubjectName
             )
             TimerRotationControls()
         }
@@ -2358,7 +2371,7 @@ struct FocusView: View {
                 sessionID: result.sessionID
             )
             await FocusActivityManager.shared.cancel(sessionID: result.sessionID)
-            dismiss()
+            returnToJar()
             return
         }
 
@@ -2394,7 +2407,7 @@ struct FocusView: View {
         // The presentation host releases Home only after this cover closes.
         // Home shows the saved completion message, then drops the gem when
         // that message is acknowledged.
-        dismiss()
+        returnToJar()
     }
 
     private func retireCompletionRecovery(_ result: PomodoroCompletion) {
@@ -3486,7 +3499,7 @@ struct FocusView: View {
             symbol: "checkmark.shield.fill",
             duration: .seconds(6)
         )
-        dismiss()
+        returnToJar()
     }
 
     private func togglePause() {
@@ -3591,7 +3604,7 @@ struct FocusView: View {
             scheduledCompletionNotificationDeliveryDate = nil
             Task { await FocusActivityManager.shared.cancel(sessionID: sessionID) }
         }
-        dismiss()
+        returnToJar()
     }
 
     @discardableResult
@@ -3685,7 +3698,7 @@ struct FocusView: View {
                          comment: "Toast: two devices started a timer; the one started first (on another device) was kept"),
             symbol: "icloud.and.arrow.up"
         )
-        dismiss()
+        returnToJar()
         return true
     }
 
@@ -3708,7 +3721,7 @@ struct FocusView: View {
                    comment: "Toast: records were reset on another device, so this timer ended"),
             symbol: "trash"
         )
-        dismiss()
+        returnToJar()
     }
 
     private func handleScenePhase(to newPhase: ScenePhase) {

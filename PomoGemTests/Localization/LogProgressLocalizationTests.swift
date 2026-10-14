@@ -109,8 +109,8 @@ final class LogProgressLocalizationTests: XCTestCase {
     func testLogCountsUsePluralForms() throws {
         XCTAssertEqual(try english("元 %lld粒", table: "Log", 1), "From 1 gem")
         XCTAssertEqual(try english("元 %lld粒", table: "Log", 1_000), "From 1,000 gems")
-        XCTAssertEqual(try english("ほか %lldテーマ", table: "Log", 1), "1 more theme")
-        XCTAssertEqual(try english("ほか%lldテーマ", table: "Log", 4), "4 more themes")
+        XCTAssertEqual(try english("ほか %lld件", table: "Log", 1), "1 more activity")
+        XCTAssertEqual(try english("ほか%lld件", table: "Log", 4), "4 more activities")
         // Counts and masses inside VoiceOver sentences come from the plural
         // helpers (CountText, MassText.spoken), so each sentence has at most
         // one plural of its own.
@@ -203,8 +203,8 @@ final class LogProgressLocalizationTests: XCTestCase {
             "It will be hidden from your Log, jar and shares. Your mass won't change. Right after deleting, you can undo it on the Log screen."
         )
         XCTAssertEqual(
-            try english("「%@」は設定で削除したテーマです。ほかのテーマを選ばなければ、このまま残ります。", table: "Log", "Math"),
-            "“Math” is a theme you deleted in Settings. It stays as it is unless you choose another theme."
+            try english("「%@」は設定で削除した取り組みです。ほかの取り組みを選ばなければ、このまま残ります。", table: "Log", "Math"),
+            "“Math” is an activity you deleted in Settings. It stays as it is unless you choose another activity."
         )
     }
 

@@ -7,6 +7,63 @@ import XCTest
 /// visible time exactly once, even across acknowledgement and epoch changes.
 @MainActor
 final class TimeFusionSceneTests: XCTestCase {
+    func testLongPressSelectsCrystalAndGrowingGemWithoutBouncingOrChangingTime() throws {
+        for grams in [250, 2_500] {
+            for reduceMotion in [false, true] {
+                let scene = makeScene()
+                scene.reduceMotion = reduceMotion
+                scene.configureTimeFusion(totalGrams: grams, colorMix: [])
+                let descriptor = grams < TimeFusionPolicy.firstCrystalGrams
+                    ? PebbleDescriptor.timeRemainder(grams: grams, colorMix: [])
+                    : PebbleDescriptor.timeProjection(
+                        unit: try XCTUnwrap(scene.timeFusionSnapshot?.visibleCrystals.first),
+                        colorMix: []
+                    )
+                let node = try XCTUnwrap(scene.childNode(
+                    withName: "//pebble.\(descriptor.id.uuidString)"
+                ) as? PebbleNode)
+                node.position = CGPoint(x: 195, y: 100)
+                let body = try XCTUnwrap(node.physicsBody)
+                body.velocity = .zero
+                let originalPosition = node.position
+                let originalSnapshot = scene.timeFusionSnapshot
+
+                XCTAssertEqual(scene.inspectableAggregateID(at: node.position), descriptor.id)
+                XCTAssertEqual(body.velocity, .zero, "Inspection must not launch the held gem")
+                XCTAssertEqual(node.position, originalPosition)
+                XCTAssertEqual(scene.timeFusionSnapshot, originalSnapshot)
+                XCTAssertNil(scene.activeTapMotionPebbleID)
+                XCTAssertNil(scene.lastAcceptedTapSelection)
+                XCTAssertNil(scene.inspectableAggregateID(at: CGPoint(x: 195, y: 340)),
+                             "Holding empty glass must not open the nearest gem's details")
+                XCTAssertNil(scene.inspectableAggregateID(at: CGPoint(x: 2, y: 210)))
+
+                XCTAssertTrue(scene.bouncePebbles(at: node.position),
+                              "Inspection must not consume the physical tap cooldown")
+                XCTAssertEqual(scene.activeTapMotionPebbleID, descriptor.id)
+                XCTAssertGreaterThan(body.velocity.dy, 0)
+            }
+        }
+    }
+
+    func testLongPressDoesNotInspectTimeCrystalThroughAnotherStone() throws {
+        let scene = makeScene()
+        scene.configureTimeFusion(totalGrams: 2_500, colorMix: [])
+        scene.setScreenTimeObstacles(totalUnits: 1)
+        let crystalID = try XCTUnwrap(scene.timeFusionSnapshot?.visibleCrystals.first?.id)
+        let crystal = try XCTUnwrap(scene.childNode(withName: "//pebble.\(crystalID.uuidString)") as? PebbleNode)
+        let obstacleDescriptor = try XCTUnwrap(ScreenTimeObstacleProjection.visibleDescriptors(totalUnits: 1).first)
+        let obstacle = try XCTUnwrap(scene.childNode(
+            withName: "//pebble.\(obstacleDescriptor.id.uuidString)"
+        ) as? PebbleNode)
+        obstacle.position = CGPoint(x: 195, y: 100)
+        crystal.position = CGPoint(x: 195 + obstacle.radius + crystal.radius + 1, y: 100)
+
+        XCTAssertNil(scene.inspectableAggregateID(at: obstacle.position),
+                     "A hold on a black stone must not select a neighboring time crystal")
+        XCTAssertNil(scene.activeTapMotionPebbleID)
+    }
+
     func testLandingAbsorbsExactCreditAndAcknowledgementCannotReplayIt() throws {
         let scene = makeScene()
         scene.reduceMotion = true

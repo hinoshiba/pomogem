@@ -296,7 +296,7 @@ private struct StorageTransferChoiceView: View {
         }
         Section(String(localized: "iCloudのデータを残す", table: "Storage",
                        comment: "Section title: keep iCloud's data (this iPhone's is deleted)")) {
-            Text("現在このiPhoneにあるテーマ・記録・設定を削除し、iCloudのデータに置き換えます。端末だけの記録は失われます。",
+            Text("現在このiPhoneにある取り組み・記録・設定を削除し、iCloudのデータに置き換えます。端末だけの記録は失われます。",
                  tableName: "Storage", comment: "Irreversible: keeping iCloud's data deletes this iPhone's")
             if isReadingChoicePreview {
                 ProgressView(StorageTransferOverwriteCopy.comparisonReading)
@@ -318,7 +318,7 @@ private struct StorageTransferChoiceView: View {
         }
         Section(String(localized: "このiPhoneのデータを残す", table: "Storage",
                        comment: "Section title: keep this iPhone's data (iCloud's is deleted)")) {
-            Text("現在iCloudにあるPomoGemのテーマ・記録・設定を削除し、このiPhoneのデータに置き換えます。同じApple Accountの他の端末にも影響します。",
+            Text("現在iCloudにあるPomoGemの取り組み・記録・設定を削除し、このiPhoneのデータに置き換えます。同じApple Accountの他の端末にも影響します。",
                  tableName: "Storage", comment: "Irreversible: keeping this iPhone's data deletes iCloud's")
             Text(StorageTransferOverwriteCopy.doorUnavailable)
                 .accessibilityIdentifier("storage-switch.replace-cloud-unavailable")
@@ -327,7 +327,7 @@ private struct StorageTransferChoiceView: View {
                 .accessibilityIdentifier("storage-switch.replace-cloud")
         }
         Section {
-            Text("テーマ名・成果メモ・記録・設定・タイマーの整合用データが、あなたのApple AccountのプライベートiCloud領域に保存されます。",
+            Text("取り組み名・成果メモ・記録・設定・タイマーの整合用データが、あなたのApple AccountのプライベートiCloud領域に保存されます。",
                  tableName: "Storage", comment: "Turn-on-iCloud sheet: what is saved to the user's private iCloud")
         }
     }

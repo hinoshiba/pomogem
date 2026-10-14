@@ -33,7 +33,7 @@ final class EnglishLocalizationSmokeUITests: XCTestCase {
         retainScreenshot(of: app, named: "English Settings")
 
         for (identifier, label) in [
-            ("settings.category.themes", "Themes"),
+            ("settings.category.themes", "Activities"),
             ("settings.category.timer", "Focus Timer"),
             ("settings.screen-time", "Add App Time"),
             ("settings.category.sensory", "Sound & Haptics"),

@@ -6,6 +6,7 @@ import XCTest
 @MainActor
 final class ThemeColorPaletteUITests: XCTestCase {
     private var app: XCUIApplication!
+    private var persistentStoreName: String?
 
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -14,6 +15,86 @@ final class ThemeColorPaletteUITests: XCTestCase {
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
         PomoGemUITestLanguage.configureJapanese(app)
+    }
+
+    override func tearDownWithError() throws {
+        app?.terminate()
+        guard let persistentStoreName else { return }
+        let cleaner = XCUIApplication()
+        cleaner.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
+        cleaner.launchEnvironment["POMOGEM_UI_TEST_PERSISTENT_STORE"] = persistentStoreName
+        cleaner.launchEnvironment["POMOGEM_UI_TEST_PERSISTENT_ACTION"] = "clean"
+        PomoGemUITestLanguage.configureJapanese(cleaner)
+        cleaner.launch()
+        XCTAssertTrue(cleaner.staticTexts["fixture.40y.cleaned"].waitForExistence(timeout: 15))
+        cleaner.terminate()
+    }
+
+    func testThemeDefaultDurationsPersistAndAllowAOneRunOverride() {
+        executionTimeAllowance = 360
+        let storeName = "theme-default-duration-\(UUID().uuidString)"
+        persistentStoreName = storeName
+        app.launchEnvironment["POMOGEM_UI_TEST_PERSISTENT_STORE"] = storeName
+        app.launchEnvironment["POMOGEM_UI_TEST_PERSISTENT_ACTION"] = "normal"
+        app.launch()
+        assertHomeDuration(minutes: 25)
+
+        openSettings()
+        openThemeEditor(named: "英語")
+        chooseThemeDefault("45分")
+        saveScreenshot("subject-default-duration")
+        saveThemeEditor()
+
+        openAddTheme()
+        let name = app.textFields["subject-editor.name"]
+        XCTAssertTrue(scrollUntilHittable(name, upward: true))
+        name.tap()
+        name.typeText("数学\n")
+        chooseThemeDefault("60分")
+        saveThemeEditor()
+        PomoGemSettingsUITestNavigation.returnHome(in: app)
+        assertHomeDuration(minutes: 45)
+
+        selectHomeTheme(named: "数学")
+        assertHomeDuration(minutes: 60)
+        app.buttons["home.duration-picker"].tap()
+        let ninetyMinutes = app.buttons["90分"].firstMatch
+        XCTAssertTrue(ninetyMinutes.waitForExistence(timeout: 4))
+        ninetyMinutes.tap()
+        assertHomeDuration(minutes: 90)
+        // A preference update or an unrelated presentation must not undo
+        // the explicitly selected time while this theme remains selected.
+        app.buttons["home.menu.open"].tap()
+        let closeMenu = app.buttons["home.menu.close"]
+        XCTAssertTrue(closeMenu.waitForExistence(timeout: 5))
+        closeMenu.tap()
+        assertHomeDuration(minutes: 90)
+
+        selectHomeTheme(named: "英語")
+        assertHomeDuration(minutes: 45)
+        selectHomeTheme(named: "数学")
+        assertHomeDuration(minutes: 60)
+        app.terminate()
+        app.launch()
+        assertHomeTheme(named: "数学")
+        assertHomeDuration(minutes: 60)
+
+        openSettings()
+        openThemeEditor(named: "数学")
+        chooseThemeDefault("共通設定を使う")
+        saveThemeEditor()
+        PomoGemSettingsUITestNavigation.returnHome(in: app)
+        // The last manually chosen app preference was 90 minutes. Setting
+        // and applying theme defaults must not replace that shared value.
+        assertHomeDuration(minutes: 90)
+        selectHomeTheme(named: "英語")
+        assertHomeDuration(minutes: 45)
+        selectHomeTheme(named: "数学")
+        assertHomeDuration(minutes: 90)
+        app.terminate()
+        app.launch()
+        assertHomeTheme(named: "数学")
+        assertHomeDuration(minutes: 90)
     }
 
     func testANewThemeStartsOnTheFirstSwatchNoThemeUses() {
@@ -34,8 +115,8 @@ final class ThemeColorPaletteUITests: XCTestCase {
         XCTAssertTrue(scrollUntilHittable(nameField, upward: true))
         nameField.tap()
         nameField.typeText("二つ目のテーマ")
-        app.navigationBars["テーマを追加"].buttons["保存"].tap()
-        XCTAssertTrue(waitForAbsence(app.navigationBars["テーマを追加"]))
+        app.navigationBars["取り組みを追加"].buttons["保存"].tap()
+        XCTAssertTrue(waitForAbsence(app.navigationBars["取り組みを追加"]))
 
         // The next theme moves on to the third swatch.
         openAddTheme()
@@ -43,7 +124,7 @@ final class ThemeColorPaletteUITests: XCTestCase {
         XCTAssertTrue(scrollUntilHittable(teal))
         XCTAssertTrue(teal.isSelected)
         XCTAssertEqual(selectedSwatches().count, 1)
-        app.navigationBars["テーマを追加"].buttons["キャンセル"].tap()
+        app.navigationBars["取り組みを追加"].buttons["キャンセル"].tap()
     }
 
     func testAnOffPaletteColourIsShownAsTheCurrentColour() {
@@ -57,7 +138,7 @@ final class ThemeColorPaletteUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(scrollUntilHittable(row))
         row.tap()
-        XCTAssertTrue(app.navigationBars["テーマを編集"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["取り組みを編集"].waitForExistence(timeout: 5))
 
         let current = app.buttons["subject-editor.color.current"]
         XCTAssertTrue(scrollUntilHittable(current))
@@ -74,7 +155,7 @@ final class ThemeColorPaletteUITests: XCTestCase {
         current.tap()
         XCTAssertTrue(current.isSelected)
         XCTAssertEqual(selectedSwatches().count, 1)
-        app.navigationBars["テーマを編集"].buttons["キャンセル"].tap()
+        app.navigationBars["取り組みを編集"].buttons["キャンセル"].tap()
     }
 
     func testTheCurrentColourAtAccessibility5() {
@@ -88,16 +169,71 @@ final class ThemeColorPaletteUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(scrollUntilHittable(row))
         row.tap()
-        XCTAssertTrue(app.navigationBars["テーマを編集"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["取り組みを編集"].waitForExistence(timeout: 5))
 
         let current = app.buttons["subject-editor.color.current"]
         XCTAssertTrue(scrollUntilHittable(current))
         XCTAssertTrue(current.isSelected)
         saveScreenshot("theme-edit-current-colour-ax5")
-        app.navigationBars["テーマを編集"].buttons["キャンセル"].tap()
+        app.navigationBars["取り組みを編集"].buttons["キャンセル"].tap()
     }
 
     // MARK: - Helpers
+
+    private func openThemeEditor(named name: String) {
+        let row = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", name)
+        ).firstMatch
+        XCTAssertTrue(scrollUntilHittable(row, upward: true))
+        row.tap()
+        XCTAssertTrue(app.navigationBars["取り組みを編集"].waitForExistence(timeout: 5))
+    }
+
+    private func chooseThemeDefault(_ title: String) {
+        let picker = app.buttons["subject-editor.default-focus-duration"]
+        XCTAssertTrue(scrollUntilHittable(picker))
+        picker.tap()
+        let option = app.buttons[title].firstMatch
+        XCTAssertTrue(option.waitForExistence(timeout: 4))
+        option.tap()
+    }
+
+    private func saveThemeEditor() {
+        let save = app.buttons["subject-editor.save"]
+        XCTAssertTrue(save.waitForExistence(timeout: 4))
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
+        XCTAssertTrue(waitForAbsence(save))
+    }
+
+    private func selectHomeTheme(named name: String) {
+        let picker = app.buttons["home.subject-picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 8))
+        picker.tap()
+        let option = app.buttons[name].firstMatch
+        XCTAssertTrue(option.waitForExistence(timeout: 4))
+        option.tap()
+        assertHomeTheme(named: name)
+    }
+
+    private func assertHomeTheme(named name: String) {
+        let picker = app.buttons["home.subject-picker"]
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND label CONTAINS %@", name),
+            object: picker
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 10), .completed)
+    }
+
+    private func assertHomeDuration(minutes: Int) {
+        let picker = app.buttons["home.duration-picker"]
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND label CONTAINS %@", "\(minutes)分"),
+            object: picker
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 10), .completed,
+                       "The selected theme must show \(minutes) minutes")
+    }
 
     private func selectedSwatches() -> [XCUIElement] {
         let swatches = app.buttons.matching(NSPredicate(
@@ -109,8 +245,17 @@ final class ThemeColorPaletteUITests: XCTestCase {
     }
 
     private func openSettings() {
-        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 10))
-        app.buttons["メニュー"].tap()
+        let menu = app.buttons.matching(NSPredicate(
+            format: "identifier == %@ OR label == %@", "home.menu.open", "メニュー"
+        )).firstMatch
+        if !menu.waitForExistence(timeout: 3) {
+            // At accessibility sizes the debug toolbar can place Menu in
+            // the system overflow menu. Follow the same visible route.
+            let overflow = app.buttons["OverflowBarButtonItem"]
+            if overflow.waitForExistence(timeout: 5) { overflow.tap() }
+        }
+        XCTAssertTrue(menu.waitForExistence(timeout: 10))
+        menu.tap()
         XCTAssertTrue(app.navigationBars["メニュー"].waitForExistence(timeout: 5))
         let settings = app.buttons.matching(
             NSPredicate(format: "label BEGINSWITH %@", "設定")
@@ -122,10 +267,10 @@ final class ThemeColorPaletteUITests: XCTestCase {
     }
 
     private func openAddTheme() {
-        let addTheme = app.buttons["テーマを追加"]
+        let addTheme = app.buttons["取り組みを追加"]
         XCTAssertTrue(scrollUntilHittable(addTheme))
         addTheme.tap()
-        XCTAssertTrue(app.navigationBars["テーマを追加"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["取り組みを追加"].waitForExistence(timeout: 5))
     }
 
     @discardableResult

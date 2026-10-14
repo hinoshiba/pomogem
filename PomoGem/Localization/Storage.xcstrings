@@ -438,36 +438,36 @@
         }
       }
     },
-    "iCloudにあるデータをこのiPhoneに取り込み直して、同期を再開します。このiPhoneのテーマ・記録・設定は削除され、iCloudのデータに置き換わります。2つのデータは結合しません。iCloudのデータは削除しません。" : {
+    "iCloudにあるデータをこのiPhoneに取り込み直して、同期を再開します。このiPhoneの取り組み・記録・設定は削除され、iCloudのデータに置き換わります。2つのデータは結合しません。iCloudのデータは削除しません。" : {
       "comment" : "What re-downloading from iCloud does on the stop screen, including the deletion on this iPhone",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Brings your iCloud data back onto this iPhone and resumes sync. This iPhone's themes, records and settings will be deleted and replaced with your iCloud data. The two sets of data are not combined. Your iCloud data will not be deleted."
+            "value" : "Brings your iCloud data back onto this iPhone and resumes sync. This iPhone's activities, records and settings will be deleted and replaced with your iCloud data. The two sets of data are not combined. Your iCloud data will not be deleted."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "iCloudにあるデータをこのiPhoneに取り込み直して、同期を再開します。このiPhoneのテーマ・記録・設定は削除され、iCloudのデータに置き換わります。2つのデータは結合しません。iCloudのデータは削除しません。"
+            "value" : "iCloudにあるデータをこのiPhoneに取り込み直して、同期を再開します。このiPhoneの取り組み・記録・設定は削除され、iCloudのデータに置き換わります。2つのデータは結合しません。iCloudのデータは削除しません。"
           }
         }
       }
     },
-    "iCloudにある現在のPomoGemのテーマ・記録・設定を削除し、このiPhoneのデータで置き換えます。2つのデータは結合しません。削除したiCloudのデータを元に戻すことはできません。同じApple Accountの他の端末は、次に開いたときにこの画面と同じ確認を求められ、その端末だけにある未送信のデータは残りません。" : {
+    "iCloudにある現在のPomoGemの取り組み・記録・設定を削除し、このiPhoneのデータで置き換えます。2つのデータは結合しません。削除したiCloudのデータを元に戻すことはできません。同じApple Accountの他の端末は、次に開いたときにこの画面と同じ確認を求められ、その端末だけにある未送信のデータは残りません。" : {
       "comment" : "Irreversible: what replacing iCloud with this iPhone's data deletes",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This deletes the PomoGem themes, records and settings now in iCloud and replaces them with this iPhone's data. The two sets of data are not combined. The deleted iCloud data can't be restored. Other devices on the same Apple Account will be asked to confirm the same thing the next time they open the app, and unsent data that exists only on those devices will not be kept."
+            "value" : "This deletes the PomoGem activities, records and settings now in iCloud and replaces them with this iPhone's data. The two sets of data are not combined. The deleted iCloud data can't be restored. Other devices on the same Apple Account will be asked to confirm the same thing the next time they open the app, and unsent data that exists only on those devices will not be kept."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "iCloudにある現在のPomoGemのテーマ・記録・設定を削除し、このiPhoneのデータで置き換えます。2つのデータは結合しません。削除したiCloudのデータを元に戻すことはできません。同じApple Accountの他の端末は、次に開いたときにこの画面と同じ確認を求められ、その端末だけにある未送信のデータは残りません。"
+            "value" : "iCloudにある現在のPomoGemの取り組み・記録・設定を削除し、このiPhoneのデータで置き換えます。2つのデータは結合しません。削除したiCloudのデータを元に戻すことはできません。同じApple Accountの他の端末は、次に開いたときにこの画面と同じ確認を求められ、その端末だけにある未送信のデータは残りません。"
           }
         }
       }
@@ -1266,19 +1266,19 @@
         }
       }
     },
-    "iCloud側には、このアプリが使っている管理情報がありません。そのため、この操作は「置き換え」ではなく、このiPhoneのデータでiCloudを新しく使い始める操作になります。いまiCloudに残っている記録は削除し、このiPhoneのテーマ・記録・設定で置き換えます。削除したiCloudのデータを元に戻すことはできません。" : {
+    "iCloud側には、このアプリが使っている管理情報がありません。そのため、この操作は「置き換え」ではなく、このiPhoneのデータでiCloudを新しく使い始める操作になります。いまiCloudに残っている記録は削除し、このiPhoneの取り組み・記録・設定で置き換えます。削除したiCloudのデータを元に戻すことはできません。" : {
       "comment" : "Final confirmation for starting iCloud from this iPhone: the records left in iCloud are deleted",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "iCloud doesn't have the management information this app uses. So rather than replacing a dataset, this starts using iCloud fresh with this iPhone's data. The records now remaining in iCloud will be deleted and replaced with this iPhone's themes, records and settings. The deleted iCloud data can't be restored."
+            "value" : "iCloud doesn't have the management information this app uses. So rather than replacing a dataset, this starts using iCloud fresh with this iPhone's data. The records now remaining in iCloud will be deleted and replaced with this iPhone's activities, records and settings. The deleted iCloud data can't be restored."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "iCloud側には、このアプリが使っている管理情報がありません。そのため、この操作は「置き換え」ではなく、このiPhoneのデータでiCloudを新しく使い始める操作になります。いまiCloudに残っている記録は削除し、このiPhoneのテーマ・記録・設定で置き換えます。削除したiCloudのデータを元に戻すことはできません。"
+            "value" : "iCloud側には、このアプリが使っている管理情報がありません。そのため、この操作は「置き換え」ではなく、このiPhoneのデータでiCloudを新しく使い始める操作になります。いまiCloudに残っている記録は削除し、このiPhoneの取り組み・記録・設定で置き換えます。削除したiCloudのデータを元に戻すことはできません。"
           }
         }
       }
@@ -1420,7 +1420,7 @@
       }
     },
     "このiPhone" : {
-      "comment" : "Label of this iPhone's row in the record comparison, as in 「このiPhone: テーマ12・記録480…」",
+      "comment" : "Label of this iPhone's row in the record comparison, as in 「このiPhone: 取り組み12・記録480…」",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1708,70 +1708,70 @@
         }
       }
     },
-    "このまま実行すると、このiPhoneのテーマ%@・記録%@・成果%@を含む、テーマ・記録・設定はすべて削除され、元に戻すことはできません。" : {
+    "このまま実行すると、このiPhoneの取り組み%@・記録%@・成果%@を含む、取り組み・記録・設定はすべて削除され、元に戻すことはできません。" : {
       "comment" : "Re-download warning when iCloud is empty. The arguments are this iPhone's theme, record and achievement counts as digit text (ungrouped in Japanese, grouped in English)",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "If you continue, all themes, records and settings on this iPhone (themes: %1$@, records: %2$@, achievements: %3$@) will be deleted and can't be restored."
+            "value" : "If you continue, all activities, records and settings on this iPhone (activities: %1$@, records: %2$@, achievements: %3$@) will be deleted and can't be restored."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このまま実行すると、このiPhoneのテーマ%@・記録%@・成果%@を含む、テーマ・記録・設定はすべて削除され、元に戻すことはできません。"
+            "value" : "このまま実行すると、このiPhoneの取り組み%@・記録%@・成果%@を含む、取り組み・記録・設定はすべて削除され、元に戻すことはできません。"
           }
         }
       }
     },
-    "このまま実行すると、このiPhoneのテーマ%@・記録%@・成果%@を含む、テーマ・記録・設定はすべて削除され、空の状態からiCloudの同期を始めます。" : {
+    "このまま実行すると、このiPhoneの取り組み%@・記録%@・成果%@を含む、取り組み・記録・設定はすべて削除され、空の状態からiCloudの同期を始めます。" : {
       "comment" : "Turn-on-iCloud warning when iCloud is empty. The arguments are this iPhone's theme, record and achievement counts as digit text (ungrouped in Japanese, grouped in English)",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "If you continue, all themes, records and settings on this iPhone (themes: %1$@, records: %2$@, achievements: %3$@) will be deleted, and iCloud sync will start with no data."
+            "value" : "If you continue, all activities, records and settings on this iPhone (activities: %1$@, records: %2$@, achievements: %3$@) will be deleted, and iCloud sync will start with no data."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このまま実行すると、このiPhoneのテーマ%@・記録%@・成果%@を含む、テーマ・記録・設定はすべて削除され、空の状態からiCloudの同期を始めます。"
+            "value" : "このまま実行すると、このiPhoneの取り組み%@・記録%@・成果%@を含む、取り組み・記録・設定はすべて削除され、空の状態からiCloudの同期を始めます。"
           }
         }
       }
     },
-    "このまま実行すると、このiPhoneのテーマ・記録・設定はすべて削除され、空の状態からiCloudの同期を始めます。" : {
+    "このまま実行すると、このiPhoneの取り組み・記録・設定はすべて削除され、空の状態からiCloudの同期を始めます。" : {
       "comment" : "Turn-on-iCloud warning when iCloud is empty and this iPhone could not be counted",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "If you continue, all themes, records and settings on this iPhone will be deleted, and iCloud sync will start with no data."
+            "value" : "If you continue, all activities, records and settings on this iPhone will be deleted, and iCloud sync will start with no data."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このまま実行すると、このiPhoneのテーマ・記録・設定はすべて削除され、空の状態からiCloudの同期を始めます。"
+            "value" : "このまま実行すると、このiPhoneの取り組み・記録・設定はすべて削除され、空の状態からiCloudの同期を始めます。"
           }
         }
       }
     },
-    "このまま実行すると、このiPhoneのテーマ・記録・設定は削除され、元に戻すことはできません。" : {
+    "このまま実行すると、このiPhoneの取り組み・記録・設定は削除され、元に戻すことはできません。" : {
       "comment" : "Re-download warning when iCloud is empty and this iPhone could not be counted",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "If you continue, the themes, records and settings on this iPhone will be deleted and can't be restored."
+            "value" : "If you continue, the activities, records and settings on this iPhone will be deleted and can't be restored."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このまま実行すると、このiPhoneのテーマ・記録・設定は削除され、元に戻すことはできません。"
+            "value" : "このまま実行すると、このiPhoneの取り組み・記録・設定は削除され、元に戻すことはできません。"
           }
         }
       }
@@ -1907,23 +1907,6 @@
         }
       }
     },
-    "この端末のテーマ・記録・設定を削除し、現在のiCloudのデータに置き換えます。未送信の端末データは失われ、iCloudのデータとは結合されません。iCloudのデータは残ります。" : {
-      "comment" : "Irreversible: what re-downloading from iCloud deletes on this device",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This deletes the themes, records and settings on this device and replaces them with the data currently in iCloud. Any device data that hasn't been sent yet will be lost and won't be combined with the iCloud data. The iCloud data is kept."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "この端末のテーマ・記録・設定を削除し、現在のiCloudのデータに置き換えます。未送信の端末データは失われ、iCloudのデータとは結合されません。iCloudのデータは残ります。"
-          }
-        }
-      }
-    },
     "この端末のデータでiCloudを置き換える操作は、いまは利用できません。端末のデータと復旧用コピーは削除せず保持します。" : {
       "comment" : "Replacing iCloud with this device's data is disabled in this build",
       "localizations" : {
@@ -1937,6 +1920,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "この端末のデータでiCloudを置き換える操作は、いまは利用できません。端末のデータと復旧用コピーは削除せず保持します。"
+          }
+        }
+      }
+    },
+    "この端末の取り組み・記録・設定を削除し、現在のiCloudのデータに置き換えます。未送信の端末データは失われ、iCloudのデータとは結合されません。iCloudのデータは残ります。" : {
+      "comment" : "Irreversible: what re-downloading from iCloud deletes on this device",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This deletes the activities, records and settings on this device and replaces them with the data currently in iCloud. Any device data that hasn't been sent yet will be lost and won't be combined with the iCloud data. The iCloud data is kept."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末の取り組み・記録・設定を削除し、現在のiCloudのデータに置き換えます。未送信の端末データは失われ、iCloudのデータとは結合されません。iCloudのデータは残ります。"
           }
         }
       }
@@ -2243,40 +2243,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "タイマーの引き継ぎ履歴が上限に達しました。サポートへお問い合わせください。"
-          }
-        }
-      }
-    },
-    "テーマ%@・記録%@・成果%@" : {
-      "comment" : "Counts in a comparison row: themes, records (focus sessions) and achievements, as digit text (ungrouped in Japanese, grouped in English)",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Themes %1$@ · Records %2$@ · Achievements %3$@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマ%@・記録%@・成果%@"
-          }
-        }
-      }
-    },
-    "テーマ名・成果メモ・記録・設定・タイマーの整合用データが、あなたのApple AccountのプライベートiCloud領域に保存されます。" : {
-      "comment" : "Turn-on-iCloud sheet: what is saved to the user's private iCloud",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Theme names, achievement notes, records, settings and the data that keeps timers consistent are saved in your Apple Account's private iCloud storage."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマ名・成果メモ・記録・設定・タイマーの整合用データが、あなたのApple AccountのプライベートiCloud領域に保存されます。"
           }
         }
       }
@@ -2859,6 +2825,40 @@
         }
       }
     },
+    "取り組み%@・記録%@・成果%@" : {
+      "comment" : "Counts in a comparison row: themes, records (focus sessions) and achievements, as digit text (ungrouped in Japanese, grouped in English)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activities %1$@ · Records %2$@ · Achievements %3$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組み%@・記録%@・成果%@"
+          }
+        }
+      }
+    },
+    "取り組み名・成果メモ・記録・設定・タイマーの整合用データが、あなたのApple AccountのプライベートiCloud領域に保存されます。" : {
+      "comment" : "Turn-on-iCloud sheet: what is saved to the user's private iCloud",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activity names, achievement notes, records, settings and the data that keeps timers consistent are saved in your Apple Account's private iCloud storage."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組み名・成果メモ・記録・設定・タイマーの整合用データが、あなたのApple AccountのプライベートiCloud領域に保存されます。"
+          }
+        }
+      }
+    },
     "受け取った内容を照合しています" : {
       "comment" : "Turning on iCloud, step 3: verifying what was received",
       "localizations" : {
@@ -2916,7 +2916,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The timer to sync has no theme."
+            "value" : "The timer to sync has no activity."
           }
         },
         "ja" : {
@@ -3148,53 +3148,53 @@
         }
       }
     },
-    "現在iCloudにあるPomoGemのテーマ・記録・設定をすべて削除し、この端末のデータに置き換えます。削除するiCloudのデータを元に戻すことはできません。" : {
+    "現在iCloudにあるPomoGemの取り組み・記録・設定をすべて削除し、この端末のデータに置き換えます。削除するiCloudのデータを元に戻すことはできません。" : {
       "comment" : "Final confirmation: replacing iCloud deletes everything in it",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This deletes all PomoGem themes, records and settings now in iCloud and replaces them with this device's data. The iCloud data that's deleted can't be restored."
+            "value" : "This deletes all PomoGem activities, records and settings now in iCloud and replaces them with this device's data. The iCloud data that's deleted can't be restored."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "現在iCloudにあるPomoGemのテーマ・記録・設定をすべて削除し、この端末のデータに置き換えます。削除するiCloudのデータを元に戻すことはできません。"
+            "value" : "現在iCloudにあるPomoGemの取り組み・記録・設定をすべて削除し、この端末のデータに置き換えます。削除するiCloudのデータを元に戻すことはできません。"
           }
         }
       }
     },
-    "現在iCloudにあるPomoGemのテーマ・記録・設定を削除し、このiPhoneのデータに置き換えます。同じApple Accountの他の端末にも影響します。" : {
+    "現在iCloudにあるPomoGemの取り組み・記録・設定を削除し、このiPhoneのデータに置き換えます。同じApple Accountの他の端末にも影響します。" : {
       "comment" : "Irreversible: keeping this iPhone's data deletes iCloud's",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This deletes the PomoGem themes, records and settings now in iCloud and replaces them with this iPhone's data. It also affects other devices on the same Apple Account."
+            "value" : "This deletes the PomoGem activities, records and settings now in iCloud and replaces them with this iPhone's data. It also affects other devices on the same Apple Account."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "現在iCloudにあるPomoGemのテーマ・記録・設定を削除し、このiPhoneのデータに置き換えます。同じApple Accountの他の端末にも影響します。"
+            "value" : "現在iCloudにあるPomoGemの取り組み・記録・設定を削除し、このiPhoneのデータに置き換えます。同じApple Accountの他の端末にも影響します。"
           }
         }
       }
     },
-    "現在このiPhoneにあるテーマ・記録・設定を削除し、iCloudのデータに置き換えます。端末だけの記録は失われます。" : {
+    "現在このiPhoneにある取り組み・記録・設定を削除し、iCloudのデータに置き換えます。端末だけの記録は失われます。" : {
       "comment" : "Irreversible: keeping iCloud's data deletes this iPhone's",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This deletes the themes, records and settings now on this iPhone and replaces them with your iCloud data. Records that exist only on this device will be lost."
+            "value" : "This deletes the activities, records and settings now on this iPhone and replaces them with your iCloud data. Records that exist only on this device will be lost."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "現在このiPhoneにあるテーマ・記録・設定を削除し、iCloudのデータに置き換えます。端末だけの記録は失われます。"
+            "value" : "現在このiPhoneにある取り組み・記録・設定を削除し、iCloudのデータに置き換えます。端末だけの記録は失われます。"
           }
         }
       }
@@ -3335,19 +3335,19 @@
         }
       }
     },
-    "置き換えの後に、他の端末から古い記録が届いた可能性があります。削除したはずのテーマが戻っていないか確認してください。もう一度この端末のデータで置き換えることもできます。" : {
+    "置き換えの後に、他の端末から古い記録が届いた可能性があります。削除したはずの取り組みが戻っていないか確認してください。もう一度この端末のデータで置き換えることもできます。" : {
       "comment" : "Banner after a replacement: old records from another device may have arrived",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Old records from another device may have arrived after the replacement. Check whether any themes you deleted have come back. You can also replace the data with this device's data again."
+            "value" : "Old records from another device may have arrived after the replacement. Check whether any activities you deleted have come back. You can also replace the data with this device's data again."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "置き換えの後に、他の端末から古い記録が届いた可能性があります。削除したはずのテーマが戻っていないか確認してください。もう一度この端末のデータで置き換えることもできます。"
+            "value" : "置き換えの後に、他の端末から古い記録が届いた可能性があります。削除したはずの取り組みが戻っていないか確認してください。もう一度この端末のデータで置き換えることもできます。"
           }
         }
       }

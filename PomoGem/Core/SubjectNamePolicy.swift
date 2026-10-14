@@ -15,11 +15,11 @@ enum SubjectNamePolicy {
         var message: String {
             switch self {
             case .empty:
-                String(localized: "テーマ名を入力してください。", table: "Onboarding",
+                String(localized: "取り組み名を入力してください。", table: "Onboarding",
                        comment: "Theme name validation: the name is empty")
             case let .tooLong(excessCharacters):
                 String(
-                    localized: "テーマ名は\(maximumCharacters)文字以内で入力してください（\(excessCharacters)文字超過）。",
+                    localized: "取り組み名は\(maximumCharacters)文字以内で入力してください（\(excessCharacters)文字超過）。",
                     table: "Onboarding",
                     comment: "Theme name validation: %1$lld is the character limit (always 40), %2$lld how many characters too many"
                 )
@@ -81,7 +81,7 @@ enum SubjectNamePolicy {
     ///   renamed built-in keeps the user's name. Snapshots and aggregates that
     ///   carry no ID (nil) are mapped by the canonical name alone.
     /// - the legacy aggregate names 「過去の集中」 and 「過去の集中 N」,
-    ///   or 「アーカイブ済みのテーマ」 and 「テーマ」 fallbacks, only when no
+    ///   or the stored 「アーカイブ済みのテーマ」 and 「テーマ」 fallbacks, only when no
     ///   theme ID is available. A custom theme with an ID keeps its own name.
     /// Everything else is the user's own name and is returned unchanged
     /// (bounded like `displayName(_:fallback:)`).
@@ -146,12 +146,12 @@ enum SubjectNamePolicy {
                 String(localized: "過去の集中 \(ordinal)", table: "Onboarding", bundle: bundle,
                        comment: "Name for one colour of an old jar layer whose themes are unknown; %lld is its number (2, 3, …)")
             case .archivedTheme:
-                String(localized: "アーカイブ済みのテーマ", table: "Onboarding", bundle: bundle,
+                String(localized: "アーカイブ済みの取り組み", table: "Onboarding", bundle: bundle,
                        comment: "Name shown for a record whose theme was deleted and left no name")
             case .untitledTheme:
-                // 「テーマ」 is also the Onboarding restore screen's count label
+                // 「取り組み」 is also the Onboarding restore screen's count label
                 // ("Themes"), so this one needs its own key.
-                String(localized: "subject.untitled-name", defaultValue: "テーマ", table: "Onboarding", bundle: bundle,
+                String(localized: "subject.untitled-name", defaultValue: "取り組み", table: "Onboarding", bundle: bundle,
                        comment: "Name shown for a theme that has no name")
             }
         }

@@ -52,10 +52,16 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         XCTAssertTrue(mechanics.label.contains("合計時間"), mechanics.label)
         XCTAssertTrue(mechanics.label.contains("元のまま"), mechanics.label)
         capture("Ten measured completions — 250 minutes conserved")
-        app.buttons["fusion.celebration.close"].tap()
+        app.buttons["積み上げた時間と記録を見る"].tap()
+        XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 8))
+        let lenses = app.segmentedControls["overview.lens"]
+        XCTAssertTrue(lenses.waitForExistence(timeout: 4))
+        XCTAssertTrue(lenses.buttons["結晶"].isSelected,
+                      "The celebration leads straight to the new crystal's time breakdown")
+        app.buttons["overview.close"].tap()
         try waitForTotal(2_500, probe: probe)
 
-        try tapRestingCrystal(probe)
+        try longPressRestingCrystal(probe)
         XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 8))
         XCTAssertFalse(app.navigationBars["結晶の内訳"].exists,
                        "A time unit is not an arbitrary group of the original sessions")
@@ -63,14 +69,14 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         capture("Ten measured completions — original records remain reachable")
     }
 
-    func testTimeCrystalTapOpensTimeAndRecordsAtAccessibilitySize() throws {
+    func testTimeCrystalLongPressOpensTimeAndRecordsAtAccessibilitySize() throws {
         app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_GEM_SHOWCASE"] = "timeLong"
         app.launch()
         let probe = app.descendants(matching: .any)["jar.presentation.probe"]
         XCTAssertTrue(probe.waitForExistence(timeout: 12))
         try waitForTotal(5_000, probe: probe)
-        try tapRestingCrystal(probe)
+        try longPressRestingCrystal(probe)
         XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 8))
         XCTAssertFalse(app.buttons["jar.aggregate.inspect"].exists)
         try openOriginalRecords()
@@ -89,12 +95,13 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
     private func openOriginalRecords() throws {
         let segments = app.segmentedControls["overview.lens"]
         if segments.waitForExistence(timeout: 2) {
-            segments.buttons["結晶"].tap()
+            XCTAssertTrue(segments.buttons["結晶"].isSelected,
+                          "A crystal long press opens its time breakdown without another lens selection")
         } else {
             let menu = app.buttons["overview.lens"]
             XCTAssertTrue(menu.waitForExistence(timeout: 4))
-            menu.tap()
-            app.buttons.matching(NSPredicate(format: "label == %@ AND identifier != %@", "結晶", "overview.lens")).firstMatch.tap()
+            XCTAssertEqual(menu.value as? String, "結晶",
+                           "A crystal long press opens its time breakdown without another lens selection")
         }
         let records = app.buttons["overview.time-crystals.records"]
         for _ in 0..<12 where !(records.exists && records.isHittable) { app.swipeUp() }
@@ -112,7 +119,7 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         }, probe.value as? String ?? "")
     }
 
-    private func tapRestingCrystal(_ probe: XCUIElement) throws {
+    private func longPressRestingCrystal(_ probe: XCUIElement) throws {
         var last = CGPoint(x: -1, y: -1)
         var resting: CGPoint?
         var stillSince = Date()
@@ -128,7 +135,8 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
             return true
         }, "A projected time crystal must settle inside the jar")
         let point = try XCTUnwrap(resting)
-        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: point.x, dy: point.y)).tap()
+        app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: point.x, dy: point.y)).press(forDuration: 0.7)
     }
 
     private func probeFields(_ probe: XCUIElement) -> [String: String] {

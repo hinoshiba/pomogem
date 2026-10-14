@@ -191,7 +191,7 @@ struct AchievementEntrySheet: View {
                     Text(kind.title)
                         .font(PomoGemTheme.brand(24))
                     Text(selectedSubject?.localizedDisplayName ?? String(
-                        localized: "テーマを選んでください",
+                        localized: "取り組みを選んでください",
                         table: "Home",
                         comment: "Achievement details: shown under the kind while no theme is chosen"
                     ))
@@ -204,7 +204,7 @@ struct AchievementEntrySheet: View {
                 subjects: subjects,
                 selectedID: $selectedSubjectID,
                 accessibilityHint: String(
-                    localized: "成果を結びつけるテーマを変更できます",
+                    localized: "成果を結びつける取り組みを変更できます",
                     table: "Home",
                     comment: "VoiceOver hint of the achievement sheet's theme menu"
                 ),

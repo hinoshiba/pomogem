@@ -1163,10 +1163,10 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             let themePicker = app.buttons["home.subject-picker"]
             XCTAssertTrue(scrollUntilHittable(themePicker, attempts: 12, swipingDown: true))
             themePicker.tap()
-            let manageThemes = app.buttons["テーマを管理"]
+            let manageThemes = app.buttons["取り組みを管理"]
             XCTAssertTrue(manageThemes.waitForExistence(timeout: 4))
             manageThemes.tap()
-            XCTAssertTrue(app.navigationBars["テーマ"].waitForExistence(timeout: 6))
+            XCTAssertTrue(app.navigationBars["取り組み"].waitForExistence(timeout: 6))
             PomoGemSettingsUITestNavigation.returnHome(in: app)
             let launcher = app.buttons["home.focus-launcher"]
             XCTAssertTrue(scrollUntilHittable(launcher, attempts: 12))
@@ -1229,22 +1229,22 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         }
 
         themePicker.tap()
-        let manageThemes = app.buttons["テーマを管理"]
+        let manageThemes = app.buttons["取り組みを管理"]
         XCTAssertTrue(manageThemes.waitForExistence(timeout: 4))
         manageThemes.tap()
-        XCTAssertTrue(app.navigationBars["テーマ"].waitForExistence(timeout: 6))
+        XCTAssertTrue(app.navigationBars["取り組み"].waitForExistence(timeout: 6))
         PomoGemSettingsUITestNavigation.open(.themes, in: app)
-        let addTheme = app.buttons["テーマを追加"]
+        let addTheme = app.buttons["取り組みを追加"]
         XCTAssertTrue(scrollUntilHittable(addTheme))
         addTheme.tap()
-        XCTAssertTrue(app.navigationBars["テーマを追加"].waitForExistence(timeout: 5))
-        let themeName = "ホームから選ぶテーマ"
+        XCTAssertTrue(app.navigationBars["取り組みを追加"].waitForExistence(timeout: 5))
+        let themeName = "ホームから選ぶ取り組み"
         let nameField = app.textFields.firstMatch
         XCTAssertTrue(nameField.waitForExistence(timeout: 4))
         nameField.tap()
         nameField.typeText(themeName)
-        app.navigationBars["テーマを追加"].buttons["保存"].tap()
-        XCTAssertTrue(waitForAbsence(app.navigationBars["テーマを追加"]))
+        app.navigationBars["取り組みを追加"].buttons["保存"].tap()
+        XCTAssertTrue(waitForAbsence(app.navigationBars["取り組みを追加"]))
         PomoGemSettingsUITestNavigation.returnHome(in: app)
         XCTAssertTrue(waitForHittable(launcher, timeout: 5))
         themePicker.tap()
@@ -1286,18 +1286,18 @@ final class RuntimeFlowAuditUITests: XCTestCase {
     }
 
     func testThemeCanBeAddedEditedHiddenRestoredSelectedAndDeleted() {
-        let originalName = "監査テーマ"
-        let editedName = "監査テーマ改"
+        let originalName = "監査取り組み"
+        let editedName = "監査取り組み改"
 
         openMenuAction(containing: "設定")
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
 
         PomoGemSettingsUITestNavigation.open(.themes, in: app)
-        let addTheme = app.buttons["テーマを追加"]
+        let addTheme = app.buttons["取り組みを追加"]
         XCTAssertTrue(scrollUntilHittable(addTheme), "Settings must expose theme creation")
         addTheme.tap()
 
-        XCTAssertTrue(app.navigationBars["テーマを追加"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["取り組みを追加"].waitForExistence(timeout: 5))
         let nameField = app.textFields.firstMatch
         XCTAssertTrue(nameField.waitForExistence(timeout: 4))
         nameField.tap()
@@ -1309,15 +1309,15 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         let color = app.buttons["色候補2、瑠璃"]
         XCTAssertTrue(scrollUntilHittable(color))
         color.tap()
-        app.navigationBars["テーマを追加"].buttons["保存"].tap()
-        XCTAssertTrue(waitForAbsence(app.navigationBars["テーマを追加"]))
+        app.navigationBars["取り組みを追加"].buttons["保存"].tap()
+        XCTAssertTrue(waitForAbsence(app.navigationBars["取り組みを追加"]))
         waitForUISettle()
 
         let createdRow = button(containing: originalName)
         XCTAssertTrue(waitForHittable(createdRow, timeout: 6))
         createdRow.tap()
 
-        XCTAssertTrue(app.navigationBars["テーマを編集"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["取り組みを編集"].waitForExistence(timeout: 5))
         replaceText(in: app.textFields.firstMatch, with: editedName)
         dismissKeyboard(from: app.textFields.firstMatch)
         let visibility = app.switches["ホームの選択肢に表示"]
@@ -1325,8 +1325,8 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(waitForSwitch(visibility, value: "1"))
         tapSwitch(visibility)
         XCTAssertTrue(waitForSwitch(visibility, value: "0"))
-        app.navigationBars["テーマを編集"].buttons["保存"].tap()
-        XCTAssertTrue(waitForAbsence(app.navigationBars["テーマを編集"]))
+        app.navigationBars["取り組みを編集"].buttons["保存"].tap()
+        XCTAssertTrue(waitForAbsence(app.navigationBars["取り組みを編集"]))
         waitForUISettle()
 
         var editedRow = button(containing: editedName)
@@ -1334,14 +1334,14 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(editedRow.label.contains("非表示"), editedRow.label)
         editedRow.tap()
 
-        XCTAssertTrue(app.navigationBars["テーマを編集"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["取り組みを編集"].waitForExistence(timeout: 5))
         let restoredVisibility = app.switches["ホームの選択肢に表示"]
         XCTAssertTrue(scrollUntilHittable(restoredVisibility))
         XCTAssertTrue(waitForSwitch(restoredVisibility, value: "0"))
         tapSwitch(restoredVisibility)
         XCTAssertTrue(waitForSwitch(restoredVisibility, value: "1"))
-        app.navigationBars["テーマを編集"].buttons["保存"].tap()
-        XCTAssertTrue(waitForAbsence(app.navigationBars["テーマを編集"]))
+        app.navigationBars["取り組みを編集"].buttons["保存"].tap()
+        XCTAssertTrue(waitForAbsence(app.navigationBars["取り組みを編集"]))
         waitForUISettle()
 
         editedRow = button(containing: editedName)
@@ -1379,7 +1379,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
 
         // Assert the destructive alert's visible contract and its explicit,
         // reversible cancel action before exercising deletion.
-        let confirmationTitle = app.staticTexts["テーマを削除"]
+        let confirmationTitle = app.staticTexts["取り組みを削除"]
         XCTAssertTrue(confirmationTitle.waitForExistence(timeout: 5))
         XCTAssertTrue(
             app.staticTexts.matching(
@@ -1469,18 +1469,18 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             scrollUntilHittable(app.buttons["英語"]),
             "The live theme must stay listed in Settings"
         )
-        XCTAssertFalse(app.buttons["削除したテーマ1"].exists)
+        XCTAssertFalse(app.buttons["削除した取り組み1"].exists)
 
-        let addTheme = app.buttons["テーマを追加"]
+        let addTheme = app.buttons["取り組みを追加"]
         XCTAssertTrue(scrollUntilHittable(addTheme))
         addTheme.tap()
-        XCTAssertTrue(app.navigationBars["テーマを追加"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["取り組みを追加"].waitForExistence(timeout: 5))
         let nameField = app.textFields.firstMatch
         XCTAssertTrue(nameField.waitForExistence(timeout: 4))
         nameField.tap()
         nameField.typeText("新しいテーマ")
-        app.navigationBars["テーマを追加"].buttons["保存"].tap()
-        XCTAssertTrue(waitForAbsence(app.navigationBars["テーマを追加"]))
+        app.navigationBars["取り組みを追加"].buttons["保存"].tap()
+        XCTAssertTrue(waitForAbsence(app.navigationBars["取り組みを追加"]))
         waitForUISettle()
         XCTAssertTrue(
             waitForHittable(button(containing: "新しいテーマ"), timeout: 6),

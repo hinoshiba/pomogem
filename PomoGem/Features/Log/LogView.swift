@@ -1621,13 +1621,13 @@ struct LogView: View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 17) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("テーマの構成", tableName: "Log", comment: "Log section title: how the period's mass splits by theme")
+                    Text("取り組みの構成", tableName: "Log", comment: "Log section title: how the period's mass splits by theme")
                         .pomogemSectionTitle()
                 }
                 if shownPeriodContent == nil {
                     HistoryLoadingPlaceholder()
                 } else if subjectMass.isEmpty {
-                    EmptyChartMessage(text: String(localized: "積んだテーマがここに並びます。", table: "Log"))
+                    EmptyChartMessage(text: String(localized: "積んだ取り組みがここに並びます。", table: "Log"))
                 } else {
                     GeometryReader { proxy in
                         HStack(spacing: 3) {
@@ -1726,7 +1726,7 @@ struct LogView: View {
                         }
                         .buttonStyle(PomoGemBareButtonStyle())
                         .accessibilityIdentifier("achievement.history.row")
-                        .accessibilityHint(Text("詳細を開いて、種類・テーマ・日付・メモを編集できます", tableName: "Log", comment: "VoiceOver hint on a milestone stone row"))
+                        .accessibilityHint(Text("詳細を開いて、種類・取り組み・日付・メモを編集できます", tableName: "Log", comment: "VoiceOver hint on a milestone stone row"))
                         if stone.id != stones.last?.id {
                             Divider().overlay(PomoGemTheme.glassEdge.opacity(0.08))
                         }
@@ -2267,7 +2267,7 @@ struct LogView: View {
             let result: AchievementStoneRevisionPolicy.MutationResult
             if let subjectID = draft.subjectID {
                 guard let subject = subjects.first(where: { $0.id == subjectID }) else {
-                    return String(localized: "選んだテーマが見つかりません。テーマを選び直してください。", table: "Log")
+                    return String(localized: "選んだ取り組みが見つかりません。取り組みを選び直してください。", table: "Log")
                 }
                 result = AchievementStoneRevisionPolicy.edit(
                     values,
@@ -2671,7 +2671,7 @@ private struct AggregateArchiveRow: View {
                         }
                     }
                     if item.subjectMix.count > 3 {
-                        Text("ほか \(item.subjectMix.count - 3)テーマ", tableName: "Log", comment: "Crystal archive row: how many more themes the crystal holds beyond the three listed")
+                        Text("ほか \(item.subjectMix.count - 3)件", tableName: "Log", comment: "Crystal archive row: how many more themes the crystal holds beyond the three listed")
                             .font(.caption2)
                             .foregroundStyle(PomoGemTheme.muted)
                             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -3028,14 +3028,14 @@ private struct AchievementEditorSheet: View {
 
     private var keptSubjectMenuTitle: String {
         selection.subjectIsDeleted
-            ? String(localized: "\(keptSubjectDisplayName)（削除したテーマ）", table: "Log", comment: "Milestone editor theme menu: keep the milestone's deleted theme; the argument is the theme name")
+            ? String(localized: "\(keptSubjectDisplayName)（削除した取り組み）", table: "Log", comment: "Milestone editor theme menu: keep the milestone's deleted theme; the argument is the theme name")
             : String(localized: "\(keptSubjectDisplayName)（今のまま）", table: "Log", comment: "Milestone editor theme menu: keep the milestone's theme as it is; the argument is the theme name")
     }
 
     private var keptSubjectNotice: String {
         selection.subjectIsDeleted
-            ? String(localized: "「\(keptSubjectDisplayName)」は設定で削除したテーマです。ほかのテーマを選ばなければ、このまま残ります。", table: "Log", comment: "Milestone editor: why a deleted theme is shown; the argument is the theme name")
-            : String(localized: "「\(keptSubjectDisplayName)」は今のテーマ一覧にありません。ほかのテーマを選ばなければ、このまま残ります。", table: "Log", comment: "Milestone editor: why a theme missing from the list is shown; the argument is the theme name")
+            ? String(localized: "「\(keptSubjectDisplayName)」は設定で削除した取り組みです。ほかの取り組みを選ばなければ、このまま残ります。", table: "Log", comment: "Milestone editor: why a deleted theme is shown; the argument is the theme name")
+            : String(localized: "「\(keptSubjectDisplayName)」は今の取り組み一覧にありません。ほかの取り組みを選ばなければ、このまま残ります。", table: "Log", comment: "Milestone editor: why a theme missing from the list is shown; the argument is the theme name")
     }
 
     var body: some View {
@@ -3173,7 +3173,7 @@ private struct AchievementEditorSheet: View {
 
     private var subjectEditor: some View {
         VStack(alignment: .leading, spacing: 8) {
-            editorLabel(String(localized: "テーマ", table: "Log", comment: "Milestone editor: label of the theme menu"))
+            editorLabel(String(localized: "取り組み", table: "Log", comment: "Milestone editor: label of the theme menu"))
             Menu {
                 if let keptSubjectChoiceID {
                     Button {
@@ -3199,7 +3199,7 @@ private struct AchievementEditorSheet: View {
                 }
             } label: {
                 editorMenuLabel(
-                    title: selectedSubjectTitle ?? String(localized: "テーマを選択", table: "Log", comment: "Milestone editor theme menu when no theme is chosen"),
+                    title: selectedSubjectTitle ?? String(localized: "取り組みを選択", table: "Log", comment: "Milestone editor theme menu when no theme is chosen"),
                     colorHex: keepsOriginalSubject
                         ? selection.subjectColorHex
                         : (selectedSubject?.colorHex ?? Constants.Color.textMute),
@@ -3209,15 +3209,15 @@ private struct AchievementEditorSheet: View {
             .disabled(subjects.isEmpty && keptSubjectChoiceID == nil)
             .accessibilityLabel(
                 selectedSubjectTitle.map {
-                    String(localized: "テーマ、\($0)", table: "Log", comment: "VoiceOver: the milestone's theme menu; the argument is the chosen theme")
-                } ?? String(localized: "テーマ、未選択", table: "Log", comment: "VoiceOver: the milestone's theme menu with no theme chosen")
+                    String(localized: "取り組み、\($0)", table: "Log", comment: "VoiceOver: the milestone's theme menu; the argument is the chosen theme")
+                } ?? String(localized: "取り組み、未選択", table: "Log", comment: "VoiceOver: the milestone's theme menu with no theme chosen")
             )
             .accessibilityHint(
                 subjects.isEmpty
                     ? (keptSubjectChoiceID == nil
-                        ? String(localized: "テーマがないため変更できません", table: "Log", comment: "VoiceOver hint: there are no themes, so the menu is disabled")
-                        : String(localized: "ほかに選べるテーマはありません", table: "Log", comment: "VoiceOver hint: no other theme to choose"))
-                    : String(localized: "成果を結びつけるテーマを変更できます", table: "Log", comment: "VoiceOver hint on the milestone's theme menu")
+                        ? String(localized: "取り組みがないため変更できません", table: "Log", comment: "VoiceOver hint: there are no themes, so the menu is disabled")
+                        : String(localized: "ほかに選べる取り組みはありません", table: "Log", comment: "VoiceOver hint: no other theme to choose"))
+                    : String(localized: "成果を結びつける取り組みを変更できます", table: "Log", comment: "VoiceOver hint on the milestone's theme menu")
             )
             .accessibilityIdentifier("achievement.editor.subject")
 

@@ -360,7 +360,7 @@ struct AccumulationTimelineBrowser: View {
             table: "Overview",
             comment: "VoiceOver month card: month, gem count on this iPhone, spoken mass"
         ))
-        .accessibilityHint(Text("テーマ別・日ごとの記録と、この月の代表瓶を開きます", tableName: "Overview"))
+        .accessibilityHint(Text("取り組み別・日ごとの記録と、この月の代表瓶を開きます", tableName: "Overview"))
     }
 
     private func timelineMetric(title: String, value: String) -> some View {
@@ -576,7 +576,7 @@ private struct AccumulationTimelineMonthSheet: View {
                         }
                         if !detail.themes.isEmpty {
                             HistoryThemeBreakdown(
-                                title: String(localized: "テーマ別", table: "Overview", comment: "Heading of the per-theme time breakdown of a month"),
+                                title: String(localized: "取り組み別", table: "Overview", comment: "Heading of the per-theme time breakdown of a month"),
                                 themes: detail.themes,
                                 totalGrams: detail.summary.exactLocalGrams
                             )
@@ -649,7 +649,7 @@ private struct AccumulationTimelineMonthSheet: View {
             .buttonStyle(PomoGemPrimaryButtonStyle())
             .accessibilityHint(Text("この月の記録を、ひとつの瓶とカードで振り返ります", tableName: "Overview"))
             .accessibilityIdentifier(AccumulationTimelineAccessibilityID.monthWrapped)
-            Text("ひと月の瓶とテーマ別の時間を見て、カードにして残せます。", tableName: "Overview", comment: "Caption under 「この月を振り返る」")
+            Text("ひと月の瓶と取り組み別の時間を見て、カードにして残せます。", tableName: "Overview", comment: "Caption under 「この月を振り返る」")
                 .font(.caption)
                 .foregroundStyle(PomoGemTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -834,7 +834,14 @@ private struct AccumulationTimelineMonthSheet: View {
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            TimeFusionPileArtwork(totalGrams: Int(clamping: detail.summary.exactLocalGrams))
+            TimeFusionPileArtwork(
+                totalGrams: Int(clamping: detail.summary.exactLocalGrams),
+                colors: JarLifetimeCorePresentation.colorShares(detail.themes.map {
+                    JarLifetimeCorePresentation.ColorContribution(
+                        grams: Int(clamping: $0.grams), hex: $0.colorHex
+                    )
+                })
+            )
                 .frame(height: 260)
         }
         .padding(16)

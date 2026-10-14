@@ -647,19 +647,19 @@
         }
       }
     },
-    "記録・テーマ・iCloud同期・シェアなど、ほかの機能はすべて無料で使えます。" : {
+    "記録・取り組み・iCloud同期・シェアなど、ほかの機能はすべて無料で使えます。" : {
       "comment" : "Paywall note under the Pro features: everything else stays free",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Everything else, including records, themes, iCloud sync and sharing, is free."
+            "value" : "Everything else, including records, activities, iCloud sync and sharing, is free."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "記録・テーマ・iCloud同期・シェアなど、ほかの機能はすべて無料で使えます。"
+            "value" : "記録・取り組み・iCloud同期・シェアなど、ほかの機能はすべて無料で使えます。"
           }
         }
       }

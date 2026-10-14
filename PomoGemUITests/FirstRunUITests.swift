@@ -131,7 +131,7 @@ final class FirstRunUITests: XCTestCase {
         next.tap()
         XCTAssertTrue(waitUntilEnabled(next))
         next.tap()
-        XCTAssertTrue(app.staticTexts["最初のテーマを選ぶ"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.staticTexts["最初の取り組みを選ぶ"].waitForExistence(timeout: 4))
         XCTAssertFalse(app.staticTexts.containing(
             NSPredicate(format: "label BEGINSWITH %@", "新しく追加できるのはあと")).firstMatch.exists,
             "A one-theme step must not show a quota line")
@@ -215,7 +215,7 @@ final class FirstRunUITests: XCTestCase {
             next.tap()
             XCTAssertTrue(waitUntilEnabled(next))
             next.tap()
-            XCTAssertTrue(app.staticTexts["最初のテーマを選ぶ"].waitForExistence(timeout: 4))
+            XCTAssertTrue(app.staticTexts["最初の取り組みを選ぶ"].waitForExistence(timeout: 4))
             var heights: [String: CGFloat] = [:]
             for name in names {
                 let chip = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name)).firstMatch
@@ -258,11 +258,11 @@ final class FirstRunUITests: XCTestCase {
         XCTAssertTrue(waitUntilEnabled(next))
         next.tap()
 
-        let heading = app.staticTexts["最初のテーマを選ぶ"]
+        let heading = app.staticTexts["最初の取り組みを選ぶ"]
         XCTAssertTrue(heading.waitForExistence(timeout: 4))
         XCTAssertLessThanOrEqual(heading.frame.maxY, next.frame.minY,
                                  "The page heading must not be cut by the pinned button")
-        XCTAssertEqual(step.label, "全3ページ中、3ページ。最初のテーマ")
+        XCTAssertEqual(step.label, "全3ページ中、3ページ。最初の取り組み")
         attachScreenshot("onboarding-ax5-page3")
         let english = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "英語")).firstMatch
         XCTAssertTrue(scrollUntilHittable(english))
@@ -305,7 +305,7 @@ final class FirstRunUITests: XCTestCase {
                        "The new-user tutorial must not run over a restore")
         let counts = app.descendants(matching: .any)["cloud-restore.counts"]
         XCTAssertTrue(counts.waitForExistence(timeout: 4))
-        XCTAssertTrue(counts.label.contains("テーマ1件"), counts.label)
+        XCTAssertTrue(counts.label.contains("取り組み1件"), counts.label)
         // The first focus record to arrive closes this screen, so a focus
         // count would read 0 for almost the whole wait: it is not shown.
         XCTAssertFalse(counts.label.contains("集中の記録"), counts.label)

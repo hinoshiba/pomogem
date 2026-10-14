@@ -3,6 +3,61 @@ import XCTest
 @testable import PomoGem
 
 final class TimerOrientationTests: XCTestCase {
+    func testHomeRevealRequiresPortraitBoundsAndCompletedActiveSceneTransition() {
+        let portrait = CGSize(width: 390, height: 844)
+        let landscape = CGSize(width: 844, height: 390)
+        XCTAssertTrue(TimerPortraitReturnPolicy.isReady(
+            interfaceOrientation: .portrait, windowSize: portrait,
+            isTransitioning: false, sceneIsActive: true
+        ))
+        for interface in [UIInterfaceOrientation.landscapeLeft, .landscapeRight, .portraitUpsideDown, .unknown] {
+            XCTAssertFalse(TimerPortraitReturnPolicy.isReady(
+                interfaceOrientation: interface, windowSize: portrait,
+                isTransitioning: false, sceneIsActive: true
+            ), "Portrait dimensions do not make a differently oriented scene ready")
+        }
+        for size in [landscape, .zero] {
+            XCTAssertFalse(TimerPortraitReturnPolicy.isReady(
+                interfaceOrientation: .portrait, windowSize: size,
+                isTransitioning: false, sceneIsActive: true
+            ), "A new orientation value can arrive before final window bounds")
+        }
+        XCTAssertFalse(TimerPortraitReturnPolicy.isReady(
+            interfaceOrientation: .portrait, windowSize: portrait,
+            isTransitioning: true, sceneIsActive: true
+        ), "Do not uncover the jar while UIKit is still animating")
+        XCTAssertFalse(TimerPortraitReturnPolicy.isReady(
+            interfaceOrientation: .portrait, windowSize: portrait,
+            isTransitioning: false, sceneIsActive: false
+        ), "Wait for foreground geometry after backgrounding during the handoff")
+    }
+
+    @MainActor
+    func testReturnBeforeSceneAttachmentWaitsAndDoesNotChangeTheTimersSavedSelection() async throws {
+        let (defaults, domain) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let selection = TimerOrientationSelection()
+        let sessionID = UUID()
+        let controller = TimerOrientationController(sessionID: sessionID, selection: selection, defaults: defaults)
+        controller.rotate()
+        let prematureDismissal = expectation(description: "Do not dismiss without an attached portrait scene")
+        prematureDismissal.isInverted = true
+        controller.prepareToReturnToPortrait { prematureDismissal.fulfill() }
+        controller.rotate()
+        controller.followDevice()
+        XCTAssertTrue(controller.isReturningToPortrait)
+        XCTAssertEqual(controller.state.direction, .right)
+        XCTAssertTrue(controller.state.isManual)
+        await fulfillment(of: [prematureDismissal], timeout: 0.05)
+        controller.disappear()
+
+        let recovered = TimerOrientationController(sessionID: sessionID, selection: selection, defaults: defaults)
+        XCTAssertEqual(recovered.state.direction, .right,
+                       "Returning Home must not overwrite the running session's recovery selection")
+        XCTAssertFalse(recovered.isReturningToPortrait,
+                       "Replacing a removed hierarchy must not inherit an abandoned dismissal")
+    }
+
     @MainActor
     func testManualChoiceSurvivesReplacingTheSameTimerViewDuringAccountRevalidation() throws {
         let (defaults, domain) = try isolatedDefaults()

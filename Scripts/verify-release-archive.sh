@@ -423,7 +423,7 @@ if app_plist.get("NSSupportsLiveActivities") is not True:
 # Focus music (Docs/FocusMusic.md): MusicKit authorization terminates an app
 # without this purpose string, and the Music app plays, never this app.
 if app_plist.get("NSAppleMusicUsageDescription") != (
-    "タイマー画面から『ミュージック』アプリで集中用の音楽を再生するために使います。"
+    "集中用の音楽を再生し、自分のライブラリからプレイリストを選ぶために使います。"
 ):
     fail("app Apple Music purpose string differs from the reviewed Music-app playback control")
 if "audio" in app_plist.get("UIBackgroundModes", []):

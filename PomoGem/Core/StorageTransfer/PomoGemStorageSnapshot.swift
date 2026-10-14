@@ -76,20 +76,24 @@ struct PomoGemStorageSnapshot: Codable, Sendable, Equatable {
         Dictionary(uniqueKeysWithValues: entities.map { ($0.name, $0.descriptors) })
     }
 
-    /// Only this known additive pair may be absent from an older format-1
-    /// payload. Keep the original dictionary/encoded bytes for receipt hashes;
-    /// use nil defaults only when validating, importing or comparing its graph.
-    /// Missing one member, any other missing field, and unknown fields still
-    /// fail schema validation instead of being silently filled or discarded.
+    /// Known additive fields may be absent from an older format-1 payload.
+    /// Keep the original dictionary/encoded bytes for receipt hashes; use nil
+    /// defaults only when validating, importing or comparing its graph. The
+    /// preference precision pair must be absent together. Other missing or
+    /// unknown fields still fail schema validation.
     nonisolated private static func fieldsIncludingLegacyDefaults(
         entity: String, fields: [String: Scalar]
     ) -> [String: Scalar] {
-        guard entity == "Prefs",
-              fields["preferredFocusSeconds"] == nil,
-              fields["preferredFocusSecondsMutationID"] == nil else { return fields }
         var result = fields
-        result["preferredFocusSeconds"] = .null
-        result["preferredFocusSecondsMutationID"] = .null
+        if entity == "Subject", fields["defaultFocusSeconds"] == nil {
+            result["defaultFocusSeconds"] = .null
+        }
+        if entity == "Prefs",
+           fields["preferredFocusSeconds"] == nil,
+           fields["preferredFocusSecondsMutationID"] == nil {
+            result["preferredFocusSeconds"] = .null
+            result["preferredFocusSecondsMutationID"] = .null
+        }
         return result
     }
 
@@ -589,6 +593,7 @@ private extension StorageSnapshotScalarConvertible { static var storageOptional:
             Field<Subject>("contentMutationID", \.contentMutationID),
             Field<Subject>("name", \.name),
             Field<Subject>("colorHex", \.colorHex),
+            Field<Subject>("defaultFocusSeconds", \.defaultFocusSeconds),
             Field<Subject>("sortOrder", \.sortOrder),
             Field<Subject>("isArchived", \.isArchived),
             Field<Subject>("deletedAt", \.deletedAt),

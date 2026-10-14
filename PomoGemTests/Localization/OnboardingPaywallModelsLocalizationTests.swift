@@ -43,10 +43,10 @@ final class OnboardingPaywallModelsLocalizationTests: XCTestCase {
         )
         XCTAssertEqual(SessionSource.timer.displayName, "実測")
         XCTAssertEqual(SessionSource.manual.displayName, "自己申告")
-        XCTAssertEqual(SubjectNamePolicy.ValidationError.empty.message, "テーマ名を入力してください。")
+        XCTAssertEqual(SubjectNamePolicy.ValidationError.empty.message, "取り組み名を入力してください。")
         XCTAssertEqual(
             SubjectNamePolicy.ValidationError.tooLong(excessCharacters: 3).message,
-            "テーマ名は40文字以内で入力してください（3文字超過）。"
+            "取り組み名は40文字以内で入力してください（3文字超過）。"
         )
         XCTAssertEqual(
             RareRewardCounts(drawCount: 3, goldCount: 1, prismCount: 0).multiDrawSummary,
@@ -90,7 +90,7 @@ final class OnboardingPaywallModelsLocalizationTests: XCTestCase {
             XCTAssertEqual(
                 SubjectNamePolicy.localizedDisplayName(ownName, subjectID: UUID(), bundle: bundle),
                 ownName,
-                "A custom theme that happens to spell a fallback must keep its chosen name"
+                "A custom activity that happens to spell a fallback must keep its chosen name"
             )
         }
         // Snapshots and aggregates carry no ID: the canonical name is enough.
@@ -118,13 +118,13 @@ final class OnboardingPaywallModelsLocalizationTests: XCTestCase {
         XCTAssertEqual(SubjectNamePolicy.localizedDisplayName("過去の集中 03", bundle: bundle), "過去の集中 03",
                        "only names the app itself writes are mapped")
         XCTAssertEqual(SubjectNamePolicy.localizedDisplayName("過去の集中 1", bundle: bundle), "過去の集中 1")
-        XCTAssertEqual(SubjectNamePolicy.localizedDisplayName("アーカイブ済みのテーマ", bundle: bundle), "Archived theme")
-        XCTAssertEqual(SubjectNamePolicy.localizedDisplayName("テーマ", bundle: bundle), "Theme")
-        XCTAssertEqual(SubjectNamePolicy.localizedDisplayName("  ", bundle: bundle), "Theme")
+        XCTAssertEqual(SubjectNamePolicy.localizedDisplayName("アーカイブ済みのテーマ", bundle: bundle), "Archived activity")
+        XCTAssertEqual(SubjectNamePolicy.localizedDisplayName("テーマ", bundle: bundle), "Activity")
+        XCTAssertEqual(SubjectNamePolicy.localizedDisplayName("  ", bundle: bundle), "Activity")
 
-        // Japanese reads exactly what is stored.
+        // Legacy storage names remain stable; the generic display name uses the current UI vocabulary.
         XCTAssertEqual(SubjectNamePolicy.localizedDisplayName("過去の集中 3"), "過去の集中 3")
-        XCTAssertEqual(SubjectNamePolicy.localizedDisplayName(""), "テーマ")
+        XCTAssertEqual(SubjectNamePolicy.localizedDisplayName(""), "取り組み")
         XCTAssertEqual(AggregateSubjectFraction(name: "過去の集中 2", colorHex: "#FFFFFF", pebbleCount: 1).displayName, "過去の集中 2")
         XCTAssertEqual(AggregateSubjectFraction(name: "数学", colorHex: "#FFFFFF", pebbleCount: 1).displayName, "数学")
     }
@@ -197,17 +197,21 @@ final class OnboardingPaywallModelsLocalizationTests: XCTestCase {
     func testOnboardingInEnglish() throws {
         XCTAssertEqual(try english("Onboarding", "集中を終えると、一粒。"), "Finish a focus, get a gem.")
         XCTAssertEqual(try english("Onboarding", "減らない"), "Nothing shrinks")
+        XCTAssertEqual(
+            try english("Onboarding", "積んだ時間と記録は、そのまま残る"),
+            "The time and records you add stay with you"
+        )
         XCTAssertEqual(try english("Onboarding", "責めない"), "No guilt")
         XCTAssertEqual(try english("Onboarding", "次へ"), "Next")
         XCTAssertEqual(try english("Onboarding", "瓶をひらく"), "Open the Jar")
         XCTAssertEqual(try english("Onboarding", "YOUR BOTTLE"), "YOUR JAR", "glossary: jar, never bottle")
-        XCTAssertEqual(try english("Onboarding", "最初のテーマを選ぶ"), "Choose Your First Theme")
+        XCTAssertEqual(try english("Onboarding", "最初の取り組みを選ぶ"), "Choose Your First Activity")
         XCTAssertEqual(try english("Onboarding", "新しく始める"), "Start Fresh")
         XCTAssertEqual(
             try english("Onboarding", "全%lldページ中、%lldページ。%@", 3, 2, "Try a Gem (Optional)"),
             "Page 2 of 3. Try a Gem (Optional)"
         )
-        XCTAssertEqual(try english("Onboarding", "最初のテーマ：%@", "English"), "First theme: English")
+        XCTAssertEqual(try english("Onboarding", "最初の取り組み：%@", "English"), "First activity: English")
         XCTAssertEqual(try english("Onboarding", "%@に、集中を思い出す通知を受け取る", "8:00 PM"), "Get a reminder to focus at 8:00 PM")
         XCTAssertEqual(try english("Onboarding", "レア粒は、自分で選ぶ。"), "Rare gems are your choice.")
     }
@@ -218,19 +222,19 @@ final class OnboardingPaywallModelsLocalizationTests: XCTestCase {
         XCTAssertEqual(try english("Onboarding", "最大%lld文字", 40), "Up to 40 characters")
         XCTAssertEqual(try english("Onboarding", "あと%lld文字入力できます", 1), "1 character left")
         XCTAssertEqual(try english("Onboarding", "あと%lld文字入力できます", 39), "39 characters left")
-        XCTAssertEqual(try english("Onboarding", "追加できるテーマは合計最大%lld件です。", 12), "You can have up to 12 themes in all.")
+        XCTAssertEqual(try english("Onboarding", "追加できる取り組みは合計最大%lld件です。", 12), "You can have up to 12 activities in all.")
         XCTAssertEqual(
-            try english("Onboarding", "テーマ名は%lld文字以内で入力してください（%lld文字超過）。", 40, 3),
-            "Theme names can be up to 40 characters (3 over)."
+            try english("Onboarding", "取り組み名は%lld文字以内で入力してください（%lld文字超過）。", 40, 3),
+            "Activity names can be up to 40 characters (3 over)."
         )
         // The restore screen's VoiceOver summary: two sentences, one count each.
-        XCTAssertEqual(try english("Onboarding", "届いた記録：テーマ%lld件。", 1), "Received so far: 1 theme.")
-        XCTAssertEqual(try english("Onboarding", "届いた記録：テーマ%lld件。", 3), "Received so far: 3 themes.")
+        XCTAssertEqual(try english("Onboarding", "届いた記録：取り組み%lld件。", 1), "Received so far: 1 activity.")
+        XCTAssertEqual(try english("Onboarding", "届いた記録：取り組み%lld件。", 3), "Received so far: 3 activities.")
         let elapsed = DurationText.spoken(seconds: 65, units: .minutesSeconds, locale: en)
         XCTAssertEqual(
-            SentenceText.join([try english("Onboarding", "届いた記録：テーマ%lld件。", 1),
+            SentenceText.join([try english("Onboarding", "届いた記録：取り組み%lld件。", 1),
                                try english("Onboarding", "経過時間%@", elapsed)], locale: en),
-            "Received so far: 1 theme. Time elapsed: 1 minute, 5 seconds."
+            "Received so far: 1 activity. Time elapsed: 1 minute, 5 seconds."
         )
     }
 

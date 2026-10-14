@@ -134,7 +134,7 @@ enum StorageTransferRefreshCopy {
         localized: "iCloudのデータでこの端末を置き換える", table: "Storage",
         comment: "Settings section title: the iCloud → device direction, which deletes this device's data")
     static let dataLossWarning = String(
-        localized: "この端末のテーマ・記録・設定を削除し、現在のiCloudのデータに置き換えます。未送信の端末データは失われ、iCloudのデータとは結合されません。iCloudのデータは残ります。",
+        localized: "この端末の取り組み・記録・設定を削除し、現在のiCloudのデータに置き換えます。未送信の端末データは失われ、iCloudのデータとは結合されません。iCloudのデータは残ります。",
         table: "Storage", comment: "Irreversible: what re-downloading from iCloud deletes on this device")
     static let relaunch = SentenceText.join([
         String(localized: "処理の途中で、アプリの終了と再起動をお願いします。", table: "Storage",
@@ -181,12 +181,12 @@ enum StorageTransferRefreshCopy {
         if let device {
             let (themes, records, achievements) = StorageTransferOverwriteCopy.countArguments(device)
             loss = String(
-                localized: "このまま実行すると、このiPhoneのテーマ\(themes)・記録\(records)・成果\(achievements)を含む、テーマ・記録・設定はすべて削除され、元に戻すことはできません。",
+                localized: "このまま実行すると、このiPhoneの取り組み\(themes)・記録\(records)・成果\(achievements)を含む、取り組み・記録・設定はすべて削除され、元に戻すことはできません。",
                 table: "Storage",
                 comment: "Re-download warning when iCloud is empty. The arguments are this iPhone's theme, record and achievement counts as digit text (ungrouped in Japanese, grouped in English)")
         } else {
             loss = String(
-                localized: "このまま実行すると、このiPhoneのテーマ・記録・設定は削除され、元に戻すことはできません。",
+                localized: "このまま実行すると、このiPhoneの取り組み・記録・設定は削除され、元に戻すことはできません。",
                 table: "Storage", comment: "Re-download warning when iCloud is empty and this iPhone could not be counted")
         }
         return SentenceText.join([
@@ -224,12 +224,12 @@ enum StorageTransferEnableCopy {
         if let device {
             let (themes, records, achievements) = StorageTransferOverwriteCopy.countArguments(device)
             loss = String(
-                localized: "このまま実行すると、このiPhoneのテーマ\(themes)・記録\(records)・成果\(achievements)を含む、テーマ・記録・設定はすべて削除され、空の状態からiCloudの同期を始めます。",
+                localized: "このまま実行すると、このiPhoneの取り組み\(themes)・記録\(records)・成果\(achievements)を含む、取り組み・記録・設定はすべて削除され、空の状態からiCloudの同期を始めます。",
                 table: "Storage",
                 comment: "Turn-on-iCloud warning when iCloud is empty. The arguments are this iPhone's theme, record and achievement counts as digit text (ungrouped in Japanese, grouped in English)")
         } else {
             loss = String(
-                localized: "このまま実行すると、このiPhoneのテーマ・記録・設定はすべて削除され、空の状態からiCloudの同期を始めます。",
+                localized: "このまま実行すると、このiPhoneの取り組み・記録・設定はすべて削除され、空の状態からiCloudの同期を始めます。",
                 table: "Storage", comment: "Turn-on-iCloud warning when iCloud is empty and this iPhone could not be counted")
         }
         return SentenceText.join([
@@ -292,7 +292,7 @@ enum StorageTransferOverwriteCopy {
         table: "Storage", comment: "The read-only iCloud check failed. %@ is the title of the button to tap again")
 
     static let dataLossWarning = String(
-        localized: "iCloudにある現在のPomoGemのテーマ・記録・設定を削除し、このiPhoneのデータで置き換えます。2つのデータは結合しません。削除したiCloudのデータを元に戻すことはできません。同じApple Accountの他の端末は、次に開いたときにこの画面と同じ確認を求められ、その端末だけにある未送信のデータは残りません。",
+        localized: "iCloudにある現在のPomoGemの取り組み・記録・設定を削除し、このiPhoneのデータで置き換えます。2つのデータは結合しません。削除したiCloudのデータを元に戻すことはできません。同じApple Accountの他の端末は、次に開いたときにこの画面と同じ確認を求められ、その端末だけにある未送信のデータは残りません。",
         table: "Storage", comment: "Irreversible: what replacing iCloud with this iPhone's data deletes")
 
     /// transfer-10. The reason line under a CLOSED replacement door, in
@@ -347,7 +347,7 @@ enum StorageTransferOverwriteCopy {
     static let sheetTitle = String(localized: "最後の確認", table: "Storage",
                                    comment: "Title of the last confirmation before an irreversible switch")
     static let sheetWarning = String(
-        localized: "現在iCloudにあるPomoGemのテーマ・記録・設定をすべて削除し、この端末のデータに置き換えます。削除するiCloudのデータを元に戻すことはできません。",
+        localized: "現在iCloudにあるPomoGemの取り組み・記録・設定をすべて削除し、この端末のデータに置き換えます。削除するiCloudのデータを元に戻すことはできません。",
         table: "Storage", comment: "Final confirmation: replacing iCloud deletes everything in it")
     static let recoveryCopy = String(
         localized: "置き換えるデータの復旧用コピーをiCloudに保存し、受領を確認してから削除を始めます。復旧用コピーには、このiPhoneだけの過去の記録も含まれます。処理完了後に復旧用コピーを削除します。通信が途切れた場合は、削除の再試行までiCloudに残ることがあります。",
@@ -426,7 +426,7 @@ enum StorageTransferOverwriteCopy {
     /// a device that flushes days later is never caught. Neither offered action
     /// is destructive.
     static let lateArrival = String(
-        localized: "置き換えの後に、他の端末から古い記録が届いた可能性があります。削除したはずのテーマが戻っていないか確認してください。もう一度この端末のデータで置き換えることもできます。",
+        localized: "置き換えの後に、他の端末から古い記録が届いた可能性があります。削除したはずの取り組みが戻っていないか確認してください。もう一度この端末のデータで置き換えることもできます。",
         table: "Storage", comment: "Banner after a replacement: old records from another device may have arrived")
     static let lateArrivalOpenSettings = String(localized: "設定を開く", table: "Storage",
                                                 comment: "Late-arrival banner button: open the app's Settings")
@@ -450,7 +450,7 @@ enum StorageTransferOverwriteCopy {
     /// row. ("iCloud" is the service's name in every language.)
     static let thisIPhoneSide = String(
         localized: "このiPhone", table: "Storage",
-        comment: "Label of this iPhone's row in the record comparison, as in 「このiPhone: テーマ12・記録480…」")
+        comment: "Label of this iPhone's row in the record comparison, as in 「このiPhone: 取り組み12・記録480…」")
 
     /// The first sentence of both empty-iCloud warnings.
     static let cloudHoldsNoUserRecords = String(
@@ -500,7 +500,7 @@ enum StorageTransferOverwriteCopy {
                       comment: "Comparison row without a date. The arguments are the side (This iPhone / iCloud) and its counts")
     }
 
-    /// 「テーマ12・記録480・成果36（最終 2026年9月20日）」. Only the three models a
+    /// 「取り組み12・記録480・成果36（最終 2026年9月20日）」. Only the three models a
     /// user recognizes are named; the remaining mirrored models are counted by
     /// the runtime but would not help someone decide.
     static func side(_ label: String, preview: StorageTransferCloudPreview?) -> String {
@@ -519,7 +519,7 @@ enum StorageTransferOverwriteCopy {
 
     private static func counts(_ preview: StorageTransferCloudPreview) -> String {
         let (themes, records, achievements) = countArguments(preview)
-        return String(localized: "テーマ\(themes)・記録\(records)・成果\(achievements)", table: "Storage",
+        return String(localized: "取り組み\(themes)・記録\(records)・成果\(achievements)", table: "Storage",
                       comment: "Counts in a comparison row: themes, records (focus sessions) and achievements, as digit text (ungrouped in Japanese, grouped in English)")
     }
 }
@@ -721,7 +721,7 @@ enum StorageTransferLineageCopy {
     /// operation has one name on this screen.
     static let refreshDoorTitle = StorageTransferRefreshCopy.confirmTitle
     static let refreshExplanation = String(
-        localized: "iCloudにあるデータをこのiPhoneに取り込み直して、同期を再開します。このiPhoneのテーマ・記録・設定は削除され、iCloudのデータに置き換わります。2つのデータは結合しません。iCloudのデータは削除しません。",
+        localized: "iCloudにあるデータをこのiPhoneに取り込み直して、同期を再開します。このiPhoneの取り組み・記録・設定は削除され、iCloudのデータに置き換わります。2つのデータは結合しません。iCloudのデータは削除しません。",
         table: "Storage", comment: "What re-downloading from iCloud does on the stop screen, including the deletion on this iPhone")
 
     // MARK: 「最後の確認」 for the start-from-device action
@@ -735,7 +735,7 @@ enum StorageTransferLineageCopy {
     /// true, so `prepareDestination` purges the mirrored zone; the staged
     /// recovery copy is this device's payload and backs none of it up.
     static let sheetWarning = String(
-        localized: "iCloud側には、このアプリが使っている管理情報がありません。そのため、この操作は「置き換え」ではなく、このiPhoneのデータでiCloudを新しく使い始める操作になります。いまiCloudに残っている記録は削除し、このiPhoneのテーマ・記録・設定で置き換えます。削除したiCloudのデータを元に戻すことはできません。",
+        localized: "iCloud側には、このアプリが使っている管理情報がありません。そのため、この操作は「置き換え」ではなく、このiPhoneのデータでiCloudを新しく使い始める操作になります。いまiCloudに残っている記録は削除し、このiPhoneの取り組み・記録・設定で置き換えます。削除したiCloudのデータを元に戻すことはできません。",
         table: "Storage", comment: "Final confirmation for starting iCloud from this iPhone: the records left in iCloud are deleted")
     static let sheetOtherBuilds = String(
         localized: "同じApple Accountの他の端末や、別のビルド（開発用／配布用）のPomoGemがこのアカウントを使っている場合、それらの端末は次に開いたときにiCloudのデータを取得し直す確認を求められます。その端末だけにある未送信の記録は残りません。",

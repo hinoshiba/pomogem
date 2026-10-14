@@ -186,6 +186,16 @@ final class FocusSystemLocalizationTests: XCTestCase {
         )
     }
 
+    func testMusicSubscriptionCopyAppliesToStreamingMusic() throws {
+        let key = "ミュージックアプリで再生します。配信曲にはApple Musicの登録が必要です。"
+        XCTAssertEqual(
+            try english(key, table: "Focus"),
+            "Plays in the Music app. Streaming music requires an Apple Music subscription."
+        )
+        let japaneseBundle = try LocalizationTestSupport.bundle(for: "ja")
+        XCTAssertEqual(japaneseBundle.localizedString(forKey: key, value: "<missing>", table: "Focus"), key)
+    }
+
     // MARK: Completion facts
 
     /// The card has always grouped its digits (its `Text` interpolated the

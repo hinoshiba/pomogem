@@ -259,6 +259,15 @@ final class TimerOrientationUITests: XCTestCase {
         skipBreakAndVerifyHome()
     }
 
+    func testBreakCloseButtonFromManualLandscapeRevealsOnlyPortraitHome() throws {
+        launch(rotationLocked: true)
+        _ = startFiveMinuteBreak()
+        for direction in ["右", "下", "左"] { rotate(to: direction) }
+        // The header X shares the main skip button's spoken label. Verify
+        // its own touch target after the same native/fallback rotation cycle.
+        skipBreakAndVerifyHome(buttonIdentifier: "break.close")
+    }
+
     func testAX5ReducedMotionManualControlsAndBreakRemainUsableInEveryDirection() throws {
         launch(rotationLocked: true, accessibilitySize: true)
         _ = startFocus(duration: "25分")
@@ -303,7 +312,7 @@ final class TimerOrientationUITests: XCTestCase {
         skipBreakAndVerifyHome()
     }
 
-    func testCompletionKeepsTheTimerOrientationUntilTheCoverCloses() throws {
+    func testCompletionKeepsOrientationThenRevealsOnlyPortraitHome() throws {
         launch(rotationLocked: true)
         for direction in ["右", "下"] {
             _ = startFocus(duration: "12秒、DEMO")
@@ -337,14 +346,17 @@ final class TimerOrientationUITests: XCTestCase {
             retainScreenshot(named: "timer-completion-\(direction == "右" ? "right" : "down")")
             stop.tap()
             let reward = app.buttons["reward.dismiss"]
-            XCTAssertTrue(reward.waitForExistence(timeout: 20))
-            assertWindowOrientation(isLandscape: false)
+            assertFirstHomeRevealIsPortrait(reward, timeout: 20)
             XCTAssertTrue(reveal(reward, towardStart: false))
-            // The card arrives while the scene turns back to portrait; a tap
-            // sent before it settles was lost once, leaving the card (and a
-            // disabled start button) behind.
-            tapUntilGone(reward, "閉じる must close the completion card")
-            XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 8))
+            // The very first card is already in settled portrait geometry.
+            // A single tap must work; retrying would hide the rotation race.
+            reward.tap()
+            let dismissed = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "exists == false"), object: reward
+            )
+            XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 5), .completed,
+                           "The first tap must dismiss the stable reward card")
+            XCTAssertTrue(waitForHittable(app.buttons["home.focus-launcher"], timeout: 8))
             // The receipt is retired after the gem lands; the next start
             // (and the next test) needs the launcher enabled again.
             let launcherEnabled = XCTNSPredicateExpectation(
@@ -353,6 +365,28 @@ final class TimerOrientationUITests: XCTestCase {
             )
             XCTAssertEqual(XCTWaiter.wait(for: [launcherEnabled], timeout: 12), .completed)
         }
+    }
+
+    private func assertFirstHomeRevealIsPortrait(
+        _ element: XCUIElement,
+        timeout: TimeInterval,
+        requiresHittable: Bool = false
+    ) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            // Home's launcher also exists behind the timer cover. A newly
+            // created reward can use existence; the launcher must be exposed.
+            if element.exists && (!requiresHittable || element.isHittable) {
+                let window = app.windows.firstMatch.frame
+                XCTAssertGreaterThan(window.height, window.width,
+                                     "Home's first reveal must never inherit the timer's landscape scene")
+                XCTAssertFalse(app.staticTexts["timer.interface-orientation"].exists,
+                               "The timer cover closes only after its portrait handoff")
+                return
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.03))
+        }
+        XCTFail("Home did not become visible after the portrait handoff")
     }
 
     /// The break-end alarm's only action must be on screen at AX5 without
@@ -413,11 +447,13 @@ final class TimerOrientationUITests: XCTestCase {
         return timer
     }
 
-    private func skipBreakAndVerifyHome() {
-        let skipBreak = app.buttons["休憩をスキップ"].firstMatch
+    private func skipBreakAndVerifyHome(buttonIdentifier: String = "break.skip") {
+        let skipBreak = app.buttons[buttonIdentifier]
         XCTAssertTrue(reveal(skipBreak, towardStart: false))
         skipBreak.tap()
-        XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 8))
+        assertFirstHomeRevealIsPortrait(app.buttons["home.focus-launcher"], timeout: 8,
+                                       requiresHittable: true)
+        XCTAssertTrue(waitForHittable(app.buttons["home.focus-launcher"], timeout: 8))
         XCTAssertFalse(app.buttons["timer.rotate"].exists)
         assertWindowOrientation(isLandscape: false)
     }

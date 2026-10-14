@@ -340,7 +340,7 @@ struct AccumulationClusterSummary: Identifiable, Equatable, Sendable {
 
     var preservationMessage: String {
         if hasStrongPreservationEvidence {
-            return String(localized: "結晶になっても元の記録は削除せず、この粒にも色・テーマ・質量の内訳と元記録への参照を保存します。記念石は結晶に含めず、別の石として残します。", table: "Overview")
+            return String(localized: "結晶になっても元の記録は削除せず、この粒にも色・取り組み・質量の内訳と元記録への参照を保存します。記念石は結晶に含めず、別の石として残します。", table: "Overview")
         }
         switch storage {
         case .aggregate(let hasStoredLineage) where hasStoredLineage:
@@ -359,7 +359,7 @@ struct AccumulationClusterSummary: Identifiable, Equatable, Sendable {
             return SentenceText.join([
                 retained,
                 reference,
-                String(localized: "旧形式のため、テーマ・入力方法・レアの内訳はこの粒自体には保存されていません。記念石は別の石として残します。", table: "Overview")
+                String(localized: "旧形式のため、取り組み・入力方法・レアの内訳はこの粒自体には保存されていません。記念石は別の石として残します。", table: "Overview")
             ])
         }
     }
@@ -912,17 +912,16 @@ struct AccumulationOverviewView: View {
         return rows.sorted { $0.level > $1.level }
     }
 
+    @ViewBuilder
     private var introduction: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("一粒は消えず、\n時間の景色に変わる。", tableName: "Overview", comment: "Progress screen headline; keep the line break")
-                .pomogemSectionTitle(size: 32)
-                .lineLimit(nil)
-                .fixedSize(horizontal: false, vertical: true)
+        // A held gem or a celebration already explains why this sheet opened.
+        // Put its time in the first viewport instead of repeating the tour.
+        if lifetimeIsCloudUnverified || initialClusterID == nil {
             Text(lifetimeIsCloudUnverified
                 ? projectionVerificationNotice
                 : (pageScope.historyPageIsPartial
-                    ? String(localized: "今週の積み上げ、瓶で動く結晶、直近の年月。古い一回ごとの記録も消えず、必要な範囲だけ読み込みます。", table: "Overview")
-                    : String(localized: "今週の積み上げ、瓶で動く結晶、年月の棚。距離を変えても、一回ごとの集中と質量はそのまま残ります。", table: "Overview")))
+                    ? String(localized: "集中時間と記録を確認できます。古い記録は「年月」から読み込めます。", table: "Overview")
+                    : String(localized: "集中時間と元の記録を、今週・結晶・年月で確認できます。", table: "Overview")))
                 .font(.subheadline)
                 .foregroundStyle(PomoGemTheme.text)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1120,7 +1119,7 @@ struct AccumulationOverviewView: View {
                     context: lifetimePresentationContext
                 ))
                 .font(.title3.bold().monospacedDigit())
-                TimeFusionPileArtwork(totalGrams: lifetimeGrams)
+                TimeFusionPileArtwork(totalGrams: lifetimeGrams, colors: lifetimeCoreColorShares)
                     .frame(height: 240)
                 Text(timeFusionExplanation)
                     .font(.caption)
@@ -1144,7 +1143,7 @@ struct AccumulationOverviewView: View {
             VStack(alignment: .leading, spacing: 18) {
                 Text("生涯の瓶", tableName: "Overview", comment: "Card title: the jar of everything so far")
                     .pomogemSectionTitle()
-                TimeFusionPileArtwork(totalGrams: lifetimeGrams)
+                TimeFusionPileArtwork(totalGrams: lifetimeGrams, colors: lifetimeCoreColorShares)
                     .frame(height: 290)
                 Text(timeFusionExplanation)
                     .font(.caption)
@@ -1161,14 +1160,21 @@ struct AccumulationOverviewView: View {
     private var lifetimeConstellation: some View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 16) {
+                // Time answers a long press before the decorative pile. At AX
+                // sizes the first stat gets the full width, including years
+                // of accumulated time, without a horizontal compression fit.
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(spacing: 10) { lifetimeStats }
+                } else {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) { lifetimeStats }
+                        VStack(spacing: 10) { lifetimeStats }
+                    }
+                }
                 Text("積み上げた時間の結晶", tableName: "Overview")
                     .pomogemSectionTitle(size: 22)
-                TimeFusionPileArtwork(totalGrams: lifetimeGrams)
+                TimeFusionPileArtwork(totalGrams: lifetimeGrams, colors: lifetimeCoreColorShares)
                     .frame(height: dynamicTypeSize.isAccessibilitySize ? 320 : 260)
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 10) { lifetimeStats }
-                    VStack(spacing: 10) { lifetimeStats }
-                }
                 Text("合計4時間10分でひとつの結晶に。結晶10個分の時間は、ひとつ上の段にまとまります。余った時間も次の粒に残ります。", tableName: "Overview")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.text)
@@ -1214,7 +1220,7 @@ struct AccumulationOverviewView: View {
                 } else {
                     LazyVStack(spacing: 10) {
                         ForEach(fusionHierarchyLevels) { level in
-                            FusionHierarchyLevelRow(summary: level)
+                            FusionHierarchyLevelRow(summary: level, colorShares: lifetimeCoreColorShares)
                         }
                     }
                 }
@@ -1240,7 +1246,7 @@ struct AccumulationOverviewView: View {
             // Not 「瓶の整理階層」: the section counts the crystal's steps.
             Text("時間で育つ結晶の段", tableName: "Overview")
                 .pomogemSectionTitle(size: 22)
-            Text("結晶は合計時間を表す目盛りです。一回ごとの記録を分割したり、削除したりすることはありません。", tableName: "Overview")
+            Text("結晶は合計時間の目盛りです。元の記録は「年月」で確認できます。", tableName: "Overview")
                 .font(.caption)
                 .foregroundStyle(PomoGemTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1320,6 +1326,17 @@ struct AccumulationOverviewView: View {
 
     @ViewBuilder
     private var lifetimeStats: some View {
+        // The first answer is credited focus time, in the same units as Home.
+        OverviewStat(
+            title: String(localized: "集中時間", table: "Overview", comment: "Lifetime stat title: total focus time"),
+            value: AggregateProjectionPresentationPolicy.overviewLifetimeValue(
+                verifiedValue: DurationPresentation.focusLabel(grams: lifetimeGrams),
+                isLocalLowerBound: lifetimeIsLowerBound,
+                context: lifetimePresentationContext
+            )
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("overview.lifetime-time")
         OverviewStat(
             title: lifetimeIsCloudUnverified
                 // sync-03: the value below is this device's confirmed mass.
@@ -1331,16 +1348,6 @@ struct AccumulationOverviewView: View {
                     : String(localized: "集中", table: "Overview", comment: "Lifetime stat title: total focus, shown as mass")),
             value: AggregateProjectionPresentationPolicy.overviewLifetimeValue(
                 verifiedValue: formattedMass(lifetimeGrams),
-                isLocalLowerBound: lifetimeIsLowerBound,
-                context: lifetimePresentationContext
-            )
-        )
-        // Time, not 「標準換算」: the ungrouped 「350640.0標準単位」 of a 40-year
-        // history read as a code, and the unit was an accounting term.
-        OverviewStat(
-            title: String(localized: "集中時間", table: "Overview", comment: "Lifetime stat title: total focus time"),
-            value: AggregateProjectionPresentationPolicy.overviewLifetimeValue(
-                verifiedValue: DurationPresentation.focusLabel(grams: lifetimeGrams),
                 isLocalLowerBound: lifetimeIsLowerBound,
                 context: lifetimePresentationContext
             )
@@ -1394,8 +1401,6 @@ struct AccumulationOverviewView: View {
 
     private var scaleGuide: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("時間をズームする", tableName: "Overview", comment: "Section title above the Now / Crystals / Years & Months lens picker")
-                .pomogemSectionTitle()
             if layoutPolicy.usesMenuLensPicker {
                 // A menu with its own label rather than a menu-style Picker:
                 // the system picker button keeps a one-line height, so at
@@ -1427,22 +1432,24 @@ struct AccumulationOverviewView: View {
                     .pickerStyle(.segmented)
                     .accessibilityIdentifier("overview.lens")
             }
-            Text(selectedLens == .timeline
-                ? pageScope.timelineDetail(isCloudOfflineSession: isCloudOfflineSession)
-                : selectedLens.detail)
-                .font(.caption.weight(.semibold))
-                // This sentence is operational scope disclosure, not tertiary
-                // decoration. Keep it readable at Increase Contrast / AX5.
-                .foregroundStyle(PomoGemTheme.text)
-                .lineLimit(nil)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.vertical, 4)
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    PomoGemTheme.card,
-                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-                )
+            // The years/months lens needs its bounded-history disclosure.
+            // Other lenses explain themselves in their data cards below.
+            if selectedLens == .timeline {
+                Text(pageScope.timelineDetail(isCloudOfflineSession: isCloudOfflineSession))
+                    .font(.caption.weight(.semibold))
+                    // This sentence is operational scope disclosure, not tertiary
+                    // decoration. Keep it readable at Increase Contrast / AX5.
+                    .foregroundStyle(PomoGemTheme.text)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.vertical, 4)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        PomoGemTheme.card,
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    )
+            }
         }
     }
 
@@ -1508,7 +1515,7 @@ struct AccumulationOverviewView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("元の記録", tableName: "Overview", comment: "The original records behind the total time")
                     .pomogemSectionTitle()
-                Text("結晶は時間総額の表示です。どの結晶から見ても、元の一回ごとの時間・テーマ・日付は記録に残っています。", tableName: "Overview")
+                Text("結晶は時間総額の表示です。どの結晶から見ても、元の一回ごとの時間・取り組み・日付は記録に残っています。", tableName: "Overview")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.text)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1708,7 +1715,7 @@ private struct FusionHierarchyLevelSummary: Identifiable, Equatable {
     }
 
 
-    /// Shared with Home and Share; a time unit owns no source theme or rarity.
+    /// Tier labels and rings stay neutral; the gem uses the lifetime composition.
     var accentHex: String { TimeFusionPolicy.colorHex }
 
     var symbol: String {
@@ -1725,6 +1732,7 @@ private struct FusionHierarchyLevelSummary: Identifiable, Equatable {
 
 private struct FusionHierarchyLevelRow: View {
     let summary: FusionHierarchyLevelSummary
+    let colorShares: [GemColorShare]
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -1736,14 +1744,14 @@ private struct FusionHierarchyLevelRow: View {
         Group {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 12) {
-                    FusionHierarchyGlyph(summary: summary)
+                    FusionHierarchyGlyph(summary: summary, colorShares: colorShares)
                         .frame(width: glyphDimension, height: glyphDimension)
                         .frame(maxWidth: .infinity, alignment: .center)
                     levelDetails
                 }
             } else {
                 HStack(spacing: 14) {
-                    FusionHierarchyGlyph(summary: summary)
+                    FusionHierarchyGlyph(summary: summary, colorShares: colorShares)
                         .frame(width: glyphDimension, height: glyphDimension)
                     levelDetails
                 }
@@ -1848,6 +1856,7 @@ private struct FusionHierarchyLevelRow: View {
 
 private struct FusionHierarchyGlyph: View {
     let summary: FusionHierarchyLevelSummary
+    let colorShares: [GemColorShare]
 
     private var ringCount: Int {
         min(max(summary.level, 0), 5)
@@ -1877,7 +1886,8 @@ private struct FusionHierarchyGlyph: View {
                 completionCount: 0,
                 colorHex: summary.accentHex,
                 level: max(1, summary.level),
-                grams: summary.grams / max(1, summary.unitCount)
+                grams: summary.grams / max(1, summary.unitCount),
+                colorShares: colorShares
             )
             .padding(CGFloat(ringCount) * 3 + 5)
 
@@ -2293,7 +2303,7 @@ struct ClusterDetailSheet: View {
 
                     if cluster.hasCompleteSubjectBreakdown {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("テーマの内訳", tableName: "Overview", comment: "Crystal detail: heading of the per-theme breakdown")
+                            Text("取り組みの内訳", tableName: "Overview", comment: "Crystal detail: heading of the per-theme breakdown")
                                 .font(.caption.weight(.bold))
                                 .foregroundStyle(PomoGemTheme.muted)
                             ForEach(Array(visibleSubjectMix.enumerated()), id: \.offset) { _, item in
@@ -2782,12 +2792,20 @@ private struct OverviewBottleGraphic: View {
     }
 }
 
-/// A time-only display shared by the overview and public cards. The gems are
-/// denominations of the total, not claims that particular records belong to
-/// a particular crystal. No session IDs or count-tree levels reach this view.
+/// A time display shared by the overview and public cards. The gems are
+/// denominations of the total and retain that total's saved colour mix,
+/// without claiming particular records belong to a particular crystal.
 struct TimeFusionPileArtwork: View {
     let totalGrams: Int
+    var colors: [GemColorShare] = []
     var showsVessel = true
+
+    private var gemColors: [GemColorShare] {
+        GemArtworkSpec.aggregateColors(
+            colors.map { StratumColorFraction(hex: $0.hex, fraction: $0.fraction) },
+            fallbackHex: TimeFusionPolicy.colorHex
+        )
+    }
 
     private struct Gem: Identifiable {
         let id: String
@@ -2830,7 +2848,7 @@ struct TimeFusionPileArtwork: View {
                     VStack(spacing: 0) {
                         GemArtworkStone(spec: GemArtworkStone.aggregateSpec(
                             grams: gem.grams,
-                            colors: [GemColorShare(hex: TimeFusionPolicy.colorHex, fraction: 1)]
+                            colors: gemColors
                         ))
                         .frame(width: size, height: size)
                         if step >= 32 {

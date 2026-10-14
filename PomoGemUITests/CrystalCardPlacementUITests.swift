@@ -1,6 +1,6 @@
 import XCTest
 
-/// Tapping a time crystal opens the total-time overview directly. Closing it
+/// A tap bounces a time crystal; holding it opens the total-time overview. Closing it
 /// returns to an unobstructed Home at standard and accessibility text sizes.
 /// The midload fixture's 975 minutes produces three 250-minute crystals and
 /// a 225-minute growing gem, independently of its 39 source records.
@@ -30,12 +30,105 @@ final class CrystalCardPlacementUITests: XCTestCase {
         app?.terminate()
     }
 
-    func testTappedTimeCrystalOpensOverviewAndReturnsToHome() throws {
+    func testTappedCrystalBouncesAndLongPressOpensOverviewAndReturnsToHome() throws {
         try checkCrystalNavigation(accessibility5: false, screenshot: "crystal-card-default")
     }
 
-    func testTappedTimeCrystalOpensOverviewAndReturnsToHomeAtAccessibilitySize() throws {
+    func testTappedCrystalBouncesAndLongPressOpensOverviewAndReturnsToHomeAtAccessibilitySize() throws {
         try checkCrystalNavigation(accessibility5: true, screenshot: "crystal-card-ax5")
+    }
+
+    func testGrowingGemLongPressOpensBreakdownWithoutBouncing() throws {
+        app.launchEnvironment["POMOGEM_UI_TEST_GEM_SHOWCASE"] = "nine"
+        app.launch()
+        let jar = app.buttons["瓶"]
+        let probe = app.descendants(matching: .any)["jar.presentation.probe"]
+        XCTAssertTrue(jar.waitForExistence(timeout: 8))
+        XCTAssertTrue(probe.waitForExistence(timeout: 5))
+        var previousTarget: CGPoint?
+        var stillSince = Date()
+        XCTAssertTrue(waitUntil(timeout: 12) {
+            let fields = self.probeFields(probe)
+            guard fields["count"] == "1",
+                  let x = fields["targetWindowX"].flatMap(Double.init),
+                  let y = fields["targetWindowY"].flatMap(Double.init)
+            else { return false }
+            let point = CGPoint(x: x, y: y)
+            if let previousTarget,
+               abs(point.x - previousTarget.x) < 0.5,
+               abs(point.y - previousTarget.y) < 0.5 {
+                return Date().timeIntervalSince(stillSince) >= 0.8
+            }
+            previousTarget = point
+            stillSince = Date()
+            return false
+        }, "The 225-minute growing gem must settle before holding it")
+        let baseline = probeFields(probe)
+        let x = try XCTUnwrap(baseline["targetWindowX"].flatMap(Double.init))
+        let y = try XCTUnwrap(baseline["targetWindowY"].flatMap(Double.init))
+        app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: x, dy: y)).press(forDuration: 0.7)
+        XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 6),
+                      "A growing gem supports the same breakdown as a time crystal")
+        assertCrystalLensSelected(accessibility5: false)
+        assertTimeIsVisibleWithoutScrolling("3時間45分")
+        app.buttons["overview.close"].tap()
+        XCTAssertTrue(jar.waitForExistence(timeout: 6))
+        XCTAssertEqual(probeFields(probe)["bounceSequence"], baseline["bounceSequence"])
+        XCTAssertEqual(probeFields(probe)["records"], baseline["records"])
+    }
+
+    func testDraggingFromJarScrollsHomeWithoutBouncingOrOpeningBreakdown() throws {
+        app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1"
+        app.launch()
+        let jar = app.buttons["瓶"]
+        let probe = app.descendants(matching: .any)["jar.presentation.probe"]
+        let scroll = app.scrollViews.containing(.button, identifier: "home.duration-picker").firstMatch
+        let launcher = app.buttons["home.focus-launcher"]
+        XCTAssertTrue(jar.waitForExistence(timeout: 8))
+        XCTAssertTrue(scroll.waitForExistence(timeout: 5))
+        XCTAssertTrue(launcher.waitForExistence(timeout: 5))
+        let baseline = try waitForRestingCrystal(probe)
+        let startY = min(jar.frame.maxY - 20, scroll.frame.maxY - 20, launcher.frame.minY - 20)
+        let navigationBottom = app.navigationBars.allElementsBoundByIndex.map { $0.frame.maxY }.max() ?? 0
+        let endY = max(navigationBottom + 20, startY - 160)
+        XCTAssertGreaterThan(startY - endY, 40)
+        XCTAssertTrue(jar.frame.contains(CGPoint(x: jar.frame.midX, y: startY)))
+        let originalY = jar.frame.minY
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+        origin.withOffset(CGVector(dx: jar.frame.midX, dy: startY))
+            .press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: jar.frame.midX, dy: endY)))
+        XCTAssertTrue(waitUntil(timeout: 4) { abs(jar.frame.minY - originalY) > 20 },
+                      "Starting a vertical scroll on the jar must still scroll Home")
+        XCTAssertFalse(app.navigationBars["積み上がり"].exists)
+        XCTAssertEqual(probeFields(probe)["bounceSequence"], baseline["bounceSequence"],
+                       "A cancelled tap or hold must not bounce on scroll release")
+    }
+
+    private func assertCrystalLensSelected(accessibility5: Bool) {
+        if accessibility5 {
+            let menu = app.buttons["overview.lens"]
+            XCTAssertTrue(menu.waitForExistence(timeout: 5))
+            XCTAssertEqual(menu.value as? String, "結晶",
+                           "A hold opens the crystal breakdown without another lens selection")
+        } else {
+            let segments = app.segmentedControls["overview.lens"]
+            XCTAssertTrue(segments.waitForExistence(timeout: 5))
+            XCTAssertTrue(segments.buttons["結晶"].isSelected,
+                          "A hold opens the crystal breakdown without another lens selection")
+        }
+    }
+
+    private func assertTimeIsVisibleWithoutScrolling(_ expectedTime: String) {
+        let time = app.descendants(matching: .any)["overview.lifetime-time"].firstMatch
+        XCTAssertTrue(time.waitForExistence(timeout: 5))
+        XCTAssertTrue(time.label.contains(expectedTime), time.label)
+        let window = app.windows.firstMatch.frame
+        let navigation = app.navigationBars["積み上がり"].frame
+        XCTAssertTrue(time.isHittable, "Holding a gem must reveal its time without scrolling through an introduction")
+        XCTAssertGreaterThanOrEqual(time.frame.minY, navigation.maxY - 1)
+        XCTAssertLessThanOrEqual(time.frame.maxY, window.maxY - 12,
+                                 "The whole focus-time answer must fit in the initial viewport")
     }
 
     private func checkCrystalNavigation(accessibility5: Bool, screenshot: String) throws {
@@ -68,13 +161,29 @@ final class CrystalCardPlacementUITests: XCTestCase {
             XCTAssertFalse(core.intersects(hud), "The total-time meter must remain clear of the readout: \(context)")
         }
 
+        let initialBounce = Int(resting["bounceSequence"] ?? "") ?? 0
         let crystalX = try XCTUnwrap(resting["crystalWindowX"].flatMap(Double.init))
         let crystalY = try XCTUnwrap(resting["crystalWindowY"].flatMap(Double.init))
         app.coordinate(withNormalizedOffset: .zero)
             .withOffset(CGVector(dx: crystalX, dy: crystalY))
             .tap()
+        XCTAssertTrue(waitUntil(timeout: 3) {
+            (Int(self.probeFields(probe)["bounceSequence"] ?? "") ?? 0) > initialBounce
+        }, "A quick tap must still perform the gem's physical action")
+        XCTAssertFalse(app.navigationBars["積み上がり"].exists,
+                       "A quick tap must not also open the breakdown")
+        XCTAssertFalse(app.buttons["jar.aggregate.inspect"].exists)
+
+        let afterBounce = try waitForRestingCrystal(probe)
+        let heldX = try XCTUnwrap(afterBounce["crystalWindowX"].flatMap(Double.init))
+        let heldY = try XCTUnwrap(afterBounce["crystalWindowY"].flatMap(Double.init))
+        app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: heldX, dy: heldY))
+            .press(forDuration: 0.7)
         XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 6),
-                      "A time crystal opens the whole time overview")
+                      "Holding a time crystal opens the whole time overview")
+        assertCrystalLensSelected(accessibility5: accessibility5)
+        assertTimeIsVisibleWithoutScrolling("16時間15分")
         XCTAssertFalse(app.buttons["jar.aggregate.inspect"].exists,
                        "There is no per-crystal membership card over Home")
         let close = app.buttons["overview.close"]
@@ -85,6 +194,11 @@ final class CrystalCardPlacementUITests: XCTestCase {
 
         XCTAssertTrue(launcher.waitForExistence(timeout: 6))
         XCTAssertTrue(waitUntilFrameSettles(launcher))
+        let afterInspection = probeFields(probe)
+        XCTAssertEqual(afterInspection["bounceSequence"], afterBounce["bounceSequence"],
+                       "A hold must not also bounce when the finger lifts")
+        XCTAssertEqual(afterInspection["records"], resting["records"],
+                       "Both gestures preserve the recorded time and represented gems")
         XCTAssertTrue(waitUntil(timeout: 4) { launcher.isHittable && launcher.isEnabled },
                       "Closing the overview leaves the focus action usable")
         XCTAssertFalse(app.buttons["jar.aggregate.inspect"].exists)
@@ -107,7 +221,7 @@ final class CrystalCardPlacementUITests: XCTestCase {
         XCTAssertTrue(durationPicker.isHittable,
                       "The duration picker stays uncovered after crystal inspection")
         XCTAssertTrue(subjectPicker.isHittable,
-                      "The theme picker stays uncovered after crystal inspection")
+                      "The subject picker stays uncovered after crystal inspection")
         tapSettledFrame(durationPicker)
         let fortyFiveMinutes = app.buttons["45分"].firstMatch
         XCTAssertTrue(fortyFiveMinutes.waitForExistence(timeout: 4))

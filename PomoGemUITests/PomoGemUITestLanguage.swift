@@ -57,14 +57,14 @@ enum PomoGemSettingsUITestNavigation {
 
         func title(english: Bool = false) -> String {
             switch (self, english) {
-            case (.themes, false): "テーマ"
+            case (.themes, false): "取り組み"
             case (.timer, false): "集中タイマー"
             case (.sensory, false): "音と触覚"
             case (.jar, false): "瓶とシェア"
             case (.notifications, false): "お知らせ"
             case (.data, false): "記録とiCloud"
             case (.support, false): "サポートとアプリ情報"
-            case (.themes, true): "Themes"
+            case (.themes, true): "Activities"
             case (.timer, true): "Focus Timer"
             case (.sensory, true): "Sound & Haptics"
             case (.jar, true): "Jar & Sharing"

@@ -95,6 +95,31 @@ enum GemShowcaseUITestFixture {
             || modeForCurrentProcess == .palette
     }
 
+    /// Two completed time units arriving before the first sheet is closed.
+    /// Home enqueues these through its normal receipt/presentation path after
+    /// the tiers fixture's saved 29,250 g has loaded. This opt-in is confined
+    /// to an in-memory Debug UI test by `modeForCurrentProcess` above.
+    static var queuedCelebrations: [PendingStratumCelebration]? {
+        guard modeForCurrentProcess == .tiers,
+              ProcessInfo.processInfo.environment["POMOGEM_UI_TEST_QUEUED_CELEBRATIONS"] == "1"
+        else { return nil }
+        let createdAt = Date(timeIntervalSince1970: 1_800_300_000)
+        return [1, 2].map { level in
+            let grams = level == 1 ? 2_500 : 25_000
+            return PendingStratumCelebration(
+                id: UUID(uuidString: String(format: "6E4D5348-4345-4C45-4252-%012X", level))!,
+                createdAt: createdAt.addingTimeInterval(Double(level)),
+                pebbleCount: 0,
+                grams: grams,
+                monthLabel: "",
+                colorHex: Constants.Color.english,
+                colorMix: [StratumColorFraction(hex: Constants.Color.english, fraction: 1)],
+                level: level,
+                timeFusionTotalGrams: grams
+            )
+        }
+    }
+
     /// Subject order chosen so the reference state mixes coral, blue and
     /// violet gems like the owner's mood image.
     private static let subjectCycle = [0, 1, 4, 0, 2, 1, 0, 3, 4, 0, 1, 2, 0, 4, 1]

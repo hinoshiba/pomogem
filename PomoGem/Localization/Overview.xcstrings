@@ -1335,19 +1335,19 @@
         }
       }
     },
-    "ひと月の瓶とテーマ別の時間を見て、カードにして残せます。" : {
+    "ひと月の瓶と取り組み別の時間を見て、カードにして残せます。" : {
       "comment" : "Caption under 「この月を振り返る」",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "See the month's jar and your time by theme, and keep it as a card."
+            "value" : "See the month's jar and your time by activity, and keep it as a card."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ひと月の瓶とテーマ別の時間を見て、カードにして残せます。"
+            "value" : "ひと月の瓶と取り組み別の時間を見て、カードにして残せます。"
           }
         }
       }
@@ -1454,56 +1454,6 @@
         }
       }
     },
-    "テーマの内訳" : {
-      "comment" : "Crystal detail: heading of the per-theme breakdown",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "By theme"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマの内訳"
-          }
-        }
-      }
-    },
-    "テーマ別" : {
-      "comment" : "Heading of the per-theme time breakdown of a month",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "By Theme"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマ別"
-          }
-        }
-      }
-    },
-    "テーマ別・日ごとの記録と、この月の代表瓶を開きます" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Opens this month's records by theme and by day, and a sample jar."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマ別・日ごとの記録と、この月の代表瓶を開きます"
-          }
-        }
-      }
-    },
     "一回ずつの手触りと、今週積み上げた時間を見ます。" : {
       "localizations" : {
         "en" : {
@@ -1533,23 +1483,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "一粒"
-          }
-        }
-      }
-    },
-    "一粒は消えず、\n時間の景色に変わる。" : {
-      "comment" : "Progress screen headline; keep the line break",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No gem disappears.\nIt becomes a landscape of time."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "一粒は消えず、\n時間の景色に変わる。"
           }
         }
       }
@@ -1658,38 +1591,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "今週の積み上げ、%@、実測%@、完走した回数%lld回。回数は時間の価値とは別に数えています"
-          }
-        }
-      }
-    },
-    "今週の積み上げ、瓶で動く結晶、年月の棚。距離を変えても、一回ごとの集中と質量はそのまま残ります。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This week's progress, the crystals moving in your jar and your shelf of years and months. Whatever the distance, every focus session and its mass stay exactly as they are."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "今週の積み上げ、瓶で動く結晶、年月の棚。距離を変えても、一回ごとの集中と質量はそのまま残ります。"
-          }
-        }
-      }
-    },
-    "今週の積み上げ、瓶で動く結晶、直近の年月。古い一回ごとの記録も消えず、必要な範囲だけ読み込みます。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This week's progress, the crystals moving in your jar and your recent years and months. Older individual records aren't lost; only what's needed is loaded."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "今週の積み上げ、瓶で動く結晶、直近の年月。古い一回ごとの記録も消えず、必要な範囲だけ読み込みます。"
           }
         }
       }
@@ -2016,6 +1917,56 @@
         }
       }
     },
+    "取り組みの内訳" : {
+      "comment" : "Crystal detail: heading of the per-theme breakdown",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "By activity"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みの内訳"
+          }
+        }
+      }
+    },
+    "取り組み別" : {
+      "comment" : "Heading of the per-theme time breakdown of a month",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "By Activity"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組み別"
+          }
+        }
+      }
+    },
+    "取り組み別・日ごとの記録と、この月の代表瓶を開きます" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opens this month's records by activity and by day, and a sample jar."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組み別・日ごとの記録と、この月の代表瓶を開きます"
+          }
+        }
+      }
+    },
     "合計4時間10分でひとつの結晶に。結晶10個分の時間は、ひとつ上の段にまとまります。余った時間も次の粒に残ります。" : {
       "localizations" : {
         "en" : {
@@ -2282,18 +2233,18 @@
         }
       }
     },
-    "旧形式のため、テーマ・入力方法・レアの内訳はこの粒自体には保存されていません。記念石は別の石として残します。" : {
+    "旧形式のため、取り組み・入力方法・レアの内訳はこの粒自体には保存されていません。記念石は別の石として残します。" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Because it uses an older format, the gem itself doesn't store a breakdown by theme, entry method or rare gems. Milestone stones stay as separate stones."
+            "value" : "Because it uses an older format, the gem itself doesn't store a breakdown by activity, entry method or rare gems. Milestone stones stay as separate stones."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "旧形式のため、テーマ・入力方法・レアの内訳はこの粒自体には保存されていません。記念石は別の石として残します。"
+            "value" : "旧形式のため、取り組み・入力方法・レアの内訳はこの粒自体には保存されていません。記念石は別の石として残します。"
           }
         }
       }
@@ -2361,23 +2312,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "時間の核の器"
-          }
-        }
-      }
-    },
-    "時間をズームする" : {
-      "comment" : "Section title above the Now / Crystals / Years & Months lens picker",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zoom Through Time"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "時間をズームする"
           }
         }
       }
@@ -2936,18 +2870,18 @@
         }
       }
     },
-    "結晶になっても元の記録は削除せず、この粒にも色・テーマ・質量の内訳と元記録への参照を保存します。記念石は結晶に含めず、別の石として残します。" : {
+    "結晶になっても元の記録は削除せず、この粒にも色・取り組み・質量の内訳と元記録への参照を保存します。記念石は結晶に含めず、別の石として残します。" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Becoming a crystal doesn't delete the original records. This gem also stores its breakdown by color, theme and mass, and links to the original records. Milestone stones aren't part of the crystal; they stay as separate stones."
+            "value" : "Becoming a crystal doesn't delete the original records. This gem also stores its breakdown by color, activity and mass, and links to the original records. Milestone stones aren't part of the crystal; they stay as separate stones."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "結晶になっても元の記録は削除せず、この粒にも色・テーマ・質量の内訳と元記録への参照を保存します。記念石は結晶に含めず、別の石として残します。"
+            "value" : "結晶になっても元の記録は削除せず、この粒にも色・取り組み・質量の内訳と元記録への参照を保存します。記念石は結晶に含めず、別の石として残します。"
           }
         }
       }
@@ -3018,34 +2952,34 @@
         }
       }
     },
-    "結晶は合計時間を表す目盛りです。一回ごとの記録を分割したり、削除したりすることはありません。" : {
+    "結晶は合計時間の目盛りです。元の記録は「年月」で確認できます。" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Crystals measure your total time. Individual records are kept whole and are never deleted by fusion."
+            "value" : "Crystals measure your total time. Find your original records in Years & Months."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "結晶は合計時間を表す目盛りです。一回ごとの記録を分割したり、削除したりすることはありません。"
+            "value" : "結晶は合計時間の目盛りです。元の記録は「年月」で確認できます。"
           }
         }
       }
     },
-    "結晶は時間総額の表示です。どの結晶から見ても、元の一回ごとの時間・テーマ・日付は記録に残っています。" : {
+    "結晶は時間総額の表示です。どの結晶から見ても、元の一回ごとの時間・取り組み・日付は記録に残っています。" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Crystals represent your total time. Each original record keeps its duration, theme, and date."
+            "value" : "Crystals represent your total time. Each original record keeps its duration, activity, and date."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "結晶は時間総額の表示です。どの結晶から見ても、元の一回ごとの時間・テーマ・日付は記録に残っています。"
+            "value" : "結晶は時間総額の表示です。どの結晶から見ても、元の一回ごとの時間・取り組み・日付は記録に残っています。"
           }
         }
       }
@@ -3631,6 +3565,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "集中時間"
+          }
+        }
+      }
+    },
+    "集中時間と元の記録を、今週・結晶・年月で確認できます。" : {
+      "comment" : "Brief introduction to the Progress screen when opened from the Home menu",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "See your focus time and records by week, crystal, or month."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中時間と元の記録を、今週・結晶・年月で確認できます。"
+          }
+        }
+      }
+    },
+    "集中時間と記録を確認できます。古い記録は「年月」から読み込めます。" : {
+      "comment" : "Brief Progress introduction when older records are loaded on demand from Years & Months",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "See your focus time and records. Load older records in Years & Months."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中時間と記録を確認できます。古い記録は「年月」から読み込めます。"
           }
         }
       }

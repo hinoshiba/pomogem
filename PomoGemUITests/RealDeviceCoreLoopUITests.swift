@@ -279,7 +279,7 @@ final class RealDeviceCoreLoopUITests: XCTestCase {
         try require(waitForLabel(step, containing: "2ページ"), "Onboarding must reach the optional trial page.")
         capture("onboarding-page2")
         try tap(next)
-        try require(app.staticTexts["最初のテーマを選ぶ"].waitForExistence(timeout: 5),
+        try require(app.staticTexts["最初の取り組みを選ぶ"].waitForExistence(timeout: 5),
                     "Onboarding must reach theme creation.")
         capture("onboarding-page3-theme")
 

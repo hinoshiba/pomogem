@@ -41,20 +41,20 @@ final class StorageSyncLocalizationTests: XCTestCase {
         let device = Self.preview(subjects: 12, sessions: 1_234, stones: 36, latest: nil)
         XCTAssertEqual(
             StorageTransferRefreshCopy.cloudSideEmpty(device: device),
-            "iCloudには、このアプリの記録と成果が1件も見つかりませんでした。このまま実行すると、このiPhoneのテーマ12・記録1234・成果36を含む、テーマ・記録・設定はすべて削除され、元に戻すことはできません。中止して、先にこの端末の記録を書き出すか、他の端末の同期が終わるのをお待ちください。",
+            "iCloudには、このアプリの記録と成果が1件も見つかりませんでした。このまま実行すると、このiPhoneの取り組み12・記録1234・成果36を含む、取り組み・記録・設定はすべて削除され、元に戻すことはできません。中止して、先にこの端末の記録を書き出すか、他の端末の同期が終わるのをお待ちください。",
             "counts stay ungrouped digits, as before"
         )
         XCTAssertEqual(
             StorageTransferRefreshCopy.cloudSideEmpty(device: nil),
-            "iCloudには、このアプリの記録と成果が1件も見つかりませんでした。このまま実行すると、このiPhoneのテーマ・記録・設定は削除され、元に戻すことはできません。中止して、先にこの端末の記録を書き出すか、他の端末の同期が終わるのをお待ちください。"
+            "iCloudには、このアプリの記録と成果が1件も見つかりませんでした。このまま実行すると、このiPhoneの取り組み・記録・設定は削除され、元に戻すことはできません。中止して、先にこの端末の記録を書き出すか、他の端末の同期が終わるのをお待ちください。"
         )
         XCTAssertEqual(
             StorageTransferEnableCopy.cloudSideEmpty(device: device),
-            "iCloudには、このアプリの記録と成果が1件も見つかりませんでした。このまま実行すると、このiPhoneのテーマ12・記録1234・成果36を含む、テーマ・記録・設定はすべて削除され、空の状態からiCloudの同期を始めます。元に戻すことはできません。"
+            "iCloudには、このアプリの記録と成果が1件も見つかりませんでした。このまま実行すると、このiPhoneの取り組み12・記録1234・成果36を含む、取り組み・記録・設定はすべて削除され、空の状態からiCloudの同期を始めます。元に戻すことはできません。"
         )
         XCTAssertEqual(
             StorageTransferEnableCopy.cloudSideEmpty(device: nil),
-            "iCloudには、このアプリの記録と成果が1件も見つかりませんでした。このまま実行すると、このiPhoneのテーマ・記録・設定はすべて削除され、空の状態からiCloudの同期を始めます。元に戻すことはできません。"
+            "iCloudには、このアプリの記録と成果が1件も見つかりませんでした。このまま実行すると、このiPhoneの取り組み・記録・設定はすべて削除され、空の状態からiCloudの同期を始めます。元に戻すことはできません。"
         )
         XCTAssertEqual(
             StorageTransferLineageCopy.screenMessage(offersLineageStart: true),
@@ -99,7 +99,7 @@ final class StorageSyncLocalizationTests: XCTestCase {
         XCTAssertEqual(
             StorageTransferOverwriteCopy.side(StorageTransferOverwriteCopy.thisIPhoneSide,
                                               preview: Self.preview(subjects: 12, sessions: 12_480, stones: 36, latest: latest)),
-            "このiPhone: テーマ12・記録12480・成果36（最終 2026年9月20日）"
+            "このiPhone: 取り組み12・記録12480・成果36（最終 2026年9月20日）"
         )
         XCTAssertEqual(StorageTransferOverwriteCopy.countsOnly("iCloud", preview: nil), "iCloud: 確認できませんでした")
         XCTAssertEqual(DateText.longDate(latest, locale: LocalizationTestSupport.japanese), "2026年9月20日")
@@ -135,34 +135,34 @@ final class StorageSyncLocalizationTests: XCTestCase {
     /// deleted" are the content of these screens, not tone.
     func testIrreversibleCopyNeverSoftens() throws {
         let expectations: [(key: String, phrases: [String])] = [
-            ("この端末のテーマ・記録・設定を削除し、現在のiCloudのデータに置き換えます。未送信の端末データは失われ、iCloudのデータとは結合されません。iCloudのデータは残ります。",
-             ["deletes the themes, records and settings on this device", "replaces them", "will be lost",
+            ("この端末の取り組み・記録・設定を削除し、現在のiCloudのデータに置き換えます。未送信の端末データは失われ、iCloudのデータとは結合されません。iCloudのデータは残ります。",
+             ["deletes the activities, records and settings on this device", "replaces them", "will be lost",
               "won't be combined", "iCloud data is kept"]),
-            ("iCloudにある現在のPomoGemのテーマ・記録・設定を削除し、このiPhoneのデータで置き換えます。2つのデータは結合しません。削除したiCloudのデータを元に戻すことはできません。同じApple Accountの他の端末は、次に開いたときにこの画面と同じ確認を求められ、その端末だけにある未送信のデータは残りません。",
-             ["deletes the PomoGem themes, records and settings now in iCloud", "not combined", "can't be restored",
+            ("iCloudにある現在のPomoGemの取り組み・記録・設定を削除し、このiPhoneのデータで置き換えます。2つのデータは結合しません。削除したiCloudのデータを元に戻すことはできません。同じApple Accountの他の端末は、次に開いたときにこの画面と同じ確認を求められ、その端末だけにある未送信のデータは残りません。",
+             ["deletes the PomoGem activities, records and settings now in iCloud", "not combined", "can't be restored",
               "will not be kept"]),
-            ("現在iCloudにあるPomoGemのテーマ・記録・設定をすべて削除し、この端末のデータに置き換えます。削除するiCloudのデータを元に戻すことはできません。",
-             ["deletes all PomoGem themes, records and settings now in iCloud", "can't be restored"]),
+            ("現在iCloudにあるPomoGemの取り組み・記録・設定をすべて削除し、この端末のデータに置き換えます。削除するiCloudのデータを元に戻すことはできません。",
+             ["deletes all PomoGem activities, records and settings now in iCloud", "can't be restored"]),
             ("置き換えるデータの復旧用コピーをiCloudに保存し、受領を確認してから削除を始めます。復旧用コピーには、このiPhoneだけの過去の記録も含まれます。処理完了後に復旧用コピーを削除します。通信が途切れた場合は、削除の再試行までiCloudに残ることがあります。",
              ["recovery copy", "deletion starts only after", "is deleted when the process finishes",
               "may stay in iCloud"]),
             ("iCloudの削除を始めたあとは取り消せません。中断しても、次に開いたときに続きから再開します。",
              ["can't be canceled"]),
-            ("iCloud側には、このアプリが使っている管理情報がありません。そのため、この操作は「置き換え」ではなく、このiPhoneのデータでiCloudを新しく使い始める操作になります。いまiCloudに残っている記録は削除し、このiPhoneのテーマ・記録・設定で置き換えます。削除したiCloudのデータを元に戻すことはできません。",
+            ("iCloud側には、このアプリが使っている管理情報がありません。そのため、この操作は「置き換え」ではなく、このiPhoneのデータでiCloudを新しく使い始める操作になります。いまiCloudに残っている記録は削除し、このiPhoneの取り組み・記録・設定で置き換えます。削除したiCloudのデータを元に戻すことはできません。",
              ["will be deleted and replaced", "can't be restored"]),
             ("iCloud側に、このアプリが使っている管理情報が見つかりません。このiPhoneの記録をiCloudへ送信し、新しいiCloudのデータとして使い始めます。このiPhoneの記録は削除しません。iCloudに残っている記録は削除され、このiPhoneのデータで置き換えられます。",
              ["will not be deleted", "will be deleted and replaced"]),
-            ("iCloudにあるデータをこのiPhoneに取り込み直して、同期を再開します。このiPhoneのテーマ・記録・設定は削除され、iCloudのデータに置き換わります。2つのデータは結合しません。iCloudのデータは削除しません。",
+            ("iCloudにあるデータをこのiPhoneに取り込み直して、同期を再開します。このiPhoneの取り組み・記録・設定は削除され、iCloudのデータに置き換わります。2つのデータは結合しません。iCloudのデータは削除しません。",
              ["will be deleted and replaced", "not combined", "will not be deleted"]),
-            ("現在このiPhoneにあるテーマ・記録・設定を削除し、iCloudのデータに置き換えます。端末だけの記録は失われます。",
-             ["deletes the themes, records and settings now on this iPhone", "will be lost"]),
+            ("現在このiPhoneにある取り組み・記録・設定を削除し、iCloudのデータに置き換えます。端末だけの記録は失われます。",
+             ["deletes the activities, records and settings now on this iPhone", "will be lost"]),
             ("このiPhoneだけにあるPomoGemのデータを削除します。iCloudのデータは残ります。削除後に元の端末データへ戻すことはできません。",
              ["deletes the PomoGem data that exists only on this iPhone", "is kept", "can't go back"]),
             ("iCloudにあるPomoGemのデータを削除します。このiPhoneのデータを残して同期を有効にします。削除するiCloudデータを元に戻すことはできません。",
              ["deletes the PomoGem data in iCloud", "can't be restored"]),
             ("解除後の変更は他の端末へ同期されません。このiPhoneのアプリを削除すると、解除後に端末で追加・変更したデータは失われます。",
              ["won't sync", "will be lost"]),
-            ("このまま実行すると、このiPhoneのテーマ・記録・設定は削除され、元に戻すことはできません。",
+            ("このまま実行すると、このiPhoneの取り組み・記録・設定は削除され、元に戻すことはできません。",
              ["will be deleted", "can't be restored"]),
             ("iCloudのデータとこのiPhoneの記録の対応を確認できないため、記録が混ざらないよう同期を止めています。このiPhoneの記録もiCloudのデータも削除していません。",
              ["sync has been stopped", "have not been deleted"]),
@@ -349,23 +349,23 @@ final class StorageSyncLocalizationTests: XCTestCase {
         XCTAssertEqual([japanese.0, japanese.1, japanese.2], ["12", "12480", "36"],
                        "Japanese keeps 「記録12480」, as before")
 
-        let counts = try english("テーマ%@・記録%@・成果%@", themes, records, achievements)
-        XCTAssertEqual(counts, "Themes 12 · Records 12,480 · Achievements 36")
+        let counts = try english("取り組み%@・記録%@・成果%@", themes, records, achievements)
+        XCTAssertEqual(counts, "Activities 12 · Records 12,480 · Achievements 36")
         let date = DateText.longDate(Self.date(2025, 9, 18), locale: en)
         XCTAssertEqual(try english("%@: %@（最終 %@）", try english("このiPhone"), counts, date),
-                       "This iPhone: Themes 12 · Records 12,480 · Achievements 36 (latest record: September 18, 2025)")
+                       "This iPhone: Activities 12 · Records 12,480 · Achievements 36 (latest record: September 18, 2025)")
         XCTAssertEqual(try english("%@: %@（日付のある記録なし）", "iCloud", counts),
-                       "iCloud: Themes 12 · Records 12,480 · Achievements 36 (no dated records)")
+                       "iCloud: Activities 12 · Records 12,480 · Achievements 36 (no dated records)")
         XCTAssertEqual(try english("%@: 確認できませんでした", "iCloud"), "iCloud: couldn't be checked")
-        XCTAssertEqual(try english("%@: %@", "iCloud", counts), "iCloud: Themes 12 · Records 12,480 · Achievements 36")
+        XCTAssertEqual(try english("%@: %@", "iCloud", counts), "iCloud: Activities 12 · Records 12,480 · Achievements 36")
 
         let empty = SentenceText.join([
             try english("iCloudには、このアプリの記録と成果が1件も見つかりませんでした。"),
-            try english("このまま実行すると、このiPhoneのテーマ%@・記録%@・成果%@を含む、テーマ・記録・設定はすべて削除され、元に戻すことはできません。",
+            try english("このまま実行すると、このiPhoneの取り組み%@・記録%@・成果%@を含む、取り組み・記録・設定はすべて削除され、元に戻すことはできません。",
                         themes, records, achievements),
             try english("中止して、先にこの端末の記録を書き出すか、他の端末の同期が終わるのをお待ちください。")
         ], locale: en)
-        XCTAssertEqual(empty, "No records or achievements from this app were found in iCloud. If you continue, all themes, records and settings on this iPhone (themes: 12, records: 12,480, achievements: 36) will be deleted and can't be restored. Stop here and export this device's records first, or wait for your other devices to finish syncing.")
+        XCTAssertEqual(empty, "No records or achievements from this app were found in iCloud. If you continue, all activities, records and settings on this iPhone (activities: 12, records: 12,480, achievements: 36) will be deleted and can't be restored. Stop here and export this device's records first, or wait for your other devices to finish syncing.")
     }
 
     // MARK: Data deletion

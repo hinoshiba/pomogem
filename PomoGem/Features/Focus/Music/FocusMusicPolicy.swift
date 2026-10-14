@@ -4,23 +4,91 @@ import Foundation
 // Nothing here touches MusicKit or MediaPlayer, so every decision is unit
 // tested with fakes; the system adapters live in FocusMusicSystemAdapters.
 
-/// One Apple-curated source. Only `id` is ever stored (device-local
-/// `music.focus.source`). MusicKit `Playlist` and `Station` values are
-/// resolved at playback time and never persisted.
-struct FocusMusicSource: Identifiable, Hashable, Sendable {
-    enum Kind: Hashable, Sendable {
-        case playlist
-        case station
+/// Source metadata only; MusicKit values are resolved at playback time.
+/// Custom choices, like curated source IDs, stay on this iPhone.
+struct FocusMusicSource: Identifiable, Hashable, Codable, Sendable {
+    enum Kind: String, Hashable, Codable, Sendable {
+        case playlist, station, song, album
     }
 
-    /// Apple Music catalog ID: `pl.` for a playlist, `ra.` for a station.
-    /// Apple's editorial IDs are global across storefronts.
     let id: String
-    /// Shown whenever the catalog title cannot be read (no MusicKit developer
-    /// token yet, offline). It is Apple's Japanese storefront title.
     let fallbackTitle: String
+    let kind: Kind
+    let customTitle: String?
+    /// A library playlist has its own ID namespace and must never be
+    /// resolved as a catalog playlist or sent to the store-ID fallback.
+    let libraryID: String?
 
-    var kind: Kind { id.hasPrefix("ra.") ? .station : .playlist }
+    init(id: String, fallbackTitle: String, kind: Kind? = nil, customTitle: String? = nil, libraryID: String? = nil) {
+        self.id = id
+        self.fallbackTitle = fallbackTitle
+        self.kind = kind ?? (id.hasPrefix("ra.") ? .station : .playlist)
+        self.customTitle = customTitle
+        self.libraryID = libraryID
+    }
+
+    var supportsShuffle: Bool { kind == .playlist || kind == .album }
+
+    static func libraryPlaylist(id: String, title: String) -> Self {
+        Self(id: "library:\(id)", fallbackTitle: title, kind: .playlist, libraryID: id)
+    }
+}
+
+/// A subject editor keeps these values in a draft until Save succeeds.
+/// Each nil independently inherits the common choice; false is explicit.
+struct FocusMusicSubjectSettings: Equatable, Sendable {
+    var source: FocusMusicSource? = nil
+    var autoplay: Bool? = nil
+}
+
+struct FocusMusicSubject: Identifiable, Hashable {
+    let id: UUID
+    let name: String
+}
+
+/// Only catalog links from Apple Music are interpreted. This never opens a
+/// URL or fetches arbitrary user input; playback resolves the catalog ID.
+enum FocusMusicSourceLink {
+    static func parse(_ text: String) -> FocusMusicSource? {
+        guard let url = URLComponents(string: text.trimmingCharacters(in: .whitespacesAndNewlines)),
+              url.scheme?.lowercased() == "https",
+              url.host?.lowercased() == "music.apple.com",
+              url.user == nil, url.password == nil, url.port == nil else { return nil }
+        let parts = url.path.split(separator: "/").map(String.init)
+        guard let typeIndex = parts.firstIndex(where: { ["playlist", "station", "album", "song"].contains($0) }),
+              typeIndex <= 1,
+              parts.count == typeIndex + 2 || parts.count == typeIndex + 3,
+              let last = parts.last else { return nil }
+        let kind: FocusMusicSource.Kind
+        let id: String
+        if parts[typeIndex] == "album", let songID = url.queryItems?.first(where: { $0.name == "i" })?.value {
+            kind = .song
+            id = songID
+        } else {
+            kind = parts[typeIndex] == "station" ? .station
+                : parts[typeIndex] == "playlist" ? .playlist
+                : parts[typeIndex] == "song" ? .song : .album
+            id = last
+        }
+        switch kind {
+        case .playlist:
+            guard id.hasPrefix("pl."), id.count > 3,
+                  id.dropFirst(3).allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }) else { return nil }
+        case .station:
+            // Personalized station IDs can use letters and hyphens too.
+            guard id.hasPrefix("ra."), id.count > 3,
+                  id.dropFirst(3).allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }) else { return nil }
+        case .song, .album:
+            guard isNumeric(id) else { return nil }
+        }
+        let title = parts.count == typeIndex + 3
+            ? parts[typeIndex + 1].replacingOccurrences(of: "-", with: " ") : id
+        return FocusMusicSource(id: id, fallbackTitle: title, kind: kind)
+    }
+
+    private static func isNumeric(_ value: String) -> Bool {
+        !value.isEmpty && value.allSatisfy { $0.isASCII && $0.isNumber }
+    }
 }
 
 enum FocusMusicCatalog {
@@ -80,7 +148,9 @@ enum FocusMusicCatalog {
 
     /// The chosen source first, then every other source in catalog order.
     static func fallbackOrder(startingWith chosen: FocusMusicSource) -> [FocusMusicSource] {
-        [chosen] + sources.filter { $0.id != chosen.id }
+        // A personal choice must not silently turn into unrelated music.
+        guard sources.contains(where: { $0.id == chosen.id }) else { return [chosen] }
+        return [chosen] + sources.filter { $0.id != chosen.id }
     }
 }
 
@@ -92,31 +162,118 @@ enum FocusMusicPreferences {
     /// The focus session autoplay last started music for, so a relaunch,
     /// recovery or resume of the same session never starts it again.
     static let autoplayedSessionKey = "music.focus.autoplay.last-session"
-    static let allKeys = [sourceKey, autoplayKey, autoplayedSessionKey]
+    static let savedSourcesKey = "music.focus.saved-sources"
+    // The existing JSON remains the source metadata store. Removing a heart
+    // only changes membership, so assigned sources remain resolvable.
+    static let unfavoritedSourcesKey = "music.focus.unfavorited-sources"
+    static let subjectSourcesKey = "music.focus.subject-sources"
+    static let subjectAutoplayKey = "music.focus.subject-autoplay"
+    static let shuffleKey = "music.focus.shuffle"
+    static let defaultShuffle = true
+    static let allKeys = [sourceKey, autoplayKey, autoplayedSessionKey, savedSourcesKey, unfavoritedSourcesKey, subjectSourcesKey, subjectAutoplayKey, shuffleKey]
 
     /// 「集中を始めたら再生する」 is opt-in (App Review 4.5.2: playback is
     /// user-initiated; starting a focus with the toggle on counts).
     static let defaultAutoplay = false
 
-    /// An ID this build does not list (a retired source) reads as no choice.
-    static func chosenSource(defaults: UserDefaults = .standard) -> FocusMusicSource? {
-        FocusMusicCatalog.source(id: defaults.string(forKey: sourceKey))
+    static func chosenSource(subjectID: UUID? = nil, defaults: UserDefaults = .standard) -> FocusMusicSource? {
+        if let subjectID, let source = subjectSource(for: subjectID, defaults: defaults) { return source }
+        return source(id: defaults.string(forKey: sourceKey), defaults: defaults)
     }
 
-    static func setChosenSource(_ source: FocusMusicSource?, defaults: UserDefaults = .standard) {
-        if let source {
+    static func subjectSource(for subjectID: UUID, defaults: UserDefaults = .standard) -> FocusMusicSource? {
+        source(id: subjectSources(defaults: defaults)[subjectID.uuidString], defaults: defaults)
+    }
+
+    static func setChosenSource(_ source: FocusMusicSource?, subjectID: UUID? = nil, defaults: UserDefaults = .standard) {
+        if let source, source.customTitle != nil || FocusMusicCatalog.source(id: source.id) == nil {
+            storeSourceMetadata(source, defaults: defaults)
+        }
+        if let subjectID {
+            var assignments = subjectSources(defaults: defaults)
+            assignments[subjectID.uuidString] = source?.id
+            write(assignments, key: subjectSourcesKey, defaults: defaults)
+        } else if let source {
             defaults.set(source.id, forKey: sourceKey)
         } else {
             defaults.removeObject(forKey: sourceKey)
         }
     }
 
-    static func isAutoplayEnabled(defaults: UserDefaults = .standard) -> Bool {
-        defaults.object(forKey: autoplayKey) as? Bool ?? defaultAutoplay
+    static func savedSources(defaults: UserDefaults = .standard) -> [FocusMusicSource] {
+        let unfavorited = Set(read([String].self, key: unfavoritedSourcesKey, defaults: defaults) ?? [])
+        return sourceMetadata(defaults: defaults).filter { !unfavorited.contains($0.id) }
     }
 
-    static func setAutoplayEnabled(_ enabled: Bool, defaults: UserDefaults = .standard) {
-        defaults.set(enabled, forKey: autoplayKey)
+    static func saveSource(_ source: FocusMusicSource, defaults: UserDefaults = .standard) {
+        storeSourceMetadata(source, defaults: defaults)
+        let unfavorited = read([String].self, key: unfavoritedSourcesKey, defaults: defaults) ?? []
+        write(unfavorited.filter { $0 != source.id }, key: unfavoritedSourcesKey, defaults: defaults)
+    }
+
+    private static func sourceMetadata(defaults: UserDefaults) -> [FocusMusicSource] {
+        read([FocusMusicSource].self, key: savedSourcesKey, defaults: defaults) ?? []
+    }
+
+    private static func storeSourceMetadata(_ source: FocusMusicSource, defaults: UserDefaults) {
+        var sources = sourceMetadata(defaults: defaults)
+        if let index = sources.firstIndex(where: { $0.id == source.id }) { sources[index] = source }
+        else { sources.append(source) }
+        write(sources, key: savedSourcesKey, defaults: defaults)
+    }
+
+    static func removeSavedSource(_ source: FocusMusicSource, defaults: UserDefaults = .standard) {
+        var unfavorited = Set(read([String].self, key: unfavoritedSourcesKey, defaults: defaults) ?? [])
+        unfavorited.insert(source.id)
+        write(unfavorited.sorted(), key: unfavoritedSourcesKey, defaults: defaults)
+    }
+
+    static func isShuffleEnabled(defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: shuffleKey) as? Bool ?? defaultShuffle
+    }
+
+    private static func source(id: String?, defaults: UserDefaults) -> FocusMusicSource? {
+        sourceMetadata(defaults: defaults).first { $0.id == id } ?? FocusMusicCatalog.source(id: id)
+    }
+
+    private static func subjectSources(defaults: UserDefaults) -> [String: String] {
+        read([String: String].self, key: subjectSourcesKey, defaults: defaults) ?? [:]
+    }
+
+    private static func read<T: Decodable>(_ type: T.Type, key: String, defaults: UserDefaults) -> T? {
+        guard let data = defaults.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(type, from: data)
+    }
+
+    private static func write<T: Encodable>(_ value: T, key: String, defaults: UserDefaults) {
+        guard let data = try? JSONEncoder().encode(value) else { return }
+        defaults.set(data, forKey: key)
+    }
+
+    static func subjectAutoplayOverride(for subjectID: UUID, defaults: UserDefaults = .standard) -> Bool? {
+        let assignments = read([String: Bool].self, key: subjectAutoplayKey, defaults: defaults)
+        return assignments?[subjectID.uuidString]
+    }
+
+    static func clearSubjectAutoplay(_ subjectID: UUID, defaults: UserDefaults = .standard) {
+        var assignments = read([String: Bool].self, key: subjectAutoplayKey, defaults: defaults) ?? [:]
+        assignments.removeValue(forKey: subjectID.uuidString)
+        write(assignments, key: subjectAutoplayKey, defaults: defaults)
+    }
+
+    static func isAutoplayEnabled(subjectID: UUID? = nil, defaults: UserDefaults = .standard) -> Bool {
+        if let subjectID, let override = subjectAutoplayOverride(for: subjectID, defaults: defaults) { return override }
+        return defaults.object(forKey: autoplayKey) as? Bool ?? defaultAutoplay
+    }
+
+    static func setAutoplayEnabled(_ enabled: Bool, subjectID: UUID? = nil, defaults: UserDefaults = .standard) {
+        if let subjectID {
+            var assignments = read([String: Bool].self, key: subjectAutoplayKey, defaults: defaults) ?? [:]
+            assignments[subjectID.uuidString] = enabled
+            write(assignments, key: subjectAutoplayKey, defaults: defaults)
+        } else {
+            defaults.set(enabled, forKey: autoplayKey)
+        }
     }
 
     static func lastAutoplayedSessionID(defaults: UserDefaults = .standard) -> UUID? {
@@ -252,6 +409,22 @@ struct FocusMusicNowPlaying: Equatable, Sendable {
     var title: String?
 }
 
+/// Explicit choices may replace the Music app's queue. A focus starting by
+/// itself must yield to audio the person starts while its source is loading.
+enum FocusMusicPlaybackIntent: Equatable, Sendable {
+    case manual
+    case autoplay
+
+    func allowsStarting(playback: FocusMusicPlaybackStatus, isOtherAudioPlaying: Bool) -> Bool {
+        self == .manual || (playback != .playing && !isOtherAudioPlaying)
+    }
+}
+
+enum FocusMusicPlaybackStartOutcome: Equatable, Sendable {
+    case started
+    case skippedForOtherAudio
+}
+
 /// Playback failures the adapters report. Only the first two let the
 /// controller move on to the next source.
 enum FocusMusicPlaybackError: Error, Equatable, Sendable {
@@ -268,6 +441,22 @@ enum FocusMusicPlaybackError: Error, Equatable, Sendable {
 
     var triesNextSource: Bool {
         self == .notInStorefront || self == .needsCatalogAccess
+    }
+}
+
+/// Search and library failures stay local to the open picker. A permission
+/// fix resolves its old prompt, but cannot resolve a failed network request.
+enum FocusMusicDiscoveryFailure: Equatable, Sendable {
+    case permissionRequired
+    case requestFailed
+
+    init(error: Error, authorization: FocusMusicAuthorization) {
+        self = (error as? FocusMusicPlaybackError) == .permissionDenied
+            || authorization != .authorized ? .permissionRequired : .requestFailed
+    }
+
+    func remaining(after authorization: FocusMusicAuthorization) -> Self? {
+        self == .permissionRequired && authorization == .authorized ? nil : self
     }
 }
 
@@ -297,7 +486,8 @@ enum FocusMusicCatalogRoutePolicy {
     ) -> FocusMusicCatalogRoute {
         switch failure {
         case .developerTokenUnavailable:
-            return source.kind == .playlist ? .mediaPlayerQueue : .fail(.needsCatalogAccess)
+            return source.kind == .playlist && source.libraryID == nil
+                ? .mediaPlayerQueue : .fail(.needsCatalogAccess)
         case .notFound:
             return .fail(.notInStorefront)
         case .permissionDenied:

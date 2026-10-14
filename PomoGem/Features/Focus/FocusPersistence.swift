@@ -343,6 +343,10 @@ struct PendingStratumCelebration: Identifiable, Codable, Equatable, Sendable {
     /// tier, allowing the celebration to look like the crystal that actually
     /// landed instead of a generic amber badge.
     let colorHex: String?
+    /// The landed time's saved palette, frozen when the celebration is made.
+    /// Optional keeps receipts from builds that saved only a dominant colour
+    /// readable after an update.
+    let colorMix: [StratumColorFraction]?
     let level: Int?
     /// Aggregate presentation values are only reusable in the exact
     /// verification epoch that produced them. Optional preserves decoding of
@@ -360,6 +364,7 @@ struct PendingStratumCelebration: Identifiable, Codable, Equatable, Sendable {
         grams: Int,
         monthLabel: String,
         colorHex: String? = nil,
+        colorMix: [StratumColorFraction]? = nil,
         level: Int? = nil,
         projectionCacheStamp: AggregateProjectionCacheStamp? = nil,
         timeFusionTotalGrams: Int? = nil
@@ -370,6 +375,7 @@ struct PendingStratumCelebration: Identifiable, Codable, Equatable, Sendable {
         self.grams = max(0, grams)
         self.monthLabel = monthLabel
         self.colorHex = colorHex
+        self.colorMix = colorMix
         self.level = level.map { max(1, $0) }
         self.projectionCacheStamp = projectionCacheStamp
         self.timeFusionTotalGrams = timeFusionTotalGrams.map { max(0, $0) }
