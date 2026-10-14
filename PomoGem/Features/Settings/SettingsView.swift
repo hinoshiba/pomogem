@@ -54,7 +54,7 @@ enum SettingsPage: String, CaseIterable, Hashable, Sendable {
 
     var title: String {
         switch self {
-        case .themes: String(localized: "テーマ", table: "Settings", comment: "Settings category title")
+        case .themes: String(localized: "取り組み", table: "Settings", comment: "Settings category title")
         case .timer: String(localized: "集中タイマー", table: "Settings", comment: "Settings category title")
         case .sensory: String(localized: "音と触覚", table: "Settings", comment: "Settings category title")
         case .jar: String(localized: "瓶とシェア", table: "Settings", comment: "Settings category title")
@@ -66,7 +66,7 @@ enum SettingsPage: String, CaseIterable, Hashable, Sendable {
 
     var subtitle: String {
         switch self {
-        case .themes: String(localized: "名前・色・表示順", table: "Settings", comment: "Settings category summary")
+        case .themes: String(localized: "名前・色・時間・音楽・表示順", table: "Settings", comment: "Settings category summary")
         case .timer: String(localized: "時間・画面・離席時の動作", table: "Settings", comment: "Settings category summary")
         case .sensory: String(localized: "終了アラーム・効果音・振動", table: "Settings", comment: "Settings category summary")
         case .jar: String(localized: "瓶の演出・シェアに含める記録", table: "Settings", comment: "Settings category summary")
@@ -128,8 +128,6 @@ struct SettingsView: View {
     @State private var focusLeaveNudgesChosen = FocusLeavePreferences.nudgesWereChosen()
     @AppStorage(TimerOrientationPreference.defaultsKey)
     private var defaultTimerOrientationRawValue = TimerDefaultOrientation.automatic.rawValue
-    @AppStorage(FocusMusicPreferences.sourceKey)
-    private var focusMusicSourceID = ""
     @State private var focusMusic = FocusMusicController.shared
     @State private var isFocusMusicPresented = false
     @State private var purchase = PurchaseManager.shared
@@ -224,19 +222,25 @@ struct SettingsView: View {
                    let subject = subjects.first(where: { $0.id == editingSubjectID }) {
                     SubjectEditorView(
                         subject: subject,
-                        suggestedColorHex: subject.colorHex
-                    ) { name, color, isArchived in
+                        suggestedColorHex: subject.colorHex,
+                        preferredFocusSeconds: resolvedPreferences?.preferredFocusSeconds
+                            ?? PomodoroDuration.twentyFiveMinutes.seconds
+                    ) { name, color, isArchived, defaultFocusSeconds, musicSettings in
                         saveSubjectEdits(
                             subject: subject,
                             name: name,
                             color: color,
-                            isArchived: isArchived
+                            isArchived: isArchived,
+                            defaultFocusSeconds: defaultFocusSeconds,
+                            musicSettings: musicSettings
                         )
                     }
                 } else {
                     SubjectEditorView(
                         subject: nil,
                         suggestedColorHex: nextSubjectColor,
+                        preferredFocusSeconds: resolvedPreferences?.preferredFocusSeconds
+                            ?? PomodoroDuration.twentyFiveMinutes.seconds,
                         onSave: addSubject
                     )
                 }
@@ -257,7 +261,13 @@ struct SettingsView: View {
             // Settings is portrait and no focus runs here, so the sheet is
             // upright and may link to the 「設定」 app (D4.1 applies only
             // while a focus is on screen).
-            FocusMusicSheet(controller: focusMusic, allowsLeavingApp: true)
+            FocusMusicSheet(
+                controller: focusMusic,
+                allowsLeavingApp: true,
+                subjects: subjects.filter { !$0.isArchived }.map {
+                    FocusMusicSubject(id: $0.id, name: $0.localizedDisplayName)
+                }
+            )
                 .modifier(FocusMusicSheetOrientation(isUpsideDown: false))
                 .environment(\.dynamicTypeSize, dynamicTypeSize)
         }
@@ -285,7 +295,7 @@ struct SettingsView: View {
             }
         }
         .alert(
-            String(localized: "テーマを削除", table: "Settings", comment: "Alert title: delete a theme"),
+            String(localized: "取り組みを削除", table: "Settings", comment: "Alert title: delete a theme"),
             isPresented: Binding(
                 get: { subjectPendingDeletion != nil },
                 set: {
@@ -591,6 +601,7 @@ struct SettingsView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(PomoGemRowButtonStyle())
+                .accessibilityIdentifier("settings.subject.\(subject.id.uuidString)")
                 .accessibilityHint(
                     subjects.count > 1
                         ? String(
@@ -631,7 +642,7 @@ struct SettingsView: View {
                         } catch {
                             modelContext.rollback()
                             settingsError = String(
-                                localized: "テーマの表示設定を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)",
+                                localized: "取り組みの表示設定を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)",
                                 table: "Settings",
                                 comment: "Settings error; the argument is the system error description"
                             )
@@ -651,9 +662,10 @@ struct SettingsView: View {
                 editingSubjectID = nil
                 isSubjectEditorPresented = true
             } label: {
-                Label(String(localized: "テーマを追加", table: "Settings", comment: "Button and editor title: add a theme"), systemImage: "plus")
+                Label(String(localized: "取り組みを追加", table: "Settings", comment: "Button and editor title: add a theme"), systemImage: "plus")
             }
             .disabled(subjects.count >= Constants.App.maximumSubjects)
+            .accessibilityIdentifier("settings.add-subject")
             .accessibilityHint(
                 subjects.count >= Constants.App.maximumSubjects
                     ? String(
@@ -661,10 +673,10 @@ struct SettingsView: View {
                         table: "Settings",
                         comment: "VoiceOver hint of the disabled Add Theme button: the 12-theme limit is reached"
                     )
-                    : String(localized: "新しいテーマを追加します", table: "Settings", comment: "VoiceOver hint of the Add Theme button")
+                    : String(localized: "新しい取り組みを追加します", table: "Settings", comment: "VoiceOver hint of the Add Theme button")
             )
         } header: {
-            Text("テーマ", tableName: "Settings", comment: "Settings section header: the person's themes")
+            Text("取り組み", tableName: "Settings", comment: "Settings section header: the person's themes")
         } footer: {
             Text(
                 "勉強も仕事も同じ一覧です。最大12件。追加画面には名前のヒントがあります。削除しても過去の質量と記録は残ります。長押しで順番を変更できます。",
@@ -805,7 +817,7 @@ struct SettingsView: View {
     /// The chosen music's catalog title once the sheet has read it, else our
     /// Japanese label (`FocusMusicController.title(for:)`).
     private var focusMusicRowValue: String {
-        if let source = FocusMusicCatalog.source(id: focusMusicSourceID) {
+        if let source = focusMusic.chosenSource {
             return focusMusic.title(for: source)
         }
         return String(
@@ -1662,7 +1674,7 @@ struct SettingsView: View {
             // the value so the no-import fact is heard too (settings-09).
             .accessibilityValue(dataExportSubtitle)
             .accessibilityHint(Text(
-                "この端末で利用可能な記録、テーマ、設定をJSONファイルにして、保存先を選びます",
+                "この端末で利用可能な記録、取り組み、設定をJSONファイルにして、保存先を選びます",
                 tableName: "Settings",
                 comment: "VoiceOver hint of the export row"
             ))
@@ -1805,7 +1817,7 @@ struct SettingsView: View {
         let message: String
         if persistenceMode == .localOnly {
             message = String(
-                localized: "集中の粒・結晶・記念石を表示と集計から外し、0から始めます。テーマと設定は残ります。リセット前の記録はこのiPhoneの中に残り、データの書き出しに含まれることがあります。このiPhoneから完全に消すには、アプリを削除してください。この操作は取り消せません。",
+                localized: "集中の粒・結晶・記念石を表示と集計から外し、0から始めます。取り組みと設定は残ります。リセット前の記録はこのiPhoneの中に残り、データの書き出しに含まれることがあります。このiPhoneから完全に消すには、アプリを削除してください。この操作は取り消せません。",
                 table: "Settings",
                 comment: "Reset confirmation on a local-only iPhone"
             )
@@ -1838,13 +1850,13 @@ struct SettingsView: View {
     private var dataStorageDisclosure: String {
         if persistenceMode == .localOnly {
             return String(
-                localized: "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにある共有可能な記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このファイルを読み込んで記録を戻したり、iCloudへ移したりすることはできません。リセットしてもテーマと設定は残ります。このiPhoneのデータは、アプリを削除すると消えます。",
+                localized: "書き出すファイル（JSON）には、取り組み名・成果メモ・設定、このiPhoneにある共有可能な記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このファイルを読み込んで記録を戻したり、iCloudへ移したりすることはできません。リセットしても取り組みと設定は残ります。このiPhoneのデータは、アプリを削除すると消えます。",
                 table: "Settings",
                 comment: "Settings export footer on a local-only iPhone"
             )
         }
         return String(
-            localized: "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにある共有可能な記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このiPhoneのデータはアプリの削除で、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除できます。",
+            localized: "書き出すファイル（JSON）には、取り組み名・成果メモ・設定、このiPhoneにある共有可能な記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このiPhoneのデータはアプリの削除で、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除できます。",
             table: "Settings",
             comment: "Settings export footer in iCloud mode"
         )
@@ -2119,10 +2131,16 @@ struct SettingsView: View {
         SubjectPalette.suggestedHex(existing: subjects.map(\.colorHex))
     }
 
-    private func addSubject(name: String, colorHex: String, isArchived _: Bool) -> String? {
+    private func addSubject(
+        name: String,
+        colorHex: String,
+        isArchived _: Bool,
+        defaultFocusSeconds: Int?,
+        musicSettings: FocusMusicSubjectSettings
+    ) -> String? {
         guard subjects.count < Constants.App.maximumSubjects else {
             return String(
-                localized: "テーマは最大\(Constants.App.maximumSubjects)件までです。",
+                localized: "取り組みは最大\(Constants.App.maximumSubjects)件までです。",
                 table: "Settings",
                 comment: "Theme editor error; the argument is the theme limit (12)"
             )
@@ -2130,31 +2148,39 @@ struct SettingsView: View {
         if let validationError = subjectNameValidationError(name) {
             return validationError
         }
+        if let validationError = subjectDurationValidationError(defaultFocusSeconds) {
+            return validationError
+        }
         guard let sanitizedName = SubjectNamePolicy.validated(name) else {
             return SubjectNamePolicy.validationError(for: name)?.message
-                ?? String(localized: "テーマ名を入力してください。", table: "Settings", comment: "Theme editor error: the name is empty")
+                ?? String(localized: "取り組み名を入力してください。", table: "Settings", comment: "Theme editor error: the name is empty")
         }
-        modelContext.insert(
-            Subject(
+        let subject = Subject(
                 name: sanitizedName,
                 colorHex: colorHex,
                 sortOrder: NonnegativeIntPolicy.next(
                     after: subjects.map(\.sortOrder).max()
-                )
-            )
+                ),
+                defaultFocusSeconds: defaultFocusSeconds
         )
-        return commitChanges(failureMessage: String(
-            localized: "テーマを追加できませんでした。",
+        modelContext.insert(subject)
+        let error = commitChanges(failureMessage: String(
+            localized: "取り組みを追加できませんでした。",
             table: "Settings",
             comment: "Theme editor error, followed by a line saying the change was undone"
         ))
+        guard error == nil else { return error }
+        focusMusic.setSubjectSettings(musicSettings, for: subject.id)
+        return nil
     }
 
     private func saveSubjectEdits(
         subject: Subject,
         name: String,
         color: String,
-        isArchived: Bool
+        isArchived: Bool,
+        defaultFocusSeconds: Int?,
+        musicSettings: FocusMusicSubjectSettings
     ) -> String? {
         if let validationError = subjectNameValidationError(
             name,
@@ -2162,28 +2188,61 @@ struct SettingsView: View {
         ) {
             return validationError
         }
+        if let validationError = subjectDurationValidationError(
+            defaultFocusSeconds,
+            preserving: subject.defaultFocusSeconds
+        ) {
+            return validationError
+        }
         guard let sanitizedName = SubjectNamePolicy.validated(name) else {
             return SubjectNamePolicy.validationError(for: name)?.message
-                ?? String(localized: "テーマ名を入力してください。", table: "Settings", comment: "Theme editor error: the name is empty")
+                ?? String(localized: "取り組み名を入力してください。", table: "Settings", comment: "Theme editor error: the name is empty")
         }
         do {
             subject.name = sanitizedName
             subject.colorHex = color
             subject.isArchived = isArchived
+            subject.defaultFocusSeconds = defaultFocusSeconds
             try SubjectSyncPolicy.recordUserMutation(
                 from: subject,
                 among: storedSubjects
             )
             try modelContext.save()
+            focusMusic.setSubjectSettings(musicSettings, for: subject.id)
             return nil
         } catch {
             modelContext.rollback()
             return String(
-                localized: "テーマの変更を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)",
+                localized: "取り組みの変更を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)",
                 table: "Settings",
                 comment: "Theme editor error; the argument is the system error description"
             )
         }
+    }
+
+    private func subjectDurationValidationError(
+        _ seconds: Int?,
+        preserving storedSeconds: Int? = nil
+    ) -> String? {
+        guard let seconds else { return nil }
+        let duration = PomodoroDuration(totalSeconds: seconds)
+        guard duration.isValid else {
+            return String(
+                localized: "集中時間は1分〜360分で設定してください。",
+                table: "Settings",
+                comment: "Theme editor error: its default focus duration must be within the supported range"
+            )
+        }
+        // Losing Pro must not erase the saved custom default or prevent an
+        // unrelated name/colour edit. New custom choices still require Pro.
+        guard !duration.requiresPro || purchase.isPro || seconds == storedSeconds else {
+            return String(
+                localized: "Proの購入状態を確認してください",
+                table: "Settings",
+                comment: "Toast: a custom duration needs Pro, and Pro is not confirmed on this device"
+            )
+        }
+        return nil
     }
 
     private func subjectNameValidationError(
@@ -2200,7 +2259,7 @@ struct SettingsView: View {
         }
         guard let duplicate else { return nil }
         return String(
-            localized: "同じ名前のテーマ「\(duplicate.localizedDisplayName)」がすでにあります。",
+            localized: "同じ名前の取り組み「\(duplicate.localizedDisplayName)」がすでにあります。",
             table: "Settings",
             comment: "Theme editor error; the argument is the existing theme's name"
         )
@@ -2227,7 +2286,7 @@ struct SettingsView: View {
         } catch {
             modelContext.rollback()
             settingsError = String(
-                localized: "テーマを削除できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)",
+                localized: "取り組みを削除できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)",
                 table: "Settings",
                 comment: "Settings error; the argument is the system error description"
             )
@@ -2280,7 +2339,7 @@ struct SettingsView: View {
         } catch {
             modelContext.rollback()
             settingsError = String(
-                localized: "関連する記録を確認できないため、テーマを削除できません。\n\(error.localizedDescription)",
+                localized: "関連する記録を確認できないため、取り組みを削除できません。\n\(error.localizedDescription)",
                 table: "Settings",
                 comment: "Settings error; the argument is the system error description"
             )
@@ -2337,7 +2396,7 @@ struct SettingsView: View {
         } catch {
             modelContext.rollback()
             settingsError = String(
-                localized: "テーマの並び順を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)",
+                localized: "取り組みの並び順を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)",
                 table: "Settings",
                 comment: "Settings error; the argument is the system error description"
             )
@@ -3348,7 +3407,7 @@ private struct CompleteDataDeletionConfirmationView: View {
         Group {
             Section {
                 Label(String(
-                    localized: "テーマと成果メモ",
+                    localized: "取り組みと成果メモ",
                     table: "Settings",
                     comment: "Complete data deletion: what is deleted"
                 ), systemImage: "tag.slash")
@@ -3371,7 +3430,7 @@ private struct CompleteDataDeletionConfirmationView: View {
                 Text("取り消せない削除対象", tableName: "Settings", comment: "Complete data deletion: section header above what is deleted for good")
             } footer: {
                 Text(
-                    "テーマ・記録・設定などのユーザー内容を削除します。古い端末からの再流入を検知するため、内容を含まない削除世代記録1件（世代ID・処理ID・連番・状態・日時）はiCloudに残ります。Proの購入履歴はAppleが管理しているため削除されず、同じApple Accountでは復元できます。",
+                    "取り組み・記録・設定などのユーザー内容を削除します。古い端末からの再流入を検知するため、内容を含まない削除世代記録1件（世代ID・処理ID・連番・状態・日時）はiCloudに残ります。Proの購入履歴はAppleが管理しているため削除されず、同じApple Accountでは復元できます。",
                     tableName: "Settings",
                     comment: "Complete data deletion: what stays (the content-free deletion record, the Pro purchase)"
                 )
@@ -3798,13 +3857,21 @@ private struct RarePebbleGuideRow: View {
 private struct SubjectEditorView: View {
     let subject: Subject?
     let suggestedColorHex: String
-    let onSave: (String, String, Bool) -> String?
+    let preferredFocusSeconds: Int
+    let onSave: (String, String, Bool, Int?, FocusMusicSubjectSettings) -> String?
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var name: String
     @State private var colorHex: String
     @State private var isArchived: Bool
+    @State private var defaultFocusSeconds: Int?
+    @State private var musicSettings: FocusMusicSubjectSettings
+    @State private var focusMusic = FocusMusicController.shared
+    @State private var showMusicSelection = false
+    @State private var purchase = PurchaseManager.shared
+    @State private var showCustomDuration = false
+    @State private var showDurationPaywall = false
     @State private var saveError: String?
     @FocusState private var isNameFocused: Bool
 
@@ -3867,14 +3934,20 @@ private struct SubjectEditorView: View {
     init(
         subject: Subject?,
         suggestedColorHex: String,
-        onSave: @escaping (String, String, Bool) -> String?
+        preferredFocusSeconds: Int,
+        onSave: @escaping (String, String, Bool, Int?, FocusMusicSubjectSettings) -> String?
     ) {
         self.subject = subject
         self.suggestedColorHex = suggestedColorHex
+        self.preferredFocusSeconds = preferredFocusSeconds
         self.onSave = onSave
         _name = State(initialValue: subject?.name ?? "")
         _colorHex = State(initialValue: subject?.colorHex ?? suggestedColorHex)
         _isArchived = State(initialValue: subject?.isArchived ?? false)
+        _defaultFocusSeconds = State(initialValue: subject?.defaultFocusSeconds)
+        _musicSettings = State(initialValue: subject.map {
+            FocusMusicController.shared.subjectSettings(for: $0.id)
+        } ?? FocusMusicSubjectSettings(source: nil, autoplay: nil))
     }
 
     var body: some View {
@@ -3886,8 +3959,9 @@ private struct SubjectEditorView: View {
                         .submitLabel(.done)
                         .focused($isNameFocused)
                         .onSubmit { isNameFocused = false }
+                        .accessibilityIdentifier("subject-editor.name")
                         .accessibilityHint(String(
-                            localized: "テーマ名は\(SubjectNamePolicy.maximumCharacters)文字までです",
+                            localized: "取り組み名は\(SubjectNamePolicy.maximumCharacters)文字までです",
                             table: "Settings",
                             comment: "VoiceOver hint of the theme name field; the argument is the longest allowed name (20)"
                         ))
@@ -3984,6 +4058,8 @@ private struct SubjectEditorView: View {
                     }
                     .padding(.vertical, 8)
                 }
+                focusDurationSection
+                focusMusicSection
                 if let subject {
                     Section {
                         Toggle(String(
@@ -4003,28 +4079,33 @@ private struct SubjectEditorView: View {
                     }
                 }
             }
+            .accessibilityIdentifier("subject-editor")
             .scrollContentBackground(.hidden)
             .background(NightBackground())
             .navigationTitle(subject == nil
-                ? String(localized: "テーマを追加", table: "Settings", comment: "Button and editor title: add a theme")
-                : String(localized: "テーマを編集", table: "Settings", comment: "Theme editor title when editing"))
+                ? String(localized: "取り組みを追加", table: "Settings", comment: "Button and editor title: add a theme")
+                : String(localized: "取り組みを編集", table: "Settings", comment: "Theme editor title when editing"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(String(
                     localized: "キャンセル",
                     table: "Settings",
                     comment: "Toolbar button"
-                )) { dismiss() } }
+                )) { dismiss() }
+                    .accessibilityIdentifier("subject-editor.cancel")
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(String(localized: "保存", table: "Settings", comment: "Toolbar button: save the theme")) {
                         guard let sanitizedName = SubjectNamePolicy.validated(name) else {
                             saveError = nameValidationError?.message
-                                ?? String(localized: "テーマ名を入力してください。", table: "Settings", comment: "Theme editor error: the name is empty")
+                                ?? String(localized: "取り組み名を入力してください。", table: "Settings", comment: "Theme editor error: the name is empty")
                             return
                         }
                         let error = onSave(
                             sanitizedName,
                             colorHex,
-                            isArchived
+                            isArchived,
+                            defaultFocusSeconds,
+                            musicSettings
                         )
                         if let error {
                             saveError = error
@@ -4033,6 +4114,7 @@ private struct SubjectEditorView: View {
                         }
                     }
                     .disabled(nameValidationError != nil)
+                    .accessibilityIdentifier("subject-editor.save")
                 }
             }
             .alert(String(
@@ -4048,6 +4130,198 @@ private struct SubjectEditorView: View {
                 Text(saveError ?? "")
             }
         }
+        .sheet(isPresented: $showCustomDuration) {
+            CustomDurationView(
+                initialSeconds: defaultFocusSeconds ?? preferredFocusSeconds,
+                onConfirm: confirmDefaultFocusSeconds
+            )
+            .environment(\.dynamicTypeSize, dynamicTypeSize)
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showMusicSelection) {
+            FocusMusicSheet(
+                controller: focusMusic,
+                allowsLeavingApp: true,
+                sourceSelection: $musicSettings.source
+            )
+            .environment(\.dynamicTypeSize, dynamicTypeSize)
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showDurationPaywall, onDismiss: {
+            if purchase.isPro { showCustomDuration = true }
+        }) {
+            PaywallView(context: .customTimer)
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
+        }
+    }
+
+    private var focusDurationSection: some View {
+        Section {
+            Picker(String(
+                localized: "既定の集中時間",
+                table: "Settings",
+                comment: "Heading of the default focus length picker in Settings"
+            ), selection: $defaultFocusSeconds) {
+                Text("共通設定を使う", tableName: "Settings", comment: "Theme duration option: inherit the app's default focus length")
+                    .tag(nil as Int?)
+                ForEach(PomodoroDuration.freePresets, id: \.self) { duration in
+                    Text(duration.displayLabel).tag(Optional(duration.seconds))
+                }
+                if let customSeconds = customDurationOption {
+                    Text(PomodoroDuration(totalSeconds: customSeconds).displayLabel)
+                        .tag(Optional(customSeconds))
+                }
+            }
+            .pickerStyle(.menu)
+            .accessibilityIdentifier("subject-editor.default-focus-duration")
+
+            Button {
+                isNameFocused = false
+                if purchase.isPro {
+                    showCustomDuration = true
+                } else {
+                    showDurationPaywall = true
+                }
+            } label: {
+                HStack {
+                    Text("カスタム時間", tableName: "Settings", comment: "Tile title: a focus length the person sets (Pro)")
+                    Text(verbatim: "Pro")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(PomoGemTheme.amber)
+                    Spacer()
+                    Image(systemName: purchase.isPro ? "chevron.right" : "lock.fill")
+                        .foregroundStyle(PomoGemTheme.muted)
+                }
+                .frame(minHeight: 44)
+            }
+            .accessibilityIdentifier("subject-editor.custom-duration")
+            .accessibilityHint(purchase.isPro
+                ? String(localized: "分と秒を入力、またはスクロールして設定します", table: "Settings", comment: "VoiceOver hint of the custom length tile for Pro users")
+                : String(localized: "ポモジェムProのプランを表示します", table: "Settings", comment: "VoiceOver hint of the custom length tile without Pro: it opens the paywall"))
+        } header: {
+            Text("この取り組みの集中時間", tableName: "Settings", comment: "Theme editor section header: this theme's default focus length")
+        } footer: {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(
+                    "ホームでこの取り組みを選ぶと、この時間が選ばれます。「共通設定を使う」では、集中タイマーの既定の集中時間を使います。",
+                    tableName: "Settings",
+                    comment: "Theme editor explanation of per-theme defaults and inheriting the app's default"
+                )
+                if let defaultFocusSeconds,
+                   PomodoroDuration(totalSeconds: defaultFocusSeconds).requiresPro,
+                   !purchase.isPro {
+                    Text(
+                        "保存したカスタム時間はProで使えます。Proを利用していない間は25分になります。",
+                        tableName: "Settings",
+                        comment: "Theme editor note: saved custom durations remain stored but use 25 minutes without Pro"
+                    )
+                }
+            }
+        }
+    }
+
+    private var focusMusicSection: some View {
+        Section {
+            Toggle(String(localized: "集中を始めたら再生する", table: "Settings"), isOn: Binding(
+                get: { musicSettings.autoplay ?? focusMusic.isAutoplayEnabled(for: nil) },
+                set: { musicSettings.autoplay = $0 }
+            ))
+            .accessibilityIdentifier("subject-editor.music.autoplay")
+
+            if musicSettings.autoplay == nil {
+                Text("共通の自動再生設定を使っています", tableName: "Settings", comment: "Activity editor: autoplay currently follows the shared preference")
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+            }
+
+            Button {
+                isNameFocused = false
+                showMusicSelection = true
+            } label: {
+                focusMusicSourceLabel
+            }
+            .accessibilityIdentifier("subject-editor.music.source")
+
+            if musicSettings.autoplay != nil {
+                Button {
+                    musicSettings.autoplay = nil
+                } label: {
+                    Text("共通の自動再生設定に戻す", tableName: "Settings", comment: "Restore the shared autoplay preference for this activity")
+                }
+                .accessibilityIdentifier("subject-editor.music.autoplay-reset")
+            }
+        } header: {
+            Text("この取り組みの音楽", tableName: "Settings", comment: "Activity editor music section heading")
+        } footer: {
+            Text("このiPhoneで使う音楽設定です。保存すると、この取り組みで集中を始めるときに使います。ほかの音楽や音声を再生中のときは入れ替えません。", tableName: "Settings", comment: "Activity music settings are device-local and apply after Save; existing audio is respected")
+        }
+    }
+
+    private var focusMusicSourceTitle: String {
+        musicSettings.source.map(focusMusic.title(for:)) ?? String(
+            localized: "共通の音楽を使う", table: "Settings"
+        )
+    }
+
+    private var focusMusicSourceLabel: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Text("集中中に流す音楽", tableName: "Settings", comment: "Activity editor: music to use during a focus")
+                        Spacer(minLength: 8)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(PomoGemTheme.muted)
+                            .accessibilityHidden(true)
+                    }
+                    Text(focusMusicSourceTitle)
+                        .foregroundStyle(PomoGemTheme.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .multilineTextAlignment(.leading)
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text("集中中に流す音楽", tableName: "Settings", comment: "Activity editor: music to use during a focus")
+                    Spacer(minLength: 8)
+                    Text(focusMusicSourceTitle)
+                        .foregroundStyle(PomoGemTheme.muted)
+                        .multilineTextAlignment(.trailing)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(PomoGemTheme.muted)
+                        .accessibilityHidden(true)
+                }
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(minHeight: 44)
+    }
+
+    private var customDurationOption: Int? {
+        // Keep the original custom value available while editing a name or
+        // switching back from a free preset, even when Pro is unavailable.
+        for seconds in [defaultFocusSeconds, subject?.defaultFocusSeconds].compactMap({ $0 }) {
+            if PomodoroDuration(totalSeconds: seconds).requiresPro { return seconds }
+        }
+        return nil
+    }
+
+    private func confirmDefaultFocusSeconds(_ seconds: Int) -> Bool {
+        guard purchase.isPro else {
+            saveError = String(
+                localized: "Proの購入状態を確認してください",
+                table: "Settings",
+                comment: "Toast: a custom duration needs Pro, and Pro is not confirmed on this device"
+            )
+            return false
+        }
+        guard PomodoroDuration(totalSeconds: seconds).isValid else { return false }
+        defaultFocusSeconds = seconds
+        showCustomDuration = false
+        return true
     }
 }
 

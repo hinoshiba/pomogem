@@ -81,6 +81,17 @@ final class SystemFocusMusicPlayer: FocusMusicPlaying {
         }
     }
 
+    var currentEntryID: String? {
+        switch route {
+        case .musicKit:
+            SystemMusicPlayer.shared.queue.currentEntry?.id
+        case .mediaPlayer:
+            // A media item's persistent ID identifies a song, not its entry
+            // in this queue. It cannot establish ownership after Music edits it.
+            nil
+        }
+    }
+
     /// Any other app's audio, the Music app included: a podcast or another
     /// music app is invisible to the Music app's player state. Reading the
     /// shared session's hint neither configures nor activates it.
@@ -88,26 +99,56 @@ final class SystemFocusMusicPlayer: FocusMusicPlaying {
         AVAudioSession.sharedInstance().isOtherAudioPlaying
     }
 
-    func play(_ source: FocusMusicSource) async throws {
+    func play(
+        _ source: FocusMusicSource, shuffle: Bool, intent: FocusMusicPlaybackIntent
+    ) async throws -> FocusMusicPlaybackStartOutcome {
         do {
             let player = SystemMusicPlayer.shared
+            let queue: MusicKit.MusicPlayer.Queue
             switch source.kind {
             case .playlist:
-                let playlist = try await Self.catalogPlaylist(source)
-                player.queue = [playlist]
+                let playlist: Playlist
+                if let libraryID = source.libraryID {
+                    playlist = try await Self.libraryPlaylist(id: libraryID)
+                } else {
+                    playlist = try await Self.catalogPlaylist(source)
+                }
+                queue = try await Self.queue(
+                    for: playlist, shuffle: shuffle, isLibrary: source.libraryID != nil
+                )
             case .station:
                 let station = try await Self.catalogStation(source)
-                player.queue = [station]
+                queue = [station]
+            case .song:
+                let song = try await Self.catalogSong(source)
+                queue = [song]
+            case .album:
+                let album = try await Self.catalogAlbum(source)
+                queue = try await Self.queue(for: album, shuffle: shuffle)
             }
+            try Task.checkCancellation()
+            guard intent.allowsStarting(
+                playback: Self.map(player.state.playbackStatus),
+                isOtherAudioPlaying: isOtherAudioPlaying
+            ) else { return .skippedForOtherAudio }
+            player.queue = queue
+            // Stations choose their own programming. Shuffle applies only
+            // to a collection of tracks, never to a station or single song.
+            let shufflesTracks = shuffle && (source.kind == .playlist || source.kind == .album)
+            player.state.shuffleMode = shufflesTracks ? .songs : .off
             try await player.play()
             route = .musicKit
             observeMusicKitQueue()
+            return .started
+        } catch is CancellationError {
+            throw CancellationError()
         } catch let error as FocusMusicPlaybackError {
             throw error
         } catch {
+            try Task.checkCancellation()
             switch Self.route(after: error, for: source) {
             case .mediaPlayerQueue:
-                try await playByStoreID(source)
+                return try await playByStoreID(source, shuffle: shuffle, intent: intent)
             case .fail(let failure):
                 throw failure
             }
@@ -180,8 +221,18 @@ final class SystemFocusMusicPlayer: FocusMusicPlaying {
     }
 
     /// The stopgap while the MusicKit App Service is off: playlists only.
-    private func playByStoreID(_ source: FocusMusicSource) async throws {
+    private func playByStoreID(
+        _ source: FocusMusicSource, shuffle: Bool, intent: FocusMusicPlaybackIntent
+    ) async throws -> FocusMusicPlaybackStartOutcome {
         let player = MPMusicPlayerController.systemMusicPlayer
+        try Task.checkCancellation()
+        guard intent.allowsStarting(
+            playback: Self.map(player.playbackState), isOtherAudioPlaying: isOtherAudioPlaying
+        ) else { return .skippedForOtherAudio }
+        // With no catalog access there are no track IDs for an explicit
+        // starting item. Ask the Music app to shuffle before preparing its
+        // store-ID queue; the Music app determines the first track here.
+        player.shuffleMode = shuffle ? .songs : .off
         player.setQueue(with: [source.id])
         do {
             try await FocusMusicCallbackDeadline.wait(
@@ -197,13 +248,28 @@ final class SystemFocusMusicPlayer: FocusMusicPlaying {
             guard nsError.domain == MPErrorDomain else { throw FocusMusicPlaybackError.failed }
             throw Self.playbackError(forMediaPlayerCode: MPError.Code(rawValue: nsError.code))
         }
+        try Task.checkCancellation()
+        guard intent.allowsStarting(
+            playback: Self.map(player.playbackState), isOtherAudioPlaying: isOtherAudioPlaying
+        ) else { return .skippedForOtherAudio }
         player.play()
         route = .mediaPlayer
+        return .started
     }
 
     private static func catalogPlaylist(_ source: FocusMusicSource) async throws -> Playlist {
         var request = MusicCatalogResourceRequest<Playlist>(matching: \.id, equalTo: MusicItemID(source.id))
         if #available(iOS 26.4, *) { request.options = [.findEquivalents] }
+        guard let playlist = try await request.response().items.first else {
+            throw FocusMusicPlaybackError.notInStorefront
+        }
+        return playlist
+    }
+
+    private static func libraryPlaylist(id: String) async throws -> Playlist {
+        var request = MusicLibraryRequest<Playlist>()
+        request.filter(matching: \.id, equalTo: MusicItemID(id))
+        request.limit = 1
         guard let playlist = try await request.response().items.first else {
             throw FocusMusicPlaybackError.notInStorefront
         }
@@ -217,6 +283,48 @@ final class SystemFocusMusicPlayer: FocusMusicPlaying {
             throw FocusMusicPlaybackError.notInStorefront
         }
         return station
+    }
+
+    private static func catalogSong(_ source: FocusMusicSource) async throws -> Song {
+        var request = MusicCatalogResourceRequest<Song>(matching: \.id, equalTo: MusicItemID(source.id))
+        if #available(iOS 26.4, *) { request.options = [.findEquivalents] }
+        guard let song = try await request.response().items.first else {
+            throw FocusMusicPlaybackError.notInStorefront
+        }
+        return song
+    }
+
+    private static func catalogAlbum(_ source: FocusMusicSource) async throws -> Album {
+        var request = MusicCatalogResourceRequest<Album>(matching: \.id, equalTo: MusicItemID(source.id))
+        if #available(iOS 26.4, *) { request.options = [.findEquivalents] }
+        guard let album = try await request.response().items.first else {
+            throw FocusMusicPlaybackError.notInStorefront
+        }
+        return album
+    }
+
+    private static func queue(for playlist: Playlist, shuffle: Bool, isLibrary: Bool = false) async throws -> MusicKit.MusicPlayer.Queue {
+        guard shuffle else { return [playlist] }
+        let detailed = try await playlist.with([.entries], preferredSource: isLibrary ? .library : .catalog)
+        guard let first = detailed.entries?.filter({ $0.playParameters != nil }).randomElement() else {
+            throw FocusMusicPlaybackError.notInStorefront
+        }
+        // Shuffle mode alone may retain the initial entry. Select that
+        // entry from the first metadata batch so long playlists do not wait
+        // for every catalog page. The queue still contains the whole
+        // playlist, and Music applies shuffle to its remaining tracks.
+        return MusicKit.MusicPlayer.Queue(playlist: detailed, startingAt: first)
+    }
+
+    private static func queue(for album: Album, shuffle: Bool) async throws -> MusicKit.MusicPlayer.Queue {
+        guard shuffle else { return [album] }
+        let detailed = try await album.with([.tracks])
+        guard let first = detailed.tracks?.filter({ $0.playParameters != nil }).randomElement() else {
+            throw FocusMusicPlaybackError.notInStorefront
+        }
+        // As for playlists, bound metadata loading to the initial batch;
+        // choosing the first track does not truncate the album's queue.
+        return MusicKit.MusicPlayer.Queue(album: detailed, startingAt: first)
     }
 
     /// Where a failure of the MusicKit path leads. `SystemMusicPlayer.play()`
@@ -361,8 +469,10 @@ struct SystemFocusMusicCatalog: FocusMusicCatalogNaming {
     /// Needs the developer token; without it every title stays our label.
     func titles(for sources: [FocusMusicSource]) async -> [String: String] {
         var titles: [String: String] = [:]
-        let playlistIDs = sources.filter { $0.kind == .playlist }.map { MusicItemID($0.id) }
+        let playlistIDs = sources.filter { $0.kind == .playlist && $0.libraryID == nil }.map { MusicItemID($0.id) }
         let stationIDs = sources.filter { $0.kind == .station }.map { MusicItemID($0.id) }
+        let songIDs = sources.filter { $0.kind == .song }.map { MusicItemID($0.id) }
+        let albumIDs = sources.filter { $0.kind == .album }.map { MusicItemID($0.id) }
         if !playlistIDs.isEmpty,
            let response = try? await MusicCatalogResourceRequest<Playlist>(
                matching: \.id,
@@ -377,6 +487,87 @@ struct SystemFocusMusicCatalog: FocusMusicCatalogNaming {
            ).response() {
             for station in response.items { titles[station.id.rawValue] = station.name }
         }
+        if !songIDs.isEmpty,
+           let response = try? await MusicCatalogResourceRequest<Song>(
+               matching: \.id,
+               memberOf: songIDs
+           ).response() {
+            for song in response.items { titles[song.id.rawValue] = Self.title(for: song) }
+        }
+        if !albumIDs.isEmpty,
+           let response = try? await MusicCatalogResourceRequest<Album>(
+               matching: \.id,
+               memberOf: albumIDs
+           ).response() {
+            for album in response.items { titles[album.id.rawValue] = Self.title(for: album) }
+        }
         return titles
+    }
+
+    func libraryPlaylists(offset: Int, limit: Int) async throws -> [FocusMusicSource] {
+        var request = MusicLibraryRequest<Playlist>()
+        request.offset = max(0, offset)
+        request.limit = max(1, limit)
+        request.sort(by: \.name, ascending: true)
+        let response = try await request.response()
+        try Task.checkCancellation()
+        return response.items.map {
+            FocusMusicSource.libraryPlaylist(id: $0.id.rawValue, title: $0.name)
+        }
+    }
+
+    func search(term: String) async throws -> [FocusMusicSource] {
+        let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        var request = MusicCatalogSearchRequest(
+            term: trimmed,
+            types: [Station.self, Song.self, Playlist.self, Album.self]
+        )
+        request.limit = 10
+        request.includeTopResults = true
+        let response = try await request.response()
+        try Task.checkCancellation()
+
+        // Keep Apple's cross-kind relevance order at the top, then include
+        // the remaining results so a station is not hidden by matching songs.
+        var sources = response.topResults.compactMap { result -> FocusMusicSource? in
+            switch result {
+            case .station(let station): Self.source(for: station)
+            case .song(let song): Self.source(for: song)
+            case .playlist(let playlist): Self.source(for: playlist)
+            case .album(let album): Self.source(for: album)
+            default: nil
+            }
+        }
+        sources.append(contentsOf: response.stations.map(Self.source(for:)))
+        sources.append(contentsOf: response.songs.map(Self.source(for:)))
+        sources.append(contentsOf: response.playlists.map(Self.source(for:)))
+        sources.append(contentsOf: response.albums.map(Self.source(for:)))
+        var seenIDs = Set<String>()
+        return sources.filter { seenIDs.insert($0.id).inserted }
+    }
+
+    private static func title(for song: Song) -> String {
+        "\(song.title) — \(song.artistName)"
+    }
+
+    private static func title(for album: Album) -> String {
+        "\(album.title) — \(album.artistName)"
+    }
+
+    private static func source(for station: Station) -> FocusMusicSource {
+        FocusMusicSource(id: station.id.rawValue, fallbackTitle: station.name, kind: .station)
+    }
+
+    private static func source(for song: Song) -> FocusMusicSource {
+        FocusMusicSource(id: song.id.rawValue, fallbackTitle: title(for: song), kind: .song)
+    }
+
+    private static func source(for playlist: Playlist) -> FocusMusicSource {
+        FocusMusicSource(id: playlist.id.rawValue, fallbackTitle: playlist.name, kind: .playlist)
+    }
+
+    private static func source(for album: Album) -> FocusMusicSource {
+        FocusMusicSource(id: album.id.rawValue, fallbackTitle: title(for: album), kind: .album)
     }
 }

@@ -70,8 +70,8 @@ final class SettingsLocalizationTests: XCTestCase {
         XCTAssertEqual(try englishCounted("あと\(3)秒"), "3 seconds left")
         XCTAssertEqual(try englishCounted("プレビューまであと\(2)秒"), "Preview in 2 seconds")
         XCTAssertEqual(
-            try englishCounted("テーマは最大\(Constants.App.maximumSubjects)件までです。"),
-            "You can have up to 12 themes."
+            try englishCounted("取り組みは最大\(Constants.App.maximumSubjects)件までです。"),
+            "You can have up to 12 activities."
         )
         XCTAssertEqual(try englishCounted("あと\(1)文字入力できます。"), "You can type 1 more character.")
         XCTAssertEqual(try englishCounted("あと\(7)文字入力できます。"), "You can type 7 more characters.")
@@ -98,11 +98,11 @@ final class SettingsLocalizationTests: XCTestCase {
         let deletion = "「%@」だけを削除します。%@と質量は消えず、現在の名前と色も残ります。この操作は取り消せません。"
         XCTAssertEqual(
             try english(deletion, "SAT prep", records(1)),
-            "Only the theme “SAT prep” will be deleted. Its mass and its 1 past record are not deleted and still show its current name and color. This can't be undone."
+            "Only the activity “SAT prep” will be deleted. Its mass and its 1 past record are not deleted and still show its current name and color. This can't be undone."
         )
         XCTAssertEqual(
             try english(deletion, "SAT prep", records(42)),
-            "Only the theme “SAT prep” will be deleted. Its mass and its 42 past records are not deleted and still show its current name and color. This can't be undone."
+            "Only the activity “SAT prep” will be deleted. Its mass and its 42 past records are not deleted and still show its current name and color. This can't be undone."
         )
         let twentyMinutes = DurationText.short(seconds: 1_200, units: .minutesSeconds, locale: en)
         XCTAssertEqual(
@@ -131,9 +131,9 @@ final class SettingsLocalizationTests: XCTestCase {
     func testSettingsHeadersAndRowsInEnglish() throws {
         XCTAssertEqual(try english("設定"), "Settings")
         XCTAssertEqual(
-            try ["テーマ", "集中タイマー", "音と触覚", "瓶とシェア", "お知らせ", "記録とiCloud", "アプリの時間を積む", "データの書き出し", "リセットと削除", "サポートとアプリ情報"]
+            try ["取り組み", "集中タイマー", "音と触覚", "瓶とシェア", "お知らせ", "記録とiCloud", "アプリの時間を積む", "データの書き出し", "リセットと削除", "サポートとアプリ情報"]
                 .map { try english($0) },
-            ["Themes", "Focus Timer", "Sound & Haptics", "Jar & Sharing", "Reminders", "Records & iCloud", "Add App Time", "Export Data", "Reset & Delete", "Support & App Info"]
+            ["Activities", "Focus Timer", "Sound & Haptics", "Jar & Sharing", "Reminders", "Records & iCloud", "Add App Time", "Export Data", "Reset & Delete", "Support & App Info"]
         )
         XCTAssertEqual(try english("集中が切れたらお知らせ"), "Notify Me When I Drift Away")
         XCTAssertEqual(try english("集中に戻るお知らせ"), "Return-to-Focus Reminder", "Glossary name")
@@ -157,8 +157,8 @@ final class SettingsLocalizationTests: XCTestCase {
             "Picker options are read as their name, then their description"
         )
         XCTAssertEqual(
-            try english("%@\n変更前の状態に戻しました。\n%@", "Couldn't add the theme.", "Disk full"),
-            "Couldn't add the theme.\nYour change was undone.\nDisk full"
+            try english("%@\n変更前の状態に戻しました。\n%@", "Couldn't add the activity.", "Disk full"),
+            "Couldn't add the activity.\nYour change was undone.\nDisk full"
         )
     }
 
@@ -194,21 +194,21 @@ final class SettingsLocalizationTests: XCTestCase {
         XCTAssertEqual(try english("表示"), "Show")
 
         XCTAssertEqual(
-            String(localized: "settings.export.collection.themes", defaultValue: "テーマ", table: "Settings"),
-            "テーマ"
+            String(localized: "settings.export.collection.themes", defaultValue: "取り組み", table: "Settings"),
+            "取り組み"
         )
         XCTAssertEqual(
             String(localized: "settings.export.collection.preferences", defaultValue: "設定", table: "Settings"),
             "設定"
         )
-        XCTAssertEqual(try english("settings.export.collection.themes"), "themes")
+        XCTAssertEqual(try english("settings.export.collection.themes"), "activities")
         XCTAssertEqual(try english("settings.export.collection.preferences"), "settings")
     }
 
     /// The deletion and reset copy says at least as much as the Japanese:
     /// what is removed, what stays, and that it cannot be undone.
     func testResetAndDeletionCopyStaysExplicitInEnglish() throws {
-        let local = try english("集中の粒・結晶・記念石を表示と集計から外し、0から始めます。テーマと設定は残ります。リセット前の記録はこのiPhoneの中に残り、データの書き出しに含まれることがあります。このiPhoneから完全に消すには、アプリを削除してください。この操作は取り消せません。")
+        let local = try english("集中の粒・結晶・記念石を表示と集計から外し、0から始めます。取り組みと設定は残ります。リセット前の記録はこのiPhoneの中に残り、データの書き出しに含まれることがあります。このiPhoneから完全に消すには、アプリを削除してください。この操作は取り消せません。")
         XCTAssertTrue(local.contains("milestone stones"), local)
         XCTAssertTrue(local.contains("remain on this iPhone"), local)
         XCTAssertTrue(local.hasSuffix("This can't be undone."), local)
@@ -243,9 +243,24 @@ final class SettingsLocalizationTests: XCTestCase {
             ["Vermilion", "Lapis", "Teal", "Verdigris", "Sky Blue", "Indigo", "Amber", "Orchid", "Copper", "Violet", "Coral", "Leaf Green"]
         )
         XCTAssertEqual(try english("色候補%lld、%@", 3, "Teal"), "Color option 3, Teal")
-        XCTAssertEqual(try english("同じ名前のテーマ「%@」がすでにあります。", "Math"), "You already have a theme named “Math”.")
-        XCTAssertEqual(try english("テーマを追加"), "Add Theme")
-        XCTAssertEqual(try english("テーマを編集"), "Edit Theme")
+        XCTAssertEqual(try english("同じ名前の取り組み「%@」がすでにあります。", "Math"), "You already have an activity named “Math”.")
+        XCTAssertEqual(try english("取り組みを追加"), "Add Activity")
+        XCTAssertEqual(try english("取り組みを編集"), "Edit Activity")
+        XCTAssertEqual(try english("名前・色・時間・音楽・表示順"), "Name, color, focus length, music & order")
+        XCTAssertEqual(try english("この取り組みの集中時間"), "Focus Length for This Activity")
+        XCTAssertEqual(try english("共通設定を使う"), "Use App Default")
+        XCTAssertEqual(
+            try english("ホームでこの取り組みを選ぶと、この時間が選ばれます。「共通設定を使う」では、集中タイマーの既定の集中時間を使います。"),
+            "Selecting this activity on Home selects this focus length. “Use App Default” follows the default focus length in Focus Timer settings."
+        )
+        XCTAssertEqual(
+            try english("保存したカスタム時間はProで使えます。Proを利用していない間は25分になります。"),
+            "Your saved custom length is available with Pro. Without Pro, this activity uses 25 minutes."
+        )
+        XCTAssertEqual(
+            try english("集中時間は1分〜360分で設定してください。"),
+            "Choose a focus length between 1 and 360 minutes."
+        )
     }
 
     func testTimerPagesInEnglish() throws {
@@ -256,6 +271,10 @@ final class SettingsLocalizationTests: XCTestCase {
         )
         XCTAssertEqual(try english("タイマーの表示"), "Timer Display")
         XCTAssertEqual(try english("既定の集中時間"), "Default Focus Length")
+        XCTAssertEqual(
+            try english("取り組みごとの時間が未設定のときに使う、共通の集中時間です。"),
+            "The shared focus length for activities without their own setting."
+        )
         XCTAssertEqual(try english("カスタム時間"), "Custom Length")
         XCTAssertEqual(try english("選択中"), "Selected")
         XCTAssertEqual(try english("未選択"), "Not selected")
@@ -293,7 +312,7 @@ final class SettingsLocalizationTests: XCTestCase {
             try english("%@を書き出し中、%lld件中%lld件", try english("集中記録"), 10, 3),
             "Exporting focus sessions: 3 of 10"
         )
-        XCTAssertEqual(try english("%@を書き出し中", try english("settings.export.collection.themes")), "Exporting themes…")
+        XCTAssertEqual(try english("%@を書き出し中", try english("settings.export.collection.themes")), "Exporting activities…")
         XCTAssertEqual(try english("データを書き出す準備中"), "Preparing to export data")
     }
 }

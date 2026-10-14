@@ -1109,7 +1109,7 @@
       }
     },
     "このiPhone" : {
-      "comment" : "Label of this iPhone's row in the record comparison, as in 「このiPhone: テーマ12・記録480…」",
+      "comment" : "Label of this iPhone's row in the record comparison, as in 「このiPhone: 取り組み12・記録480…」",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1697,23 +1697,6 @@
         }
       }
     },
-    "テーマ名、成果メモ、集中記録、設定、進行中タイマーをApple AccountのプライベートiCloudへ送信します。オンラインでApple Accountを確認した後に保存方式を確定します。このiPhoneに保存済みの記録があれば、オフラインでも使えます。初回の取得や同期の再開には通信が必要です。後で同期を止めるときは、iCloudの記録をこのiPhoneへコピーし、iCloudの記録も残します。" : {
-      "comment" : "First-run storage choice: iCloud confirmation message (full caveats)",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Theme names, achievement notes, focus sessions, settings and any running timer are sent to your Apple Account's private iCloud. Your storage setting is finalized after your Apple Account is checked online. If records are already saved on this iPhone, you can use them offline too. The first download and resuming sync need a connection. If you stop syncing later, your iCloud records are copied to this iPhone and also kept in iCloud."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマ名、成果メモ、集中記録、設定、進行中タイマーをApple AccountのプライベートiCloudへ送信します。オンラインでApple Accountを確認した後に保存方式を確定します。このiPhoneに保存済みの記録があれば、オフラインでも使えます。初回の取得や同期の再開には通信が必要です。後で同期を止めるときは、iCloudの記録をこのiPhoneへコピーし、iCloudの記録も残します。"
-          }
-        }
-      }
-    },
     "プライバシーポリシー" : {
       "localizations" : {
         "en" : {
@@ -2071,39 +2054,6 @@
         }
       }
     },
-    "保存済みのテーマと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへはまだ送信されません。通信回復後、同じアカウントとデータを確認してから同期を再開します。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "You can keep using the timer and adding records with your saved themes and records. Changes made meanwhile are saved on this device and haven't been sent to iCloud yet. Once you're back online, sync resumes after the same account and data are confirmed."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保存済みのテーマと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへはまだ送信されません。通信回復後、同じアカウントとデータを確認してから同期を再開します。"
-          }
-        }
-      }
-    },
-    "保存済みのテーマと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへは送信されません。通信が戻っても同期は自動では再開しません。再開する方法は、画面上部の「復旧手順」から確認できます。" : {
-      "comment" : "「復旧手順」 is the offline banner's button title",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "You can keep using the timer and adding records with your saved themes and records. Changes made meanwhile are saved on this device and are not sent to iCloud. Sync does not resume on its own when the connection comes back. To see how to resume it, tap “Recovery Steps” at the top of the screen."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保存済みのテーマと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへは送信されません。通信が戻っても同期は自動では再開しません。再開する方法は、画面上部の「復旧手順」から確認できます。"
-          }
-        }
-      }
-    },
     "保存済みの削除工程から再開します" : {
       "comment" : "VoiceOver hint for Retry Deletion",
       "localizations" : {
@@ -2117,6 +2067,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "保存済みの削除工程から再開します"
+          }
+        }
+      }
+    },
+    "保存済みの取り組みと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへはまだ送信されません。通信回復後、同じアカウントとデータを確認してから同期を再開します。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can keep using the timer and adding records with your saved activities and records. Changes made meanwhile are saved on this device and haven't been sent to iCloud yet. Once you're back online, sync resumes after the same account and data are confirmed."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存済みの取り組みと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへはまだ送信されません。通信回復後、同じアカウントとデータを確認してから同期を再開します。"
+          }
+        }
+      }
+    },
+    "保存済みの取り組みと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへは送信されません。通信が戻っても同期は自動では再開しません。再開する方法は、画面上部の「復旧手順」から確認できます。" : {
+      "comment" : "「復旧手順」 is the offline banner's button title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can keep using the timer and adding records with your saved activities and records. Changes made meanwhile are saved on this device and are not sent to iCloud. Sync does not resume on its own when the connection comes back. To see how to resume it, tap “Recovery Steps” at the top of the screen."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存済みの取り組みと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへは送信されません。通信が戻っても同期は自動では再開しません。再開する方法は、画面上部の「復旧手順」から確認できます。"
           }
         }
       }
@@ -2587,6 +2570,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "削除結果を反映中"
+          }
+        }
+      }
+    },
+    "取り組み名、成果メモ、集中記録、設定、進行中タイマーをApple AccountのプライベートiCloudへ送信します。オンラインでApple Accountを確認した後に保存方式を確定します。このiPhoneに保存済みの記録があれば、オフラインでも使えます。初回の取得や同期の再開には通信が必要です。後で同期を止めるときは、iCloudの記録をこのiPhoneへコピーし、iCloudの記録も残します。" : {
+      "comment" : "First-run storage choice: iCloud confirmation message (full caveats)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activity names, achievement notes, focus sessions, settings and any running timer are sent to your Apple Account's private iCloud. Your storage setting is finalized after your Apple Account is checked online. If records are already saved on this iPhone, you can use them offline too. The first download and resuming sync need a connection. If you stop syncing later, your iCloud records are copied to this iPhone and also kept in iCloud."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組み名、成果メモ、集中記録、設定、進行中タイマーをApple AccountのプライベートiCloudへ送信します。オンラインでApple Accountを確認した後に保存方式を確定します。このiPhoneに保存済みの記録があれば、オフラインでも使えます。初回の取得や同期の再開には通信が必要です。後で同期を止めるときは、iCloudの記録をこのiPhoneへコピーし、iCloudの記録も残します。"
           }
         }
       }

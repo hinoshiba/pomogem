@@ -24,7 +24,7 @@ struct PreferredFocusDurationPicker: View {
                     .font(.headline)
                     .foregroundStyle(PomoGemTheme.text)
                     .accessibilityAddTraits(.isHeader)
-                Text("次の集中に使う時間を選びます。", tableName: "Settings")
+                Text("取り組みごとの時間が未設定のときに使う、共通の集中時間です。", tableName: "Settings")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
             }

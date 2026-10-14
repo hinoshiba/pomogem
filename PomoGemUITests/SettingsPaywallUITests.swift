@@ -66,7 +66,7 @@ final class SettingsPaywallUITests: XCTestCase {
         theme.swipeLeft(velocity: .slow)
         XCTAssertTrue(app.buttons["削除"].firstMatch.waitForExistence(timeout: 5),
                       "Theme swipe actions remain available; nothing is deleted")
-        app.navigationBars["テーマ"].buttons.firstMatch.tap()
+        app.navigationBars["取り組み"].buttons.firstMatch.tap()
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 8))
         swipeBackFromEdge()
         XCTAssertTrue(app.buttons["home.menu.open"].waitForExistence(timeout: 8))
@@ -433,7 +433,7 @@ final class SettingsPaywallUITests: XCTestCase {
         attach("\(prefix) — index records and support")
 
         PomoGemSettingsUITestNavigation.open(.themes, in: app)
-        let addTheme = app.buttons["テーマを追加"]
+        let addTheme = app.buttons["取り組みを追加"]
         XCTAssertTrue(reveal(addTheme))
         XCTAssertGreaterThanOrEqual(addTheme.frame.height, 43.5)
         attach("\(prefix) — themes")

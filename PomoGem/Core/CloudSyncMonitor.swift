@@ -864,9 +864,9 @@ struct CloudSyncSettingsSection: View {
                   systemImage: "icloud.slash")
                 .font(.headline)
             Text(stopped
-                 ? String(localized: "保存済みのテーマと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへは送信されません。通信が戻っても同期は自動では再開しません。再開する方法は、画面上部の「復旧手順」から確認できます。", table: "Launch",
+                 ? String(localized: "保存済みの取り組みと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへは送信されません。通信が戻っても同期は自動では再開しません。再開する方法は、画面上部の「復旧手順」から確認できます。", table: "Launch",
                           comment: "「復旧手順」 is the offline banner's button title")
-                 : String(localized: "保存済みのテーマと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへはまだ送信されません。通信回復後、同じアカウントとデータを確認してから同期を再開します。", table: "Launch"))
+                 : String(localized: "保存済みの取り組みと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへはまだ送信されません。通信回復後、同じアカウントとデータを確認してから同期を再開します。", table: "Launch"))
                 .font(.caption)
                 .fixedSize(horizontal: false, vertical: true)
             Text("別端末でデータが置き換わっている場合は、端末の記録を保持して同期を停止します。保存先の切り替えは、接続と内容を確認できてから行ってください。", tableName: "Launch")

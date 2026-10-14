@@ -30,6 +30,7 @@ struct BreakTimerView: View {
     @State private var notificationSchedulingTask: Task<Void, Never>?
     @State private var notificationGeneration = 0
     @State private var isBreakActive = true
+    @State private var returnToPortraitRequested = false
     @State private var didEnterBackgroundSinceLastActive = false
     @State private var foregroundResolution: TimerForegroundResolution
     @State private var scheduledCompletionNotificationDeliveryDate: Date? = nil
@@ -115,7 +116,11 @@ struct BreakTimerView: View {
         ZStack {
             Color.black.ignoresSafeArea()
             RadialGradient(colors: [PomoGemTheme.amber.opacity(0.08), .clear], center: .center, startRadius: 0, endRadius: 340).ignoresSafeArea()
-            TimerOrientationContainer(sessionID: sessionID) { context in
+            TimerOrientationContainer(
+                sessionID: sessionID,
+                returnToPortraitRequested: returnToPortraitRequested,
+                onPortraitReady: { dismiss() }
+            ) { context in
                 VStack(spacing: 0) {
                     GeometryReader { proxy in
                         ScrollView {
@@ -282,6 +287,7 @@ struct BreakTimerView: View {
                 Image(systemName: "xmark")
             }
             .buttonStyle(PomoGemIconButtonStyle())
+            .accessibilityIdentifier("break.close")
             .accessibilityLabel(
                 remaining > 0
                     ? Text("休憩をスキップ", tableName: "Focus", comment: "Button: end the break now")
@@ -369,6 +375,7 @@ struct BreakTimerView: View {
             Button(String(localized: "休憩をスキップ", table: "Focus", comment: "Button: end the break now")) { closeBreak() }
                 .buttonStyle(PomoGemSecondaryButtonStyle())
                 .frame(minHeight: 44)
+                .accessibilityIdentifier("break.skip")
         }
     }
 
@@ -624,7 +631,7 @@ struct BreakTimerView: View {
         FocusPersistence.clearBreak()
         stopNotificationScheduling(state: .idle)
         BreakLiveActivity.end(breakID: sessionID)
-        dismiss()
+        returnToPortraitRequested = true
     }
 
     @MainActor
@@ -632,7 +639,7 @@ struct BreakTimerView: View {
         FocusPersistence.clearBreak()
         BreakLiveActivity.end(breakID: sessionID)
         isBreakActive = false
-        dismiss()
+        returnToPortraitRequested = true
     }
 
     @MainActor

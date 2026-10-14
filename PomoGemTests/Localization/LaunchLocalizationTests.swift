@@ -86,8 +86,8 @@ final class LaunchLocalizationTests: XCTestCase {
         for phrase in ["never sent to iCloud", "will be lost", "will be replaced", "cannot be moved"] {
             XCTAssertTrue(message.contains(phrase), phrase)
         }
-        let cloud = try english("テーマ名、成果メモ、集中記録、設定、進行中タイマーをApple AccountのプライベートiCloudへ送信します。オンラインでApple Accountを確認した後に保存方式を確定します。このiPhoneに保存済みの記録があれば、オフラインでも使えます。初回の取得や同期の再開には通信が必要です。後で同期を止めるときは、iCloudの記録をこのiPhoneへコピーし、iCloudの記録も残します。")
-        for phrase in ["Theme names", "achievement notes", "focus sessions", "private iCloud", "need a connection",
+        let cloud = try english("取り組み名、成果メモ、集中記録、設定、進行中タイマーをApple AccountのプライベートiCloudへ送信します。オンラインでApple Accountを確認した後に保存方式を確定します。このiPhoneに保存済みの記録があれば、オフラインでも使えます。初回の取得や同期の再開には通信が必要です。後で同期を止めるときは、iCloudの記録をこのiPhoneへコピーし、iCloudの記録も残します。")
+        for phrase in ["Activity names", "achievement notes", "focus sessions", "private iCloud", "need a connection",
                        "also kept in iCloud"] {
             XCTAssertTrue(cloud.contains(phrase), phrase)
         }
@@ -104,7 +104,7 @@ final class LaunchLocalizationTests: XCTestCase {
         XCTAssertEqual(try english("復旧手順"), "Recovery Steps")
         // The sentences that name a button quote its English title.
         XCTAssertTrue(try english("通信が戻ったら「同期を再開」で接続を確認できます。").contains("“Resume Sync”"))
-        XCTAssertTrue(try english("保存済みのテーマと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへは送信されません。通信が戻っても同期は自動では再開しません。再開する方法は、画面上部の「復旧手順」から確認できます。")
+        XCTAssertTrue(try english("保存済みの取り組みと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへは送信されません。通信が戻っても同期は自動では再開しません。再開する方法は、画面上部の「復旧手順」から確認できます。")
             .contains("“Recovery Steps”"))
         let tryAgain = try english("もう一度試す")
         XCTAssertEqual(tryAgain, "Try Again")

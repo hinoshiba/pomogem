@@ -57,14 +57,14 @@ enum PomoGemSettingsUITestNavigation {
 
         func title(english: Bool = false) -> String {
             switch (self, english) {
-            case (.themes, false): "テーマ"
+            case (.themes, false): "取り組み"
             case (.timer, false): "集中タイマー"
             case (.sensory, false): "音と触覚"
             case (.jar, false): "瓶とシェア"
             case (.notifications, false): "お知らせ"
             case (.data, false): "記録とiCloud"
             case (.support, false): "サポートとアプリ情報"
-            case (.themes, true): "Themes"
+            case (.themes, true): "Activities"
             case (.timer, true): "Focus Timer"
             case (.sensory, true): "Sound & Haptics"
             case (.jar, true): "Jar & Sharing"
@@ -158,11 +158,14 @@ enum PomoGemSettingsUITestNavigation {
         }
         for attempt in 0 ..< 24 {
             if element.exists {
+                let viewport = visibleViewport(for: element, in: app)
                 let top = app.navigationBars.allElementsBoundByIndex
-                    .filter(\.isHittable).map(\.frame.maxY).max() ?? 0
-                let bottom = app.windows.firstMatch.frame.maxY - 24
+                    .filter(\.isHittable).map(\.frame.maxY).max() ?? viewport.minY
+                let bottom = viewport.maxY
                 let frame = element.frame
-                if frame.height > 0, frame.minY >= top, frame.maxY <= bottom, element.isHittable {
+                if frame.height > 0, frame.width > 0,
+                   frame.minX >= viewport.minX, frame.maxX <= viewport.maxX,
+                   frame.minY >= max(top, viewport.minY), frame.maxY <= bottom, element.isHittable {
                     var previous = frame
                     for _ in 0 ..< 8 {
                         usleep(100_000)
@@ -197,5 +200,20 @@ enum PomoGemSettingsUITestNavigation {
             }
         }
         return false
+    }
+
+    private static func visibleViewport(for element: XCUIElement, in app: XCUIApplication) -> CGRect {
+        let window = app.windows.firstMatch.frame
+        // Use the List's actual visible bounds. On an SE, its fully visible
+        // last row can finish 20 pt above the screen edge; inventing a 24 pt
+        // bottom inset makes repeated drags bounce forever at the same row.
+        guard !element.identifier.isEmpty else { return window }
+        for query in [app.collectionViews, app.tables, app.scrollViews] {
+            let surface = query.containing(.any, identifier: element.identifier).firstMatch
+            guard surface.exists else { continue }
+            let visible = window.intersection(surface.frame)
+            if !visible.isNull, !visible.isEmpty { return visible }
+        }
+        return window
     }
 }

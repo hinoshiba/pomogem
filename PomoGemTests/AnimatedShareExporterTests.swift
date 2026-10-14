@@ -106,7 +106,7 @@ struct AnimatedShareExporterTests {
         for hashtag in ShareCopy.hashtags {
             #expect(caption.contains(hashtag))
         }
-        #expect(!caption.contains("テーマ"))
+        #expect(!caption.contains("取り組み"))
         #expect(!caption.contains("顧客"))
         #expect(!caption.contains("成果メモ"))
     }

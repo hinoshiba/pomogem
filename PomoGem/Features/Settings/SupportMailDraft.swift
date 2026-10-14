@@ -76,7 +76,7 @@ enum SupportMailDraft {
             comment: "Support mail body: where the person writes their message"
         )
         let disclosure = String(
-            localized: "以下はアプリが自動で記入しました。記録の内容やテーマ名は含まれていません。不要な行は消してから送れます。",
+            localized: "以下はアプリが自動で記入しました。記録の内容や取り組み名は含まれていません。不要な行は消してから送れます。",
             table: "Settings",
             comment: "Support mail body: explains the filled-in lines below it"
         )

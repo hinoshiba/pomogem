@@ -127,7 +127,7 @@ enum FocusStartEntryPolicy {
             )
         case .noTheme:
             return String(
-                localized: "テーマを選ぶと、集中を始められます",
+                localized: "取り組みを選ぶと、集中を始められます",
                 table: "Home",
                 comment: "Toast: a widget, link or Siri asked to start a focus before any theme exists"
             )

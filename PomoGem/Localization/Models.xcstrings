@@ -178,19 +178,19 @@
         }
       }
     },
-    "このテーマは変更の回数が上限に達したため、これ以上変更できません。" : {
+    "この取り組みは変更の回数が上限に達したため、これ以上変更できません。" : {
       "comment" : "Theme edit error: the theme reached its edit limit",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This theme has reached its limit of changes and can’t be changed any further."
+            "value" : "This activity has reached its limit of changes and can’t be changed any further."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このテーマは変更の回数が上限に達したため、これ以上変更できません。"
+            "value" : "この取り組みは変更の回数が上限に達したため、これ以上変更できません。"
           }
         }
       }
@@ -293,23 +293,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "スクリーンタイム"
-          }
-        }
-      }
-    },
-    "テーマの保存データが多すぎるため、安全に変更できませんでした。" : {
-      "comment" : "Theme edit error: too many stored copies of the theme to change it safely",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This theme has too much saved data to change safely, so it wasn’t changed."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマの保存データが多すぎるため、安全に変更できませんでした。"
           }
         }
       }
@@ -616,6 +599,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "区切りが分かる、落ち着いた2音"
+          }
+        }
+      }
+    },
+    "取り組みの保存データが多すぎるため、安全に変更できませんでした。" : {
+      "comment" : "Theme edit error: too many stored copies of the theme to change it safely",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This activity has too much saved data to change safely, so it wasn’t changed."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みの保存データが多すぎるため、安全に変更できませんでした。"
           }
         }
       }

@@ -175,7 +175,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         try require(waitForLabel(app.descendants(matching: .any)["onboarding.step"], containing: "2ページ"),
                     "Onboarding must reach the optional trial page.")
         try tap(next)
-        try require(app.staticTexts["最初のテーマを選ぶ"].waitForExistence(timeout: 5),
+        try require(app.staticTexts["最初の取り組みを選ぶ"].waitForExistence(timeout: 5),
                     "Onboarding must reach real theme creation.")
         let nameField = app.textFields["例：英語、TOEIC、企画、開発"]
         try scrollTo(nameField)
@@ -703,7 +703,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         try scrollTo(theme, direction: .down, attempts: 24)
         theme.swipeLeft()
         try tap(app.buttons["削除"])
-        let confirmation = app.alerts["テーマを削除"]
+        let confirmation = app.alerts["取り組みを削除"]
         try require(confirmation.waitForExistence(timeout: 5), "Theme deletion must require its real confirmation.")
         try require(confirmation.staticTexts.matching(NSPredicate(
             format: "label CONTAINS %@ AND label CONTAINS %@", "過去の記録", "質量は消えず"
@@ -828,7 +828,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         let picker = app.buttons["home.subject-picker"]
         let launcher = app.buttons["home.focus-launcher"]
         try scrollTo(launcher, direction: .down)
-        if launcher.label == "テーマを選んではじめる" {
+        if launcher.label == "取り組みを選んではじめる" {
             // Deleting the final theme removes the picker entirely. The exact
             // empty-state launcher opens Settings without starting a timer.
             try require(!picker.exists, "Home with no selected theme must show the documented empty-theme state.")
@@ -837,13 +837,13 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
             try scrollTo(picker, direction: .down)
             try require(!picker.label.contains(themeName), "Home must stop selecting the deleted theme.")
             try tap(picker)
-            let manage = app.buttons["テーマを管理"]
+            let manage = app.buttons["取り組みを管理"]
             try require(manage.waitForExistence(timeout: 5), "The real theme menu must be open before checking absence.")
             try require(!app.buttons[themeName].exists, "The deleted theme must not be selectable from Home.")
             try tap(manage)
         }
-        try require(app.navigationBars["テーマ"].waitForExistence(timeout: 5), "Theme management must open Themes directly.")
-        try scrollTo(app.buttons["テーマを追加"], direction: .down, attempts: 24)
+        try require(app.navigationBars["取り組み"].waitForExistence(timeout: 5), "Theme management must open Themes directly.")
+        try scrollTo(app.buttons["取り組みを追加"], direction: .down, attempts: 24)
         try require(!app.buttons[themeName].exists, "The deleted theme must not return in Settings.")
         try returnHome(from: "設定")
     }
@@ -982,7 +982,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
             // A native Menu can retain its opening snapshot while CloudKit
             // imports another theme. Use an ordinary, non-editing destination
             // to dismiss it, then reopen with the refreshed source collection.
-            try tap(app.buttons["テーマを管理"])
+            try tap(app.buttons["取り組みを管理"])
             try returnHome(from: "設定")
         } while deadline.timeIntervalSinceNow > 0
         try require(false, "The persisted audit theme is missing after the hydration deadline.")

@@ -477,7 +477,7 @@ class ArchiveMetadataTopologyTests(unittest.TestCase):
             "LSRequiresIPhoneOS": True, "CFBundleURLTypes": [{"CFBundleURLName": identifiers["app"],
                 "CFBundleURLSchemes": ["pomogem"]}], "POMOGEM_PRIVACY_POLICY_URL": "https://pomogem.hinoshiba.com/#privacy",
             "ITSAppUsesNonExemptEncryption": False, "NSSupportsLiveActivities": True,
-            "NSAppleMusicUsageDescription": "タイマー画面から『ミュージック』アプリで集中用の音楽を再生するために使います。",
+            "NSAppleMusicUsageDescription": "集中用の音楽を再生し、自分のライブラリからプレイリストを選ぶために使います。",
             "UIBackgroundModes": ["remote-notification"],
             "NSMotionUsageDescription": "fixture", "NSPhotoLibraryAddUsageDescription": "fixture",
             "NSAlarmKitUsageDescription": "fixture",

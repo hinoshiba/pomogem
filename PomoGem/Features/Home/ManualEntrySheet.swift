@@ -70,7 +70,7 @@ struct ManualEntrySheet: View {
                             subjects: subjects,
                             selectedID: $selectedSubjectID,
                             accessibilityHint: String(
-                                localized: "積むテーマを変更できます。ホームで選んでいるテーマは変わりません",
+                                localized: "積む取り組みを変更できます。ホームで選んでいる取り組みは変わりません",
                                 table: "Home",
                                 comment: "VoiceOver hint of the manual-entry sheet's theme menu"
                             ),
@@ -216,11 +216,11 @@ struct ManualEntrySheet: View {
 
                 VStack(spacing: 10) {
                     confirmationRow(
-                        title: String(localized: "テーマ", table: "Home", comment: "The word theme, alone: the caption above the sheets' theme menu, the manual-entry confirmation row, and the stand-in for a missing theme name"),
+                        title: String(localized: "取り組み", table: "Home", comment: "The word theme, alone: the caption above the sheets' theme menu, the manual-entry confirmation row, and the stand-in for a missing theme name"),
                         value: selectedSubject?.localizedDisplayName ?? String(
                             localized: "未選択",
                             table: "Home",
-                            comment: "No theme chosen yet: read after テーマ、 by VoiceOver and shown in the manual-entry confirmation row"
+                            comment: "No theme chosen yet: read after 取り組み、 by VoiceOver and shown in the manual-entry confirmation row"
                         )
                     )
                     confirmationRow(
@@ -331,7 +331,7 @@ struct ManualEntrySheet: View {
 
     private func confirmAccessibilityHint(_ duration: ManualDuration) -> String {
         let theme = selectedSubject?.localizedDisplayName ?? String(
-            localized: "テーマ",
+            localized: "取り組み",
             table: "Home",
             comment: "The word theme, alone: the caption above the sheets' theme menu, the manual-entry confirmation row, and the stand-in for a missing theme name"
         )

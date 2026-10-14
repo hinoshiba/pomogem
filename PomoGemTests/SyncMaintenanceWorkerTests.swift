@@ -1103,7 +1103,7 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
             .revisionLimitReached
         ] {
             let message = error.localizedDescription
-            XCTAssertTrue(message.contains("テーマ"), message)
+            XCTAssertTrue(message.contains("取り組み"), message)
             XCTAssertFalse(message.contains("MutationError"), message)
         }
     }

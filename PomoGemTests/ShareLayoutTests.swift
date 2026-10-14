@@ -161,21 +161,52 @@ final class ShareLayoutTests: XCTestCase {
         let date = Date(timeIntervalSinceReferenceDate: 0)
         let linked = AggregatePebble(
             level: 1, pebbleCount: 10, grams: 2_500,
-            colorMixJSON: "[]", periodStart: date, periodEnd: date,
+            colorMixJSON: StrataMath.encodeColorMix([
+                StratumColorFraction(hex: Constants.Color.science, fraction: 1)
+            ]), periodStart: date, periodEnd: date,
             sessionIDs: sessions.map(\.id)
         )
         let standalone = AggregatePebble(
             level: 1, pebbleCount: 10, grams: 6_000,
-            colorMixJSON: "[]", periodStart: date, periodEnd: date
+            colorMixJSON: StrataMath.encodeColorMix([
+                StratumColorFraction(hex: Constants.Color.english, fraction: 1)
+            ]), periodStart: date, periodEnd: date
         )
+        let aggregates = [ShareAggregateVisual(aggregate: linked), ShareAggregateVisual(aggregateSummary: standalone)]
         let projection = ShareTimeFusionPresentation.snapshot(
             sessions: sessions,
-            aggregates: [ShareAggregateVisual(aggregate: linked), ShareAggregateVisual(aggregateSummary: standalone)]
+            aggregates: aggregates
         )
         XCTAssertEqual(projection.totalGrams, 8_500)
         XCTAssertEqual(projection.representedGrams, 8_500)
         XCTAssertEqual(projection.crystals.count, 3)
         XCTAssertEqual(projection.remainderGrams, 1_000)
+        let colors = ShareTimeFusionPresentation.colorShares(sessions: sessions, aggregates: aggregates)
+        XCTAssertEqual(colors.map(\.hex), [Constants.Color.english, Constants.Color.mathematics])
+        XCTAssertEqual(colors[0].fraction, 6_000.0 / 8_500, accuracy: 0.0001)
+        XCTAssertEqual(colors[1].fraction, 2_500.0 / 8_500, accuracy: 0.0001)
+    }
+
+    func testTimeCrystalColoursUseOnlySanitizedPublicMembership() throws {
+        let end = Date(timeIntervalSinceReferenceDate: 1_500)
+        func session(source: SessionSource, color: String) -> StudySession {
+            StudySession(
+                startAt: end.addingTimeInterval(-1_500), endAt: end,
+                seconds: 1_500, source: source, deviceDayKey: "2026-10-14",
+                subjectNameSnapshot: "Focus", subjectColorHexSnapshot: color
+            )
+        }
+        let shared = session(source: .timer, color: Constants.Color.mathematics)
+        let personal = session(source: .screenTime, color: Constants.Color.english)
+        let sanitized = try XCTUnwrap(ShareAggregateVisual(
+            externallySharing: UUID(), members: [shared, personal],
+            standalone: true, permitsPartialCrystal: true
+        ))
+        XCTAssertEqual(ShareTimeFusionPresentation.snapshot(sessions: [], aggregates: [sanitized]).totalGrams,
+                       shared.grams)
+        XCTAssertEqual(ShareTimeFusionPresentation.colorShares(sessions: [], aggregates: [sanitized]), [
+            GemColorShare(hex: Constants.Color.mathematics, fraction: 1)
+        ], "The public crystal must not reveal a private Screen Time colour")
     }
 
     // MARK: - Fixtures

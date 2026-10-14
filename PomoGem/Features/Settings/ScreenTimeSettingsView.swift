@@ -144,7 +144,7 @@ struct ScreenTimeSettingsView: View {
                           comment: "Validation: recording is on but no apps are chosen")
         }
         if learningCount > 0 && !allLearningThemesExist {
-            return String(localized: "各アプリの記録先のテーマを選んでください。", table: "ScreenTime",
+            return String(localized: "各アプリの記録先の取り組みを選んでください。", table: "ScreenTime",
                           comment: "Validation: every selected learning app needs a live destination theme")
         }
         return nil
@@ -331,7 +331,7 @@ struct ScreenTimeSettingsView: View {
         Section {
             Label {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("アプリの時間を、テーマごとの粒に。", tableName: "ScreenTime",
+                    Text("アプリの時間を、取り組みごとの粒に。", tableName: "ScreenTime",
                          comment: "Screen Time settings: headline")
                         .font(.headline)
                         .foregroundStyle(PomoGemTheme.text)
@@ -442,7 +442,7 @@ struct ScreenTimeSettingsView: View {
                    isOn: editedBinding(\.enabled))
                 .disabled(editsLocked || controller.isSaving || controller.isResetting
                           || (!controller.authorizationGranted && !draft.enabled))
-                .accessibilityHint(Text("アプリとテーマを選び、保存すると反映されます", tableName: "ScreenTime",
+                .accessibilityHint(Text("アプリと取り組みを選び、保存すると反映されます", tableName: "ScreenTime",
                                         comment: "VoiceOver hint: choose apps and a theme, then save"))
                 .accessibilityIdentifier("screen-time.enabled")
 
@@ -507,7 +507,7 @@ struct ScreenTimeSettingsView: View {
             selectionButton(.learning, count: learningCount)
 
             if learningApps.isEmpty {
-                Text("まだアプリが選ばれていません。追加すると、アプリごとに記録先のテーマを指定できます。",
+                Text("まだアプリが選ばれていません。追加すると、アプリごとに記録先の取り組みを指定できます。",
                      tableName: "ScreenTime", comment: "Empty learning app list: choose apps, then assign each to a theme")
                     .font(.subheadline)
                     .foregroundStyle(PomoGemTheme.muted)
@@ -533,9 +533,9 @@ struct ScreenTimeSettingsView: View {
             Text("粒にするアプリ", tableName: "ScreenTime", comment: "Section header: apps whose usage adds gems")
         } footer: {
             VStack(alignment: .leading, spacing: 5) {
-                Text("記録先のテーマは、時間を分けるカテゴリです。同じテーマに指定したアプリの利用時間を合計し、10分ごとに粒（10分・100g）を追加します。異なるテーマの時間は合算しません。",
+                Text("記録先の取り組みは、時間を分けるカテゴリです。同じ取り組みに指定したアプリの利用時間を合計し、10分ごとに粒（10分・100g）を追加します。異なる取り組みの時間は合算しません。",
                      tableName: "ScreenTime", comment: "Footer: how study-app time becomes pebbles")
-                Text("テーマは「設定」→「テーマ」で追加できます。例：ニュース、読書、英語。",
+                Text("取り組みは「設定」→「取り組み」で追加できます。例：ニュース、読書、英語。",
                      tableName: "ScreenTime", comment: "Where to create destination categories, with examples")
                 Text(purchase.isPro
                      ? String(localized: "Pro：アプリ数は無制限です。", table: "ScreenTime",
@@ -543,13 +543,13 @@ struct ScreenTimeSettingsView: View {
                      : String(localized: "無料：5つまで。Pro：無制限。", table: "ScreenTime",
                               comment: "Footer: free plan up to 5 study apps; Pro unlimited"))
                 if showsThemeRemovedNotice {
-                    Text("削除されたテーマを記録先にしていたアプリの選択を解除しました。再開するには、アプリを追加して記録先を選び直してください。",
+                    Text("削除された取り組みを記録先にしていたアプリの選択を解除しました。再開するには、アプリを追加して記録先を選び直してください。",
                          tableName: "ScreenTime", comment: "Footer: the destination theme was deleted and the study apps were cleared")
                         .foregroundStyle(PomoGemTheme.amber)
                         .accessibilityIdentifier("screen-time.theme-removed")
                 }
                 if learningCount > 0 && !allLearningThemesExist {
-                    Text("記録先が未選択、または削除されているアプリがあります。各アプリのテーマを選び直してください。", tableName: "ScreenTime",
+                    Text("記録先が未選択、または削除されているアプリがあります。各アプリの取り組みを選び直してください。", tableName: "ScreenTime",
                          comment: "Footer: no destination theme, or it was deleted")
                         .foregroundStyle(.red)
                 }
@@ -578,20 +578,20 @@ struct ScreenTimeSettingsView: View {
                     Text("選んでください", tableName: "ScreenTime", comment: "Picker placeholder: no theme chosen yet")
                         .tag(nil as UUID?)
                     if let themeID = draft.learningThemeID(for: token), !subjects.contains(where: { $0.id == themeID }) {
-                        Text("削除されたテーマ", tableName: "ScreenTime", comment: "Picker value: the chosen theme was deleted")
+                        Text("削除された取り組み", tableName: "ScreenTime", comment: "Picker value: the chosen theme was deleted")
                             .tag(Optional(themeID))
                     }
                     ForEach(subjects, id: \.id) { subject in
                         Text(subject.localizedDisplayName).tag(Optional(subject.id))
                     }
                 } label: {
-                    Text("記録先のテーマ", tableName: "ScreenTime", comment: "Picker: the destination category for this app")
+                    Text("記録先の取り組み", tableName: "ScreenTime", comment: "Picker: the destination category for this app")
                 }
             } label: {
                 // Menu's explicit label keeps the entire destination readable;
                 // the native menu Picker compresses its selected text at AX sizes.
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("記録先のテーマ", tableName: "ScreenTime", comment: "Picker: the destination category for this app")
+                    Text("記録先の取り組み", tableName: "ScreenTime", comment: "Picker: the destination category for this app")
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -610,7 +610,7 @@ struct ScreenTimeSettingsView: View {
                 .contentShape(Rectangle())
             }
             .disabled(editsLocked || controller.isSaving || controller.isResetting)
-            .accessibilityLabel(Text("記録先のテーマ", tableName: "ScreenTime", comment: "Picker: the destination category for this app"))
+            .accessibilityLabel(Text("記録先の取り組み", tableName: "ScreenTime", comment: "Picker: the destination category for this app"))
             .accessibilityValue(learningThemeName(for: token))
             .accessibilityIdentifier("screen-time.learning-theme.\(index)")
         }
@@ -626,7 +626,7 @@ struct ScreenTimeSettingsView: View {
             return String(localized: "選んでください", table: "ScreenTime", comment: "Picker placeholder: no theme chosen yet")
         }
         return subjects.first(where: { $0.id == themeID })?.localizedDisplayName
-            ?? String(localized: "削除されたテーマ", table: "ScreenTime", comment: "Picker value: the chosen theme was deleted")
+            ?? String(localized: "削除された取り組み", table: "ScreenTime", comment: "Picker value: the chosen theme was deleted")
     }
 
     private var distractionSection: some View {

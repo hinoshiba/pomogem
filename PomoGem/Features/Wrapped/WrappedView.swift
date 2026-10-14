@@ -477,9 +477,9 @@ private struct WrappedThemeTimes: View {
         VStack(alignment: .leading, spacing: 10) {
             Group {
                 if isScoped {
-                    Text("確認済みのテーマ別の時間", tableName: "Log", comment: "Wrapped: heading of the time per theme when only part of the month is shown or iCloud is re-counting")
+                    Text("確認済みの取り組み別の時間", tableName: "Log", comment: "Wrapped: heading of the time per theme when only part of the month is shown or iCloud is re-counting")
                 } else {
-                    Text("テーマ別の時間", tableName: "Log", comment: "Wrapped: heading of the month's time per theme")
+                    Text("取り組み別の時間", tableName: "Log", comment: "Wrapped: heading of the month's time per theme")
                 }
             }
                 .font(.caption.weight(.bold))
@@ -508,7 +508,7 @@ private struct WrappedThemeTimes: View {
                 ))
             }
             if themes.count > shown.count {
-                Text("ほか\(themes.count - shown.count)テーマ", tableName: "Log", comment: "Wrapped: how many more themes are not listed")
+                Text("ほか\(themes.count - shown.count)件", tableName: "Log", comment: "Wrapped: how many more themes are not listed")
                     .font(.caption2)
                     .foregroundStyle(PomoGemTheme.muted)
                     .frame(maxWidth: .infinity, alignment: .trailing)

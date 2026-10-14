@@ -33,7 +33,7 @@ final class EnglishLocalizationSmokeUITests: XCTestCase {
         retainScreenshot(of: app, named: "English Settings")
 
         for (identifier, label) in [
-            ("settings.category.themes", "Themes"),
+            ("settings.category.themes", "Activities"),
             ("settings.category.timer", "Focus Timer"),
             ("settings.screen-time", "Add App Time"),
             ("settings.category.sensory", "Sound & Haptics"),
@@ -46,6 +46,11 @@ final class EnglishLocalizationSmokeUITests: XCTestCase {
             XCTAssertTrue(PomoGemSettingsUITestNavigation.reveal(row, in: app))
             XCTAssertTrue(row.label.contains(label), row.label)
         }
+
+        PomoGemSettingsUITestNavigation.open(.support, in: app, english: true)
+        XCTAssertTrue(app.navigationBars["Support & App Info"].isHittable)
+        retainScreenshot(of: app, named: "English Settings — Support & App Info")
+        XCTAssertTrue(PomoGemSettingsUITestNavigation.backToIndex(in: app, english: true))
 
         PomoGemSettingsUITestNavigation.open(.timer, in: app, english: true)
         let display = app.buttons["settings.timer-display-mode"]

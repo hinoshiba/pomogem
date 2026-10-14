@@ -19,11 +19,13 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
     private func launch(accessibility5: Bool = false) {
         app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = accessibility5 ? "1" : "0"
         app.launch()
-        XCTAssertTrue(
-            app.buttons["メニュー"].waitForExistence(timeout: 10)
+        XCTAssertTrue(waitUntil(timeout: 10) {
+            app.buttons["home.menu.open"].exists
+                || app.buttons["OverflowBarButtonItem"].exists
                 || app.buttons["今日はここまで"].exists
-        )
+        })
         cancelFocusIfPresented()
+        revealHomeMenuButton()
     }
 
     // MARK: - Menu
@@ -65,6 +67,38 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         saveScreenshot("menu-ax5")
     }
 
+    func testMenuKeepsItsHorizontalAlignmentWhenExpandedAndScrolled() {
+        launch()
+        app.buttons["home.menu.open"].tap()
+        let bar = app.navigationBars["メニュー"]
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitUntilFrameSettles(bar))
+        let initialBarFrame = bar.frame
+        let settings = menuRow("設定")
+        XCTAssertTrue(settings.isHittable)
+        let initialSettingsFrame = settings.frame
+
+        // A natural vertical swipe is rarely perfectly straight. Its small
+        // horizontal component must not make the menu drift sideways.
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.50, dy: 0.82))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.65, dy: 0.34))
+        start.press(forDuration: 0.05, thenDragTo: end)
+        XCTAssertTrue(waitUntilFrameSettles(bar))
+        XCTAssertEqual(bar.frame.midX, initialBarFrame.midX, accuracy: 1)
+        XCTAssertEqual(bar.frame.width, initialBarFrame.width, accuracy: 1)
+        XCTAssertLessThan(bar.frame.minY, initialBarFrame.minY)
+
+        let aurora = app.buttons["home.atmosphere.aurora"]
+        XCTAssertTrue(bringFullyIntoView(aurora))
+        XCTAssertGreaterThanOrEqual(aurora.frame.minX, initialBarFrame.minX)
+        XCTAssertLessThanOrEqual(aurora.frame.maxX, initialBarFrame.maxX)
+        saveScreenshot("menu-vertical-scroll")
+
+        XCTAssertTrue(bringFullyIntoView(settings))
+        XCTAssertEqual(settings.frame.minX, initialSettingsFrame.minX, accuracy: 1)
+        XCTAssertEqual(settings.frame.width, initialSettingsFrame.width, accuracy: 1)
+    }
+
     /// Once the jar held a gem, its shake capture used to hold first
     /// responder, and opening either picker menu slid a software keyboard
     /// over the menu's lower rows on the simulator (12秒、DEMO among them).
@@ -89,7 +123,7 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         ).firstMatch.waitForExistence(timeout: 4))
 
         app.buttons["home.subject-picker"].tap()
-        let manageThemes = app.buttons["テーマを管理"]
+        let manageThemes = app.buttons["取り組みを管理"]
         XCTAssertTrue(manageThemes.waitForExistence(timeout: 4))
         pause(1)
         XCTAssertEqual(app.keyboards.count, 0, "Opening the theme menu must not bring up a keyboard")
@@ -108,6 +142,7 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         let homeTheme = app.buttons["home.subject-picker"]
         XCTAssertTrue(homeTheme.waitForExistence(timeout: 5))
         let homeThemeLabel = homeTheme.label
+        XCTAssertTrue(homeThemeLabel.hasPrefix("取り組み、"), homeThemeLabel)
 
         openMenuRow("時間を手動で積む")
         let picker = app.buttons["manual.subject-picker"]
@@ -125,7 +160,7 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         // No swipe: choosing a duration must put the commit button on screen.
         XCTAssertTrue(waitForHittable(confirm), "確認して積む must be reachable right after choosing a duration")
         let summary = app.descendants(matching: .any).matching(
-            NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "テーマ", "数学")
+            NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "取り組み", "数学")
         ).firstMatch
         XCTAssertTrue(summary.exists, "The confirmation names the theme that will be saved")
         XCTAssertEqual(
@@ -518,6 +553,18 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
 
     // MARK: - Helpers
 
+    private func revealHomeMenuButton() {
+        let menu = app.buttons["home.menu.open"]
+        if !menu.waitForExistence(timeout: 2) {
+            // Debug's Gemmy controls can put Menu in the native toolbar
+            // overflow at accessibility sizes. Use that same visible route.
+            let overflow = app.buttons["OverflowBarButtonItem"]
+            XCTAssertTrue(overflow.waitForExistence(timeout: 5))
+            overflow.tap()
+        }
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
+    }
+
     private func probeFields(_ probe: XCUIElement) -> [String: String] {
         guard let rawValue = probe.value as? String else { return [:] }
         return Dictionary(rawValue.split(separator: ";").compactMap { field -> (String, String)? in
@@ -556,7 +603,7 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         stop.tap()
         let alert = app.alerts["今日はここまで"]
         if alert.waitForExistence(timeout: 3) { alert.buttons["今日はここまで"].tap() }
-        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 6))
+        revealHomeMenuButton()
     }
 
     /// Returns right after 「確認して積む」. The toast that confirms the save
@@ -610,13 +657,13 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         openMenuRow("設定")
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
         PomoGemSettingsUITestNavigation.open(.themes, in: app)
-        let addTheme = app.buttons["テーマを追加"]
+        let addTheme = app.buttons["取り組みを追加"]
         XCTAssertTrue(scrollUntilHittable(addTheme))
         // A tap sent while 設定 is still being pushed can be lost: a failed
-        // run's hierarchy shows 設定 at rest with テーマを追加 hittable and no
+        // run's hierarchy shows 設定 at rest with 取り組みを追加 hittable and no
         // editor. Tap once it has settled, and again if no editor came.
         XCTAssertTrue(waitUntilFrameSettles(addTheme), "設定 must come to rest")
-        let editorBar = app.navigationBars["テーマを追加"]
+        let editorBar = app.navigationBars["取り組みを追加"]
         addTheme.tap()
         if !editorBar.waitForExistence(timeout: 3), addTheme.exists, addTheme.isHittable {
             addTheme.tap()
@@ -626,9 +673,9 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         XCTAssertTrue(nameField.waitForExistence(timeout: 4))
         nameField.tap()
         nameField.typeText(name)
-        app.navigationBars["テーマを追加"].buttons["保存"].tap()
+        app.navigationBars["取り組みを追加"].buttons["保存"].tap()
         XCTAssertTrue(XCTWaiter.wait(for: [XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "exists == false"), object: app.navigationBars["テーマを追加"]
+            predicate: NSPredicate(format: "exists == false"), object: app.navigationBars["取り組みを追加"]
         )], timeout: 5) == .completed)
         PomoGemSettingsUITestNavigation.returnHome(in: app)
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
@@ -639,7 +686,7 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
     }
 
     private func openMenuRow(_ title: String) {
-        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
+        revealHomeMenuButton()
         app.buttons["メニュー"].tap()
         let row = menuRow(title)
         XCTAssertTrue(bringFullyIntoView(row), "Missing menu row: \(title)")

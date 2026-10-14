@@ -85,7 +85,10 @@ final class TimeFusionUITests: XCTestCase {
         capture("AX5 — reachable time-progress action")
         progress.tap()
         XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 8))
-        selectCrystalLens()
+        let lensMenu = app.buttons["overview.lens"]
+        XCTAssertTrue(lensMenu.waitForExistence(timeout: 5))
+        XCTAssertEqual(lensMenu.value as? String, "結晶",
+                       "The progress action opens its time breakdown without another lens selection")
         let explanation = app.descendants(matching: .any)["overview.fusion-hierarchy.explanation"]
         XCTAssertTrue(scrollTo(explanation))
         XCTAssertTrue(explanation.label.contains("合計時間"), explanation.label)
@@ -94,6 +97,12 @@ final class TimeFusionUITests: XCTestCase {
         XCTAssertTrue(scrollTo(records))
         records.tap()
         XCTAssertTrue(app.descendants(matching: .any)["overview.timeline.year-list"].waitForExistence(timeout: 8))
+        let year = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "overview.timeline.year.")
+        ).firstMatch
+        XCTAssertTrue(year.waitForExistence(timeout: 5))
+        XCTAssertTrue(year.isHittable,
+                      "Opening the original records must expose a usable year choice without another scroll")
         capture("AX5 — original records")
     }
 
@@ -129,13 +138,143 @@ final class TimeFusionUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Progress"].waitForExistence(timeout: 8))
         let lenses = app.segmentedControls["overview.lens"]
         XCTAssertTrue(lenses.waitForExistence(timeout: 4))
-        lenses.buttons["Crystals"].tap()
+        XCTAssertTrue(lenses.buttons["Crystals"].isSelected,
+                      "The progress action opens its time breakdown without another lens selection")
         let title = app.staticTexts["Crystals of accumulated time"]
         XCTAssertTrue(scrollTo(title))
         let records = app.buttons["overview.time-crystals.records"]
         XCTAssertTrue(scrollTo(records))
         XCTAssertEqual(records.label, "View original records")
         capture("English — time crystals and original records in Progress")
+    }
+
+    func testExploreOpensOverviewBeforeTheNextQueuedCelebration() {
+        checkExploreWithQueuedCelebrations(reduceMotion: false)
+    }
+
+    func testExploreOpensOverviewBeforeTheNextQueuedCelebrationWithReduceMotion() {
+        checkExploreWithQueuedCelebrations(reduceMotion: true, accessibility5: true)
+    }
+
+    func testShareOpensBeforeTheNextQueuedCelebration() {
+        checkShareWithQueuedCelebrations(reduceMotion: false)
+    }
+
+    func testShareOpensBeforeTheNextQueuedCelebrationWithReduceMotion() {
+        checkShareWithQueuedCelebrations(reduceMotion: true, accessibility5: true)
+    }
+
+    private func checkShareWithQueuedCelebrations(reduceMotion: Bool, accessibility5: Bool = false) {
+        app.launchEnvironment["POMOGEM_UI_TEST_QUEUED_CELEBRATIONS"] = "1"
+        app.launchEnvironment["POMOGEM_UI_TEST_REDUCE_MOTION"] = reduceMotion ? "1" : "0"
+        app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = accessibility5 ? "1" : "0"
+        app.launchEnvironment["POMOGEM_UI_TEST_GEM_SHOWCASE"] = "tiers"
+        app.launch()
+        defer {
+            if (testRun?.failureCount ?? 0) > 0 {
+                capture("Queued celebrations — share handoff failure")
+                let hierarchy = XCTAttachment(string: app.debugDescription)
+                hierarchy.name = "Queued celebrations — share handoff accessibility hierarchy"
+                hierarchy.lifetime = .keepAlways
+                add(hierarchy)
+            }
+        }
+
+        let title = app.staticTexts["fusion.celebration.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 12))
+        XCTAssertTrue(title.label.contains("4時間10分"), title.label)
+        let share = app.buttons["積み上がりをカードにする"]
+        XCTAssertTrue(scrollTo(share))
+        capture("Queued celebrations — first crystal before Share")
+        share.tap()
+
+        let composer = app.navigationBars["カードにする"]
+        XCTAssertTrue(composer.waitForExistence(timeout: 8),
+                      "Share must open before the queued second celebration")
+        // This is the composer's own close control, not the completion
+        // sheet's close button or the system activity sheet's Cancel.
+        let close = app.buttons["share.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons.matching(identifier: "share.close").count, 1)
+        let shareReady = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            composer.exists && close.isHittable && close.isEnabled && !title.exists
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [shareReady], timeout: 8), .completed,
+                       "The next celebration must not cover or replace the share composer")
+        capture("Queued celebrations — Share before next celebration")
+        close.tap()
+
+        let celebrationClose = app.buttons["fusion.celebration.close"]
+        let nextTitle = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            title.exists && title.label.contains("41時間40分")
+                && celebrationClose.isHittable && !composer.exists
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [nextTitle], timeout: 8), .completed,
+                       "Closing Share must reveal a usable second celebration")
+        capture("Queued celebrations — second crystal after Share closes")
+        celebrationClose.tap()
+
+        let launcher = app.buttons["home.focus-launcher"]
+        let homeReady = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            launcher.exists && launcher.isHittable && launcher.isEnabled
+                && !title.exists && !composer.exists
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [homeReady], timeout: 8), .completed,
+                       "Finishing both celebrations must leave Home usable")
+    }
+
+    private func checkExploreWithQueuedCelebrations(reduceMotion: Bool, accessibility5: Bool = false) {
+        app.launchEnvironment["POMOGEM_UI_TEST_QUEUED_CELEBRATIONS"] = "1"
+        app.launchEnvironment["POMOGEM_UI_TEST_REDUCE_MOTION"] = reduceMotion ? "1" : "0"
+        app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = accessibility5 ? "1" : "0"
+        app.launchEnvironment["POMOGEM_UI_TEST_GEM_SHOWCASE"] = "tiers"
+        app.launch()
+
+        let title = app.staticTexts["fusion.celebration.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 12))
+        XCTAssertTrue(title.label.contains("4時間10分"), title.label)
+        let explore = app.buttons["積み上げた時間と記録を見る"]
+        XCTAssertTrue(scrollTo(explore))
+        capture("Queued celebrations — first crystal")
+        explore.tap()
+
+        let overview = app.navigationBars["積み上がり"]
+        XCTAssertTrue(overview.waitForExistence(timeout: 8),
+                      "Explore must open Progress before the queued second celebration")
+        if accessibility5 {
+            let lenses = app.buttons["overview.lens"]
+            XCTAssertTrue(lenses.waitForExistence(timeout: 5))
+            XCTAssertEqual(lenses.value as? String, "結晶")
+        } else {
+            let lenses = app.segmentedControls["overview.lens"]
+            XCTAssertTrue(lenses.waitForExistence(timeout: 5))
+            XCTAssertTrue(lenses.buttons["結晶"].isSelected)
+        }
+        let time = app.descendants(matching: .any)["overview.lifetime-time"].firstMatch
+        XCTAssertTrue(time.waitForExistence(timeout: 5))
+        XCTAssertTrue(time.label.contains("集中時間"), time.label)
+        XCTAssertTrue(time.label.contains("48時間45分"), time.label)
+        XCTAssertTrue(time.isHittable)
+        XCTAssertGreaterThanOrEqual(time.frame.minY, overview.frame.maxY - 1)
+        XCTAssertLessThanOrEqual(time.frame.maxY, app.windows.firstMatch.frame.maxY - 12,
+                                 "Explore must show the focus-time answer in the first viewport")
+        XCTAssertFalse(title.exists, "The next celebration waits until Progress has closed")
+        capture("Queued celebrations — crystal lens before next celebration")
+        app.buttons["overview.close"].tap()
+
+        let nextTitle = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            title.exists && title.label.contains("41時間40分")
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [nextTitle], timeout: 8), .completed,
+                       "Closing Progress must resume the second queued celebration")
+        XCTAssertFalse(overview.exists)
+        capture("Queued celebrations — second crystal after Progress closes")
+        app.buttons["fusion.celebration.close"].tap()
+        let launcher = app.buttons["home.focus-launcher"]
+        let homeReady = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            launcher.exists && launcher.isHittable && launcher.isEnabled && !title.exists
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [homeReady], timeout: 8), .completed)
     }
 
     private func launch(_ fixture: String) {

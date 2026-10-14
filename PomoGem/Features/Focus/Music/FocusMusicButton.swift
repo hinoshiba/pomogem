@@ -39,6 +39,8 @@ struct FocusMusicButton: View {
     /// has ended. The sheet closes at once and cannot be opened, so the
     /// completion alarm's Stop control is never under it (#32).
     var keepsSheetClosed: Bool
+    var subjectID: UUID?
+    var subjectName: String?
 
     @Environment(TimerOrientationController.self) private var orientation: TimerOrientationController?
     @State private var music = FocusMusicController.shared
@@ -48,11 +50,16 @@ struct FocusMusicButton: View {
     /// subscription past the end reads the current value here, not the view
     /// value it started from.
     @State private var isSheetLocked = false
-    @AppStorage(FocusMusicPreferences.sourceKey) private var chosenSourceID = ""
-
-    init(focusStart: FocusStart? = nil, keepsSheetClosed: Bool = false) {
+    init(
+        focusStart: FocusStart? = nil,
+        keepsSheetClosed: Bool = false,
+        subjectID: UUID? = nil,
+        subjectName: String? = nil
+    ) {
         self.focusStart = focusStart
         self.keepsSheetClosed = keepsSheetClosed
+        self.subjectID = subjectID
+        self.subjectName = subjectName
     }
 
     var body: some View {
@@ -66,7 +73,7 @@ struct FocusMusicButton: View {
         .buttonStyle(PomoGemBareButtonStyle())
         // Near and after the end, a tap that could only open the sheet does
         // nothing, so it is shown as unavailable instead.
-        .disabled(keepsSheetClosed && music.headerAction == .presentSheet)
+        .disabled(keepsSheetClosed && music.headerAction(for: subjectID) == .presentSheet)
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.5).onEnded { _ in
                 // The button's own tap still arrives when the finger lifts.
@@ -82,7 +89,12 @@ struct FocusMusicButton: View {
         }
         .accessibilityIdentifier("timer.music")
         .sheet(isPresented: $isSheetPresented, onDismiss: { suppressesNextTap = false }) {
-            FocusMusicSheet(controller: music, allowsLeavingApp: focusStart == nil)
+            FocusMusicSheet(
+                controller: music,
+                allowsLeavingApp: focusStart == nil,
+                subjects: musicSubjects,
+                initialSubjectID: subjectID
+            )
                 .modifier(FocusMusicSheetOrientation(isUpsideDown: isTimerUpsideDown))
         }
         .onChange(of: keepsSheetClosed, initial: true) { _, closes in
@@ -100,7 +112,8 @@ struct FocusMusicButton: View {
             await music.autoplayIfNeeded(
                 sessionID: focusStart.sessionID,
                 startedAt: focusStart.startedAt,
-                isStartedOnThisIPhone: focusStart.isStartedOnThisIPhone
+                isStartedOnThisIPhone: focusStart.isStartedOnThisIPhone,
+                subjectID: subjectID
             )
         }
     }
@@ -116,7 +129,7 @@ struct FocusMusicButton: View {
             return
         }
         Task {
-            let action = await music.handleHeaderTap()
+            let action = await music.handleHeaderTap(subjectID: subjectID)
             // Also after a play that did not start, so its hint, Apple's
             // offer or the permission card is seen (D4.3).
             if music.presentsSheet(after: action) {
@@ -134,13 +147,18 @@ struct FocusMusicButton: View {
     }
 
     private var chosenTitle: String? {
-        FocusMusicCatalog.source(id: chosenSourceID).map(music.title(for:))
+        music.chosenSource(for: subjectID).map(music.title(for:))
+    }
+
+    private var musicSubjects: [FocusMusicSubject] {
+        guard let subjectID, let subjectName else { return [] }
+        return [FocusMusicSubject(id: subjectID, name: subjectName)]
     }
 
     /// The label follows what the tap will do (`FocusMusicHeaderPolicy`),
     /// never the playback state alone.
     private var accessibilityLabel: Text {
-        switch music.headerAction {
+        switch music.headerAction(for: subjectID) {
         case .pause:
             return Text("集中用の音楽を一時停止", tableName: "Focus", comment: "VoiceOver label: pause the Music app from the timer")
         case .play, .resume, .ignore:
@@ -151,7 +169,8 @@ struct FocusMusicButton: View {
     }
 
     private var accessibilityValue: Text {
-        if music.isPlaying, let title = music.nowPlaying.title {
+        if music.isPlaying || music.transportToggle(for: subjectID) == .resume,
+           let title = music.nowPlaying.title {
             return Text(verbatim: title)
         }
         if let chosenTitle {
@@ -164,7 +183,7 @@ struct FocusMusicButton: View {
         if keepsSheetClosed {
             return Text(verbatim: "")
         }
-        if music.headerAction == .presentSheet {
+        if music.headerAction(for: subjectID) == .presentSheet {
             return Text("ミュージックアプリで再生する音楽を選びます", tableName: "Focus", comment: "VoiceOver hint: the timer music button opens the music list")
         }
         return Text("長押しで音楽を選べます", tableName: "Focus", comment: "VoiceOver hint: long press the timer music button to choose music")

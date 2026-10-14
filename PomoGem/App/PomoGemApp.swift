@@ -4131,7 +4131,7 @@ private struct PersistenceLaunchStatusView: View {
                 // that this is shown before the choice is confirmed).
                 Alert(
                     title: Text("iCloudに保存して同期しますか？", tableName: "Launch"),
-                    message: Text("テーマ名、成果メモ、集中記録、設定、進行中タイマーをApple AccountのプライベートiCloudへ送信します。オンラインでApple Accountを確認した後に保存方式を確定します。このiPhoneに保存済みの記録があれば、オフラインでも使えます。初回の取得や同期の再開には通信が必要です。後で同期を止めるときは、iCloudの記録をこのiPhoneへコピーし、iCloudの記録も残します。",
+                    message: Text("取り組み名、成果メモ、集中記録、設定、進行中タイマーをApple AccountのプライベートiCloudへ送信します。オンラインでApple Accountを確認した後に保存方式を確定します。このiPhoneに保存済みの記録があれば、オフラインでも使えます。初回の取得や同期の再開には通信が必要です。後で同期を止めるときは、iCloudの記録をこのiPhoneへコピーし、iCloudの記録も残します。",
                                   tableName: "Launch",
                                   comment: "First-run storage choice: iCloud confirmation message (full caveats)"),
                     primaryButton: .cancel(Text("キャンセル", tableName: "Launch", comment: "Button: cancels a confirmation")),
@@ -4474,7 +4474,7 @@ private struct PersistenceLaunchStatusView: View {
     /// The device row's label in both comparisons, beside the 「iCloud」 row.
     private static var thisIPhoneSide: String {
         String(localized: "このiPhone", table: "Launch",
-               comment: "Label of this iPhone's row in the record comparison, as in 「このiPhone: テーマ12・記録480…」")
+               comment: "Label of this iPhone's row in the record comparison, as in 「このiPhone: 取り組み12・記録480…」")
     }
 
     private var lineageComparison: String {

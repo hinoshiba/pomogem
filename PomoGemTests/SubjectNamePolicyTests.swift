@@ -2,6 +2,73 @@ import XCTest
 @testable import PomoGem
 
 final class SubjectNamePolicyTests: XCTestCase {
+    func testSubjectDurationDefaultsToSharedPreferenceAndKeepsSeconds() {
+        let subject = Subject(name: "Reading", colorHex: Constants.Color.english, sortOrder: 0)
+        XCTAssertNil(subject.defaultFocusSeconds)
+        XCTAssertEqual(SubjectFocusDurationPolicy.savedDuration(
+            subjectDefaultSeconds: nil, preferredSeconds: 2_700
+        ), .custom(minutes: 45))
+        XCTAssertEqual(SubjectFocusDurationPolicy.savedDuration(
+            subjectDefaultSeconds: 95, preferredSeconds: 2_700
+        ), .customSeconds(totalSeconds: 95))
+        XCTAssertEqual(SubjectFocusDurationPolicy.savedDuration(
+            subjectDefaultSeconds: nil, preferredSeconds: nil
+        ), .twentyFiveMinutes)
+    }
+
+    func testInvalidSubjectDurationsFallBackWithoutClampingRawValues() {
+        for seconds in [Int.min, -1, 0, 59, 21_601, Int.max] {
+            XCTAssertEqual(SubjectFocusDurationPolicy.savedDuration(
+                subjectDefaultSeconds: seconds, preferredSeconds: 3_600
+            ), .sixtyMinutes)
+            XCTAssertEqual(SubjectFocusDurationPolicy.savedDuration(
+                subjectDefaultSeconds: seconds, preferredSeconds: seconds
+            ), .twentyFiveMinutes)
+        }
+        for seconds in [60, 21_600] {
+            XCTAssertEqual(SubjectFocusDurationPolicy.savedDuration(
+                subjectDefaultSeconds: seconds, preferredSeconds: nil
+            ).seconds, seconds)
+        }
+    }
+
+    func testSubjectDurationRespectsEntitlementWithoutDiscardingSavedValue() {
+        for duration in PomodoroDuration.freePresets {
+            XCTAssertEqual(SubjectFocusDurationPolicy.availableDuration(
+                subjectDefaultSeconds: duration.seconds, preferredSeconds: nil, isPro: false
+            ), duration)
+        }
+        XCTAssertEqual(SubjectFocusDurationPolicy.availableDuration(
+            subjectDefaultSeconds: 95, preferredSeconds: 3_600, isPro: false
+        ), .twentyFiveMinutes)
+        XCTAssertEqual(SubjectFocusDurationPolicy.availableDuration(
+            subjectDefaultSeconds: 95, preferredSeconds: 3_600, isPro: true
+        ), .customSeconds(totalSeconds: 95))
+        XCTAssertEqual(SubjectFocusDurationPolicy.savedDuration(
+            subjectDefaultSeconds: 95, preferredSeconds: 3_600
+        ).seconds, 95)
+        XCTAssertEqual(SubjectFocusDurationPolicy.availableDuration(
+            subjectDefaultSeconds: nil, preferredSeconds: 95, isPro: false
+        ), .twentyFiveMinutes)
+    }
+
+    func testSubjectDefaultMutationSelectsNewReplicaAndCanReturnToSharedDefault() throws {
+        let id = UUID()
+        let original = Subject(id: id, name: "Reading", colorHex: Constants.Color.english,
+                               sortOrder: 0, defaultFocusSeconds: 2_700)
+        let edited = Subject(id: id, name: "Reading", colorHex: Constants.Color.english,
+                             sortOrder: 0, defaultFocusSeconds: 95)
+        try SubjectSyncPolicy.recordUserMutation(from: edited, among: [original, edited])
+        for values in [[original, edited], [edited, original]] {
+            XCTAssertEqual(SubjectSyncPolicy.canonical(from: values)?.defaultFocusSeconds, 95)
+        }
+        edited.defaultFocusSeconds = nil
+        try SubjectSyncPolicy.recordUserMutation(from: edited, among: [original, edited])
+        XCTAssertTrue(SubjectSyncPolicy.canonical(from: [edited, original]) === edited)
+        XCTAssertNil(SubjectSyncPolicy.canonical(from: [original, edited])?.defaultFocusSeconds)
+        XCTAssertEqual(original.defaultFocusSeconds, 2_700, "Keep the other physical row as sync evidence")
+    }
+
     func testSanitizedTrimsAndLimitsByUserVisibleCharacter() {
         let value = "  " + String(repeating: "📚", count: 45) + "\n"
         let sanitized = SubjectNamePolicy.sanitized(value)

@@ -951,7 +951,7 @@ enum ScreenTimeRowStatus: Equatable {
             String(localized: "要確認：粒にするアプリの記録が止まっています", table: "ScreenTime",
                    comment: "Settings row subtitle: study apps stopped recording (free-plan limit); black stones still record")
         case .themeRemoved:
-            String(localized: "要確認：記録先のテーマが削除されました", table: "ScreenTime",
+            String(localized: "要確認：記録先の取り組みが削除されました", table: "ScreenTime",
                    comment: "Settings row subtitle: the study-app destination theme was deleted")
         }
     }
@@ -967,7 +967,7 @@ enum ScreenTimeThemeDeletionNotice {
     }
 
     static var text: String {
-        String(localized: "このテーマを記録先にしたアプリの選択が解除されます。ほかのテーマに記録するアプリはそのままです。記録を続けるには、対象のアプリと記録先を選び直してください。",
+        String(localized: "この取り組みを記録先にしたアプリの選択が解除されます。ほかの取り組みに記録するアプリはそのままです。記録を続けるには、対象のアプリと記録先を選び直してください。",
                table: "ScreenTime", comment: "Theme delete confirmation: the theme is the Screen Time destination")
     }
 }

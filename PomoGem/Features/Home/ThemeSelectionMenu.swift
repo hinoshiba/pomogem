@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The テーマ menu shared by the two ways to add to the jar from Home's menu,
+/// The 取り組み menu shared by the two ways to add to the jar from Home's menu,
 /// 「時間を手動で積む」 and 「成果を積む」. The choice belongs to the sheet: it
 /// never writes Home's selected theme, so back-filling time for another theme
 /// does not also change what the next timer starts with.
@@ -16,7 +16,7 @@ struct ThemeSelectionMenu: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("テーマ", tableName: "Home", comment: "The word theme, alone: the caption above the sheets' theme menu, the manual-entry confirmation row, and the stand-in for a missing theme name")
+            Text("取り組み", tableName: "Home", comment: "The word theme, alone: the caption above the sheets' theme menu, the manual-entry confirmation row, and the stand-in for a missing theme name")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(PomoGemTheme.muted)
                 .accessibilityHidden(true)
@@ -66,16 +66,16 @@ struct ThemeSelectionMenu: View {
 }
 
 extension ThemeSelectionMenu {
-    /// VoiceOver: 「テーマ、英語」, or 「テーマ、未選択」. Home's own theme
+    /// VoiceOver: 「取り組み、英語」, or 「取り組み、未選択」. Home's own theme
     /// picker reads the same way.
     static func accessibilityLabel(for subject: Subject?) -> String {
         let name = subject?.localizedDisplayName ?? String(
             localized: "未選択",
             table: "Home",
-            comment: "No theme chosen yet: read after テーマ、 by VoiceOver and shown in the manual-entry confirmation row"
+            comment: "No theme chosen yet: read after 取り組み、 by VoiceOver and shown in the manual-entry confirmation row"
         )
         return String(
-            localized: "テーマ、\(name)",
+            localized: "取り組み、\(name)",
             table: "Home",
             comment: "VoiceOver label of a theme menu; the argument is the chosen theme or 未選択"
         )

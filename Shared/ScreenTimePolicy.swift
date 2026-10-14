@@ -108,7 +108,7 @@ enum ScreenTimeError: LocalizedError {
             return String(localized: "無料で登録できる粒にするアプリは5つまでです。5つ以下にするか、Proをご利用ください。",
                           table: "ScreenTime", comment: "Error: more study apps than the free plan records")
         case .missingTheme:
-            return String(localized: "各アプリの記録先のテーマを選んでください。",
+            return String(localized: "各アプリの記録先の取り組みを選んでください。",
                           table: "ScreenTime", comment: "Error: each chosen app needs a destination theme")
         case .corruptedState:
             return String(localized: "スクリーンタイムの記録を読み込めませんでした。記録の上書きは行っていません。",

@@ -199,7 +199,7 @@ require(
 )
 require(
     info.get("NSAppleMusicUsageDescription")
-    == "タイマー画面から『ミュージック』アプリで集中用の音楽を再生するために使います。",
+    == "集中用の音楽を再生し、自分のライブラリからプレイリストを選ぶために使います。",
     "Apple Music purpose string differs from the reviewed Music-app playback control (Docs/FocusMusic.md)",
 )
 require(

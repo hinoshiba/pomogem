@@ -60,6 +60,7 @@ final class PomoGemDataExporterTests: XCTestCase {
             name: "社外秘プロジェクト",
             colorHex: "#12A0D0",
             sortOrder: 7,
+            defaultFocusSeconds: 47 * 60 + 35,
             isArchived: true,
             deletedAt: instant.addingTimeInterval(120),
             createdAt: instant,
@@ -383,6 +384,7 @@ final class PomoGemDataExporterTests: XCTestCase {
         XCTAssertEqual(subjects.first?["syncRecordID"] as? String, subjectSyncRecordID.uuidString)
         XCTAssertEqual(subjects.first?["contentRevision"] as? Int, 9)
         XCTAssertEqual(subjects.first?["contentMutationID"] as? String, subjectMutationID.uuidString)
+        XCTAssertEqual(subjects.first?["defaultFocusSeconds"] as? Int, 47 * 60 + 35)
         XCTAssertNotNil(subjects.first?["deletedAt"])
 
         let sessions = try XCTUnwrap(records["studySessions"] as? [[String: Any]])

@@ -332,7 +332,7 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
             let outcome = await controller.retireLearningSelection(ofRemovedTheme: themeID, isPro: resolvedIsPro)
             if outcome.cleared {
                 router?.showToast(
-                    String(localized: "記録先のテーマが削除されたため、対象アプリの記録を止めました", table: "ScreenTime",
+                    String(localized: "記録先の取り組みが削除されたため、対象アプリの記録を止めました", table: "ScreenTime",
                            comment: "Toast: apps assigned to a deleted Screen Time theme stopped recording"),
                     symbol: "exclamationmark.triangle"
                 )

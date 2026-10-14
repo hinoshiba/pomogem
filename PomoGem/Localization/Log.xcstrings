@@ -290,19 +290,19 @@
         }
       }
     },
-    "%@（削除したテーマ）" : {
+    "%@（削除した取り組み）" : {
       "comment" : "Milestone editor theme menu: keep the milestone's deleted theme; the argument is the theme name",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ (deleted theme)"
+            "value" : "%@ (deleted activity)"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@（削除したテーマ）"
+            "value" : "%@（削除した取り組み）"
           }
         }
       }
@@ -465,36 +465,36 @@
         }
       }
     },
-    "「%@」は今のテーマ一覧にありません。ほかのテーマを選ばなければ、このまま残ります。" : {
+    "「%@」は今の取り組み一覧にありません。ほかの取り組みを選ばなければ、このまま残ります。" : {
       "comment" : "Milestone editor: why a theme missing from the list is shown; the argument is the theme name",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "“%@” isn't in your current list of themes. It stays as it is unless you choose another theme."
+            "value" : "“%@” isn't in your current list of activities. It stays as it is unless you choose another activity."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "「%@」は今のテーマ一覧にありません。ほかのテーマを選ばなければ、このまま残ります。"
+            "value" : "「%@」は今の取り組み一覧にありません。ほかの取り組みを選ばなければ、このまま残ります。"
           }
         }
       }
     },
-    "「%@」は設定で削除したテーマです。ほかのテーマを選ばなければ、このまま残ります。" : {
+    "「%@」は設定で削除した取り組みです。ほかの取り組みを選ばなければ、このまま残ります。" : {
       "comment" : "Milestone editor: why a deleted theme is shown; the argument is the theme name",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "“%@” is a theme you deleted in Settings. It stays as it is unless you choose another theme."
+            "value" : "“%@” is an activity you deleted in Settings. It stays as it is unless you choose another activity."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "「%@」は設定で削除したテーマです。ほかのテーマを選ばなければ、このまま残ります。"
+            "value" : "「%@」は設定で削除した取り組みです。ほかの取り組みを選ばなければ、このまま残ります。"
           }
         }
       }
@@ -505,7 +505,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Top theme"
+            "value" : "Top activity"
           }
         },
         "ja" : {
@@ -878,7 +878,7 @@
         }
       }
     },
-    "ほか %lldテーマ" : {
+    "ほか %lld件" : {
       "comment" : "Crystal archive row: how many more themes the crystal holds beyond the three listed",
       "localizations" : {
         "en" : {
@@ -887,13 +887,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld more theme"
+                  "value" : "%lld more activity"
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld more themes"
+                  "value" : "%lld more activities"
                 }
               }
             }
@@ -902,12 +902,12 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ほか %lldテーマ"
+            "value" : "ほか %lld件"
           }
         }
       }
     },
-    "ほか%lldテーマ" : {
+    "ほか%lld件" : {
       "comment" : "Wrapped: how many more themes are not listed",
       "localizations" : {
         "en" : {
@@ -916,13 +916,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld more theme"
+                  "value" : "%lld more activity"
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld more themes"
+                  "value" : "%lld more activities"
                 }
               }
             }
@@ -931,24 +931,24 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ほか%lldテーマ"
+            "value" : "ほか%lld件"
           }
         }
       }
     },
-    "ほかに選べるテーマはありません" : {
+    "ほかに選べる取り組みはありません" : {
       "comment" : "VoiceOver hint: no other theme to choose",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "There are no other themes to choose"
+            "value" : "There are no other activities to choose"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ほかに選べるテーマはありません"
+            "value" : "ほかに選べる取り組みはありません"
           }
         }
       }
@@ -1049,142 +1049,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "スクリーンタイムの%@は、完走した回数に含みません"
-          }
-        }
-      }
-    },
-    "テーマ" : {
-      "comment" : "Milestone editor: label of the theme menu",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Theme"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマ"
-          }
-        }
-      }
-    },
-    "テーマ、%@" : {
-      "comment" : "VoiceOver: the milestone's theme menu; the argument is the chosen theme",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Theme, %@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマ、%@"
-          }
-        }
-      }
-    },
-    "テーマ、未選択" : {
-      "comment" : "VoiceOver: the milestone's theme menu with no theme chosen",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Theme, none chosen"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマ、未選択"
-          }
-        }
-      }
-    },
-    "テーマがないため変更できません" : {
-      "comment" : "VoiceOver hint: there are no themes, so the menu is disabled",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "There are no themes, so this can't be changed"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマがないため変更できません"
-          }
-        }
-      }
-    },
-    "テーマの構成" : {
-      "comment" : "Log section title: how the period's mass splits by theme",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Theme Breakdown"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマの構成"
-          }
-        }
-      }
-    },
-    "テーマを選択" : {
-      "comment" : "Milestone editor theme menu when no theme is chosen",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Choose a Theme"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマを選択"
-          }
-        }
-      }
-    },
-    "テーマ別" : {
-      "comment" : "Heading of the per-theme time breakdown of a day",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "By Theme"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマ別"
-          }
-        }
-      }
-    },
-    "テーマ別の時間" : {
-      "comment" : "Wrapped: heading of the month's time per theme",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Time by Theme"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマ別の時間"
           }
         }
       }
@@ -1435,6 +1299,142 @@
         }
       }
     },
+    "取り組み" : {
+      "comment" : "Milestone editor: label of the theme menu",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activity"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組み"
+          }
+        }
+      }
+    },
+    "取り組み、%@" : {
+      "comment" : "VoiceOver: the milestone's theme menu; the argument is the chosen theme",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activity, %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組み、%@"
+          }
+        }
+      }
+    },
+    "取り組み、未選択" : {
+      "comment" : "VoiceOver: the milestone's theme menu with no theme chosen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activity, none chosen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組み、未選択"
+          }
+        }
+      }
+    },
+    "取り組みがないため変更できません" : {
+      "comment" : "VoiceOver hint: there are no themes, so the menu is disabled",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "There are no activities, so this can't be changed"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みがないため変更できません"
+          }
+        }
+      }
+    },
+    "取り組みの構成" : {
+      "comment" : "Log section title: how the period's mass splits by theme",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activity Breakdown"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みの構成"
+          }
+        }
+      }
+    },
+    "取り組みを選択" : {
+      "comment" : "Milestone editor theme menu when no theme is chosen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose an Activity"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みを選択"
+          }
+        }
+      }
+    },
+    "取り組み別" : {
+      "comment" : "Heading of the per-theme time breakdown of a day",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "By Activity"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組み別"
+          }
+        }
+      }
+    },
+    "取り組み別の時間" : {
+      "comment" : "Wrapped: heading of the month's time per theme",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Time by Activity"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組み別の時間"
+          }
+        }
+      }
+    },
     "同じ記録の同期コピーが多いため、安全な内容を確定できませんでした。" : {
       "localizations" : {
         "en" : {
@@ -1550,19 +1550,19 @@
         }
       }
     },
-    "成果を結びつけるテーマを変更できます" : {
+    "成果を結びつける取り組みを変更できます" : {
       "comment" : "VoiceOver hint on the milestone's theme menu",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Changes the theme this achievement belongs to"
+            "value" : "Changes the activity this achievement belongs to"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "成果を結びつけるテーマを変更できます"
+            "value" : "成果を結びつける取り組みを変更できます"
           }
         }
       }
@@ -2029,19 +2029,19 @@
         }
       }
     },
-    "確認済みのテーマ別の時間" : {
+    "確認済みの取り組み別の時間" : {
       "comment" : "Wrapped: heading of the time per theme when only part of the month is shown or iCloud is re-counting",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Confirmed Time by Theme"
+            "value" : "Confirmed Time by Activity"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "確認済みのテーマ別の時間"
+            "value" : "確認済みの取り組み別の時間"
           }
         }
       }
@@ -2052,7 +2052,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Confirmed top theme"
+            "value" : "Confirmed top activity"
           }
         },
         "ja" : {
@@ -2148,18 +2148,18 @@
         }
       }
     },
-    "積んだテーマがここに並びます。" : {
+    "積んだ取り組みがここに並びます。" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The themes you add gems to will show up here."
+            "value" : "The activities you add gems to will show up here."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "積んだテーマがここに並びます。"
+            "value" : "積んだ取り組みがここに並びます。"
           }
         }
       }
@@ -2566,19 +2566,19 @@
         }
       }
     },
-    "詳細を開いて、種類・テーマ・日付・メモを編集できます" : {
+    "詳細を開いて、種類・取り組み・日付・メモを編集できます" : {
       "comment" : "VoiceOver hint on a milestone stone row",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Opens the details, where you can edit the type, theme, date and note"
+            "value" : "Opens the details, where you can edit the type, activity, date and note"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "詳細を開いて、種類・テーマ・日付・メモを編集できます"
+            "value" : "詳細を開いて、種類・取り組み・日付・メモを編集できます"
           }
         }
       }
@@ -2717,18 +2717,18 @@
         }
       }
     },
-    "選んだテーマが見つかりません。テーマを選び直してください。" : {
+    "選んだ取り組みが見つかりません。取り組みを選び直してください。" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The theme you chose can't be found. Please choose a theme again."
+            "value" : "The activity you chose can't be found. Please choose an activity again."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "選んだテーマが見つかりません。テーマを選び直してください。"
+            "value" : "選んだ取り組みが見つかりません。取り組みを選び直してください。"
           }
         }
       }

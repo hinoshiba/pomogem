@@ -38,7 +38,7 @@
 	<key>NSAlarmKitUsageDescription</key>
 	<string>集中や休憩の終わりを、マナーモードや集中モード中でもアラームでお知らせするために使います。</string>
 	<key>NSAppleMusicUsageDescription</key>
-	<string>タイマー画面から『ミュージック』アプリで集中用の音楽を再生するために使います。</string>
+	<string>集中用の音楽を再生し、自分のライブラリからプレイリストを選ぶために使います。</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 hinoshiba</string>
 	<key>NSMotionUsageDescription</key>

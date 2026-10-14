@@ -709,7 +709,7 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         XCTAssertTrue(entry.waitForExistence(timeout: 8))
         XCTAssertTrue(reveal(entry))
         XCTAssertTrue(entry.label.contains("アプリの時間を積む"), entry.label)
-        XCTAssertTrue(entry.label.contains("選んだアプリをテーマ別に記録"), "The detail names the apps that count: \(entry.label)")
+        XCTAssertTrue(entry.label.contains("選んだアプリを取り組み別に記録"), "The detail names the apps that count: \(entry.label)")
         return entry
     }
 

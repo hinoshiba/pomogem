@@ -283,13 +283,110 @@ final class TimeFusionPersistenceFairnessTests: XCTestCase {
         XCTAssertEqual(index.sessionIDs.count, 10)
     }
 
-    private func session(index: Int, minutes: Int) -> StudySession {
+    func testTimeFusionColoursFollowRecordedTimeAcrossSessionPartitions() {
+        let blue = Constants.Color.english
+        let red = Constants.Color.mathematics
+        let long = session(index: 0, minutes: 90, colorHex: red)
+        let short = session(index: 1, minutes: 10, colorHex: blue)
+        let combined = HomeProjectionPolicy.timeFusionColorMix(
+            roots: [], looseSessions: [long, short, short], unlandedSessionIDs: []
+        )
+        let split = HomeProjectionPolicy.timeFusionColorMix(
+            roots: [],
+            looseSessions: (0..<9).map { session(index: $0, minutes: 10, colorHex: red) }
+                + [session(index: 10, minutes: 10, colorHex: blue)],
+            unlandedSessionIDs: []
+        )
+        XCTAssertEqual(combined, split)
+        XCTAssertEqual(combined.map(\.hex), [red, blue])
+        XCTAssertEqual(combined[0].fraction, 0.9, accuracy: 0.0001)
+        XCTAssertEqual(combined[1].fraction, 0.1, accuracy: 0.0001)
+    }
+
+    func testTimeFusionColoursExcludePendingLooseAndIndexedReceipts() {
+        let blue = Constants.Color.english
+        let red = Constants.Color.mathematics
+        let green = Constants.Color.science
+        let indexedPending = session(index: 1, minutes: 50, colorHex: blue)
+        let loosePending = session(index: 2, minutes: 25, colorHex: red)
+        let landed = session(index: 3, minutes: 100, colorHex: green)
+        let root = AggregatePebble(
+            level: 1, pebbleCount: 10, grams: 2_500, measuredPebbleCount: 10,
+            colorMixJSON: StrataMath.encodeColorMix([
+                StratumColorFraction(hex: red, fraction: 0.8),
+                StratumColorFraction(hex: blue, fraction: 0.2)
+            ]),
+            periodStart: .distantPast, periodEnd: .distantPast,
+            sessionIDs: [indexedPending.id]
+        )
+        let mix = HomeProjectionPolicy.timeFusionColorMix(
+            roots: [root], looseSessions: [landed, loosePending, landed],
+            unlandedSessionIDs: [indexedPending.id, loosePending.id],
+            representedPendingSessions: [indexedPending, indexedPending]
+        )
+        XCTAssertEqual(mix.map(\.hex), [red, green])
+        XCTAssertEqual(mix[0].fraction, 2.0 / 3, accuracy: 0.0001)
+        XCTAssertEqual(mix[1].fraction, 1.0 / 3, accuracy: 0.0001)
+        XCTAssertEqual(root.grams, 2_500, "Colour projection must never modify saved time")
+        XCTAssertTrue(HomeProjectionPolicy.timeFusionColorMix(
+            roots: [], looseSessions: [loosePending], unlandedSessionIDs: [loosePending.id]
+        ).isEmpty)
+    }
+
+    @MainActor
+    func testRemainderRetainsEveryVisibleCompositionColour() throws {
+        let blue = Constants.Color.english
+        let red = Constants.Color.mathematics
+        let mix = [
+            StratumColorFraction(hex: blue, fraction: 0.6),
+            StratumColorFraction(hex: red, fraction: 0.4)
+        ]
+        let remainder = PebbleDescriptor.timeRemainder(grams: 1_000, colorMix: mix)
+        let spec = try XCTUnwrap(PebbleNode.bodySpec(for: remainder))
+        XCTAssertEqual(spec.colors, mix.map { GemColorShare(hex: $0.hex, fraction: $0.fraction) })
+        XCTAssertFalse(spec.isMuted)
+        XCTAssertEqual(spec.facetContrast, GemCutLadder.standard.loose.facetContrast)
+        let recoloured = PebbleDescriptor.timeRemainder(grams: 1_000, colorMix: [
+            StratumColorFraction(hex: blue, fraction: 0.6),
+            StratumColorFraction(hex: Constants.Color.science, fraction: 0.4)
+        ])
+        XCTAssertEqual(remainder.id, recoloured.id)
+        XCTAssertEqual(remainder.colorHex, recoloured.colorHex)
+        XCTAssertFalse(remainder.hasSamePresentation(as: recoloured),
+                       "A secondary colour change must refresh an existing scene body")
+    }
+
+    @MainActor
+    func testTimeCrystalsKeepThePreviousMeasuredCrystalBrilliance() throws {
+        let mix = [
+            StratumColorFraction(hex: Constants.Color.english, fraction: 0.6),
+            StratumColorFraction(hex: Constants.Color.mathematics, fraction: 0.4)
+        ]
+        for (level, grams) in [(1, 2_500), (2, 25_000), (3, 250_000)] {
+            let unit = TimeFusionUnit(level: level, grams: grams, ordinal: 0)
+            let projected = PebbleDescriptor.timeProjection(unit: unit, colorMix: mix)
+            let previous = PebbleDescriptor(aggregate: AggregatePebble(
+                id: unit.id, level: level, pebbleCount: 10,
+                grams: grams, measuredPebbleCount: 10,
+                colorMixJSON: StrataMath.encodeColorMix(mix),
+                periodStart: .distantPast, periodEnd: .distantPast
+            ))
+            let spec = try XCTUnwrap(PebbleNode.bodySpec(for: projected))
+            XCTAssertEqual(spec, PebbleNode.bodySpec(for: previous),
+                           "The same colours and saved time keep the existing vivid facet material")
+            XCTAssertEqual(GemCutLadder.standard.rung(for: projected),
+                           GemCutLadder.standard.rung(for: previous))
+            XCTAssertFalse(spec.isMuted)
+        }
+    }
+
+    private func session(index: Int, minutes: Int, colorHex: String = Constants.Color.english) -> StudySession {
         let end = Date(timeIntervalSince1970: 1_790_000_000 + Double(index * 60))
         return StudySession(
             id: UUID(uuidString: String(format: "00000000-0000-4000-8000-%012X", index + 1))!,
             startAt: end.addingTimeInterval(-Double(minutes * 60)), endAt: end,
             seconds: minutes * 60, source: .timer, deviceDayKey: "2026-09-01",
-            subjectNameSnapshot: "集中", subjectColorHexSnapshot: Constants.Color.english
+            subjectNameSnapshot: "集中", subjectColorHexSnapshot: colorHex
         )
     }
 }

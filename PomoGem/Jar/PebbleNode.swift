@@ -307,6 +307,9 @@ struct PebbleDescriptor: Identifiable {
     /// Used only when speaking the stored name; aggregation keeps `subjectName`.
     let subjectID: UUID?
     let colorHex: String
+    /// Visual colour shares for a body without aggregate membership, such
+    /// as focus time still accumulating toward its first crystal.
+    let colorMix: [StratumColorFraction]
     let source: SessionSource
     let kind: PebbleKind
     /// All per-credit outcomes represented by this one physical body. The
@@ -328,6 +331,7 @@ struct PebbleDescriptor: Identifiable {
         subjectName: String,
         subjectID: UUID? = nil,
         colorHex: String,
+        colorMix: [StratumColorFraction] = [],
         source: SessionSource,
         kind: PebbleKind,
         rareRewardCounts: RareRewardCounts? = nil,
@@ -344,6 +348,7 @@ struct PebbleDescriptor: Identifiable {
         self.subjectName = subjectName
         self.subjectID = subjectID
         self.colorHex = colorHex
+        self.colorMix = colorMix
         self.source = source
         self.kind = kind
         self.rareRewardCounts = rareRewardCounts ?? RareRewardCounts(
@@ -441,6 +446,7 @@ struct PebbleDescriptor: Identifiable {
             && subjectName == other.subjectName
             && subjectID == other.subjectID
             && colorHex == other.colorHex
+            && colorMix == other.colorMix
             && source.rawValue == other.source.rawValue
             && kind.rawValue == other.kind.rawValue
             && rareRewardCounts == other.rareRewardCounts
@@ -666,6 +672,7 @@ struct PebbleDescriptor: Identifiable {
             id: TimeFusionUnit(level: 0, grams: 0, ordinal: 0).id,
             subjectName: subjectMix.first?.name ?? String(localized: "集中時間", table: "Jar"),
             colorHex: colorMix.first?.hex ?? TimeFusionPolicy.colorHex,
+            colorMix: colorMix,
             source: .timer, kind: .normal, grams: max(0, grams),
             createdAt: .distantPast, isTimeProjection: true
         )
@@ -1424,7 +1431,7 @@ final class PebbleNode: SKShapeNode {
     ) -> GemArtworkSpec {
         GemArtworkSpec(
             rung: cutLadder.rung(for: descriptor),
-            colors: [GemColorShare(hex: descriptor.colorHex, fraction: 1)],
+            colors: GemArtworkSpec.aggregateColors(descriptor.colorMix, fallbackHex: descriptor.colorHex),
             variant: GemArtworkSpec.variant(for: descriptor.id),
             isMuted: !descriptor.isMeasured && !descriptor.isTutorial,
             showsDashedRing: !descriptor.isMeasured && !descriptor.isTutorial,

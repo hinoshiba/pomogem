@@ -112,7 +112,7 @@ enum UsagePurpose: String, CaseIterable, Identifiable, Sendable {
     var privacyGuidance: String? {
         guard self == .work else { return nil }
         return String(
-            localized: "シェアカードにテーマ名は載せません。成果メモも載せません。終了通知にもテーマ名は表示しません。案件名・顧客名・個人名などの守秘情報は入れず、「企画」「顧客対応」のような大分類がおすすめです。",
+            localized: "シェアカードに取り組み名は載せません。成果メモも載せません。終了通知にも取り組み名は表示しません。案件名・顧客名・個人名などの守秘情報は入れず、「企画」「顧客対応」のような大分類がおすすめです。",
             table: "Onboarding",
             comment: "Legacy usage purpose: privacy note for work themes (theme names never appear on share cards or notifications)"
         )
@@ -202,7 +202,7 @@ enum SubjectSuggestionCatalog {
         comment: "Example theme names under the theme name field (Settings). en: culturally neutral examples"
     )
     static let setupDetail = String(
-        localized: "勉強も仕事も同じテーマ一覧で管理できます。候補を1つ選ぶか、自由に入力してください。",
+        localized: "勉強も仕事も同じ取り組み一覧で管理できます。候補を1つ選ぶか、自由に入力してください。",
         table: "Onboarding",
         comment: "Onboarding theme step: study and work themes share one list"
     )

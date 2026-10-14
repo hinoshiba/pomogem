@@ -283,7 +283,7 @@ final class StorageTransferNilLineageDatasetTests: XCTestCase {
             latestRecordAt: Date(timeIntervalSinceReferenceDate: 0),
             otherDeviceIDs: 0, ignoredWriterIDs: 0)
         XCTAssertEqual(StorageTransferOverwriteCopy.cloudSideWithoutLineage(preview: preview),
-                       "iCloud: テーマ2・記録3・成果0")
+                       "iCloud: 取り組み2・記録3・成果0")
         // A read that never happened is still reported as a read that never
         // happened, not as an absent ledger.
         XCTAssertEqual(StorageTransferOverwriteCopy.cloudSideWithoutLineage(preview: nil),

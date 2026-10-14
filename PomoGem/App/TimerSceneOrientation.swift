@@ -41,13 +41,16 @@ final class TimerSceneOrientation {
     func release(_ scene: UIWindowScene, owner: TimerOrientationController) {
         guard isOwner(owner, of: scene) else { return }
         requests.removeValue(forKey: scene.session.persistentIdentifier)
-        // Let SwiftUI finish removing the full-screen timer. A replacement
-        // timer may claim the scene before this restoration reaches UIKit.
+        // Normal exits already restored portrait under the timer's opaque
+        // cover. This remains a fallback for an externally removed hierarchy;
+        // a replacement timer may claim the scene before it reaches UIKit.
         DispatchQueue.main.async { [weak self, weak scene] in
             guard let self, let scene,
                   self.requests[scene.session.persistentIdentifier] == nil else { return }
             self.invalidateControllers(in: scene)
-            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+            if scene.effectiveGeometry.interfaceOrientation != .portrait {
+                scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+            }
         }
     }
 

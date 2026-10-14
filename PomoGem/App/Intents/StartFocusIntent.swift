@@ -53,7 +53,7 @@ struct StartFocusIntent: AppIntent {
         comment: "Siri, Spotlight and Shortcuts: the start-focus action"
     )
     static let description = IntentDescription(LocalizedStringResource(
-        "ポモジェムを開き、ホームで選んでいるテーマで集中を始めます。",
+        "ポモジェムを開き、ホームで選んでいる取り組みで集中を始めます。",
         table: "Focus",
         comment: "Shortcuts: what the start-focus action does"
     ))

@@ -19,7 +19,7 @@
       }
     },
     "%@以上" : {
-      "comment" : "A lower bound while the jar is re-counted; the argument is a mass such as 600g",
+      "comment" : "A lower bound while the jar is re-counted\nA lower bound while the jar is re-counted; the argument is a mass such as 600g",
       "localizations" : {
         "en" : {
           "stringUnit" : {

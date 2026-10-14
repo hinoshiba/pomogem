@@ -205,7 +205,7 @@ struct OnboardingView: View {
         switch page {
         case 0: String(localized: "集中が残るしくみ", table: "Onboarding", comment: "Onboarding step 1 title: how your focus is kept")
         case 1: String(localized: "一粒を体験（任意）", table: "Onboarding", comment: "Onboarding step 2 title: try dropping one gem (optional)")
-        case 2: String(localized: "最初のテーマ", table: "Onboarding", comment: "Onboarding step 3 title: your first theme")
+        case 2: String(localized: "最初の取り組み", table: "Onboarding", comment: "Onboarding step 3 title: your first theme")
         default: String(localized: "粒の好み", table: "Onboarding", comment: "Onboarding step 4 title: rare gem preference")
         }
     }
@@ -260,7 +260,7 @@ struct OnboardingView: View {
 
     private func primaryActionHint(selection: Set<String>) -> String {
         if page == 2, selection.isEmpty {
-            return String(localized: "テーマを1つ選ぶと瓶をひらけます", table: "Onboarding",
+            return String(localized: "取り組みを1つ選ぶと瓶をひらけます", table: "Onboarding",
                           comment: "VoiceOver hint: the button is disabled until a theme is chosen")
         }
         if RareRewardReleasePolicy.isEnabled,
@@ -274,10 +274,10 @@ struct OnboardingView: View {
             return String(localized: "次は、記録を作らず一粒を試せるページです", table: "Onboarding",
                           comment: "VoiceOver hint for Next on page 1")
         case 1:
-            return String(localized: "体験を省略して、最初のテーマを選べます", table: "Onboarding",
+            return String(localized: "体験を省略して、最初の取り組みを選べます", table: "Onboarding",
                           comment: "VoiceOver hint for Next on the trial page: skip the trial")
         case 2 where !RareRewardReleasePolicy.isEnabled:
-            return String(localized: "ホームへ進みます。テーマと時間を確認してから集中を始められます", table: "Onboarding",
+            return String(localized: "ホームへ進みます。取り組みと時間を確認してから集中を始められます", table: "Onboarding",
                           comment: "VoiceOver hint for the finishing button")
         default:
             return String(localized: "次のページへ進みます", table: "Onboarding",
@@ -364,8 +364,8 @@ private struct ValuePage: View {
                         symbol: "archivebox.fill",
                         title: String(localized: "減らない", table: "Onboarding",
                                       comment: "Onboarding promise title: nothing you added shrinks (from 減らない。消えない。責めない。)"),
-                        detail: String(localized: "積んだ粒と記録は、そのまま残る", table: "Onboarding",
-                                       comment: "Onboarding promise detail: your gems and records stay")
+                        detail: String(localized: "積んだ時間と記録は、そのまま残る", table: "Onboarding",
+                                       comment: "Onboarding promise detail: your accumulated time and records stay")
                     )
                     ValuePromise(
                         symbol: "leaf.fill",
@@ -413,7 +413,7 @@ private struct ValuePage: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("onboarding.value-headline")
-            Text("テーマと時間を選んで、集中をはじめる。\n完走すると、その時間が一粒になって瓶に残ります。",
+            Text("取り組みと時間を選んで、集中をはじめる。\n完走すると、その時間が一粒になって瓶に残ります。",
                  tableName: "Onboarding",
                  comment: "Onboarding page 1: how a focus becomes a gem in the jar")
                 .font(.body)
@@ -474,10 +474,10 @@ private struct OnboardingSelectionSummary: View {
 
     private var summary: String {
         guard let chosen = selection.sorted().first else {
-            return String(localized: "テーマを1つ選ぶと、瓶をひらけます", table: "Onboarding",
+            return String(localized: "取り組みを1つ選ぶと、瓶をひらけます", table: "Onboarding",
                           comment: "Onboarding theme summary before a theme is chosen")
         }
-        return String(localized: "最初のテーマ：\(SubjectSuggestionCatalog.displayName(forChosen: chosen))", table: "Onboarding",
+        return String(localized: "最初の取り組み：\(SubjectSuggestionCatalog.displayName(forChosen: chosen))", table: "Onboarding",
                       comment: "Onboarding theme summary; %@ is the chosen theme's name")
     }
 }
@@ -922,15 +922,15 @@ private struct SubjectSetupPage: View {
                         // A decorative English eyebrow in Japanese too; the
                         // English UI names the jar by its glossary noun.
                         SectionEyebrow(text: String(localized: "YOUR BOTTLE", table: "Onboarding",
-                                                    comment: "Decorative uppercase eyebrow above 最初のテーマを選ぶ. en: YOUR JAR (glossary: jar, never bottle)"))
+                                                    comment: "Decorative uppercase eyebrow above 最初の取り組みを選ぶ. en: YOUR JAR (glossary: jar, never bottle)"))
                     }
-                    Text("最初のテーマを選ぶ", tableName: "Onboarding", comment: "Onboarding theme page heading: choose your first theme")
+                    Text("最初の取り組みを選ぶ", tableName: "Onboarding", comment: "Onboarding theme page heading: choose your first theme")
                         .font(PomoGemTheme.brand(30))
                     Text(SubjectSuggestionCatalog.setupDetail)
                         .font(.subheadline)
                         .foregroundStyle(PomoGemTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text("このあとはホームで時間を選び、開始ボタンをタップ。テーマはいつでも変更できます。", tableName: "Onboarding",
+                    Text("このあとはホームで時間を選び、開始ボタンをタップ。取り組みはいつでも変更できます。", tableName: "Onboarding",
                          comment: "Onboarding theme page: what happens next on Home")
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
@@ -1062,7 +1062,7 @@ private struct SubjectSetupPage: View {
                             .foregroundStyle(PomoGemTheme.amber)
                             .fixedSize(horizontal: false, vertical: true)
                     } else if remainingNewSubjectSlots == 0 {
-                        Text("新しいテーマの枠がありません。既存のテーマを選ぶか、瓶をひらいた後に整理してください。", tableName: "Onboarding",
+                        Text("新しい取り組みの枠がありません。既存の取り組みを選ぶか、瓶をひらいた後に整理してください。", tableName: "Onboarding",
                              comment: "Onboarding theme page: the theme limit leaves no room for a new theme")
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
@@ -1198,7 +1198,7 @@ private struct SubjectSetupPage: View {
         }
 
         guard canChooseSubject(named: name) else {
-            showCustomSubjectFeedback(String(localized: "テーマは合計最大\(Constants.App.maximumSubjects)件です。不要なテーマは設定から削除できます。", table: "Onboarding",
+            showCustomSubjectFeedback(String(localized: "取り組みは合計最大\(Constants.App.maximumSubjects)件です。不要な取り組みは設定から削除できます。", table: "Onboarding",
                                              comment: "Onboarding: theme limit reached; %lld is the maximum number of themes (12)"))
             return
         }
@@ -1216,7 +1216,7 @@ private struct SubjectSetupPage: View {
 
     private func choosePreset(_ preset: UsagePurpose.CategoryPreset) {
         guard canChooseSubject(named: preset.name) else {
-            showCustomSubjectFeedback(String(localized: "追加できるテーマは合計最大\(Constants.App.maximumSubjects)件です。", table: "Onboarding",
+            showCustomSubjectFeedback(String(localized: "追加できる取り組みは合計最大\(Constants.App.maximumSubjects)件です。", table: "Onboarding",
                                              comment: "Onboarding: theme limit reached; %lld is the maximum number of themes (12)"))
             return
         }

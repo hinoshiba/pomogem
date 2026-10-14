@@ -1116,6 +1116,10 @@ final class FocusPersistenceTests: XCTestCase {
             grams: 12_000,
             monthLabel: "2026年8月",
             colorHex: "#5DE0BD",
+            colorMix: [
+                StratumColorFraction(hex: "#5DE0BD", fraction: 0.75),
+                StratumColorFraction(hex: "#FF4B4B", fraction: 0.25)
+            ],
             level: 2
         )
 
@@ -1153,6 +1157,7 @@ final class FocusPersistenceTests: XCTestCase {
         XCTAssertEqual(decoded.pebbleCount, 10)
         XCTAssertEqual(decoded.grams, 2_500)
         XCTAssertNil(decoded.colorHex)
+        XCTAssertNil(decoded.colorMix)
         XCTAssertNil(decoded.level)
     }
 

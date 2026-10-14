@@ -133,7 +133,7 @@ final class StrataMathTests: XCTestCase {
         XCTAssertEqual(summary.manualPebbleCount, 0)
         XCTAssertEqual(summary.preservationTitle, "この粒に残っている情報")
         XCTAssertTrue(summary.preservationMessage.contains("色・粒数・質量"))
-        XCTAssertTrue(summary.preservationMessage.contains("テーマ・入力方法・レア"))
+        XCTAssertTrue(summary.preservationMessage.contains("取り組み・入力方法・レア"))
         XCTAssertTrue(summary.preservationMessage.contains("元記録への参照が保存されていません"))
 
         let noColorSummary = AccumulationClusterSummary(
@@ -183,7 +183,7 @@ final class StrataMathTests: XCTestCase {
         XCTAssertTrue(summary.subjectMix.isEmpty)
         XCTAssertEqual(summary.preservationTitle, "この粒に残っている情報")
         XCTAssertTrue(summary.preservationMessage.contains("一部の内訳がない場合があります"))
-        XCTAssertFalse(summary.preservationMessage.contains("元の記録・色・テーマ"))
+        XCTAssertFalse(summary.preservationMessage.contains("元の記録・色・取り組み"))
 
         let memberID = UUID()
         let attributed = AggregatePebble(

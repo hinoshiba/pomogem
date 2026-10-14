@@ -67,7 +67,7 @@ struct DayHistorySheet: View {
                         } else {
                             if detail.themes.count > 1 {
                                 HistoryThemeBreakdown(
-                                    title: String(localized: "テーマ別", table: "Log", comment: "Heading of the per-theme time breakdown of a day"),
+                                    title: String(localized: "取り組み別", table: "Log", comment: "Heading of the per-theme time breakdown of a day"),
                                     themes: detail.themes,
                                     totalGrams: detail.totalGrams
                                 )

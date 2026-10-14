@@ -229,8 +229,11 @@ struct HomeView: View {
     /// verification completes after its receipt froze.
     @State private var restampedWeekly: RestampedWeeklyMetrics?
     @State private var selectedDuration: PomodoroDuration = .twentyFiveMinutes
+    @State private var hasExplicitDurationSelection = false
     @State private var focusConfiguration: FocusConfiguration?
     @State private var showHomeMenu = false
+    @State private var showFocusMusic = false
+    @State private var focusMusic = FocusMusicController.shared
     /// The menu's height, bound so that picking a background can lower a
     /// fully raised menu back to half height, where the new background shows.
     @State private var homeMenuDetent: PresentationDetent = .medium
@@ -253,6 +256,12 @@ struct HomeView: View {
     @State private var presentedStratumID: UUID?
     @State private var stratumCelebrationQueue: [PendingStratumCelebration] = []
     @State private var isDeferringCelebrationsForShare = false
+    /// Keep later celebrations queued from Explore until its overview has
+    /// actually dismissed, including both sheet transition boundaries.
+    @State private var isDeferringCelebrationsForOverview = false
+#if DEBUG && targetEnvironment(simulator)
+    @State private var didEnqueueCelebrationNavigationFixture = false
+#endif
     @State private var failedBakeIDs = Set<UUID>()
     @State private var failedAggregateRequest: JarAggregateRequest?
     @State private var capacityRemaining: Int?
@@ -898,6 +907,7 @@ struct HomeView: View {
     private var celebrationPresentationBlockers: [Bool] {
         [
             showHomeMenu,
+            showFocusMusic,
             showAccumulationOverview,
             selectedAggregateDetail != nil,
             showManualEntry,
@@ -914,6 +924,7 @@ struct HomeView: View {
             router.recoveredFocus != nil,
             router.recoveredBreak != nil,
             isDeferringCelebrationsForShare,
+            isDeferringCelebrationsForOverview,
             aggregateProjectionPresentation.isCloudVerificationPending,
             isDeferringStratumForCloudVerification
         ]
@@ -926,7 +937,7 @@ struct HomeView: View {
         return !PendingRewardReceiptStore.load().isEmpty
     }
     private var rewardDropSurfaceIsObscured: Bool {
-        showHomeMenu || showAccumulationOverview || selectedAggregateDetail != nil
+        showHomeMenu || showFocusMusic || showAccumulationOverview || selectedAggregateDetail != nil
             || showManualEntry || showAchievementEntry || showCustomDuration
             || showAccumulationPlan || completedStratum != nil
             || breakConfiguration != nil || router.recoveredBreak != nil
@@ -935,6 +946,19 @@ struct HomeView: View {
     }
     private var selectedSubject: Subject? {
         activeSubjects.first { $0.id.uuidString == selectedSubjectID } ?? activeSubjects.first
+    }
+
+    private var selectedSubjectDefaultDuration: PomodoroDuration? {
+        guard let seconds = selectedSubject?.defaultFocusSeconds else { return nil }
+        let duration = PomodoroDuration(totalSeconds: seconds)
+        return duration.isValid ? duration : nil
+    }
+
+    private var savedFocusDuration: PomodoroDuration {
+        SubjectFocusDurationPolicy.savedDuration(
+            subjectDefaultSeconds: selectedSubject?.defaultFocusSeconds,
+            preferredSeconds: resolvedPreferences?.preferredFocusSeconds
+        )
     }
 
     var body: some View {
@@ -1147,8 +1171,25 @@ struct HomeView: View {
                 .environment(\.dynamicTypeSize, dynamicTypeSize)
                 .presentationDetents(auxiliarySheetDetents, selection: homeMenuDetentSelection)
                 .presentationDragIndicator(.visible)
+                .presentationBackground(PomoGemTheme.background)
         }
-        .sheet(isPresented: $showAccumulationOverview) {
+        .sheet(isPresented: $showFocusMusic) {
+            FocusMusicSheet(
+                controller: focusMusic,
+                allowsLeavingApp: true,
+                subjects: activeSubjects.map {
+                    FocusMusicSubject(id: $0.id, name: $0.localizedDisplayName)
+                },
+                initialSubjectID: selectedSubject?.id
+            )
+            .environment(\.dynamicTypeSize, dynamicTypeSize)
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showAccumulationOverview, onDismiss: {
+            isDeferringCelebrationsForOverview = false
+            presentNextStratumCelebrationIfNeeded()
+        }) {
             accumulationOverviewSheet
                 .presentationDragIndicator(.visible)
         }
@@ -1197,6 +1238,9 @@ struct HomeView: View {
             // First, so the open paywall blocks the next queued celebration.
             presentMonthLabelPaywallIfRequested()
             finishPresentedStratumCelebration()
+            if isDeferringCelebrationsForOverview {
+                showAccumulationOverview = true
+            }
         }) { request in
             stratumCelebrationSheet(request)
         }
@@ -1234,7 +1278,8 @@ struct HomeView: View {
     private var homeMenuDetentSelection: Binding<PresentationDetent> {
         Binding(
             get: {
-                auxiliarySheetDetents.contains(homeMenuDetent) ? homeMenuDetent : .large
+                auxiliarySheetDetents.contains(homeMenuDetent)
+                    ? homeMenuDetent : expandedHomeMenuDetent
             },
             set: { homeMenuDetent = $0 }
         )
@@ -1244,7 +1289,19 @@ struct HomeView: View {
         if dynamicTypeSize.isAccessibilitySize || verticalSizeClass == .compact {
             return [.large]
         }
-        return [.medium, .large]
+        return [.medium, expandedHomeMenuDetent]
+    }
+
+    private var expandedHomeMenuDetent: PresentationDetent {
+        if dynamicTypeSize.isAccessibilitySize || verticalSizeClass == .compact {
+            return .large
+        }
+        if #available(iOS 26.0, *) {
+            // Keep both heights below the system's full-width large sheet,
+            // so moving the menu changes its height without changing width.
+            return .fraction(0.9)
+        }
+        return .large
     }
 
     private var customDurationSheetDetents: Set<PresentationDetent> {
@@ -1426,9 +1483,10 @@ struct HomeView: View {
         storeObservedContent
         .onChange(of: purchase.isPro) { _, isPro in
             if isPro {
-                restorePreferredDuration()
+                if !hasExplicitDurationSelection { restorePreferredDuration() }
             } else if selectedDuration.requiresPro {
                 selectedDuration = .twentyFiveMinutes
+                hasExplicitDurationSelection = false
             }
             syncBaseLayers()
         }
@@ -1438,6 +1496,17 @@ struct HomeView: View {
         }
         .onChange(of: sensoryChangeTokens) { _, _ in
             applySensoryPreferences()
+        }
+        .onChange(of: resolvedPreferences?.preferredFocusSeconds) { _, _ in
+            // A one-off Home choice updates the shared last-used length. It
+            // must not immediately replace itself with this theme's default.
+            guard selectedSubjectDefaultDuration == nil else { return }
+            restorePreferredDuration()
+        }
+        .onChange(of: selectedSubject?.id) { _, _ in
+            restorePreferredDuration()
+        }
+        .onChange(of: selectedSubject?.defaultFocusSeconds) { _, _ in
             restorePreferredDuration()
         }
         .onChange(of: reduceMotion) { _, _ in
@@ -1492,10 +1561,13 @@ struct HomeView: View {
     private func stratumCelebrationSheet(_ request: PendingStratumCelebration) -> some View {
         let sheet = StratumCelebrationView(
             request: request,
-            colorShares: [],
+            colorShares: GemArtworkSpec.aggregateColors(
+                request.colorMix ?? [],
+                fallbackHex: request.colorHex ?? TimeFusionPolicy.colorHex
+            ),
             showsMonthLabel: false,
             teachesCoreBirth: presentedStratumTeachesCoreBirth,
-            onExplore: exploreCompletedStratum,
+            onExplore: { exploreCompletedStratum(request) },
             onShare: { shareCompletedStratum(request) },
             onContinue: dismissCompletedStratum,
             monthLabelHint: nil
@@ -1593,7 +1665,7 @@ struct HomeView: View {
                 isLoadingRecords: readout.isLoading,
                 isMotionEnabled: homeJarMotionIsEnabled,
                 inspectableAggregateID: stage.inspectableAggregateID,
-                onAggregateTapped: revealAggregateInspection,
+                onAggregateLongPressed: revealAggregateInspection,
                 onAggregateAccessibilityAction: revealAggregateInspection
             )
                 .onGeometryChange(for: CGRect.self) { geometry in
@@ -1747,6 +1819,7 @@ struct HomeView: View {
             && focusConfiguration == nil
             && breakConfiguration == nil
             && !showHomeMenu
+            && !showFocusMusic
             && !showAccumulationOverview
             && selectedAggregateDetail == nil
             && !showManualEntry
@@ -2366,7 +2439,7 @@ struct HomeView: View {
                     .font(PomoGemTheme.brand(21))
                 Text(
                     selectedSubject == nil
-                        ? String(localized: "下のボタンから、最初のテーマを追加しよう。", table: "Home", comment: "Empty jar before any theme exists")
+                        ? String(localized: "下のボタンから、最初の取り組みを追加しよう。", table: "Home", comment: "Empty jar before any theme exists")
                         : String(
                             localized: "\(focusDurationLabel)の集中で、ここにひと粒落ちる。",
                             table: "Home",
@@ -2424,7 +2497,7 @@ struct HomeView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
             selectedSubject == nil
-                ? String(localized: "瓶はまだ空です。下のボタンからテーマを追加できます", table: "Home",
+                ? String(localized: "瓶はまだ空です。下のボタンから取り組みを追加できます", table: "Home",
                          comment: "VoiceOver, empty jar at accessibility text sizes, no theme yet")
                 : String(localized: "瓶はまだ空です。下のボタンから最初の集中を始められます", table: "Home",
                          comment: "VoiceOver, empty jar at accessibility text sizes")
@@ -2446,7 +2519,7 @@ struct HomeView: View {
         // including on compact iPhones, and for the compact progress link.
         // Opening a gem's detail does not resize the jar.
         let progressRowHeight: CGFloat = showsTimeProgressLink ? 52 : 0
-        let controls = 216 + progressRowHeight
+        let controls: CGFloat = 268 + progressRowHeight
         // While a completion card shortens the jar, keep the placement of
         // the room without it.
         let cardIsUp = breakOffer != nil || router.deferredFocusRecovery != nil
@@ -2497,7 +2570,7 @@ struct HomeView: View {
     }
 
     private var focusSelectionControls: some View {
-        Group {
+        VStack(spacing: 8) {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(spacing: 8) {
                     homeSubjectPicker
@@ -2510,7 +2583,80 @@ struct HomeView: View {
                         .fixedSize(horizontal: true, vertical: false)
                 }
             }
+            homeMusicButton
         }
+    }
+
+    private var homeMusicButton: some View {
+        Button {
+            showFocusMusic = true
+        } label: {
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            Label(
+                                String(localized: "音楽", table: "Home", comment: "Home button beside the focus controls: choose focus music"),
+                                systemImage: "music.note"
+                            )
+                            .font(.system(.subheadline, design: .rounded, weight: .bold))
+                            Spacer(minLength: 8)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(PomoGemTheme.muted)
+                                .accessibilityHidden(true)
+                        }
+                        Text(verbatim: homeMusicValue)
+                            .font(.subheadline)
+                            .foregroundStyle(PomoGemTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .multilineTextAlignment(.leading)
+                } else {
+                    HStack(spacing: 8) {
+                        Label(
+                            String(localized: "音楽", table: "Home", comment: "Home button beside the focus controls: choose focus music"),
+                            systemImage: "music.note"
+                        )
+                        .font(.system(.subheadline, design: .rounded, weight: .bold))
+                        .fixedSize(horizontal: true, vertical: false)
+                        Spacer(minLength: 0)
+                        Text(verbatim: homeMusicValue)
+                            .font(.subheadline)
+                            .foregroundStyle(PomoGemTheme.muted)
+                            .lineLimit(1)
+                            .multilineTextAlignment(.trailing)
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(PomoGemTheme.muted)
+                            .accessibilityHidden(true)
+                    }
+                }
+            }
+            .foregroundStyle(PomoGemTheme.text)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background(PomoGemTheme.raised.opacity(0.7), in: RoundedRectangle(cornerRadius: 14))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PomoGemBareButtonStyle())
+        .accessibilityLabel(Text("音楽", tableName: "Home", comment: "Home button beside the focus controls: choose focus music"))
+        .accessibilityValue(Text(verbatim: homeMusicValue))
+        .accessibilityHint(Text(
+            "集中用の音楽や取り組みごとの音楽を選べます",
+            tableName: "Home",
+            comment: "VoiceOver hint: the Home music button opens music selection, including theme-specific choices"
+        ))
+        .accessibilityIdentifier("home.focus-music")
+    }
+
+    private var homeMusicValue: String {
+        if let source = focusMusic.chosenSource(for: selectedSubject?.id) {
+            return focusMusic.title(for: source)
+        }
+        return String(localized: "選ぶ", table: "Home", comment: "Home music button value before any source is chosen")
     }
 
     private var homeSubjectPicker: some View {
@@ -2521,7 +2667,7 @@ struct HomeView: View {
                 router.selectedTab = .settingsPage(.themes)
             } label: {
                 Label(
-                    String(localized: "テーマを管理", table: "Home", comment: "Home theme menu: open the theme settings"),
+                    String(localized: "取り組みを管理", table: "Home", comment: "Home theme menu: open the theme settings"),
                     systemImage: "slider.horizontal.3"
                 )
             }
@@ -2532,7 +2678,7 @@ struct HomeView: View {
                     .frame(width: 10, height: 10)
                     .accessibilityHidden(true)
                 Text(selectedSubject?.localizedDisplayName ?? String(
-                    localized: "テーマを選ぶ",
+                    localized: "取り組みを選ぶ",
                     table: "Home",
                     comment: "Home theme menu while no theme exists yet"
                 ))
@@ -2551,7 +2697,7 @@ struct HomeView: View {
         }
         .accessibilityLabel(ThemeSelectionMenu.accessibilityLabel(for: selectedSubject))
         .accessibilityHint(String(
-            localized: "テーマを変更できます。タイマーは開始しません",
+            localized: "取り組みを変更できます。タイマーは開始しません",
             table: "Home",
             comment: "VoiceOver hint of Home's theme menu"
         ))
@@ -2726,12 +2872,12 @@ struct HomeView: View {
     }
 
     private static var chooseThemeToStartTitle: String {
-        String(localized: "テーマを選んではじめる", table: "Home", comment: "Home start button before any theme exists; it opens Settings")
+        String(localized: "取り組みを選んではじめる", table: "Home", comment: "Home start button before any theme exists; it opens Settings")
     }
 
     private var selectedThemeName: String {
         selectedSubject?.localizedDisplayName ?? String(
-            localized: "選択中のテーマ",
+            localized: "選択中の取り組み",
             table: "Home",
             comment: "Stands in for the theme name on Home's start button if it is momentarily missing"
         )
@@ -2747,7 +2893,7 @@ struct HomeView: View {
         return selectedSubject == nil
             ? String(localized: "設定画面を開きます", table: "Home", comment: "VoiceOver hint of the start button before any theme exists")
             : String(
-                localized: "タイマーを開始します。上のテーマと時間のボタンで内容を変更できます",
+                localized: "タイマーを開始します。上の取り組みと時間のボタンで内容を変更できます",
                 table: "Home",
                 comment: "VoiceOver hint of Home's start button"
             )
@@ -2826,23 +2972,28 @@ struct HomeView: View {
 
     private var homeMenuSheet: some View {
         NavigationStack {
-            ScrollViewReader { menuScrollProxy in
-            ScrollView {
-                // The menu is Home's only way to 記録 and 設定, so the
-                // destinations people open it for come first and fit in the
-                // half-height sheet even on a 4.7-inch phone. The decorative
-                // background picker comes last.
-                VStack(spacing: 14) {
-                    menuDestinationActions
-                    menuAccumulationActions
-                    menuAccumulationPlanAction
-                    menuWeightJourney
-                    menuAtmospherePicker(scrollProxy: menuScrollProxy)
+            GeometryReader { menuGeometry in
+                ScrollViewReader { menuScrollProxy in
+                ScrollView(.vertical) {
+                    // The menu is Home's only way to 記録 and 設定, so the
+                    // destinations people open it for come first and fit in the
+                    // half-height sheet even on a 4.7-inch phone. The decorative
+                    // background picker comes last.
+                    VStack(spacing: 14) {
+                        menuDestinationActions
+                        menuAccumulationActions
+                        menuAccumulationPlanAction
+                        menuWeightJourney
+                        menuAtmospherePicker(scrollProxy: menuScrollProxy)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    // The menu has one axis. Long labels and background artwork
+                    // must wrap within the presented width, never widen it.
+                    .frame(width: menuGeometry.size.width)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-            }
-            .scrollBounceBehavior(.basedOnSize)
+                .scrollBounceBehavior(.basedOnSize, axes: [.vertical, .horizontal])
+                }
             }
             .background(NightBackground())
             .navigationTitle(Self.menuTitle)
@@ -2875,12 +3026,12 @@ struct HomeView: View {
                 Text(
                     dynamicTypeSize.isAccessibilitySize
                         ? String(
-                            localized: "テーマの色はそのままに、\n背景の空気だけを変えます。",
+                            localized: "取り組みの色はそのままに、\n背景の空気だけを変えます。",
                             table: "Home",
                             comment: "Atmosphere picker note at accessibility text sizes, broken into two lines at a natural point"
                         )
                         : String(
-                            localized: "テーマの色はそのままに、背景の空気だけを変えます。",
+                            localized: "取り組みの色はそのままに、背景の空気だけを変えます。",
                             table: "Home",
                             comment: "Atmosphere picker note: the theme colors stay, only the background changes"
                         )
@@ -3066,6 +3217,7 @@ struct HomeView: View {
 
     private func selectSubject(_ subject: Subject) {
         selectedSubjectID = subject.id.uuidString
+        restorePreferredDuration()
     }
 
     private var menuAccumulationActions: some View {
@@ -3112,7 +3264,7 @@ struct HomeView: View {
                 menuActionButton(
                     title: String(localized: "アプリの時間を積む", table: "Home",
                                   comment: "Home menu row: open the Screen Time settings"),
-                    detail: String(localized: "選んだアプリをテーマ別に記録", table: "Home",
+                    detail: String(localized: "選んだアプリを取り組み別に記録", table: "Home",
                                    comment: "Home menu row detail: every 10 minutes in the chosen study apps adds one pebble"),
                     symbol: "hourglass"
                 ) {
@@ -3224,7 +3376,7 @@ struct HomeView: View {
             }
             menuActionButton(
                 title: String(localized: "設定", table: "Home", comment: "Home menu row: open Settings"),
-                detail: String(localized: "タイマー・テーマ・通知・データ", table: "Home", comment: "Home menu row detail: what Settings holds"),
+                detail: String(localized: "タイマー・取り組み・通知・データ", table: "Home", comment: "Home menu row detail: what Settings holds"),
                 symbol: "gearshape.fill"
             ) {
                 showHomeMenu = false
@@ -3962,7 +4114,7 @@ struct HomeView: View {
     /// VoiceOver value of the completion card's heading.
     private func postDropSpokenSummary(_ offer: BreakOffer, historySpokenTitle: String) -> String {
         var sentences = [
-            String(localized: "テーマは\(offer.localizedSubjectName)です。", table: "Home", comment: "VoiceOver, completion card: the theme"),
+            String(localized: "取り組みは\(offer.localizedSubjectName)です。", table: "Home", comment: "VoiceOver, completion card: the theme"),
             String(
                 localized: "今回は\(MassText.spoken(grams: offer.grams))、標準換算は\(EffortProgressPresentation.formattedStandardUnits(grams: offer.grams))です。",
                 table: "Home",
@@ -4445,6 +4597,9 @@ struct HomeView: View {
         // first visible descent. The landing callback applies the latest page.
         guard !scene.hasCompletionDropInFlight else { return }
         guard refreshRewardSessionBackfill() else { return }
+#if DEBUG && targetEnvironment(simulator)
+        defer { enqueueCelebrationNavigationFixtureIfNeeded() }
+#endif
         let markedLocalCompletions = StudySessionSyncPolicy.canonicalSessions(
             from: looseSessions + currentRewardSessionBackfill
         ).filter(hasLocalCompletionMarker)
@@ -4720,7 +4875,12 @@ struct HomeView: View {
         )
         scene.configureTimeFusion(
             totalGrams: readout.jarGrams ?? landed.grams,
-            colorMix: [],
+            colorMix: HomeProjectionPolicy.timeFusionColorMix(
+                roots: acceptedAggregateRoots,
+                looseSessions: looseSessions,
+                unlandedSessionIDs: pendingIDs,
+                representedPendingSessions: representedPending
+            ),
             pendingContributions: landingContributions,
             epochID: currentActivityEpochID
         )
@@ -4873,18 +5033,14 @@ struct HomeView: View {
     }
 
     private func restorePreferredDuration() {
-        guard let preferred = resolvedPreferences?.preferredFocusSeconds else {
-            return
-        }
-        let restored = PomodoroDuration(totalSeconds: preferred)
-        guard restored.isValid else { return }
-        if restored.requiresPro {
-            selectedDuration = purchase.isPro ? restored : .twentyFiveMinutes
-            // Also catches a custom time chosen on another device.
-            if purchase.isPro { rememberCustomDuration(restored) }
-        } else {
-            selectedDuration = restored
-        }
+        hasExplicitDurationSelection = false
+        selectedDuration = SubjectFocusDurationPolicy.availableDuration(
+            subjectDefaultSeconds: selectedSubject?.defaultFocusSeconds,
+            preferredSeconds: resolvedPreferences?.preferredFocusSeconds,
+            isPro: purchase.isPro
+        )
+        // Also catches a custom time chosen for this theme on another device.
+        if selectedDuration.requiresPro { rememberCustomDuration(selectedDuration) }
     }
 
     private func resumeCustomDurationAfterPurchaseIfNeeded() {
@@ -4908,6 +5064,7 @@ struct HomeView: View {
             failureMessage: String(localized: "集中時間を保存できませんでした", table: "Home", comment: "Toast: the chosen focus length could not be saved")
         ) else { return false }
         selectedDuration = duration
+        hasExplicitDurationSelection = true
         rememberCustomDuration(duration)
         showCustomDuration = false
         return true
@@ -4926,17 +5083,13 @@ struct HomeView: View {
         }
     }
 
-    private func exploreCompletedStratum() {
+    private func exploreCompletedStratum(_ request: PendingStratumCelebration) {
         dropFocusStartWaitingOnCelebration()
-        overviewInitialClusterID = nil
+        overviewInitialClusterID = TimeFusionUnit(
+            level: request.level ?? 1, grams: request.grams, ordinal: 0
+        ).id
+        isDeferringCelebrationsForOverview = true
         completedStratum = nil
-        Task { @MainActor in
-            if !reduceMotion {
-                try? await Task.sleep(for: .milliseconds(360))
-            }
-            guard !Task.isCancelled else { return }
-            showAccumulationOverview = true
-        }
     }
 
     private func dismissCompletedStratum() {
@@ -4952,6 +5105,7 @@ struct HomeView: View {
 
     private func selectDuration(_ duration: PomodoroDuration) {
         selectedDuration = duration
+        hasExplicitDurationSelection = true
 #if DEBUG
         if duration == .demo { return }
 #endif
@@ -5023,7 +5177,8 @@ struct HomeView: View {
             otherSurfaceIsPresented: router.paywallPresented || router.sharePresented,
             entryFormIsPresented: showManualEntry
                 || showAchievementEntry
-                || showCustomDuration,
+                || showCustomDuration
+                || showFocusMusic,
             closableSurfaceIsPresented: showHomeMenu
                 || showAccumulationOverview
                 || selectedAggregateDetail != nil
@@ -5040,11 +5195,9 @@ struct HomeView: View {
     /// selected length is only the free fallback `restorePreferredDuration`
     /// put there. A start with it would also save 25 over the custom length.
     private var savedFocusLengthNeedsPro: Bool {
-        guard let seconds = resolvedPreferences?.preferredFocusSeconds else {
-            return false
-        }
-        let saved = PomodoroDuration(totalSeconds: seconds)
-        return saved.isValid && saved.requiresPro
+        hasExplicitDurationSelection
+            ? selectedDuration.requiresPro
+            : savedFocusDuration.requiresPro
     }
 
     private func handlePendingFocusStart() {
@@ -5155,13 +5308,24 @@ struct HomeView: View {
               let crystal = TimeFusionPolicy.snapshot(totalGrams: transition.afterGrams)
                 .crystals.first(where: { $0.level == transition.destinationLevel })
         else { return }
+        let colorMix = HomeProjectionPolicy.timeFusionColorMix(
+            roots: acceptedAggregateRoots,
+            looseSessions: looseSessions,
+            unlandedSessionIDs: jarStageState.unlandedSessionIDs(
+                pendingOnHomePass: receiptUnlandedSessionIDs
+            ),
+            representedPendingSessions: currentRewardSessionBackfill.filter {
+                representedSessionIDs.contains($0.id)
+            }
+        )
         let request = PendingStratumCelebration(
             id: UUID(),
             createdAt: .now,
             pebbleCount: 0,
             grams: crystal.grams,
             monthLabel: "",
-            colorHex: TimeFusionPolicy.colorHex,
+            colorHex: colorMix.first?.hex ?? TimeFusionPolicy.colorHex,
+            colorMix: colorMix,
             level: transition.destinationLevel,
             projectionCacheStamp: aggregateProjectionPresentation.verifiedCacheStamp,
             timeFusionTotalGrams: transition.afterGrams
@@ -5169,6 +5333,25 @@ struct HomeView: View {
         PendingStratumCelebrationStore.insert(request)
         enqueueStratumCelebration(request)
     }
+
+#if DEBUG && targetEnvironment(simulator)
+    /// Simulate two already-delivered fusion events, using the real durable
+    /// receipt and presentation queue. The fixture never changes stored time.
+    private func enqueueCelebrationNavigationFixtureIfNeeded() {
+        guard !didEnqueueCelebrationNavigationFixture,
+              sceneInitialized,
+              totalGrams >= 25_000,
+              !localProjectionNeedsMaintenance,
+              canPresentStratumCelebration,
+              let requests = GemShowcaseUITestFixture.queuedCelebrations
+        else { return }
+        didEnqueueCelebrationNavigationFixture = true
+        for request in requests {
+            PendingStratumCelebrationStore.insert(request)
+            enqueueStratumCelebration(request)
+        }
+    }
+#endif
 
     private func enqueueStratumCelebration(_ request: PendingStratumCelebration) {
         guard canPublishCelebrationSnapshot(request) else {
@@ -5273,6 +5456,7 @@ struct HomeView: View {
         stratumCelebrationQueue.removeAll()
         pendingCapacityCelebrations.removeAll()
         isDeferringStratumForCloudVerification = false
+        isDeferringCelebrationsForOverview = false
     }
 
     private func canPublishCelebrationSnapshot(
@@ -5362,16 +5546,16 @@ struct HomeView: View {
             showManualEntry = false
             router.selectedTab = .settingsPage(.themes)
             router.showToast(
-                String(localized: "先にテーマを追加してください", table: "Home", comment: "Toast: add a theme before adding time"),
+                String(localized: "先に取り組みを追加してください", table: "Home", comment: "Toast: add a theme before adding time"),
                 symbol: "books.vertical.fill"
             )
-            return String(localized: "先にテーマを追加してください。", table: "Home", comment: "Manual entry error: add a theme before adding time")
+            return String(localized: "先に取り組みを追加してください。", table: "Home", comment: "Manual entry error: add a theme before adding time")
         }
         // The sheet's list is a snapshot; the theme may have been archived
         // or removed (for example from another device) while it was open.
         guard activeSubjects.contains(where: { $0.id == subject.id }) else {
             return String(
-                localized: "選んだテーマが見つかりません。テーマを選び直してください。",
+                localized: "選んだ取り組みが見つかりません。取り組みを選び直してください。",
                 table: "Home",
                 comment: "Manual entry error: the chosen theme was archived or removed while the sheet was open"
             )
@@ -6407,6 +6591,13 @@ struct HomeView: View {
                 comment: "One-time jar tip with VoiceOver on"
             )
         }
+        if totalGrams > 0 {
+            return String(
+                localized: "Gemをタップすると跳ね、長押しすると内訳を確認できます",
+                table: "Home",
+                comment: "One-time jar tip: a tap plays with the gem, a long press opens its breakdown"
+            )
+        }
 #if targetEnvironment(macCatalyst)
         return String(
             localized: "瓶をタップすると粒が跳ね、左右にドラッグすると転がります",
@@ -6423,11 +6614,16 @@ struct HomeView: View {
     }
 
     private var jarInteractionShortHintText: String {
-        voiceOverEnabled
-            ? String(localized: "瓶をダブルタップすると粒が跳ねます", table: "Home",
-                     comment: "One-line jar tip in a short jar at accessibility text sizes, with VoiceOver on")
-            : String(localized: "瓶をタップすると粒が跳ねます", table: "Home",
-                     comment: "One-line jar tip in a short jar at accessibility text sizes")
+        if voiceOverEnabled {
+            return String(localized: "瓶をダブルタップすると粒が跳ねます", table: "Home",
+                          comment: "One-line jar tip in a short jar at accessibility text sizes, with VoiceOver on")
+        }
+        if totalGrams > 0 {
+            return String(localized: "タップで跳ねる・長押しで内訳", table: "Home",
+                          comment: "One-line jar tip in a short jar: a tap bounces gems, a long press opens details")
+        }
+        return String(localized: "瓶をタップすると粒が跳ねます", table: "Home",
+                      comment: "One-line jar tip in a short jar at accessibility text sizes")
     }
 
     private var jarInteractionHintSymbol: String {
@@ -6438,7 +6634,9 @@ struct HomeView: View {
         cancelTiltHintPresentation()
         didSeeAggregateDetail = true
         if TimeFusionPolicy.isProjectionID(aggregateID) {
-            overviewInitialClusterID = nil
+            // The projection ID selects the time-crystal lens; it never opens
+            // a stored-membership sheet for an arbitrary group of sessions.
+            overviewInitialClusterID = aggregateID
             showAccumulationOverview = true
         } else {
             presentAggregateDetail(aggregateID)
@@ -6495,7 +6693,7 @@ struct HomeView: View {
 
     private func aggregateInspectionSlot(_ readout: LifetimeReadoutContinuityPolicy.Readout) -> some View {
         Button {
-            overviewInitialClusterID = nil
+            overviewInitialClusterID = TimeFusionUnit(level: 0, grams: 0, ordinal: 0).id
             showAccumulationOverview = true
         } label: {
             HStack(spacing: 8) {
@@ -7981,7 +8179,8 @@ private struct StratumCelebrationView: View {
                 completionCount: 0,
                 colorHex: colorHex,
                 level: level,
-                grams: request.grams
+                grams: request.grams,
+                colorShares: colorShares
             )
             .frame(width: side * 0.86, height: side * 0.86)
         }
@@ -8023,7 +8222,7 @@ private struct StratumCelebrationView: View {
     @ViewBuilder
     private var coreBirthLine: some View {
         if teachesCoreBirth {
-            Text("4時間10分を積み上げ、時間の核が生まれました。これからも、集中した時間で育ちます。", tableName: "Home",
+            Text("時間の核が生まれました。集中した時間で育ちます。", tableName: "Home",
                  comment: "Fusion sheet, only when the first crystal and the first time core arrive together")
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(PomoGemTheme.text)

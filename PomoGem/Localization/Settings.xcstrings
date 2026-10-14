@@ -524,13 +524,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "themes"
+            "value" : "activities"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "テーマ"
+            "value" : "取り組み"
           }
         }
       }
@@ -645,7 +645,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Only the theme “%1$@” will be deleted. Its mass and its %2$@ are not deleted and still show its current name and color. This can't be undone."
+            "value" : "Only the activity “%1$@” will be deleted. Its mass and its %2$@ are not deleted and still show its current name and color. This can't be undone."
           }
         },
         "ja" : {
@@ -1003,6 +1003,23 @@
         }
       }
     },
+    "このiPhoneで使う音楽設定です。保存すると、この取り組みで集中を始めるときに使います。ほかの音楽や音声を再生中のときは入れ替えません。" : {
+      "comment" : "Activity music settings are device-local and apply after Save; existing audio is respected",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "These music settings apply on this iPhone after you save. They are used when you start a focus for this activity. Audio that is already playing is left alone."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneで使う音楽設定です。保存すると、この取り組みで集中を始めるときに使います。ほかの音楽や音声を再生中のときは入れ替えません。"
+          }
+        }
+      }
+    },
     "このiPhoneに保存され、アプリを再起動しても引き継がれます。" : {
       "localizations" : {
         "en" : {
@@ -1087,19 +1104,53 @@
         }
       }
     },
-    "この端末で利用可能な記録、テーマ、設定をJSONファイルにして、保存先を選びます" : {
-      "comment" : "VoiceOver hint of the export row",
+    "この取り組みの集中時間" : {
+      "comment" : "Theme editor section header: this theme's default focus length",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Puts the records, themes and settings available on this device into a JSON file, then lets you choose where to save it."
+            "value" : "Focus Length for This Activity"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "この端末で利用可能な記録、テーマ、設定をJSONファイルにして、保存先を選びます"
+            "value" : "この取り組みの集中時間"
+          }
+        }
+      }
+    },
+    "この取り組みの音楽" : {
+      "comment" : "Activity editor music section heading",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Music for This Activity"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この取り組みの音楽"
+          }
+        }
+      }
+    },
+    "この端末で利用可能な記録、取り組み、設定をJSONファイルにして、保存先を選びます" : {
+      "comment" : "VoiceOver hint of the export row",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Puts the records, activities and settings available on this device into a JSON file, then lets you choose where to save it."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末で利用可能な記録、取り組み、設定をJSONファイルにして、保存先を選びます"
           }
         }
       }
@@ -1949,268 +2000,6 @@
         }
       }
     },
-    "テーマ" : {
-      "comment" : "Settings category title\nSettings section header: the person's themes",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Themes"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマ"
-          }
-        }
-      }
-    },
-    "テーマと成果メモ" : {
-      "comment" : "Complete data deletion: what is deleted",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Themes and achievement notes"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマと成果メモ"
-          }
-        }
-      }
-    },
-    "テーマの並び順を保存できませんでした。\n変更前の状態に戻しました。\n%@" : {
-      "comment" : "Settings error; the argument is the system error description",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Couldn't save the theme order.\nYour change was undone.\n%@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマの並び順を保存できませんでした。\n変更前の状態に戻しました。\n%@"
-          }
-        }
-      }
-    },
-    "テーマの変更を保存できませんでした。\n変更前の状態に戻しました。\n%@" : {
-      "comment" : "Theme editor error; the argument is the system error description",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Couldn't save the theme.\nYour changes were undone.\n%@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマの変更を保存できませんでした。\n変更前の状態に戻しました。\n%@"
-          }
-        }
-      }
-    },
-    "テーマの表示設定を保存できませんでした。\n変更前の状態に戻しました。\n%@" : {
-      "comment" : "Settings error; the argument is the system error description",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Couldn't save whether the theme is shown.\nYour change was undone.\n%@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマの表示設定を保存できませんでした。\n変更前の状態に戻しました。\n%@"
-          }
-        }
-      }
-    },
-    "テーマは最大%lld件までです。" : {
-      "comment" : "Theme editor error; the argument is the theme limit (12)",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "You can have up to %lld theme."
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "You can have up to %lld themes."
-                }
-              }
-            }
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマは最大%lld件までです。"
-          }
-        }
-      }
-    },
-    "テーマを削除" : {
-      "comment" : "Alert title: delete a theme",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Delete Theme"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマを削除"
-          }
-        }
-      }
-    },
-    "テーマを削除できませんでした。\n変更前の状態に戻しました。\n%@" : {
-      "comment" : "Settings error; the argument is the system error description",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Couldn't delete the theme.\nYour change was undone.\n%@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマを削除できませんでした。\n変更前の状態に戻しました。\n%@"
-          }
-        }
-      }
-    },
-    "テーマを編集" : {
-      "comment" : "Theme editor title when editing",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Edit Theme"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマを編集"
-          }
-        }
-      }
-    },
-    "テーマを追加" : {
-      "comment" : "Button and editor title: add a theme",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add Theme"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマを追加"
-          }
-        }
-      }
-    },
-    "テーマを追加できませんでした。" : {
-      "comment" : "Theme editor error, followed by a line saying the change was undone",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Couldn't add the theme."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマを追加できませんでした。"
-          }
-        }
-      }
-    },
-    "テーマ・記録・設定などのユーザー内容を削除します。古い端末からの再流入を検知するため、内容を含まない削除世代記録1件（世代ID・処理ID・連番・状態・日時）はiCloudに残ります。Proの購入履歴はAppleが管理しているため削除されず、同じApple Accountでは復元できます。" : {
-      "comment" : "Complete data deletion: what stays (the content-free deletion record, the Pro purchase)",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This deletes your content, including themes, records and settings. So that data coming back from an older device can be detected, one deletion record with no content (a generation ID, a process ID, a sequence number, a status and dates) stays in iCloud. Your Pro purchase history is managed by Apple, so it is not deleted, and you can restore it with the same Apple Account."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマ・記録・設定などのユーザー内容を削除します。古い端末からの再流入を検知するため、内容を含まない削除世代記録1件（世代ID・処理ID・連番・状態・日時）はiCloudに残ります。Proの購入履歴はAppleが管理しているため削除されず、同じApple Accountでは復元できます。"
-          }
-        }
-      }
-    },
-    "テーマ名は%lld文字までです" : {
-      "comment" : "VoiceOver hint of the theme name field; the argument is the longest allowed name (20)",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Theme names can be up to %lld character"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Theme names can be up to %lld characters"
-                }
-              }
-            }
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマ名は%lld文字までです"
-          }
-        }
-      }
-    },
-    "テーマ名を入力してください。" : {
-      "comment" : "Theme editor error: the name is empty",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Enter a theme name."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマ名を入力してください。"
-          }
-        }
-      }
-    },
     "データの書き出し" : {
       "comment" : "Settings data export section header",
       "localizations" : {
@@ -2474,6 +2263,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "プレビューをキャンセルしました"
+          }
+        }
+      }
+    },
+    "ホームでこの取り組みを選ぶと、この時間が選ばれます。「共通設定を使う」では、集中タイマーの既定の集中時間を使います。" : {
+      "comment" : "Theme editor explanation of per-theme defaults and inheriting the app's default",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selecting this activity on Home selects this focus length. “Use App Default” follows the default focus length in Focus Timer settings."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ホームでこの取り組みを選ぶと、この時間が選ばれます。「共通設定を使う」では、集中タイマーの既定の集中時間を使います。"
           }
         }
       }
@@ -2852,19 +2658,19 @@
         }
       }
     },
-    "以下はアプリが自動で記入しました。記録の内容やテーマ名は含まれていません。不要な行は消してから送れます。" : {
+    "以下はアプリが自動で記入しました。記録の内容や取り組み名は含まれていません。不要な行は消してから送れます。" : {
       "comment" : "Support mail body: explains the filled-in lines below it",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The app filled in the lines below. They don't include your records or theme names. You can delete any line before sending."
+            "value" : "The app filled in the lines below. They don't include your records or activity names. You can delete any line before sending."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "以下はアプリが自動で記入しました。記録の内容やテーマ名は含まれていません。不要な行は消してから送れます。"
+            "value" : "以下はアプリが自動で記入しました。記録の内容や取り組み名は含まれていません。不要な行は消してから送れます。"
           }
         }
       }
@@ -2899,6 +2705,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "保存"
+          }
+        }
+      }
+    },
+    "保存したカスタム時間はProで使えます。Proを利用していない間は25分になります。" : {
+      "comment" : "Theme editor note: saved custom durations remain stored but use 25 minutes without Pro",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your saved custom length is available with Pro. Without Pro, this activity uses 25 minutes."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存したカスタム時間はProで使えます。Proを利用していない間は25分になります。"
           }
         }
       }
@@ -3056,6 +2879,73 @@
         }
       }
     },
+    "共通の自動再生設定に戻す" : {
+      "comment" : "Restore the shared autoplay preference for this activity",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use Shared Autoplay Setting"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共通の自動再生設定に戻す"
+          }
+        }
+      }
+    },
+    "共通の自動再生設定を使っています" : {
+      "comment" : "Activity editor: autoplay currently follows the shared preference",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Using the shared autoplay setting"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共通の自動再生設定を使っています"
+          }
+        }
+      }
+    },
+    "共通の音楽を使う" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use default music"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共通の音楽を使う"
+          }
+        }
+      }
+    },
+    "共通設定を使う" : {
+      "comment" : "Theme duration option: inherit the app's default focus length",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use App Default"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共通設定を使う"
+          }
+        }
+      }
+    },
     "内容を確認して次へ" : {
       "comment" : "Complete data deletion: go from the consequences to the last step",
       "localizations" : {
@@ -3181,7 +3071,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Study and work themes share one list, up to 12. The add screen suggests names. Deleting a theme keeps its past mass and records. Touch and hold to change the order."
+            "value" : "Study and work activities share one list, up to 12. The add screen suggests names. Deleting an activity keeps its past mass and records. Touch and hold to change the order."
           }
         },
         "ja" : {
@@ -3209,19 +3099,297 @@
         }
       }
     },
-    "同じ名前のテーマ「%@」がすでにあります。" : {
-      "comment" : "Theme editor error; the argument is the existing theme's name",
+    "取り組み" : {
+      "comment" : "Settings category title\nSettings section header: the person's themes",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "You already have a theme named “%@”."
+            "value" : "Activities"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "同じ名前のテーマ「%@」がすでにあります。"
+            "value" : "取り組み"
+          }
+        }
+      }
+    },
+    "取り組みごとの時間が未設定のときに使う、共通の集中時間です。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The shared focus length for activities without their own setting."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みごとの時間が未設定のときに使う、共通の集中時間です。"
+          }
+        }
+      }
+    },
+    "取り組みと成果メモ" : {
+      "comment" : "Complete data deletion: what is deleted",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activities and achievement notes"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みと成果メモ"
+          }
+        }
+      }
+    },
+    "取り組みの並び順を保存できませんでした。\n変更前の状態に戻しました。\n%@" : {
+      "comment" : "Settings error; the argument is the system error description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save the activity order.\nYour change was undone.\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みの並び順を保存できませんでした。\n変更前の状態に戻しました。\n%@"
+          }
+        }
+      }
+    },
+    "取り組みの変更を保存できませんでした。\n変更前の状態に戻しました。\n%@" : {
+      "comment" : "Theme editor error; the argument is the system error description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save the activity.\nYour changes were undone.\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みの変更を保存できませんでした。\n変更前の状態に戻しました。\n%@"
+          }
+        }
+      }
+    },
+    "取り組みの表示設定を保存できませんでした。\n変更前の状態に戻しました。\n%@" : {
+      "comment" : "Settings error; the argument is the system error description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save whether the activity is shown.\nYour change was undone.\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みの表示設定を保存できませんでした。\n変更前の状態に戻しました。\n%@"
+          }
+        }
+      }
+    },
+    "取り組みは最大%lld件までです。" : {
+      "comment" : "Theme editor error; the argument is the theme limit (12)",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "You can have up to %lld activity."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "You can have up to %lld activities."
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みは最大%lld件までです。"
+          }
+        }
+      }
+    },
+    "取り組みを削除" : {
+      "comment" : "Alert title: delete a theme",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete Activity"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みを削除"
+          }
+        }
+      }
+    },
+    "取り組みを削除できませんでした。\n変更前の状態に戻しました。\n%@" : {
+      "comment" : "Settings error; the argument is the system error description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't delete the activity.\nYour change was undone.\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みを削除できませんでした。\n変更前の状態に戻しました。\n%@"
+          }
+        }
+      }
+    },
+    "取り組みを編集" : {
+      "comment" : "Theme editor title when editing",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit Activity"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みを編集"
+          }
+        }
+      }
+    },
+    "取り組みを追加" : {
+      "comment" : "Button and editor title: add a theme",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add Activity"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みを追加"
+          }
+        }
+      }
+    },
+    "取り組みを追加できませんでした。" : {
+      "comment" : "Theme editor error, followed by a line saying the change was undone",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't add the activity."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組みを追加できませんでした。"
+          }
+        }
+      }
+    },
+    "取り組み・記録・設定などのユーザー内容を削除します。古い端末からの再流入を検知するため、内容を含まない削除世代記録1件（世代ID・処理ID・連番・状態・日時）はiCloudに残ります。Proの購入履歴はAppleが管理しているため削除されず、同じApple Accountでは復元できます。" : {
+      "comment" : "Complete data deletion: what stays (the content-free deletion record, the Pro purchase)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This deletes your content, including activities, records and settings. So that data coming back from an older device can be detected, one deletion record with no content (a generation ID, a process ID, a sequence number, a status and dates) stays in iCloud. Your Pro purchase history is managed by Apple, so it is not deleted, and you can restore it with the same Apple Account."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組み・記録・設定などのユーザー内容を削除します。古い端末からの再流入を検知するため、内容を含まない削除世代記録1件（世代ID・処理ID・連番・状態・日時）はiCloudに残ります。Proの購入履歴はAppleが管理しているため削除されず、同じApple Accountでは復元できます。"
+          }
+        }
+      }
+    },
+    "取り組み名は%lld文字までです" : {
+      "comment" : "VoiceOver hint of the theme name field; the argument is the longest allowed name (20)",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Activity names can be up to %lld character"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Activity names can be up to %lld characters"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組み名は%lld文字までです"
+          }
+        }
+      }
+    },
+    "取り組み名を入力してください。" : {
+      "comment" : "Theme editor error: the name is empty",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter an activity name."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り組み名を入力してください。"
+          }
+        }
+      }
+    },
+    "同じ名前の取り組み「%@」がすでにあります。" : {
+      "comment" : "Theme editor error; the argument is the existing theme's name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You already have an activity named “%@”."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同じ名前の取り組み「%@」がすでにあります。"
           }
         }
       }
@@ -3260,19 +3428,19 @@
         }
       }
     },
-    "名前・色・表示順" : {
+    "名前・色・時間・音楽・表示順" : {
       "comment" : "Settings category summary",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Names, colors, and order"
+            "value" : "Name, color, focus length, music & order"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "名前・色・表示順"
+            "value" : "名前・色・時間・音楽・表示順"
           }
         }
       }
@@ -3396,19 +3564,19 @@
         }
       }
     },
-    "新しいテーマを追加します" : {
+    "新しい取り組みを追加します" : {
       "comment" : "VoiceOver hint of the Add Theme button",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Adds a new theme."
+            "value" : "Adds a new activity."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "新しいテーマを追加します"
+            "value" : "新しい取り組みを追加します"
           }
         }
       }
@@ -3600,36 +3768,36 @@
         }
       }
     },
-    "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにある共有可能な記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このiPhoneのデータはアプリの削除で、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除できます。" : {
+    "書き出すファイル（JSON）には、取り組み名・成果メモ・設定、このiPhoneにある共有可能な記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このiPhoneのデータはアプリの削除で、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除できます。" : {
       "comment" : "Settings export footer in iCloud mode",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The exported file (JSON) contains your theme names, achievement notes and settings, records eligible for export on this iPhone (including records from before a reset), and a random device ID used to sync the timer. It is separate from the share images for social media. Be careful where you keep or send it. To delete the data on this iPhone, delete the app. To delete the data in iCloud, use iCloud storage management in the Settings app on your iPhone."
+            "value" : "The exported file (JSON) contains your activity names, achievement notes and settings, records eligible for export on this iPhone (including records from before a reset), and a random device ID used to sync the timer. It is separate from the share images for social media. Be careful where you keep or send it. To delete the data on this iPhone, delete the app. To delete the data in iCloud, use iCloud storage management in the Settings app on your iPhone."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにある共有可能な記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このiPhoneのデータはアプリの削除で、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除できます。"
+            "value" : "書き出すファイル（JSON）には、取り組み名・成果メモ・設定、このiPhoneにある共有可能な記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このiPhoneのデータはアプリの削除で、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除できます。"
           }
         }
       }
     },
-    "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにある共有可能な記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このファイルを読み込んで記録を戻したり、iCloudへ移したりすることはできません。リセットしてもテーマと設定は残ります。このiPhoneのデータは、アプリを削除すると消えます。" : {
+    "書き出すファイル（JSON）には、取り組み名・成果メモ・設定、このiPhoneにある共有可能な記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このファイルを読み込んで記録を戻したり、iCloudへ移したりすることはできません。リセットしても取り組みと設定は残ります。このiPhoneのデータは、アプリを削除すると消えます。" : {
       "comment" : "Settings export footer on a local-only iPhone",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The exported file (JSON) contains your theme names, achievement notes and settings, records eligible for export on this iPhone (including records from before a reset), and a random device ID used to sync the timer. It is separate from the share images for social media. Be careful where you keep or send it. You can't import this file to restore your records or to move them to iCloud. Resetting keeps your themes and settings. The data on this iPhone is erased when you delete the app."
+            "value" : "The exported file (JSON) contains your activity names, achievement notes and settings, records eligible for export on this iPhone (including records from before a reset), and a random device ID used to sync the timer. It is separate from the share images for social media. Be careful where you keep or send it. You can't import this file to restore your records or to move them to iCloud. Resetting keeps your activities and settings. The data on this iPhone is erased when you delete the app."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにある共有可能な記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このファイルを読み込んで記録を戻したり、iCloudへ移したりすることはできません。リセットしてもテーマと設定は残ります。このiPhoneのデータは、アプリを削除すると消えます。"
+            "value" : "書き出すファイル（JSON）には、取り組み名・成果メモ・設定、このiPhoneにある共有可能な記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このファイルを読み込んで記録を戻したり、iCloudへ移したりすることはできません。リセットしても取り組みと設定は残ります。このiPhoneのデータは、アプリを削除すると消えます。"
           }
         }
       }
@@ -3800,22 +3968,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "機種：%@"
-          }
-        }
-      }
-    },
-    "次の集中に使う時間を選びます。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Choose how long your next focus lasts."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "次の集中に使う時間を選びます。"
           }
         }
       }
@@ -5282,19 +5434,19 @@
         }
       }
     },
-    "関連する記録を確認できないため、テーマを削除できません。\n%@" : {
+    "関連する記録を確認できないため、取り組みを削除できません。\n%@" : {
       "comment" : "Settings error; the argument is the system error description",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The theme can't be deleted because its records couldn't be checked.\n%@"
+            "value" : "The activity can't be deleted because its records couldn't be checked.\n%@"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "関連する記録を確認できないため、テーマを削除できません。\n%@"
+            "value" : "関連する記録を確認できないため、取り組みを削除できません。\n%@"
           }
         }
       }
@@ -5418,19 +5570,19 @@
         }
       }
     },
-    "集中の粒・結晶・記念石を表示と集計から外し、0から始めます。テーマと設定は残ります。リセット前の記録はこのiPhoneの中に残り、データの書き出しに含まれることがあります。このiPhoneから完全に消すには、アプリを削除してください。この操作は取り消せません。" : {
+    "集中の粒・結晶・記念石を表示と集計から外し、0から始めます。取り組みと設定は残ります。リセット前の記録はこのiPhoneの中に残り、データの書き出しに含まれることがあります。このiPhoneから完全に消すには、アプリを削除してください。この操作は取り消せません。" : {
       "comment" : "Reset confirmation on a local-only iPhone",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Your focus gems, crystals and milestone stones are taken out of what's shown and counted, and you start again from 0. Your themes and settings stay. Records from before the reset remain on this iPhone and may be included in a data export. To erase them from this iPhone completely, delete the app. This can't be undone."
+            "value" : "Your focus gems, crystals and milestone stones are taken out of what's shown and counted, and you start again from 0. Your activities and settings stay. Records from before the reset remain on this iPhone and may be included in a data export. To erase them from this iPhone completely, delete the app. This can't be undone."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "集中の粒・結晶・記念石を表示と集計から外し、0から始めます。テーマと設定は残ります。リセット前の記録はこのiPhoneの中に残り、データの書き出しに含まれることがあります。このiPhoneから完全に消すには、アプリを削除してください。この操作は取り消せません。"
+            "value" : "集中の粒・結晶・記念石を表示と集計から外し、0から始めます。取り組みと設定は残ります。リセット前の記録はこのiPhoneの中に残り、データの書き出しに含まれることがあります。このiPhoneから完全に消すには、アプリを削除してください。この操作は取り消せません。"
           }
         }
       }
@@ -5448,6 +5600,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "集中の粒・結晶・記念石を表示と集計から外し、0から始めます。同じiCloudを使うほかのiPhoneにも、接続したときに反映されます。オフラインのiPhoneから古い記録が戻らないよう、リセット前の記録は同期のために残り、データの書き出しにも含まれます。このiPhoneから完全に消すにはアプリを削除し、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除してください。この操作は取り消せません。"
+          }
+        }
+      }
+    },
+    "集中を始めたら再生する" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Play When Focus Starts"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中を始めたら再生する"
           }
         }
       }
@@ -5515,6 +5683,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "集中・休憩の両方に使います。タイマー画面で一時的に向きを変えても、この既定値は変わりません。"
+          }
+        }
+      }
+    },
+    "集中中に流す音楽" : {
+      "comment" : "Activity editor: music to use during a focus",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Music During Focus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中中に流す音楽"
+          }
+        }
+      }
+    },
+    "集中時間は1分〜360分で設定してください。" : {
+      "comment" : "Theme editor error: its default focus duration must be within the supported range",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a focus length between 1 and 360 minutes."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集中時間は1分〜360分で設定してください。"
           }
         }
       }

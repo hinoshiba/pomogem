@@ -2,26 +2,31 @@
 
 Product: `com.hinoshiba.pomogem.pro.lifetime`
 
-Candidate: 1.1.0 (10). The existing non-consumable gains unlimited learning-app selection.
+Candidate: 1.1.1 (13). The existing non-consumable retains custom timers and unlimited learning-app selection. Time-based crystals no longer offer month labels; original dates, monthly records, and purchase entitlements are preserved.
 
-Current local review image (`captured_live_price`, 2026-10-01): `AppStore/screenshots/iap-review/01-pomogem-pro-live-price.png`
+Current review capture (`captured_live_price`, 2026-10-12 12:39:59.718 JST):
+`AppStore/screenshots/iap-review/01-pomogem-pro-live-price.png`
 Historical image: `AppStore/screenshots/history/iap-review-20260906.png`
-（1.0 build 5、実際のStoreKit商品価格を表示、購入未実行。候補の新しいPro機能の証拠にはしません。）
+（1.0 build 5、実際のStoreKit商品価格を表示、購入未実行。新候補の証拠にはしません。）
 
-The current 1.1.0 (10) Simulator image shows the actual StoreKit `Product.displayPrice`
-`$0.99`, including the unlimited learning-app benefit. The storefront country was not
-independently read; this is not evidence of a US storefront or a Japanese-yen price.
-No purchase or restore was performed. The current candidate image was uploaded and
-its saved replacement verified in App Store Connect on 2026-10-04.
-See `screenshots/README.md` for capture provenance.
+The 1.1.1 (13) Debug capture used iOS 26.5 / iPhone 12 Pro Max Simulator,
+with the same application source as main `988830ec02d5585e18e1d6b747c4bcb3241147ff`
+and fixed build source `7547245174d2eef0765d660c94957a08c6902f0e`.
+It shows the actual StoreKit `Product.displayPrice` `$0.99` and purchase label
+`$0.99でProを購入`, with custom timers and unlimited learning apps and no
+month-label benefit. All three listing/IAP capture tests passed with no
+failures or skips. No StoreKit configuration was used, no purchase or restore
+was performed, and the storefront country was not independently verified.
+This is not signed-device or Sandbox purchase verification. Capture and file
+replacement do not establish that Connect has saved the new image.
+See `screenshots/README.md` for capture and replacement provenance.
 
 Type: Non-Consumable
 
 ## English (for App Review)
 
 PomoGem Pro is a one-time, non-consumable purchase. It unlocks every other focus timer from
-1 to 360 minutes beyond the free 25-, 45-, 60-, and 90-minute presets, plus month labels on
-grouped pebbles, and an unlimited number of learning apps for Screen Time recording (five apps
+1 to 360 minutes beyond the free 25-, 45-, 60-, and 90-minute presets and an unlimited number of learning apps for Screen Time recording (five apps
 on the free plan). Apps selected for black distraction gems are unlimited on both plans.
 Share cards retain PomoGem branding for every user. There is no subscription,
 free trial, external payment, account login, or custom purchase server.
@@ -37,19 +42,18 @@ Review steps:
 5. The paywall displays the storefront price returned by StoreKit. The link labeled
    “価格・提供条件・販売者情報を確認” opens the pre-purchase terms and seller information.
 6. “購入を復元” (Restore Purchases) is at the bottom of the same screen.
-7. On an authorized iPhone, Settings → “アプリの利用時間” → “勉強アプリの粒” accepts up to five
+7. On an authorized iPhone, Settings → “アプリの時間を積む” → “粒にするアプリ” accepts up to five
    learning apps for free. After purchase or restore, more than five can be selected and saved.
-   Category and website selections are not accepted. “黒い石” app selection is unlimited without purchase.
+   Category and website selections are not accepted. “黒い石にするアプリ” app selection is unlimited without purchase.
 
 Use the paywall showing the live `Product.displayPrice` as the IAP review screenshot.
-The existing non-consumable was originally submitted with version 1.0; this candidate adds a benefit to the same product.
-The Screen Time addition is part of the 1.1.0 candidate. It requires Family Controls distribution
-approval for the host and monitor extension, plus signed-device verification before submission.
-The current review image above includes the added Pro feature and live StoreKit price; the historical image remains separate.
+The existing non-consumable was originally submitted with version 1.0; this candidate uses the same product and preserves purchases.
+Screen Time was added in 1.1.0. Distribution entitlement and signed-device checks remain separate.
+The current capture contains the changed build 13 paywall and its live StoreKit price. Connect replacement and signed-device comparison are separate checks.
 
 ## 日本語
 
-ポモジェムProは1回限りの買い切りです。無料の25分・45分・60分・90分以外の任意の1〜360分タイマー、結晶の月刻印、スクリーンタイムの勉強アプリ数無制限（無料5つ）を解放します。
+ポモジェムProは1回限りの買い切りです。無料の25分・45分・60分・90分以外の任意の1〜360分タイマー、スクリーンタイムの勉強アプリ数無制限（無料5つ）を解放します。
 黒い石用のアプリ数は無料でも無制限です。
 シェアカードのポモジェムロゴと公式サイトは、無料／Proとも常に表示します。subscription、trial、
 外部決済、独自purchase serverはありません。
@@ -65,12 +69,12 @@ The current review image above includes the added Pro feature and live StoreKit 
 5. PaywallはStoreKitから取得したlocal priceを表示し、「価格・提供条件・販売者情報を確認」から
    購入前の販売条件を開けます。
 6. 「購入を復元」は同じ画面の下部にあります。
-7. 許可済みiPhoneで設定 →「アプリの利用時間」→「勉強アプリの粒」を開き、無料では5アプリまで、
-   購入・復元後は6アプリ以上を選択・保存できることを確認します。「黒い石」は購入不要で無制限です。
+7. 許可済みiPhoneで設定 →「アプリの時間を積む」→「粒にするアプリ」を開き、無料では5アプリまで、
+   購入・復元後は6アプリ以上を選択・保存できることを確認します。「黒い石にするアプリ」は購入不要で無制限です。
 
-スクリーンタイム追加は1.1.0候補です。提出前に本体・Monitor拡張のFamily Controls配布権限承認と
-署名済み実機検証を行います。現在の審査画像は新しいPro機能とStoreKitの実際の価格 `$0.99` を含み、過去の画像とは分けて保持しています。取得元のストア国は独立に確認しておらず、購入・復元は実行していません。
+スクリーンタイムは1.1.0で追加しました。配布権限と署名済み実機検証は別々に確認します。
+2026-10-12 12:39:59.718 JSTにbuild 13のpaywallを撮影し、月刻印の案内がなく、StoreKitの実際の価格 `$0.99` と購入ラベル `$0.99でProを購入` を確認しました。StoreKit構成ファイルは使わず、取得元のストア国は独立に確認しておらず、購入・復元は実行していません。Connectでの画像置換・再読込と署名済み実機比較は別の確認事項です。
 
-独自loginやreview用accountは不要です。初回提出はversion 1.0の履歴です。今回は既存商品を維持し、購入済み利用者にも追加機能を提供します。
+独自loginやreview用accountは不要です。初回提出はversion 1.0の履歴です。今回は既存商品と購入状態を維持します。時間結晶には従来の月刻印を提供せず、元の日時と月別記録を保持します。
 Sandboxで購入、承認待ち、cancel、復元、revocationを確認し、審査用screenshotは上記paywallで
 `Product.displayPrice`が表示された状態を使用します。

@@ -25,7 +25,7 @@ final class SupportMailDraftTests: XCTestCase {
             "Pro：未購入"
         ])
         XCTAssertTrue(body.hasPrefix("（お問い合わせの内容をお書きください。"), body)
-        XCTAssertTrue(body.contains("記録の内容やテーマ名は含まれていません"), body)
+        XCTAssertTrue(body.contains("記録の内容や取り組み名は含まれていません"), body)
     }
 
     func testStorageAndProReadAsTheSettingsScreenSaysThem() {

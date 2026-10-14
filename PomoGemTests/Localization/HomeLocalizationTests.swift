@@ -42,7 +42,7 @@ final class HomeLocalizationTests: XCTestCase {
         XCTAssertEqual(HomeView.spokenPhrases(["深夜", "静かな定番"]), "深夜、静かな定番")
         XCTAssertEqual(HomeView.spokenPhrases(["時間の核の進み"]), "時間の核の進み")
         XCTAssertEqual(HomeView.spokenSentence("今週の完走5回"), "今週の完走5回。")
-        XCTAssertEqual(ThemeSelectionMenu.accessibilityLabel(for: nil), "テーマ、未選択")
+        XCTAssertEqual(ThemeSelectionMenu.accessibilityLabel(for: nil), "取り組み、未選択")
         XCTAssertEqual(ManualEntrySheet.dayBoundaryTimeLabel(), "4:00")
         XCTAssertEqual(
             ListText.compact(ManualDuration.allCases.map { DurationText.short(minutes: $0.minutes) }),
@@ -83,7 +83,7 @@ final class HomeLocalizationTests: XCTestCase {
     func testHomeInEnglish() throws {
         let focusLength = DurationText.short(seconds: 1_500, units: .minutesSeconds, locale: en)
         XCTAssertEqual(try english("\(focusLength)、集中する"), "Focus for 25 min")
-        XCTAssertEqual(try english("テーマを選んではじめる"), "Choose a Theme to Start")
+        XCTAssertEqual(try english("取り組みを選んではじめる"), "Choose an Activity to Start")
         let grams = MassText.grams(625.formatted(.number.locale(en)), bundle: try LocalizationTestSupport.englishBundle(), locale: en)
         XCTAssertEqual(try english("\("Math") ・ 完走で+\(grams)"), "Math · +625 g when you finish")
         XCTAssertEqual(
@@ -92,9 +92,9 @@ final class HomeLocalizationTests: XCTestCase {
         )
         XCTAssertEqual(try english("\(focusLength)の集中で、ここにひと粒落ちる。"), "Focus for 25 min and a gem drops in here.")
         XCTAssertEqual(try english("積み上げた集中"), "Focus built up")
-        XCTAssertEqual(try english("テーマ、\("Math")"), "Theme, Math")
+        XCTAssertEqual(try english("取り組み、\("Math")"), "Activity, Math")
         let notChosen = try english("未選択")
-        XCTAssertEqual(try english("テーマ、\(notChosen)"), "Theme, Not chosen")
+        XCTAssertEqual(try english("取り組み、\(notChosen)"), "Activity, Not chosen")
         XCTAssertEqual(try english("メニュー"), "Menu")
         XCTAssertEqual(try english("時間を手動で積む"), "Add Time Manually")
         XCTAssertEqual(try english("成果を積む"), "Add an Achievement")

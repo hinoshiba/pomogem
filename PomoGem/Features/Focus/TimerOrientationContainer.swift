@@ -177,6 +177,20 @@ final class TimerOrientationSelection {
     }
 }
 
+/// A portrait label alone is not enough: UIKit can publish it before the
+/// window's bounds and rotation animation have reached their final geometry.
+enum TimerPortraitReturnPolicy {
+    static func isReady(
+        interfaceOrientation: UIInterfaceOrientation,
+        windowSize: CGSize,
+        isTransitioning: Bool,
+        sceneIsActive: Bool
+    ) -> Bool {
+        sceneIsActive && !isTransitioning && interfaceOrientation == .portrait
+            && windowSize.width > 0 && windowSize.height >= windowSize.width
+    }
+}
+
 @MainActor @Observable
 final class TimerOrientationController {
     private(set) var state: TimerOrientationState {
@@ -190,6 +204,13 @@ final class TimerOrientationController {
     @ObservationIgnored private var isPresented = false
     @ObservationIgnored private var requestedDirection: TimerOrientation?
     @ObservationIgnored private var requestGeneration = 0
+    private(set) var isReturningToPortrait = false
+    private(set) var canRetryPortraitReturn = false
+    @ObservationIgnored private var portraitReturnWatchdog: Task<Void, Never>?
+    @ObservationIgnored private var geometryTransitionInProgress = false
+    @ObservationIgnored private var portraitRequestPending = false
+    @ObservationIgnored private var didRequestPortraitReturn = false
+    @ObservationIgnored private var onPortraitReady: (() -> Void)?
 
     init(sessionID: AnyHashable, selection: TimerOrientationSelection? = nil, defaults: UserDefaults = .standard) {
         let selection = selection ?? .shared
@@ -202,18 +223,152 @@ final class TimerOrientationController {
         if windowScene !== scene {
             releaseScene()
             windowScene = scene
+            // Transition callbacks belong to the old scene. A detached
+            // reader may never deliver its completion to this replacement.
+            geometryTransitionInProgress = false
+            portraitRequestPending = false
+            didRequestPortraitReturn = false
         }
         updateGeometry()
-        refresh()
+        if isReturningToPortrait { continuePortraitReturn() } else { refresh() }
     }
 
     func updateGeometry() {
         guard let windowScene else { return }
         interfaceOrientation = windowScene.effectiveGeometry.interfaceOrientation
+        finishPortraitReturnIfReady()
+    }
+
+    func geometryTransitionChanged(isTransitioning: Bool) {
+        geometryTransitionInProgress = isTransitioning
+        guard !isTransitioning else { return }
+        portraitRequestPending = false
+        updateGeometry()
+        if isReturningToPortrait { continuePortraitReturn() }
+    }
+
+    /// The timer's opaque cover remains present until native portrait geometry
+    /// has settled. Home, its reward card, and gem physics are revealed only
+    /// after this callback, so they never inherit the outgoing landscape scene.
+    func prepareToReturnToPortrait(then completion: @escaping () -> Void) {
+        guard !isReturningToPortrait else { return }
+        isReturningToPortrait = true
+        onPortraitReady = completion
+        requestGeneration += 1
+        setActive(false)
+        if let windowScene {
+            // Withdraw an earlier landscape request before consulting UIKit's
+            // still-portrait geometry; that request may not have begun yet.
+            TimerSceneOrientation.shared.claim(windowScene, owner: self, mask: .portrait)
+        }
+        // Let SwiftUI hide the timer's transformed content before UIKit turns
+        // the scene. The cover's background stays opaque throughout the turn.
+        DispatchQueue.main.async { [weak self] in self?.retryPortraitReturn() }
+    }
+
+    func retryPortraitReturn() {
+        guard isReturningToPortrait, onPortraitReady != nil else { return }
+        canRetryPortraitReturn = false
+        portraitRequestPending = false
+        didRequestPortraitReturn = false
+        portraitReturnWatchdog?.cancel()
+        portraitReturnWatchdog = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .seconds(2)) } catch { return }
+            guard let self, self.onPortraitReady != nil,
+                  self.windowScene == nil || self.windowScene?.activationState == .foregroundActive else { return }
+            // A refused request or missing UIKit callback must not strand the
+            // user on a spinner. Success is still gated by actual geometry.
+            self.canRetryPortraitReturn = true
+            self.portraitRequestPending = false
+        }
+        continuePortraitReturn()
+    }
+
+    private func continuePortraitReturn() {
+        guard isReturningToPortrait, onPortraitReady != nil else { return }
+        // The scene reader attaches asynchronously. A recovered completion
+        // can request dismissal first, so no scene means wait for attachment.
+        guard let windowScene else { return }
+#if targetEnvironment(macCatalyst)
+        completePortraitReturn()
+#else
+        guard windowScene.activationState == .foregroundActive else { return }
+        guard !geometryTransitionInProgress else { return }
+        if didRequestPortraitReturn, portraitReturnIsReady {
+            updateGeometry()
+            return
+        }
+        guard !portraitRequestPending else { return }
+        portraitRequestPending = true
+        didRequestPortraitReturn = true
+        requestGeneration += 1
+        let generation = requestGeneration
+        TimerSceneOrientation.shared.claim(windowScene, owner: self, mask: .portrait)
+        windowScene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait)) { [weak self, weak windowScene] _ in
+            guard let self, let windowScene, self.isReturningToPortrait,
+                  self.requestGeneration == generation,
+                  TimerSceneOrientation.shared.isOwner(self, of: windowScene) else { return }
+            self.portraitRequestPending = false
+            self.didRequestPortraitReturn = false
+            self.updateGeometry()
+            // A rejected request may coincide with an alert's dismissal.
+            // Retry at that transition's completion, not after a guessed delay.
+            self.retryPortraitReturnAfterPresentationTransition()
+        }
+        updateGeometry()
+#endif
+    }
+
+    private var portraitReturnIsReady: Bool {
+        guard didRequestPortraitReturn, let windowScene else { return false }
+        return TimerPortraitReturnPolicy.isReady(
+            interfaceOrientation: windowScene.effectiveGeometry.interfaceOrientation,
+            windowSize: windowScene.coordinateSpace.bounds.size,
+            isTransitioning: geometryTransitionInProgress,
+            sceneIsActive: windowScene.activationState == .foregroundActive
+        )
+    }
+
+    private func finishPortraitReturnIfReady() {
+        guard isReturningToPortrait, onPortraitReady != nil, portraitReturnIsReady else { return }
+        // The transition completion and layout callbacks can arrive in the
+        // same run loop. Recheck after the final layout before revealing Home.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.isReturningToPortrait, self.portraitReturnIsReady else { return }
+            self.completePortraitReturn()
+        }
+    }
+
+    private func completePortraitReturn() {
+        let completion = onPortraitReady
+        onPortraitReady = nil
+        portraitReturnWatchdog?.cancel()
+        portraitReturnWatchdog = nil
+        completion?()
+    }
+
+    private func retryPortraitReturnAfterPresentationTransition() {
+        guard let windowScene else { return }
+        for window in windowScene.windows {
+            var controller = window.rootViewController
+            while let current = controller {
+                if let transition = current.transitionCoordinator {
+                    if transition.animate(alongsideTransition: nil, completion: { [weak self] _ in
+                        self?.retryPortraitReturn()
+                    }) { return }
+                }
+                controller = current.presentedViewController
+            }
+        }
+        portraitReturnWatchdog?.cancel()
+        canRetryPortraitReturn = true
     }
 
     func disappear() {
         isPresented = false
+        onPortraitReady = nil
+        portraitReturnWatchdog?.cancel()
+        portraitReturnWatchdog = nil
         setActive(false)
         releaseScene()
     }
@@ -227,6 +382,11 @@ final class TimerOrientationController {
     }
 
     func setActive(_ active: Bool) {
+        if active, isReturningToPortrait {
+            retryPortraitReturn()
+            return
+        }
+        if !active, isReturningToPortrait { portraitReturnWatchdog?.cancel() }
         if active, !isObserving {
             isPresented = true
             requestedDirection = nil
@@ -265,11 +425,13 @@ final class TimerOrientationController {
     }
 
     func rotate() {
+        guard !isReturningToPortrait else { return }
         state.rotate()
         requestSceneOrientation()
     }
 
     func followDevice() {
+        guard !isReturningToPortrait else { return }
         state.followDevice(UIDevice.current.orientation, isLocked: isLocked)
         requestSceneOrientation()
     }
@@ -312,10 +474,19 @@ struct TimerLayoutContext {
 struct TimerOrientationContainer<Content: View>: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var orientation: TimerOrientationController
+    let returnToPortraitRequested: Bool
+    let onPortraitReady: () -> Void
     let content: (TimerLayoutContext) -> Content
 
-    init(sessionID: AnyHashable, @ViewBuilder content: @escaping (TimerLayoutContext) -> Content) {
+    init(
+        sessionID: AnyHashable,
+        returnToPortraitRequested: Bool = false,
+        onPortraitReady: @escaping () -> Void = {},
+        @ViewBuilder content: @escaping (TimerLayoutContext) -> Content
+    ) {
         _orientation = State(initialValue: TimerOrientationController(sessionID: sessionID))
+        self.returnToPortraitRequested = returnToPortraitRequested
+        self.onPortraitReady = onPortraitReady
         self.content = content
     }
 
@@ -329,10 +500,31 @@ struct TimerOrientationContainer<Content: View>: View {
                 .frame(width: size.width, height: size.height)
                 .rotationEffect(.degrees(residual.degrees))
                 .frame(width: proxy.size.width, height: proxy.size.height)
+                .opacity(orientation.isReturningToPortrait ? 0 : 1)
+                .allowsHitTesting(!orientation.isReturningToPortrait)
+                .accessibilityHidden(orientation.isReturningToPortrait)
+        }
+        .overlay {
+            if orientation.isReturningToPortrait {
+                if orientation.canRetryPortraitReturn {
+                    Button(String(localized: "瓶へ戻る", table: "Focus", comment: "Button: back to the jar"),
+                           action: orientation.retryPortraitReturn)
+                        .buttonStyle(.bordered)
+                        .tint(PomoGemTheme.amber)
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("timer.portrait-return.retry")
+                } else {
+                    ProgressView()
+                        .tint(PomoGemTheme.muted)
+                        .accessibilityLabel(Text("瓶へ戻ります", tableName: "Focus",
+                                                 comment: "VoiceOver label of the spinner before going back to the jar"))
+                }
+            }
         }
         .background {
             TimerWindowSceneReader(onChange: { orientation.attach(to: $0) },
-                                   onGeometryChange: { orientation.updateGeometry() })
+                                   onGeometryChange: { orientation.updateGeometry() },
+                                   onTransitionChange: { orientation.geometryTransitionChanged(isTransitioning: $0) })
                 .frame(width: 0, height: 0)
                 .accessibilityHidden(true)
         }
@@ -348,6 +540,9 @@ struct TimerOrientationContainer<Content: View>: View {
         }
         .onAppear { orientation.setActive(scenePhase == .active) }
         .onDisappear { orientation.disappear() }
+        .onChange(of: returnToPortraitRequested, initial: true) { _, requested in
+            if requested { orientation.prepareToReturnToPortrait(then: onPortraitReady) }
+        }
         .onChange(of: scenePhase) { _, phase in
             orientation.setActive(phase == .active)
         }
@@ -407,22 +602,26 @@ struct TimerRotationControls: View {
 private struct TimerWindowSceneReader: UIViewControllerRepresentable {
     let onChange: (UIWindowScene?) -> Void
     let onGeometryChange: () -> Void
+    let onTransitionChange: (Bool) -> Void
 
     func makeUIViewController(context: Context) -> SceneController {
         let controller = SceneController()
         controller.onChange = onChange
         controller.onGeometryChange = onGeometryChange
+        controller.onTransitionChange = onTransitionChange
         return controller
     }
 
     func updateUIViewController(_ controller: SceneController, context: Context) {
         controller.onChange = onChange
         controller.onGeometryChange = onGeometryChange
+        controller.onTransitionChange = onTransitionChange
     }
 
     final class SceneController: UIViewController {
         var onChange: ((UIWindowScene?) -> Void)?
         var onGeometryChange: (() -> Void)?
+        var onTransitionChange: ((Bool) -> Void)?
 
         override func loadView() {
             let sceneView = SceneView()
@@ -440,12 +639,16 @@ private struct TimerWindowSceneReader: UIViewControllerRepresentable {
 
         override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
             super.viewWillTransition(to: size, with: coordinator)
+            onTransitionChange?(true)
             // Also observe 180° transitions, whose final bounds and safe-area
             // insets can match the previous landscape orientation exactly.
             coordinator.animate(alongsideTransition: { [weak self] _ in
                 self?.publishGeometry()
             }, completion: { [weak self] _ in
-                self?.publishGeometry()
+                DispatchQueue.main.async { [weak self] in
+                    self?.onTransitionChange?(false)
+                    self?.publishGeometry()
+                }
             })
         }
 

@@ -292,19 +292,19 @@
         }
       }
     },
-    "このテーマを記録先にしたアプリの選択が解除されます。ほかのテーマに記録するアプリはそのままです。記録を続けるには、対象のアプリと記録先を選び直してください。" : {
+    "この取り組みを記録先にしたアプリの選択が解除されます。ほかの取り組みに記録するアプリはそのままです。記録を続けるには、対象のアプリと記録先を選び直してください。" : {
       "comment" : "Theme delete confirmation: the theme is the Screen Time destination",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Apps assigned to this theme will be removed from your selection. Apps assigned to other themes stay selected. To continue recording the affected apps, select them again and choose a destination."
+            "value" : "Apps assigned to this activity will be removed from your selection. Apps assigned to other activities stay selected. To continue recording the affected apps, select them again and choose a destination."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このテーマを記録先にしたアプリの選択が解除されます。ほかのテーマに記録するアプリはそのままです。記録を続けるには、対象のアプリと記録先を選び直してください。"
+            "value" : "この取り組みを記録先にしたアプリの選択が解除されます。ほかの取り組みに記録するアプリはそのままです。記録を続けるには、対象のアプリと記録先を選び直してください。"
           }
         }
       }
@@ -326,19 +326,19 @@
         }
       }
     },
-    "まだアプリが選ばれていません。追加すると、アプリごとに記録先のテーマを指定できます。" : {
+    "まだアプリが選ばれていません。追加すると、アプリごとに記録先の取り組みを指定できます。" : {
       "comment" : "Empty learning app list: choose apps, then assign each to a theme",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No apps selected yet. Add apps to choose a destination theme for each one."
+            "value" : "No apps selected yet. Add apps to choose a destination activity for each one."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "まだアプリが選ばれていません。追加すると、アプリごとに記録先のテーマを指定できます。"
+            "value" : "まだアプリが選ばれていません。追加すると、アプリごとに記録先の取り組みを指定できます。"
           }
         }
       }
@@ -411,36 +411,36 @@
         }
       }
     },
-    "アプリとテーマを選び、保存すると反映されます" : {
+    "アプリと取り組みを選び、保存すると反映されます" : {
       "comment" : "VoiceOver hint: choose apps and a theme, then save",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Choose apps and a theme, then save to apply."
+            "value" : "Choose apps and an activity, then save to apply."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "アプリとテーマを選び、保存すると反映されます"
+            "value" : "アプリと取り組みを選び、保存すると反映されます"
           }
         }
       }
     },
-    "アプリの時間を、テーマごとの粒に。" : {
+    "アプリの時間を、取り組みごとの粒に。" : {
       "comment" : "Screen Time settings: headline",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Turn app time into gems, by theme."
+            "value" : "Turn app time into gems, by activity."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "アプリの時間を、テーマごとの粒に。"
+            "value" : "アプリの時間を、取り組みごとの粒に。"
           }
         }
       }
@@ -1056,23 +1056,6 @@
         }
       }
     },
-    "テーマは「設定」→「テーマ」で追加できます。例：ニュース、読書、英語。" : {
-      "comment" : "Where to create destination categories, with examples",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add themes in Settings → Themes. For example: News, Reading, or English."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テーマは「設定」→「テーマ」で追加できます。例：ニュース、読書、英語。"
-          }
-        }
-      }
-    },
     "データの準備が完了してから、もう一度お試しください。" : {
       "comment" : "Error: the app's data is not ready yet",
       "localizations" : {
@@ -1396,36 +1379,36 @@
         }
       }
     },
-    "削除されたテーマ" : {
+    "削除された取り組み" : {
       "comment" : "Picker value: the chosen theme was deleted",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Deleted theme"
+            "value" : "Deleted activity"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "削除されたテーマ"
+            "value" : "削除された取り組み"
           }
         }
       }
     },
-    "削除されたテーマを記録先にしていたアプリの選択を解除しました。再開するには、アプリを追加して記録先を選び直してください。" : {
+    "削除された取り組みを記録先にしていたアプリの選択を解除しました。再開するには、アプリを追加して記録先を選び直してください。" : {
       "comment" : "Footer: the destination theme was deleted and the study apps were cleared",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Apps assigned to the deleted theme have been removed from your selection. To resume, add them again and choose a destination."
+            "value" : "Apps assigned to the deleted activity have been removed from your selection. To resume, add them again and choose a destination."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "削除されたテーマを記録先にしていたアプリの選択を解除しました。再開するには、アプリを追加して記録先を選び直してください。"
+            "value" : "削除された取り組みを記録先にしていたアプリの選択を解除しました。再開するには、アプリを追加して記録先を選び直してください。"
           }
         }
       }
@@ -1464,19 +1447,36 @@
         }
       }
     },
-    "各アプリの記録先のテーマを選んでください。" : {
-      "comment" : "Error: each chosen app needs a destination theme\nValidation: every selected learning app needs a live destination theme",
+    "取り組みは「設定」→「取り組み」で追加できます。例：ニュース、読書、英語。" : {
+      "comment" : "Where to create destination categories, with examples",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Choose a destination theme for each app."
+            "value" : "Add activities in Settings → Activities. For example: News, Reading, or English."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "各アプリの記録先のテーマを選んでください。"
+            "value" : "取り組みは「設定」→「取り組み」で追加できます。例：ニュース、読書、英語。"
+          }
+        }
+      }
+    },
+    "各アプリの記録先の取り組みを選んでください。" : {
+      "comment" : "Error: each chosen app needs a destination theme\nValidation: every selected learning app needs a live destination theme",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a destination activity for each app."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "各アプリの記録先の取り組みを選んでください。"
           }
         }
       }
@@ -2071,19 +2071,19 @@
         }
       }
     },
-    "要確認：記録先のテーマが削除されました" : {
+    "要確認：記録先の取り組みが削除されました" : {
       "comment" : "Settings row subtitle: the study-app destination theme was deleted",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Needs attention: the theme for study apps was deleted"
+            "value" : "Needs attention: the activity for study apps was deleted"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "要確認：記録先のテーマが削除されました"
+            "value" : "要確認：記録先の取り組みが削除されました"
           }
         }
       }
@@ -2173,70 +2173,70 @@
         }
       }
     },
-    "記録先が未選択、または削除されているアプリがあります。各アプリのテーマを選び直してください。" : {
+    "記録先が未選択、または削除されているアプリがあります。各アプリの取り組みを選び直してください。" : {
       "comment" : "Footer: no destination theme, or it was deleted",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Some apps have no destination, or their theme was deleted. Choose a theme for each app."
+            "value" : "Some apps have no destination, or their activity was deleted. Choose an activity for each app."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "記録先が未選択、または削除されているアプリがあります。各アプリのテーマを選び直してください。"
+            "value" : "記録先が未選択、または削除されているアプリがあります。各アプリの取り組みを選び直してください。"
           }
         }
       }
     },
-    "記録先のテーマ" : {
+    "記録先の取り組み" : {
       "comment" : "Picker: the destination category for this app",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Theme to Record To"
+            "value" : "Activity to Record To"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "記録先のテーマ"
+            "value" : "記録先の取り組み"
           }
         }
       }
     },
-    "記録先のテーマが削除されたため、対象アプリの記録を止めました" : {
+    "記録先の取り組みが削除されたため、対象アプリの記録を止めました" : {
       "comment" : "Toast: apps assigned to a deleted Screen Time theme stopped recording",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Recording stopped for apps assigned to the deleted theme"
+            "value" : "Recording stopped for apps assigned to the deleted activity"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "記録先のテーマが削除されたため、対象アプリの記録を止めました"
+            "value" : "記録先の取り組みが削除されたため、対象アプリの記録を止めました"
           }
         }
       }
     },
-    "記録先のテーマは、時間を分けるカテゴリです。同じテーマに指定したアプリの利用時間を合計し、10分ごとに粒（10分・100g）を追加します。異なるテーマの時間は合算しません。" : {
+    "記録先の取り組みは、時間を分けるカテゴリです。同じ取り組みに指定したアプリの利用時間を合計し、10分ごとに粒（10分・100g）を追加します。異なる取り組みの時間は合算しません。" : {
       "comment" : "Footer: how study-app time becomes pebbles",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Themes are categories for your time. Apps assigned to the same theme add one gem (10 minutes, 100 g) for every 10 minutes of combined use. Time in different themes is counted separately."
+            "value" : "Activities are categories for your time. Apps assigned to the same activity add one gem (10 minutes, 100 g) for every 10 minutes of combined use. Time in different activities is counted separately."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "記録先のテーマは、時間を分けるカテゴリです。同じテーマに指定したアプリの利用時間を合計し、10分ごとに粒（10分・100g）を追加します。異なるテーマの時間は合算しません。"
+            "value" : "記録先の取り組みは、時間を分けるカテゴリです。同じ取り組みに指定したアプリの利用時間を合計し、10分ごとに粒（10分・100g）を追加します。異なる取り組みの時間は合算しません。"
           }
         }
       }

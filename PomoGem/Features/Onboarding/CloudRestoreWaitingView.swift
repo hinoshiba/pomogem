@@ -200,7 +200,7 @@ struct CloudRestoreWaitingView: View {
                                  comment: "Restore waiting screen: start onboarding without waiting for iCloud (button and its confirmation)")
                         }
                         .buttonStyle(PomoGemSecondaryButtonStyle())
-                        .accessibilityHint(Text("記録の到着を待たずに、最初のテーマ選びへ進みます", tableName: "Onboarding",
+                        .accessibilityHint(Text("記録の到着を待たずに、最初の取り組み選びへ進みます", tableName: "Onboarding",
                                                 comment: "VoiceOver hint for 新しく始める on the restore waiting screen"))
                         .accessibilityIdentifier("cloud-restore.start-fresh")
                         Text("この画面を開いたままお待ちください。", tableName: "Onboarding",
@@ -248,7 +248,7 @@ struct CloudRestoreWaitingView: View {
                 onStartFresh()
             }
         } message: {
-            Text("記録の到着を待たずに、最初のテーマ選びへ進みます。iCloudの記録は、届きしだいこのiPhoneにも表示されます。",
+            Text("記録の到着を待たずに、最初の取り組み選びへ進みます。iCloudの記録は、届きしだいこのiPhoneにも表示されます。",
                  tableName: "Onboarding",
                  comment: "Restore waiting screen: what starting without waiting means")
         }
@@ -262,7 +262,7 @@ struct CloudRestoreWaitingView: View {
                 .foregroundStyle(PomoGemTheme.muted)
             countTile(
                 value: themeCount,
-                title: Text("テーマ", tableName: "Onboarding", comment: "Restore waiting screen: count label for themes")
+                title: Text("取り組み", tableName: "Onboarding", comment: "Restore waiting screen: count label for themes")
             )
             Text("経過 \(elapsedText)", tableName: "Onboarding",
                  comment: "Restore waiting screen: elapsed time, e.g. 経過 1:05")
@@ -298,10 +298,10 @@ struct CloudRestoreWaitingView: View {
     }
 
     /// VoiceOver: two sentences, so each count carries its own plural form.
-    /// Japanese reads exactly as before, 「届いた記録：テーマ1件。経過時間0分5秒」.
+    /// Japanese reads exactly as before, 「届いた記録：取り組み1件。経過時間0分5秒」.
     private var receivedSummaryLabel: String {
         SentenceText.join([
-            String(localized: "届いた記録：テーマ\(themeCount)件。", table: "Onboarding",
+            String(localized: "届いた記録：取り組み\(themeCount)件。", table: "Onboarding",
                    comment: "VoiceOver summary of the restore progress; %lld is the number of themes received"),
             String(localized: "経過時間\(elapsedSpoken)", table: "Onboarding",
                    comment: "VoiceOver: time spent waiting; %@ is a spoken duration such as 1 minute, 5 seconds")

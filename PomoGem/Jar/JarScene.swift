@@ -9,10 +9,9 @@ struct JarLandingEvent {
     let position: CGPoint
 }
 
-/// The one physical gem accepted by the latest jar tap. Inspection is offered
-/// only when that same gem is an aggregate and the finger actually landed on
-/// its visible footprint; taps on sparse glass may still bounce the nearest
-/// gem without pretending that it was selected.
+/// Hit metadata for the latest physical tap. Sparse glass may bounce the
+/// nearest gem without claiming a direct hit. Opening its breakdown belongs
+/// to the separate, side-effect-free long-press hit test.
 struct JarAcceptedTapSelection: Equatable, Sendable {
     let pebbleID: UUID
     let inspectableAggregateID: UUID?
@@ -2342,6 +2341,29 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         return true
     }
 
+    /// A hold inspects only the gem under the pointer. Unlike a tap on sparse
+    /// glass, it must not substitute a nearby crystal, wake physics, or consume
+    /// the tap cooldown. Growing time gems have the same breakdown destination.
+    func inspectableAggregateID(at point: CGPoint) -> UUID? {
+        guard !isBakeInProgress,
+              makeJarPath(in: outerJarRect).contains(point),
+              let pebble = nearestPhysicalPebble(to: point, among: gesturePebbles),
+              pebble.descriptor.isAggregate || pebble.descriptor.isTimeProjection,
+              hypot(pebble.position.x - point.x, pebble.position.y - point.y)
+                <= pebble.radius + TapResponse.aggregateInspectionHitPadding
+        else { return nil }
+        return pebble.descriptor.id
+    }
+
+    private func nearestPhysicalPebble(to point: CGPoint, among pebbles: [PebbleNode]) -> PebbleNode? {
+        pebbles.filter { $0.physicsBody != nil }.min { lhs, rhs in
+            let lhsDistance = hypot(lhs.position.x - point.x, lhs.position.y - point.y) - lhs.radius
+            let rhsDistance = hypot(rhs.position.x - point.x, rhs.position.y - point.y) - rhs.radius
+            if abs(lhsDistance - rhsDistance) > 0.001 { return lhsDistance < rhsDistance }
+            return lhs.descriptor.id.uuidString < rhs.descriptor.id.uuidString
+        }
+    }
+
     /// Launches the nearest gem and lets its contacts send a physical ripple
     /// through the rest of the pile.
     ///
@@ -2376,20 +2398,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             )
         )
         let physicalPebbles = pebbles.filter { $0.physicsBody != nil }
-        guard let primaryPebble = physicalPebbles.min(by: { lhs, rhs in
-            let lhsDistance = hypot(
-                lhs.position.x - origin.x,
-                lhs.position.y - origin.y
-            ) - lhs.radius
-            let rhsDistance = hypot(
-                rhs.position.x - origin.x,
-                rhs.position.y - origin.y
-            ) - rhs.radius
-            if abs(lhsDistance - rhsDistance) > 0.001 {
-                return lhsDistance < rhsDistance
-            }
-            return lhs.descriptor.id.uuidString < rhs.descriptor.id.uuidString
-        }) else { return false }
+        guard let primaryPebble = nearestPhysicalPebble(to: origin, among: physicalPebbles)
+        else { return false }
 
         var impacts: [LocalTapImpact] = physicalPebbles.compactMap { pebble in
             guard pebble.physicsBody != nil else { return nil }
