@@ -96,8 +96,18 @@ final class OverviewLocalizationTests: XCTestCase {
     func testProgressScreenCopyInEnglish() throws {
         XCTAssertEqual(try english("積み上がり"), "Progress")
         XCTAssertEqual(try english("積み上がりを閉じる"), "Close Progress")
-        XCTAssertEqual(try english("一粒は消えず、\n時間の景色に変わる。"), "No gem disappears.\nIt becomes a landscape of time.")
-        XCTAssertEqual(try english("時間をズームする"), "Zoom Through Time")
+        XCTAssertEqual(
+            try english("集中時間と元の記録を、今週・結晶・年月で確認できます。"),
+            "See your focus time and records by week, crystal, or month."
+        )
+        XCTAssertEqual(
+            try english("集中時間と記録を確認できます。古い記録は「年月」から読み込めます。"),
+            "See your focus time and records. Load older records in Years & Months."
+        )
+        XCTAssertEqual(
+            try english("結晶は合計時間の目盛りです。元の記録は「年月」で確認できます。"),
+            "Crystals measure your total time. Find your original records in Years & Months."
+        )
         XCTAssertEqual(
             try ["いま", "結晶", "年月"].map { try english($0) },
             ["Now", "Crystals", "Years & Months"]

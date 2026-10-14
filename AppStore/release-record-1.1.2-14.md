@@ -27,7 +27,13 @@ The eight-round UX review and its precise scope are recorded in
 [RELEASING.md](../Docs/RELEASING.md#2026-10-14-リリース前uxレビュー).
 After integration with current main, static OSS, privacy, metadata, website,
 and localization checks passed, including compiler-extracted localization.
-Full unit tests, focused UI regression tests, and the Release build are in progress.
+The application-source Release build and all three bundles' Japanese/English
+localizations passed. The first integrated unit run executed 2,988 XCTest tests
+(eight skips) and 30 Swift Testing tests. One localization test still expected
+two removed introductory strings; it was corrected to verify the three
+current explanations used by the UI. Its rerun and focused UI results, followed
+by the complete final-head CI result, are tracked in
+[PR #89](https://github.com/hinoshiba/pomogem/pull/89).
 
 `Subject.defaultFocusSeconds` is a new optional synchronized attribute.
 Production must include `CD_Subject.CD_defaultFocusSeconds` as Int64;
