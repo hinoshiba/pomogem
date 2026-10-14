@@ -5,10 +5,25 @@
 この手順は、許可済みMacのXcode OrganizerからiPhone版をArchive、Validate、Uploadするための
 正本です。Mac／Mac Catalyst版は作成しません。
 
+2026-10-14: 1.1.2 (14)を準備しています。Gemの色と長押し、取り組み別の時間・音楽設定、
+メニューとタイマーの画面遷移を改善します。Appleの公開Store情報では1.1.1の公開日が
+2026-10-13と確認できました。新候補のArchive・Upload・審査提出は未完了です。
+[1.1.2 (14) release record](../AppStore/release-record-1.1.2-14.md)に今回の状態を記録します。
+
+以下は前回提出時点の記録です。
+
+2026-10-12: main `988830ec02d5585e18e1d6b747c4bcb3241147ff`の変更を含む1.1.1 (13)を
+12:45 JSTにuploadし、旧build 12の提出を取り消して差し替え、13:38 JSTに審査へ提出しました。
+Connectの提出詳細でiOS 1.1.1 (13)とPomoGem Pro Lifetimeの2項目が「審査待ち」であることを
+確認済みです。日英metadata、掲載画像10枚、IAP画像、最新review notesを保存・再読込で照合しました。
+時間結晶で月刻印を提供しない旨も更新内容へ記載しています。承認・公開は未確認で、公開確認済みは
+1.1.0 (11)です。実機試験などの未確認事項は引き続き保持します。
+今回の記録は[1.1.1 (13) release record](../AppStore/release-record-1.1.1-13.md)を参照してください。
+
 2026-10-11にApp Store Connectで1.1.0 (11)の配信準備完了を確認しました。1.1.1 (12)は
 同日10:40 JSTにuploadが成功し、配布payloadの全3 bundleを検証済みです。処理完了後にbuild 12を
 選択・保存し、10:58 JSTに審査へ提出しました。Connectで「審査待ち」を確認済みです。
-1.1.1の承認・公開はまだ確認していません。最新の作業結果は
+このbuild 12は10月12日に差し替えのため提出を取り消しました。当時の結果は
 [1.1.1 (12) release record](../AppStore/release-record-1.1.1-12.md)を参照してください。
 以下の1.1.0 (10)準備状況は当時の履歴です。未実施の実機試験などは完了扱いにしません。
 
@@ -219,7 +234,7 @@ valueを読んだ時点で停止するため、同じApple Accountの旧版端�
 記録されており、すでに配備済みでした。今回の作業でschemaを変更・再配備していません。
 この照合を実機2台の秒単位送受信の合格とは扱いません。
 
-テーマ別の既定時間は`Subject.defaultFocusSeconds`（optional Int）を追加します。
+取り組み別の既定時間は`Subject.defaultFocusSeconds`（optional Int）を追加します。
 この機能を公開する前に、`CD_Subject.CD_defaultFocusSeconds`（Int(64)）のDevelopment／Productionの
 schemaを照合し、実機2台で設定・変更・解除の送受信を確認してください。現時点でこの追加fieldの
 Production配備と実通信は未検証です。未設定の既存テーマは従来の共通設定を使います。

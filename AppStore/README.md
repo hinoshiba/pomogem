@@ -3,10 +3,23 @@
 このfolderはApp Store Connectへ入力する内容と提出判断のsource of truthです。App Store Connect
 APIのcredentialやdownloadしたprofileは置きません。
 
+2026-10-14: 公開ストアで1.1.1の配信を確認しました。今回の1.1.2 (14)は準備中です。
+Archive、Upload、審査提出の完了とは区別し、[今回の記録](release-record-1.1.2-14.md)へ追記します。
+
+以下は過去の提出履歴です。
+
+2026-10-12: main `988830ec02d5585e18e1d6b747c4bcb3241147ff`の変更を含む1.1.1 (13)を
+12:45 JSTにuploadし、旧build 12の提出を取り消して差し替え、13:38 JSTに審査へ提出しました。
+Connectの提出詳細でiOS 1.1.1 (13)とPomoGem Pro Lifetimeの2項目が「審査待ち」であることを
+確認済みです。日英metadata、掲載画像10枚、IAP画像、最新review notesを保存・再読込で照合しました。
+時間結晶で月刻印を提供しない旨も更新内容へ記載しています。承認・公開は未確認で、公開確認済みは
+1.1.0 (11)です。実機試験などの未確認事項は引き続き保持します。
+今回の記録は[1.1.1 (13) release record](release-record-1.1.1-13.md)を参照してください。
+
 2026-10-11にApp Store Connectで1.1.0 (11)の配信準備完了を確認しました。1.1.1 (12)は
 同日10:40 JSTにuploadが成功し、配布payloadの全3 bundleを検証済みです。処理完了後にbuild 12を
 選択・保存し、10:58 JSTに審査へ提出しました。Connectで「審査待ち」を確認済みです。
-1.1.1の承認・公開はまだ確認していません。現在の作業結果は
+このbuild 12は10月12日に差し替えのため提出を取り消しました。当時の結果は
 [release-record-1.1.1-12.md](release-record-1.1.1-12.md)を参照してください。
 下記の1.1.0準備状況や旧profileに関する記述は、記載日時点の履歴です。
 

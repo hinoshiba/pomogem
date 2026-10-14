@@ -114,21 +114,21 @@ statusは公開前と各更新時に再監査します。新しいstorefrontの�
 | Type | Non-Consumable |
 | Reference Name | PomoGem Pro Lifetime |
 | ja-JP name | ポモジェムPro |
-| ja-JP description | 自由な集中時間・月刻印・勉強アプリ数無制限。買い切りです。 |
+| ja-JP description | 自由な集中時間・勉強アプリ数無制限。買い切りです。 |
 | en-US name | PomoGem Pro |
-| en-US description | Custom timers, month labels, unlimited learning apps. |
+| en-US description | Custom timers and unlimited learning apps. |
 | Base country or region | United States |
 | United States target price | USD 0.99（「約1ドル」の利用可能な標準price point） |
 | Japan custom price | JPY 100 |
 | Other available storefronts | AppleがUSD 0.99を基準に為替・税・各地域の価格慣行から生成する現地相当額 |
 | Availability | App本体と同じ148 of 175 Countries or Regions（現行EU 27を除外。新しいstorefrontは自動追加） |
 | Family Sharing | Off |
-| Review screenshot | `captured_live_price`。2026-10-01に現行1.1.0 (10)の実StoreKit価格$0.99を再撮影・検証。storefront国は未確認。正本は `AppStore/screenshots/iap-review/01-pomogem-pro-live-price.png`。Connectには2026-09-22の旧画像が残るため、配布署名済み版との表示照合後に差し替え・再読込確認が必要 |
+| Review screenshot | `captured_live_price`。2026-10-12 12:39:59.718 JSTにbuild 13の月刻印を除いたpaywallと実StoreKit価格$0.99を撮影。storefront国は未確認、購入・復元は未実行。正本は `AppStore/screenshots/iap-review/01-pomogem-pro-live-price.png`。署名済み実機との表示比較、Connectへの差し替え・再読込確認は別の確認事項 |
 | Review notes | `AppStore/iap-review-notes-connect.txt` |
 
-Unlockは無料preset以外の任意の1分00秒〜360分00秒、結晶の月刻印、スクリーンタイムの勉強アプリ数無制限（無料5つ）です。黒い石用アプリ数は無料でも無制限です。分・秒の数字入力とホイールに対応します。share cardは無料／Proともロゴと公式サイトを常設します。subscription、trial、
+Unlockは無料preset以外の任意の1分00秒〜360分00秒、スクリーンタイムの勉強アプリ数無制限（無料5つ）です。黒い石用アプリ数は無料でも無制限です。分・秒の数字入力とホイールに対応します。share cardは無料／Proともロゴと公式サイトを常設します。subscription、trial、
 external purchase、独自serverはありません。purchase、pending、cancel、restore、revocationと、
-entitlement反映後にtransactionをfinishすることをSandboxで検証します。初回IAPのversion 1.0提出は履歴です。1.1.0でも既存商品を維持し、購入済み利用者にも追加機能を提供します。
+entitlement反映後にtransactionをfinishすることをSandboxで検証します。初回IAPのversion 1.0提出は履歴です。1.1.1 (13)も既存商品と購入状態を維持します。時間結晶では月刻印を提供せず、元の日時と月別記録を保持します。
 
 日本だけをcustom priceとして固定し、EU 27を除くその他の配信地域ではAppleの自動調整を維持します。
 「全地域を手動管理」は採用しません。App内では常にStoreKitの`displayPrice`を表示し、固定為替や

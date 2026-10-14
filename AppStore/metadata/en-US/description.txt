@@ -1,33 +1,37 @@
 Turn focused time into colorful gems.
 
-Study and work time becomes visible progress. Earned gems stay when you take a day off. The app is in English and Japanese. Support is currently provided in Japanese.
+Gems stay when you take a day off. English and Japanese UI; support is currently provided in Japanese.
 
-CHOOSE A THEME AND START
+FOCUS BY ACTIVITY
 
-Choose a theme and a free 25-, 45-, 60-, or 90-minute timer. Finish a session and a gem drops into your jar with sound and haptic feedback. Each completed minute becomes 10 grams: 25 minutes adds 250 grams.
+Choose an activity and a free 25-, 45-, 60-, or 90-minute timer. Each completed minute adds 10 grams to your jar.
 
-• Custom themes for study and work
-• A tactile jar that responds to taps, tilt, and gentle shaking
-• Ten gems combine into a larger crystal
-• Weekly and lifetime views, milestones, and manual records separate from timed focus
-• Weight Journey shows your next milestone and compares your total with the approximate weights of familiar objects
-• Focus and break-end alarms with a choice of sound and strength
-• Images and short GIFs for sharing eligible records, always with PomoGem branding and its official website
-• Home and Lock Screen widgets that start a focus without displaying your records
+• Tap a gem to bounce it; long-press for details. Tilt your iPhone to move gems
+• Vivid crystals reflect the colors in their breakdown
+• Vertical menus and smoother returns from landscape timers to the portrait jar
+• Every 250 minutes forms a crystal; ten form the next size. Remaining time carries forward
+• Weekly and lifetime progress, milestones, and manual records separate from timed focus
+• Share images and short GIFs of eligible records, with PomoGem branding and its website
+
+MUSIC FOR EACH ACTIVITY
+
+Set music and autoplay per activity using suggestions, your playlists, Apple Music search, or a shared link. Save choices in the activity editor. Music settings stay on this iPhone. Autoplay respects audio already playing. Playback uses the Music app; streaming music requires an Apple Music subscription.
 
 OPTIONAL SCREEN TIME GEMS
 
-In Settings > Add App Time, choose apps and a theme for each. App names appear in settings. Apps with the same theme combine their use: each confirmed 10 minutes adds a 100-gram gem. Themes count separately. Free: 5 apps; Pro: unlimited. OS notifications may be delayed. Periods under 10 minutes are not added. Gem recording pauses during focus timers.
+In Settings > Add App Time, choose apps and an activity for each. Apps with the same activity combine their use: each confirmed 10 minutes adds a 100-gram gem. Activities count separately. Free: 5 apps; Pro: unlimited. OS notifications may be delayed. Periods under 10 minutes are not added. Gem recording pauses during focus timers.
 
-You can also choose apps you want to use less. Each combined 10 minutes adds a black obstacle gem. This selection is unlimited for everyone. Black gems combine only with black gems; they do not count toward study time, study mass, rewards, or sharing, and never subtract earned study gems. The same app cannot belong to both selections. You choose whether to authorize and enable recording.
+Apps you want to use less can add black gems every combined 10 minutes. This selection is unlimited for everyone. Black gems combine only with black gems; they never count toward study time, mass, rewards, or sharing, or subtract earned gems. An app cannot belong to both selections. Authorization and recording are optional.
 
 POMOGEM PRO
 
-A one-time, non-consumable In-App Purchase unlocks custom timers from 1 minute 00 seconds to 360 minutes 00 seconds, month stamps on crystals, and unlimited learning apps for Screen Time recording. Enter minutes and seconds or use scroll wheels. Update both devices before handing off timers set with seconds. No subscription, trial, or automatic renewal. The purchase screen shows your App Store price.
+A one-time In-App Purchase adds custom timers from 1:00 to 360:00 and unlimited Screen Time learning apps. Enter minutes and seconds or use wheels. Update both devices to hand off second-level timers. Pro has no subscription, trial, or renewal. The purchase screen shows your price.
+
+Time-based crystals no longer offer Pro month stamps. Session dates, monthly records, and your purchase remain intact.
 
 YOUR STORAGE CHOICE
 
-At first launch, choose private iCloud sync or this iPhone only. Device-only mode works without an Apple Account or network and never uploads automatically. If you confirm iCloud, theme names, achievement notes, records, settings, and the active timer use your Apple Account's private CloudKit storage. Initial loading and resuming sync require online checks.
+At first launch, choose private iCloud sync or this iPhone only. Device-only mode works without an Apple Account or network and never uploads automatically. If you confirm iCloud, activity names, achievement notes, records, settings, and the active timer use your Apple Account's private CloudKit storage. Initial loading and resuming sync require online checks.
 
 An eligible, previously verified local copy can be used offline in iCloud mode; changes wait on this iPhone for sync. Verified account changes or conflicting history can block access to protect data. Reopening the app may be required. A connection check does not prove all records have uploaded.
 

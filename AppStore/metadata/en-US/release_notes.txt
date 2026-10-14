@@ -1,4 +1,5 @@
-- Choose a recording theme for each app that earns Screen Time gems, such as News for Podcasts and Reading for Audible. Apps assigned to the same theme combine their time toward a 100-gram gem every 10 minutes; different themes count separately. Your existing theme carries over to each app.
-- Selected app names now appear in the settings menu and detail screen.
-- Find these options under Add App Time, with clearer controls for apps that earn gems and apps that add black gems. Improved readability at larger text sizes.
-- Fixed settings screens shifting sideways on iPhone.
+- Gems and crystals reflect the colors in their breakdown, with more vivid rendering. Tap to bounce a gem; long-press to view its details.
+- Menus now open and close vertically without shifting sideways.
+- Themes are now called Activities. Choose music and autoplay for each activity, including your playlists, Apple Music search, and shared links. Music settings stay on this iPhone.
+- Improved the return to the portrait jar when ending or interrupting a landscape focus timer, or finishing a break.
+- Improved larger-text layouts and the details shown after a long-press or completed focus.
