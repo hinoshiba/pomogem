@@ -47,6 +47,11 @@ final class EnglishLocalizationSmokeUITests: XCTestCase {
             XCTAssertTrue(row.label.contains(label), row.label)
         }
 
+        PomoGemSettingsUITestNavigation.open(.support, in: app, english: true)
+        XCTAssertTrue(app.navigationBars["Support & App Info"].isHittable)
+        retainScreenshot(of: app, named: "English Settings — Support & App Info")
+        XCTAssertTrue(PomoGemSettingsUITestNavigation.backToIndex(in: app, english: true))
+
         PomoGemSettingsUITestNavigation.open(.timer, in: app, english: true)
         let display = app.buttons["settings.timer-display-mode"]
         XCTAssertTrue(PomoGemSettingsUITestNavigation.reveal(display, in: app))

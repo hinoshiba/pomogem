@@ -332,7 +332,14 @@ final class FocusMusicEntryUITests: XCTestCase {
             let start = window.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
                 dx: window.frame.width * 0.9, dy: (top + bottom) / 2 - window.frame.minY
             ))
-            start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: distance)))
+            // Stop the finger before lifting so inertia cannot carry a tall
+            // AX5 row past the opposite viewport edge and alternate forever.
+            start.press(
+                forDuration: 0.05,
+                thenDragTo: start.withOffset(CGVector(dx: 0, dy: distance)),
+                withVelocity: .slow,
+                thenHoldForDuration: 0.2
+            )
         }
         return false
     }
