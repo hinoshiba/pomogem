@@ -63,27 +63,43 @@ final class FocusMusicEntryUITests: XCTestCase {
     }
 
     func testMusicAndThemeContextRemainReachableAtLargestTextSize() {
+        executionTimeAllowance = 300
+        // Persist the same longer playlist name that made the narrow AX5
+        // value column taller than Home's scrollable viewport. Do not depend
+        // on another test having selected it first.
+        app.launch()
+        openActivitySettings()
+        openEnglishActivityEditor()
+        let source = app.buttons["subject-editor.music.source"]
+        XCTAssertTrue(reveal(source))
+        source.tap()
+        let classical = app.buttons["focus-music.source.pl.cf8514b686374fadbe6807a6339dfd89"]
+        XCTAssertTrue(reveal(classical))
+        classical.tap()
+        XCTAssertTrue(source.waitForExistence(timeout: 5))
+        XCTAssertTrue(source.label.contains("作業用BGM：クラシック"), source.label)
+        app.buttons["subject-editor.save"].tap()
+        XCTAssertTrue(app.navigationBars["取り組み"].waitForExistence(timeout: 5))
+        app.terminate()
+
         app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1"
         app.launch()
         let music = app.buttons["home.focus-music"]
+        let homeScroll = app.scrollViews.containing(.button, identifier: "home.focus-music").firstMatch
         XCTAssertTrue(music.waitForExistence(timeout: 12))
-        for _ in 0..<5 {
-            if music.isHittable { break }
-            app.swipeUp(velocity: .slow)
-        }
-        XCTAssertTrue(music.isHittable)
+        XCTAssertTrue(homeScroll.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForContext(music, containing: "作業用BGM：クラシック"))
+        XCTAssertTrue(reveal(music, in: homeScroll),
+                      "The selected playlist must fit completely inside Home's actual scroll viewport")
         let window = app.windows.firstMatch.frame
         XCTAssertGreaterThanOrEqual(music.frame.minX, window.minX)
         XCTAssertLessThanOrEqual(music.frame.maxX, window.maxX)
+        retainScreenshot(named: "Home — selected classical playlist fully visible at AX5")
         music.tap()
         let context = app.descendants(matching: .any)
             .matching(identifier: "focus-music.subject").firstMatch
         XCTAssertTrue(context.waitForExistence(timeout: 5))
-        for _ in 0..<5 {
-            if context.isHittable { break }
-            app.swipeUp(velocity: .slow)
-        }
-        XCTAssertTrue(context.isHittable)
+        XCTAssertTrue(reveal(context))
         XCTAssertTrue(waitForContext(context, containing: "英語"), context.label)
         XCTAssertTrue(app.buttons["focus-music.close"].isHittable)
         retainScreenshot(named: "Music — theme context at AX5")
@@ -312,31 +328,69 @@ final class FocusMusicEntryUITests: XCTestCase {
         XCTAssertTrue(app.buttons["focus-music.close"].waitForExistence(timeout: 5))
     }
 
-    private func reveal(_ element: XCUIElement) -> Bool {
-        for _ in 0..<18 {
+    private func reveal(_ element: XCUIElement, in requestedSurface: XCUIElement? = nil) -> Bool {
+        var lastKnownFrame: CGRect?
+        var direction: CGFloat = -1
+        var observations: [String] = []
+        var revealed = false
+        defer {
+            let geometry = XCTAttachment(string: observations.joined(separator: "\n"))
+            geometry.name = "Music reveal \(revealed ? "succeeded" : "failed") — viewport and target geometry"
+            geometry.lifetime = .keepAlways
+            add(geometry)
+        }
+        let deadline = Date().addingTimeInterval(60)
+        for attempt in 0..<32 {
             let window = app.windows.firstMatch
-            let top = (app.navigationBars.allElementsBoundByIndex
-                .filter(\.isHittable).map(\.frame.maxY).max() ?? window.frame.minY) + 8
+            let windowFrame = window.frame
+            let navigationBottom = app.navigationBars.allElementsBoundByIndex
+                .filter(\.isHittable).map(\.frame.maxY).max() ?? windowFrame.minY
             let keyboard = app.keyboards.firstMatch
-            let bottom = keyboard.exists ? keyboard.frame.minY - 12 : window.frame.maxY - 24
-            var correction: CGFloat = -140
+            let keyboardTop = keyboard.exists ? keyboard.frame.minY - 12 : windowFrame.maxY - 24
+            let surfaces = app.scrollViews.allElementsBoundByIndex + app.collectionViews.allElementsBoundByIndex
+            guard let surface = requestedSurface ?? surfaces.last(where: {
+                $0.isHittable && $0.frame.maxY > navigationBottom + 60 && $0.frame.minY < keyboardTop
+            }) else {
+                observations.append("attempt=\(attempt); no frontmost scrollable surface")
+                return false
+            }
+            let scrollFrame = surface.frame.intersection(windowFrame)
+            let top = max(scrollFrame.minY, navigationBottom) + 8
+            let bottom = min(scrollFrame.maxY - 8, keyboardTop)
+            let room = bottom - top
+            guard room > 60 else { return false }
+            var distance = room * 0.65
             if element.exists {
                 let frame = element.frame
-                if frame.minY >= top, frame.maxY <= bottom, element.isHittable { return true }
-                // isHittable alone can include content under the pinned
-                // navigation bar. Keep fields above the keyboard too.
-                correction = frame.minY < top ? top - frame.minY + 16 : bottom - frame.maxY - 16
+                lastKnownFrame = frame
+                observations.append("attempt=\(attempt); target=\(frame); top=\(top); bottom=\(bottom); surface=\(scrollFrame)")
+                if frame.minY >= top, frame.maxY <= bottom, element.isHittable {
+                    revealed = true
+                    return true
+                }
+                // A row taller than the usable viewport is a real layout
+                // failure. Keep the full-visibility requirement for all rows.
+                guard frame.height <= room else { return false }
+                let correction = (top + bottom) / 2 - frame.midY
+                direction = correction < 0 ? -1 : 1
+                distance = min(distance, max(24, abs(correction)))
+            } else {
+                observations.append("attempt=\(attempt); target absent; last=\(String(describing: lastKnownFrame)); direction=\(direction); top=\(top); bottom=\(bottom); surface=\(scrollFrame)")
             }
-            let limit = min(160, (bottom - top) / 3)
-            let distance = min(limit, max(40, abs(correction))) * (correction < 0 ? -1 : 1)
+            guard attempt < 31, Date() < deadline else { return false }
+            // Lazy AX5 forms can span seven pages before creating the row.
+            // Seek by a viewport fraction; once it exists, center it precisely.
+            // If virtualization hides it again, retain the last known direction.
+            let startY = direction < 0 ? bottom - 12 : top + 12
             let start = window.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
-                dx: window.frame.width * 0.9, dy: (top + bottom) / 2 - window.frame.minY
+                dx: scrollFrame.minX + scrollFrame.width * 0.9 - windowFrame.minX,
+                dy: startY - windowFrame.minY
             ))
             // Stop the finger before lifting so inertia cannot carry a tall
             // AX5 row past the opposite viewport edge and alternate forever.
             start.press(
                 forDuration: 0.05,
-                thenDragTo: start.withOffset(CGVector(dx: 0, dy: distance)),
+                thenDragTo: start.withOffset(CGVector(dx: 0, dy: distance * direction)),
                 withVelocity: .slow,
                 thenHoldForDuration: 0.2
             )

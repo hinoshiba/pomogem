@@ -2591,23 +2591,48 @@ struct HomeView: View {
         Button {
             showFocusMusic = true
         } label: {
-            HStack(spacing: 8) {
-                Label(
-                    String(localized: "音楽", table: "Home", comment: "Home button beside the focus controls: choose focus music"),
-                    systemImage: "music.note"
-                )
-                .font(.system(.subheadline, design: .rounded, weight: .bold))
-                .fixedSize(horizontal: true, vertical: false)
-                Spacer(minLength: 0)
-                Text(verbatim: homeMusicValue)
-                    .font(.subheadline)
-                    .foregroundStyle(PomoGemTheme.muted)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-                    .multilineTextAlignment(.trailing)
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(PomoGemTheme.muted)
-                    .accessibilityHidden(true)
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            Label(
+                                String(localized: "音楽", table: "Home", comment: "Home button beside the focus controls: choose focus music"),
+                                systemImage: "music.note"
+                            )
+                            .font(.system(.subheadline, design: .rounded, weight: .bold))
+                            Spacer(minLength: 8)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(PomoGemTheme.muted)
+                                .accessibilityHidden(true)
+                        }
+                        Text(verbatim: homeMusicValue)
+                            .font(.subheadline)
+                            .foregroundStyle(PomoGemTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .multilineTextAlignment(.leading)
+                } else {
+                    HStack(spacing: 8) {
+                        Label(
+                            String(localized: "音楽", table: "Home", comment: "Home button beside the focus controls: choose focus music"),
+                            systemImage: "music.note"
+                        )
+                        .font(.system(.subheadline, design: .rounded, weight: .bold))
+                        .fixedSize(horizontal: true, vertical: false)
+                        Spacer(minLength: 0)
+                        Text(verbatim: homeMusicValue)
+                            .font(.subheadline)
+                            .foregroundStyle(PomoGemTheme.muted)
+                            .lineLimit(1)
+                            .multilineTextAlignment(.trailing)
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(PomoGemTheme.muted)
+                            .accessibilityHidden(true)
+                    }
+                }
             }
             .foregroundStyle(PomoGemTheme.text)
             .padding(.horizontal, 14)
