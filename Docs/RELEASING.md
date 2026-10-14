@@ -7,7 +7,9 @@
 
 2026-10-14: 1.1.2 (14)を準備しています。Gemの色と長押し、取り組み別の時間・音楽設定、
 メニューとタイマーの画面遷移を改善します。Appleの公開Store情報では1.1.1の公開日が
-2026-10-13と確認できました。新候補のArchive・Upload・審査提出は未完了です。
+2026-10-13と確認できました。新候補は15:56 JSTに署名済みraw Archiveと全3 bundleの検証、
+16:01 JSTにOrganizerのApple Validateが成功しました。raw Archiveは開発署名であり、
+配布payloadは未検証です。Upload・処理・審査提出は未完了で、App Store Connectへのログイン待ちです。
 [1.1.2 (14) release record](../AppStore/release-record-1.1.2-14.md)に今回の状態を記録します。
 
 以下は前回提出時点の記録です。

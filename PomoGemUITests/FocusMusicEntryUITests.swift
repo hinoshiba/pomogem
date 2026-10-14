@@ -346,9 +346,36 @@ final class FocusMusicEntryUITests: XCTestCase {
             let navigationBottom = app.navigationBars.allElementsBoundByIndex
                 .filter(\.isHittable).map(\.frame.maxY).max() ?? windowFrame.minY
             let keyboard = app.keyboards.firstMatch
-            let keyboardTop = keyboard.exists ? keyboard.frame.minY - 12 : windowFrame.maxY - 24
-            let surfaces = app.scrollViews.allElementsBoundByIndex + app.collectionViews.allElementsBoundByIndex
-            guard let surface = requestedSurface ?? surfaces.last(where: {
+            let keyboardTop: CGFloat
+            if keyboard.exists {
+                // Keyboard.frame excludes the predictive-text bar. Include
+                // the complete input area so a scroll starts on app content.
+                let inputFrames = app.otherElements.matching(NSPredicate(
+                    format: "identifier IN %@", ["inputView", "SystemInputAssistantView"]
+                )).allElementsBoundByIndex.map(\.frame)
+                    .filter { !$0.isEmpty && $0.intersects(windowFrame) }
+                let inputTop = inputFrames.map(\.minY).min() ?? keyboard.frame.minY
+                keyboardTop = min(keyboard.frame.minY, inputTop) - 12
+            } else {
+                keyboardTop = windowFrame.maxY - 24
+            }
+            let surfaces = app.scrollViews.allElementsBoundByIndex
+                + app.collectionViews.allElementsBoundByIndex
+                + app.tables.allElementsBoundByIndex
+            // A SwiftUI Form can report its collection container as not
+            // hittable while its buttons are hittable. Resolve the target's
+            // actual owner before using container hit testing for lazy rows.
+            let elementExists = element.exists
+            let targetIdentifier = elementExists ? element.identifier : ""
+            let targetLabel = elementExists ? element.label : ""
+            let targetType = elementExists ? element.elementType : .any
+            let owner = elementExists ? surfaces.last(where: { surface in
+                let descendants = surface.descendants(matching: targetType)
+                return targetIdentifier.isEmpty
+                    ? descendants.matching(NSPredicate(format: "label == %@", targetLabel)).firstMatch.exists
+                    : descendants.matching(identifier: targetIdentifier).firstMatch.exists
+            }) : nil
+            guard let surface = requestedSurface ?? owner ?? surfaces.last(where: {
                 $0.isHittable && $0.frame.maxY > navigationBottom + 60 && $0.frame.minY < keyboardTop
             }) else {
                 observations.append("attempt=\(attempt); no frontmost scrollable surface")
@@ -360,7 +387,7 @@ final class FocusMusicEntryUITests: XCTestCase {
             let room = bottom - top
             guard room > 60 else { return false }
             var distance = room * 0.65
-            if element.exists {
+            if elementExists {
                 let frame = element.frame
                 lastKnownFrame = frame
                 observations.append("attempt=\(attempt); target=\(frame); top=\(top); bottom=\(bottom); surface=\(scrollFrame)")
