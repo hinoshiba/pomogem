@@ -200,6 +200,23 @@
         }
       }
     },
+    "タイマーを終了" : {
+      "comment" : "Timer button: end only the current focus without completing it; a new timer can be started anytime",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop Timer"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマーを終了"
+          }
+        }
+      }
+    },
     "ポモジェム" : {
       "comment" : "Brand wordmark beside the jar mark (en: PomoGem)",
       "localizations" : {
@@ -264,23 +281,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "一時停止"
-          }
-        }
-      }
-    },
-    "今日はここまで" : {
-      "comment" : "Timer button: a gentle stop that ends this focus without completing it (not 'Give Up' or 'Done')",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Stop for Today"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "今日はここまで"
           }
         }
       }

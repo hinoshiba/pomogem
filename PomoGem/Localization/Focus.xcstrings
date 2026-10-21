@@ -640,7 +640,7 @@
       }
     },
     "この回の粒は積まれません。これまでの瓶はそのままです。" : {
-      "comment" : "Stop-for-today confirmation: this session adds no gem, and the jar keeps everything so far",
+      "comment" : "Stop-timer confirmation: this session adds no gem, and the jar keeps everything so far",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -942,6 +942,23 @@
         }
       }
     },
+    "タイマーに戻る" : {
+      "comment" : "Alert button: dismiss without ending the timer or changing its running or paused state",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back to Timer"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマーに戻る"
+          }
+        }
+      }
+    },
     "タイマーの前に、1つだけ。" : {
       "comment" : "Rare-gem choice before the first timed focus: heading",
       "localizations" : {
@@ -989,6 +1006,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "タイマーは別の端末へ引き継がれました"
+          }
+        }
+      }
+    },
+    "タイマーを終了しますか？" : {
+      "comment" : "Alert title: confirm ending only the current focus timer",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop this timer?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマーを終了しますか？"
           }
         }
       }
@@ -3234,23 +3268,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "終了通知を許可"
-          }
-        }
-      }
-    },
-    "続ける" : {
-      "comment" : "Alert button: keep focusing instead of stopping for today",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keep Going"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "続ける"
           }
         }
       }

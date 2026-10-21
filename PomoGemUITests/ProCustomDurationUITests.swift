@@ -294,11 +294,11 @@ final class ProCustomDurationUITests: XCTestCase {
     }
 
     private func cancelFocusIfPresented() {
-        let cancel = app.buttons["今日はここまで"].firstMatch
+        let cancel = app.buttons["タイマーを終了"].firstMatch
         guard cancel.exists, reveal(cancel) else { return }
         cancel.tap()
-        let alert = app.alerts["今日はここまで"]
-        if alert.waitForExistence(timeout: 2) { alert.buttons["今日はここまで"].tap() }
+        let alert = app.alerts["タイマーを終了しますか？"]
+        if alert.waitForExistence(timeout: 2) { alert.buttons["タイマーを終了"].tap() }
     }
 
     private func screenshot(_ name: String) {

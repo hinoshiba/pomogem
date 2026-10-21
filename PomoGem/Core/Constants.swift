@@ -416,9 +416,9 @@ enum Constants {
             comment: "Timer button: pause the running focus"
         )
         static let giveUp = String(
-            localized: "今日はここまで",
+            localized: "タイマーを終了",
             table: "Common",
-            comment: "Timer button: a gentle stop that ends this focus without completing it (not 'Give Up' or 'Done')"
+            comment: "Timer button: end only the current focus without completing it; a new timer can be started anytime"
         )
         static let jarEmptyTitle = String(
             localized: "まだ空っぽ。",

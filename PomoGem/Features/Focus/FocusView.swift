@@ -1101,14 +1101,16 @@ struct FocusView: View {
             isViewActive = false
             if !didStart { didActivate = false }
         }
-        .alert(Constants.UIStrings.giveUp, isPresented: $showGiveUpConfirmation) {
-            Button(String(localized: "続ける", table: "Focus",
-                          comment: "Alert button: keep focusing instead of stopping for today"),
+        .alert(String(localized: "タイマーを終了しますか？", table: "Focus",
+                      comment: "Alert title: confirm ending only the current focus timer"),
+               isPresented: $showGiveUpConfirmation) {
+            Button(String(localized: "タイマーに戻る", table: "Focus",
+                          comment: "Alert button: dismiss without ending the timer or changing its running or paused state"),
                    role: .cancel) {}
             Button(Constants.UIStrings.giveUp, role: .destructive) { giveUp() }
         } message: {
             Text("この回の粒は積まれません。これまでの瓶はそのままです。", tableName: "Focus",
-                 comment: "Stop-for-today confirmation: this session adds no gem, and the jar keeps everything so far")
+                 comment: "Stop-timer confirmation: this session adds no gem, and the jar keeps everything so far")
         }
         .alert(String(localized: "タイマーを開始できませんでした", table: "Focus",
                       comment: "Alert title: the focus timer could not start"),
@@ -1199,7 +1201,7 @@ struct FocusView: View {
     }
 
     /// At accessibility text sizes the ring, notice and controls cannot all
-    /// fit a 4.7-inch screen. Pause/resume and 「今日はここまで」 are then
+    /// fit a 4.7-inch screen. Pause/resume and 「タイマーを終了」 are then
     /// pinned below the scrolling content, like the completion alarm's Stop,
     /// so they are always on screen; the ring scrolls above them.
     private func timerBody(_ context: TimerLayoutContext) -> some View {
@@ -2311,7 +2313,7 @@ struct FocusView: View {
         cue: TimerCompletionForegroundFeedbackPolicy.Cue
     ) {
         guard pendingCompletion == nil else { return }
-        // A 「今日はここまで」 confirmation opened before the end no longer
+        // A 「タイマーを終了」 confirmation opened before the end no longer
         // describes anything: the focus is complete and will be saved.
         showGiveUpConfirmation = false
         pendingCompletion = result

@@ -866,7 +866,7 @@ final class PassiveReminderActivityReaderTests: XCTestCase {
 
     func testAFocusStartedTodayAnswersOnlyToday() throws {
         let context = try makeContext()
-        // Stopped with 「今日はここまで」: nothing saved, but the day is answered.
+        // Stopped with 「タイマーを終了」: nothing saved, but the day is answered.
         PassiveReminderActivityReader.recordFocusStarted(
             at: now,
             timeZone: Self.tokyo.timeZone,

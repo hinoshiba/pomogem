@@ -86,12 +86,12 @@ final class FocusLeavePauseUITests: XCTestCase {
         XCTAssertTrue(pause.waitForExistence(timeout: 4))
         XCTAssertFalse(notice.exists, "A resumed focus is no longer leave-paused")
 
-        let giveUp = app.buttons["今日はここまで"]
+        let giveUp = app.buttons["タイマーを終了"]
         XCTAssertTrue(giveUp.waitForExistence(timeout: 4))
         giveUp.tap()
-        let confirmation = app.alerts["今日はここまで"]
+        let confirmation = app.alerts["タイマーを終了しますか？"]
         XCTAssertTrue(confirmation.waitForExistence(timeout: 4))
-        confirmation.buttons["今日はここまで"].tap()
+        confirmation.buttons["タイマーを終了"].tap()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
     }
 

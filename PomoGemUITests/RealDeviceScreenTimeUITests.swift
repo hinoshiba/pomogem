@@ -3102,17 +3102,17 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
     }
 
     private func cancelTimer(_ app: XCUIApplication) throws {
-        let stop = app.buttons["今日はここまで"]
+        let stop = app.buttons["タイマーを終了"]
         _ = reveal(stop)
         try require(safelyHittable(stop, in: app),
-                    "The timer must offer its ordinary 今日はここまで cancellation.",
+                    "The timer must offer its ordinary タイマーを終了 cancellation.",
                     evidence: "timer-no-cancel")
         stop.tap()
-        let confirmation = app.alerts["今日はここまで"]
+        let confirmation = app.alerts["タイマーを終了しますか？"]
         try require(confirmation.waitForExistence(timeout: 10),
                     "Cancelling the timer must ask for its ordinary confirmation.",
                     evidence: "timer-no-cancel-confirmation")
-        try tap(confirmation.buttons["今日はここまで"], "今日はここまで (confirm)")
+        try tap(confirmation.buttons["タイマーを終了"], "タイマーを終了 (confirm)")
         try require(app.buttons["メニュー"].waitForExistence(timeout: 60),
                     "Cancelling the timer must return to Home.",
                     evidence: "timer-cancel-stuck")

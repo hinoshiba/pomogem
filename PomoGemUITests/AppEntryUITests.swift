@@ -417,12 +417,12 @@ final class AppEntryUITests: XCTestCase {
 
     private func cancelPresentedFocusIfNeeded() {
         guard let app else { return }
-        let giveUp = app.buttons["今日はここまで"].firstMatch
+        let giveUp = app.buttons["タイマーを終了"].firstMatch
         guard giveUp.exists, giveUp.isHittable else { return }
         giveUp.tap()
-        let confirmation = app.alerts["今日はここまで"]
+        let confirmation = app.alerts["タイマーを終了しますか？"]
         if confirmation.waitForExistence(timeout: 2) {
-            confirmation.buttons["今日はここまで"].tap()
+            confirmation.buttons["タイマーを終了"].tap()
         }
     }
 

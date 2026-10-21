@@ -652,15 +652,15 @@ final class TimerOrientationUITests: XCTestCase {
 
     private func cancelFocusAndVerifyHome() {
         let timerWasLandscape = app.windows.firstMatch.frame.width > app.windows.firstMatch.frame.height
-        let cancel = app.buttons["今日はここまで"].firstMatch
+        let cancel = app.buttons["タイマーを終了"].firstMatch
         XCTAssertTrue(reveal(cancel, towardStart: false))
         cancel.tap()
-        let alert = app.alerts["今日はここまで"]
+        let alert = app.alerts["タイマーを終了しますか？"]
         XCTAssertTrue(alert.waitForExistence(timeout: 3))
         assertWindowOrientation(isLandscape: timerWasLandscape)
         XCTAssertTrue(app.windows.firstMatch.frame.contains(alert.frame),
                       "The system cancellation alert must fit the timer's native scene")
-        alert.buttons["今日はここまで"].tap()
+        alert.buttons["タイマーを終了"].tap()
         XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 8))
         XCTAssertFalse(app.buttons["timer.rotate"].exists)
         assertWindowOrientation(isLandscape: false)
@@ -678,11 +678,11 @@ final class TimerOrientationUITests: XCTestCase {
         }
         let skip = app.buttons["休憩をスキップ"].firstMatch
         if skip.exists, reveal(skip, towardStart: false) { skip.tap() }
-        let cancel = app.buttons["今日はここまで"].firstMatch
+        let cancel = app.buttons["タイマーを終了"].firstMatch
         if cancel.exists, reveal(cancel, towardStart: false) {
             cancel.tap()
-            let alert = app.alerts["今日はここまで"]
-            if alert.waitForExistence(timeout: 2) { alert.buttons["今日はここまで"].tap() }
+            let alert = app.alerts["タイマーを終了しますか？"]
+            if alert.waitForExistence(timeout: 2) { alert.buttons["タイマーを終了"].tap() }
         }
     }
 

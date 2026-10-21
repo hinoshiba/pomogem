@@ -703,7 +703,7 @@ struct ScreenTimeSettingsView: View {
     /// needs access; switching only it off is saved whatever else fails and
     /// always lifts the shield). The escape hatch acts at once, without 保存.
     /// The focus screen is a full-screen cover, so while a focus is on screen
-    /// its own 今日はここまで is the way out; this page's hatch covers a
+    /// its own タイマーを終了 is the way out; this page's hatch covers a
     /// shield that outlived the focus UI.
     private var focusShieldSection: some View {
         FocusShieldSettingsSection(

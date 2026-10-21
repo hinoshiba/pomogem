@@ -22,7 +22,7 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         XCTAssertTrue(waitUntil(timeout: 10) {
             app.buttons["home.menu.open"].exists
                 || app.buttons["OverflowBarButtonItem"].exists
-                || app.buttons["今日はここまで"].exists
+                || app.buttons["タイマーを終了"].exists
         })
         cancelFocusIfPresented()
         revealHomeMenuButton()
@@ -598,11 +598,11 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
 
     /// A running timer survives relaunch; end it so later tests start on Home.
     private func cancelFocusIfPresented() {
-        let stop = app.buttons["今日はここまで"].firstMatch
+        let stop = app.buttons["タイマーを終了"].firstMatch
         guard stop.waitForExistence(timeout: 1) else { return }
         stop.tap()
-        let alert = app.alerts["今日はここまで"]
-        if alert.waitForExistence(timeout: 3) { alert.buttons["今日はここまで"].tap() }
+        let alert = app.alerts["タイマーを終了しますか？"]
+        if alert.waitForExistence(timeout: 3) { alert.buttons["タイマーを終了"].tap() }
         revealHomeMenuButton()
     }
 
