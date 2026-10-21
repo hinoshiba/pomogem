@@ -351,7 +351,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         if permissionError.exists {
             permissionError.buttons["閉じる"].tap()
         }
-        let cancel = app.buttons["今日はここまで"].firstMatch
+        let cancel = app.buttons["タイマーを終了"].firstMatch
         if cancel.exists {
             _ = scrollUntilHittable(cancel, attempts: 6)
         }
@@ -417,7 +417,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         resume.tap()
         XCTAssertTrue(app.buttons["一時停止"].waitForExistence(timeout: 4))
         XCTAssertLessThanOrEqual(try timerRemainingSeconds(timer), pausedSeconds)
-        XCTAssertTrue(scrollUntilHittable(app.buttons["今日はここまで"]))
+        XCTAssertTrue(scrollUntilHittable(app.buttons["タイマーを終了"]))
         cancelPresentedFocusIfNeeded()
         XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 6))
         XCTAssertEqual(jarPresentation(from: presentation), initialPresentation)
@@ -541,10 +541,10 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         startDemoFocusForVisualAudit()
 
         // Open the destructive confirmation and hesitate past the end.
-        let giveUp = app.buttons["今日はここまで"]
+        let giveUp = app.buttons["タイマーを終了"]
         XCTAssertTrue(waitForHittable(giveUp, timeout: 4))
         giveUp.tap()
-        let confirmation = app.alerts["今日はここまで"]
+        let confirmation = app.alerts["タイマーを終了しますか？"]
         XCTAssertTrue(confirmation.waitForExistence(timeout: 4))
         XCTAssertTrue(
             confirmation.staticTexts["この回の粒は積まれません。これまでの瓶はそのままです。"].exists
@@ -568,7 +568,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             dismiss.waitForExistence(timeout: 20),
             "The earned completion must reach Home's receipt, not be discarded"
         )
-        XCTAssertFalse(app.alerts["今日はここまで"].exists)
+        XCTAssertFalse(app.alerts["タイマーを終了しますか？"].exists)
         dismiss.tap()
         let landed = try waitForLandedCompletion(from: probe, after: initial, timeout: 10)
         XCTAssertTrue(landed.records.hasSuffix(":250"), landed.records)
@@ -1559,10 +1559,10 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         waitForUISettle()
         retainScreenshot(named: "ASC_02_25-minute-focus")
 
-        app.buttons["今日はここまで"].tap()
-        let giveUpConfirmation = app.alerts["今日はここまで"]
+        app.buttons["タイマーを終了"].tap()
+        let giveUpConfirmation = app.alerts["タイマーを終了しますか？"]
         XCTAssertTrue(giveUpConfirmation.waitForExistence(timeout: 4))
-        giveUpConfirmation.buttons["今日はここまで"].tap()
+        giveUpConfirmation.buttons["タイマーを終了"].tap()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
 
         // 2. Create one deterministic 250g completion. The Debug-only duration
@@ -1675,11 +1675,11 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         waitForUISettle()
         retainScreenshot(named: "ASC_EN_02_25-minute-focus")
 
-        let stopForToday = app.buttons["Stop for Today"]
-        stopForToday.tap()
-        let confirmation = app.alerts["Stop for Today"]
+        let stopTimer = app.buttons["Stop Timer"]
+        stopTimer.tap()
+        let confirmation = app.alerts["Stop this timer?"]
         XCTAssertTrue(confirmation.waitForExistence(timeout: 4))
-        confirmation.buttons["Stop for Today"].tap()
+        confirmation.buttons["Stop Timer"].tap()
         XCTAssertTrue(menu.waitForExistence(timeout: 8))
 
         duration.tap()
@@ -1947,7 +1947,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         )
         XCTAssertEqual(
             app.buttons.matching(
-                NSPredicate(format: "label == %@", "今日はここまで")
+                NSPredicate(format: "label == %@", "タイマーを終了")
             ).count,
             1,
             "Focus must expose one unambiguous give-up action"
@@ -1964,17 +1964,17 @@ final class RuntimeFlowAuditUITests: XCTestCase {
 
         resume.tap()
         XCTAssertTrue(app.buttons["一時停止"].waitForExistence(timeout: 4))
-        let textGiveUp = app.buttons["今日はここまで"]
+        let textGiveUp = app.buttons["タイマーを終了"]
         XCTAssertTrue(textGiveUp.waitForExistence(timeout: 3))
         textGiveUp.tap()
 
-        let confirmation = app.alerts["今日はここまで"]
+        let confirmation = app.alerts["タイマーを終了しますか？"]
         XCTAssertTrue(confirmation.waitForExistence(timeout: 4))
-        XCTAssertTrue(confirmation.buttons["続ける"].exists)
+        XCTAssertTrue(confirmation.buttons["タイマーに戻る"].exists)
         XCTAssertTrue(
             confirmation.staticTexts["この回の粒は積まれません。これまでの瓶はそのままです。"].exists
         )
-        confirmation.buttons["今日はここまで"].tap()
+        confirmation.buttons["タイマーを終了"].tap()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
     }
 
@@ -2296,12 +2296,12 @@ final class RuntimeFlowAuditUITests: XCTestCase {
     }
 
     private func cancelPresentedFocusIfNeeded() {
-        let giveUp = app.buttons["今日はここまで"].firstMatch
+        let giveUp = app.buttons["タイマーを終了"].firstMatch
         guard giveUp.exists, giveUp.isHittable else { return }
         giveUp.tap()
-        let confirmation = app.alerts["今日はここまで"]
+        let confirmation = app.alerts["タイマーを終了しますか？"]
         if confirmation.waitForExistence(timeout: 2) {
-            confirmation.buttons["今日はここまで"].tap()
+            confirmation.buttons["タイマーを終了"].tap()
         }
     }
 

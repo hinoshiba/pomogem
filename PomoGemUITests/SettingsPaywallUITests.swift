@@ -297,7 +297,7 @@ final class SettingsPaywallUITests: XCTestCase {
         let launcher = app.buttons["home.focus-launcher"]
         XCTAssertTrue(launcher.waitForExistence(timeout: 6))
         launcher.tap()
-        let giveUp = app.buttons["今日はここまで"].firstMatch
+        let giveUp = app.buttons["タイマーを終了"].firstMatch
         XCTAssertTrue(giveUp.waitForExistence(timeout: 8))
 
         let notice = app.descendants(matching: .any).matching(
@@ -311,9 +311,9 @@ final class SettingsPaywallUITests: XCTestCase {
 
         XCTAssertTrue(reveal(giveUp))
         giveUp.tap()
-        let confirmation = app.alerts["今日はここまで"]
+        let confirmation = app.alerts["タイマーを終了しますか？"]
         XCTAssertTrue(confirmation.waitForExistence(timeout: 4))
-        confirmation.buttons["今日はここまで"].tap()
+        confirmation.buttons["タイマーを終了"].tap()
         XCTAssertTrue(menu.waitForExistence(timeout: 8))
         XCTAssertTrue(notice.waitForExistence(timeout: 15), "The notice is told once Home can be seen")
         attach("Approval notice — told on Home after the timer closed")

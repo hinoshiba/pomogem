@@ -228,15 +228,15 @@
       "lint": "none"
     },
     {
-      "ja": "今日はここまで",
-      "en": "Stop for Today",
+      "ja": "タイマーを終了",
+      "en": "Stop Timer",
       "lint": "none",
       "forbidden_en": [
         "Give Up",
         "Quit",
         "Fail"
       ],
-      "notes": "Gentle stop; not 'Done' (it does not complete the session)."
+      "notes": "Ends only the current focus timer without completing it. A new timer can be started anytime; do not imply stopping for the whole day."
     },
     {
       "ja": "中断",

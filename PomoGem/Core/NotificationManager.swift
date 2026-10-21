@@ -328,7 +328,7 @@ enum PassiveReminderActivityReader {
     }
 
     /// Home calls this when the person starts a new focus. Opening one
-    /// answers today's reminder even when it is stopped with 「今日はここまで」:
+    /// answers today's reminder even when it is stopped with 「タイマーを終了」:
     /// asking again an hour later would be a nag.
     static func recordFocusStarted(
         at now: Date = .now,

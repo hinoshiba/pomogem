@@ -26,7 +26,7 @@ final class CommonLocalizationTests: XCTestCase {
     func testFixedCopyStaysJapaneseOnJapaneseDevices() {
         XCTAssertEqual(Constants.UIStrings.resume, "再開する")
         XCTAssertEqual(Constants.UIStrings.pause, "一時停止")
-        XCTAssertEqual(Constants.UIStrings.giveUp, "今日はここまで")
+        XCTAssertEqual(Constants.UIStrings.giveUp, "タイマーを終了")
         XCTAssertEqual(Constants.UIStrings.jarEmptyTitle, "まだ空っぽ。")
         XCTAssertEqual(Constants.UIStrings.goldToast, "✦ 金の粒が出た！ +250g")
         XCTAssertEqual(Constants.UIStrings.prismToast, "❖ 虹の粒！！ +250g")
@@ -44,7 +44,7 @@ final class CommonLocalizationTests: XCTestCase {
     func testFixedCopyInEnglish() throws {
         XCTAssertEqual(try english("再開する"), "Resume")
         XCTAssertEqual(try english("一時停止"), "Pause")
-        XCTAssertEqual(try english("今日はここまで"), "Stop for Today")
+        XCTAssertEqual(try english("タイマーを終了"), "Stop Timer")
         XCTAssertEqual(try english("まだ空っぽ。"), "Still empty.")
         XCTAssertEqual(try english("自己申告はこの端末で1日3回まで"), "Up to 3 self-reported entries a day on this device")
         XCTAssertEqual(

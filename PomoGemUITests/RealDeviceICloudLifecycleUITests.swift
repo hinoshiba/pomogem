@@ -943,12 +943,12 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
 
     private func cancelAuditTimerAndRequireDurableHome() throws {
         let app = app!
-        let stop = app.buttons["今日はここまで"]
+        let stop = app.buttons["タイマーを終了"]
         try scrollTo(stop)
         try tap(stop)
-        let confirmation = app.alerts["今日はここまで"]
+        let confirmation = app.alerts["タイマーを終了しますか？"]
         try require(confirmation.waitForExistence(timeout: 5), "Timer cancellation requires its ordinary confirmation.")
-        try tap(confirmation.buttons["今日はここまで"])
+        try tap(confirmation.buttons["タイマーを終了"])
         try requireHome()
         try require(waitForAbsence(focusTimer), "A cancelled timer must dismiss its focus screen.")
         _ = launchRealApplication()

@@ -1053,8 +1053,8 @@ final class RareRewardOptInUITests: XCTestCase {
 
         // Leave process-local recovery clean for whichever UI journey runs
         // next; the in-memory SwiftData store does not own this envelope.
-        app.buttons["今日はここまで"].firstMatch.tap()
-        let destructiveGiveUp = app.alerts.buttons["今日はここまで"]
+        app.buttons["タイマーを終了"].firstMatch.tap()
+        let destructiveGiveUp = app.alerts.buttons["タイマーを終了"]
         XCTAssertTrue(destructiveGiveUp.waitForExistence(timeout: 3))
         destructiveGiveUp.tap()
     }

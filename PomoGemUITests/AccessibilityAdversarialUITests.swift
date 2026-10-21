@@ -92,12 +92,12 @@ final class AccessibilityAdversarialUITests: XCTestCase {
             .waitForExistence(timeout: 8))
         XCTAssertFalse(app.buttons["focus.display-mode"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["timer-display.selection"].exists)
-        let giveUp = app.buttons["今日はここまで"]
+        let giveUp = app.buttons["タイマーを終了"]
         XCTAssertTrue(scrollUntilHittable(giveUp, attempts: 12))
         giveUp.tap()
-        let confirmation = app.alerts["今日はここまで"]
+        let confirmation = app.alerts["タイマーを終了しますか？"]
         XCTAssertTrue(confirmation.waitForExistence(timeout: 4))
-        confirmation.buttons["今日はここまで"].tap()
+        confirmation.buttons["タイマーを終了"].tap()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 6))
     }
 
@@ -405,7 +405,7 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         XCTAssertTrue(waitForEnabled(app.buttons["home.focus-launcher"], timeout: 12))
     }
 
-    /// At AX5 on a 4.7-inch iPhone the timer's pause/resume and 「今日はここまで」
+    /// At AX5 on a 4.7-inch iPhone the timer's pause/resume and 「タイマーを終了」
     /// used to start below the fold with nothing showing the screen scrolls.
     /// They are pinned on screen in every state.
     func testAX5FocusControlsStayOnScreenWhileRunningAndPaused() throws {
@@ -434,7 +434,7 @@ final class AccessibilityAdversarialUITests: XCTestCase {
             XCTAssertGreaterThanOrEqual(element.frame.height, 43.5, message)
         }
         let pause = app.buttons["一時停止"]
-        let giveUp = app.buttons["今日はここまで"]
+        let giveUp = app.buttons["タイマーを終了"]
         assertOnScreen(pause, "Pause must be operable at AX5 without scrolling")
         assertOnScreen(giveUp, "Give-up must be operable at AX5 without scrolling")
         let running = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -452,9 +452,9 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         add(paused)
 
         giveUp.tap()
-        let confirmation = app.alerts["今日はここまで"]
+        let confirmation = app.alerts["タイマーを終了しますか？"]
         XCTAssertTrue(confirmation.waitForExistence(timeout: 4))
-        confirmation.buttons["今日はここまで"].tap()
+        confirmation.buttons["タイマーを終了"].tap()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
     }
 
@@ -517,12 +517,12 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         try app.performAccessibilityAudit(for: .hitRegion)
         try app.performAccessibilityAudit(for: .textClipped)
 
-        let giveUp = app.buttons["今日はここまで"]
+        let giveUp = app.buttons["タイマーを終了"]
         XCTAssertTrue(giveUp.waitForExistence(timeout: 4))
         giveUp.tap()
-        let confirmation = app.alerts["今日はここまで"]
+        let confirmation = app.alerts["タイマーを終了しますか？"]
         XCTAssertTrue(confirmation.waitForExistence(timeout: 4))
-        confirmation.buttons["今日はここまで"].tap()
+        confirmation.buttons["タイマーを終了"].tap()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
     }
 
